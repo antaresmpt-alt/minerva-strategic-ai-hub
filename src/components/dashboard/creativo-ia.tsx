@@ -25,6 +25,8 @@ import {
   CREATIVO_IMAGE_MODEL_STORAGE_KEY,
   DEFAULT_CREATIVO_UI_MODEL_ID,
 } from "@/lib/creativo-image-models";
+import { compressImageForApi } from "@/lib/compress-product-image-client";
+import { readApiJson } from "@/lib/read-api-json";
 import {
   VARIANT_META,
   VARIANT_ORDER,
@@ -205,6 +207,18 @@ export function CreativoIa() {
       return;
     }
 
+    let payload: { base64: string; mime: string };
+    try {
+      payload = await compressImageForApi(product.base64, product.mime);
+    } catch (e) {
+      setPanelError(
+        e instanceof Error
+          ? e.message
+          : "No se pudo preparar la imagen para el envío."
+      );
+      return;
+    }
+
     setStarted(true);
     setBatchRunning(true);
 
@@ -221,19 +235,21 @@ export function CreativoIa() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(
-            buildBody(variant, product.base64, product.mime)
+            buildBody(variant, payload.base64, payload.mime)
           ),
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Error al generar");
+        const data = await readApiJson<{
+          imageBase64: string;
+          mimeType?: string;
+        }>(res);
 
         setAds((s) => ({
           ...s,
           [variant]: {
             ...s[variant],
             loading: false,
-            base64: data.imageBase64 as string,
-            mime: (data.mimeType as string) || "image/png",
+            base64: data.imageBase64,
+            mime: data.mimeType || "image/png",
           },
         }));
       } catch (e) {
@@ -265,14 +281,18 @@ export function CreativoIa() {
     }));
 
     try {
+      const payload = await compressImageForApi(
+        slot.base64,
+        slot.mime ?? "image/png"
+      );
       const res = await fetch("/api/gemini/creativo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "edit",
           variant,
-          imageBase64: slot.base64,
-          imageMime: slot.mime ?? "image/png",
+          imageBase64: payload.base64,
+          imageMime: payload.mime,
           imageModel: imageModelId,
           editInstruction: instruction,
           productName: productName.trim(),
@@ -283,16 +303,18 @@ export function CreativoIa() {
           discountPct: discountPct.trim() || undefined,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al editar");
+      const data = await readApiJson<{
+        imageBase64: string;
+        mimeType?: string;
+      }>(res);
 
       setAds((s) => ({
         ...s,
         [variant]: {
           ...s[variant],
           loading: false,
-          base64: data.imageBase64 as string,
-          mime: (data.mimeType as string) || "image/png",
+          base64: data.imageBase64,
+          mime: data.mimeType || "image/png",
         },
       }));
     } catch (e) {
@@ -313,14 +335,15 @@ export function CreativoIa() {
     }));
 
     try {
+      const payload = await compressImageForApi(product.base64, product.mime);
       const res = await fetch("/api/gemini/creativo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "regenerate",
           variant,
-          imageBase64: product.base64,
-          imageMime: product.mime,
+          imageBase64: payload.base64,
+          imageMime: payload.mime,
           imageModel: imageModelId,
           productName: productName.trim(),
           cta: cta.trim(),
@@ -330,16 +353,18 @@ export function CreativoIa() {
           discountPct: discountPct.trim() || undefined,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al regenerar");
+      const data = await readApiJson<{
+        imageBase64: string;
+        mimeType?: string;
+      }>(res);
 
       setAds((s) => ({
         ...s,
         [variant]: {
           ...s[variant],
           loading: false,
-          base64: data.imageBase64 as string,
-          mime: (data.mimeType as string) || "image/png",
+          base64: data.imageBase64,
+          mime: data.mimeType || "image/png",
         },
       }));
     } catch (e) {
@@ -381,15 +406,16 @@ export function CreativoIa() {
       return;
     }
 
-    setVideoStarted(true);
     setVideoLoading(true);
     try {
+      const payload = await compressImageForApi(product.base64, product.mime);
+      setVideoStarted(true);
       const res = await fetch("/api/gemini/creativo-video", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          imageBase64: product.base64,
-          imageMime: product.mime,
+          imageBase64: payload.base64,
+          imageMime: payload.mime,
           productName: productName.trim(),
           cta: cta.trim(),
           description: description.trim() || undefined,
@@ -398,10 +424,10 @@ export function CreativoIa() {
           discountPct: discountPct.trim() || undefined,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al generar el guion");
-      setVideoScript(data.text as string);
+      const data = await readApiJson<{ text: string }>(res);
+      setVideoScript(data.text);
     } catch (e) {
+      setVideoStarted(false);
       setPanelError(
         e instanceof Error ? e.message : "Error al generar el guion"
       );
