@@ -8,6 +8,7 @@ import {
   Presentation,
   Sparkles,
   SquareStop,
+  Target,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,12 +26,19 @@ import { ReportBody } from "@/components/dashboard/report-body";
 import { DeepDiveChat } from "@/components/dashboard/deep-dive-chat";
 import { ExportPdfMenu } from "@/components/dashboard/export-pdf-menu";
 import { CreativoIa } from "@/components/dashboard/creativo-ia";
+import { MetaProposal } from "@/components/dashboard/meta-proposal";
+import { MetaProposalExports } from "@/components/dashboard/meta-proposal-exports";
 
 const MODES: { id: AppMode; label: string; icon: typeof BarChart3 }[] = [
   { id: "strategic", label: "Análisis Estratégico", icon: BarChart3 },
   { id: "pmax", label: "Generador PMAX", icon: Megaphone },
   { id: "slides", label: "Estructura de Slides", icon: Presentation },
   { id: "creativo", label: "Creativo IA", icon: Sparkles },
+  {
+    id: "metaProposal",
+    label: "Propuesta Meta Ads",
+    icon: Target,
+  },
 ];
 
 export function MinervaDashboard() {
@@ -41,6 +49,7 @@ export function MinervaDashboard() {
   const strategicAnalysis = useHubStore((s) => s.strategicAnalysis);
   const pmaxContent = useHubStore((s) => s.pmaxContent);
   const slidesContent = useHubStore((s) => s.slidesContent);
+  const metaProposalPayload = useHubStore((s) => s.metaProposalPayload);
   const setUrl = useHubStore((s) => s.setUrl);
   const setCountry = useHubStore((s) => s.setCountry);
   const setTargetClient = useHubStore((s) => s.setTargetClient);
@@ -223,7 +232,7 @@ export function MinervaDashboard() {
   });
 
   const canRun =
-    activeMode === "creativo"
+    activeMode === "creativo" || activeMode === "metaProposal"
       ? false
       : activeMode === "strategic" ||
         (!!strategicAnalysis?.trim() &&
@@ -289,8 +298,8 @@ export function MinervaDashboard() {
           })}
         </nav>
         <div className="mt-auto p-4 text-[10px] leading-relaxed text-white/55">
-          Análisis, PMAX y slides comparten contexto en memoria. Creativo IA es
-          independiente (subida de imagen propia).
+          Análisis, PMAX y slides comparten contexto en memoria. Creativo IA y
+          Propuesta Meta Ads son módulos independientes.
         </div>
       </aside>
 
@@ -301,18 +310,26 @@ export function MinervaDashboard() {
               <h1 className="font-[family-name:var(--font-heading)] text-2xl font-bold text-[#002147] md:text-3xl">
                 {activeMode === "creativo"
                   ? "Creativo IA"
-                  : "Minerva Strategic AI Hub"}
+                  : activeMode === "metaProposal"
+                    ? "Propuesta Meta Ads"
+                    : "Minerva Strategic AI Hub"}
               </h1>
               <p className="mt-1 max-w-2xl text-sm text-slate-600">
                 {activeMode === "creativo"
                   ? "Diseñador de anuncios con IA: sube tu producto, define el copy y obtén tres formatos optimizados para Google y Meta. Edita cada pieza con instrucciones en lenguaje natural."
-                  : "Consultoría estratégica asistida por IA: diagnóstico B2B, activos PMAX y narrativa ejecutiva en formato McKinsey-style."}
+                  : activeMode === "metaProposal"
+                    ? "Genera propuestas completas para Facebook e Instagram: estrategia por objetivo, segmentación, copys con emojis y creatividades con IA, listas para presentar al cliente."
+                    : "Consultoría estratégica asistida por IA: diagnóstico B2B, activos PMAX y narrativa ejecutiva en formato McKinsey-style."}
               </p>
             </div>
-            {activeMode !== "creativo" && <ExportPdfMenu mode={activeMode} />}
+            {activeMode === "metaProposal" && metaProposalPayload ? (
+              <MetaProposalExports payload={metaProposalPayload} />
+            ) : activeMode !== "creativo" && activeMode !== "metaProposal" ? (
+              <ExportPdfMenu mode={activeMode} />
+            ) : null}
           </div>
 
-          {activeMode !== "creativo" && (
+          {activeMode !== "creativo" && activeMode !== "metaProposal" && (
             <>
               <Card className="border-[#002147]/15 bg-slate-50/50 shadow-sm">
                 <CardContent className="grid gap-4 p-4 md:grid-cols-3 md:gap-5 md:p-5">
@@ -397,6 +414,10 @@ export function MinervaDashboard() {
           {activeMode === "creativo" ? (
             <div className="mx-auto max-w-6xl">
               <CreativoIa />
+            </div>
+          ) : activeMode === "metaProposal" ? (
+            <div className="mx-auto max-w-6xl">
+              <MetaProposal />
             </div>
           ) : (
             <>

@@ -21,7 +21,9 @@ export function DeepDiveChat({ mode, originalReport }: Props) {
       ? s.chatStrategic
       : mode === "pmax"
         ? s.chatPmax
-        : s.chatSlides
+        : mode === "slides"
+          ? s.chatSlides
+          : []
   );
 
   const [input, setInput] = useState("");

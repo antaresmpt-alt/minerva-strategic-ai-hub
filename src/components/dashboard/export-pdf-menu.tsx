@@ -23,6 +23,7 @@ const TITLES: Record<AppMode, string> = {
   pmax: "Generador PMAX",
   slides: "Estructura de Slides",
   creativo: "Creativo IA",
+  metaProposal: "Propuesta Meta Ads",
 };
 
 export function ExportPdfMenu({ mode }: { mode: AppMode }) {

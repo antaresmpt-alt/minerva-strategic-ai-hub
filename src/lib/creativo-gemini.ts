@@ -89,3 +89,18 @@ export async function generateCreativoImageFromParts(params: {
     "La IA no devolvió una imagen. Prueba otra foto o reformula el texto."
   );
 }
+
+/** Imagen cuadrada solo desde texto (creativos Meta sin foto de producto). Salida 1080×1080. */
+export async function generateSquareAdImageFromPrompt(params: {
+  apiKey: string;
+  model?: string;
+  prompt: string;
+}): Promise<Buffer> {
+  const full = `Create a single square 1:1 advertising creative for Meta (Facebook/Instagram) feed. ${params.prompt} Professional, high CTR, bold composition, clean background. Avoid illegible small text.`;
+  const raw = await generateCreativoImageFromParts({
+    apiKey: params.apiKey,
+    model: params.model,
+    parts: [{ text: full }],
+  });
+  return enforceDimensions(raw, 1080, 1080);
+}
