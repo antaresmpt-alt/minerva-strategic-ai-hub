@@ -2,7 +2,13 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-import { BarChart3, Megaphone, Presentation, SquareStop } from "lucide-react";
+import {
+  BarChart3,
+  Megaphone,
+  Presentation,
+  Sparkles,
+  SquareStop,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,11 +24,13 @@ import { GenerationProgress } from "@/components/dashboard/generation-progress";
 import { ReportBody } from "@/components/dashboard/report-body";
 import { DeepDiveChat } from "@/components/dashboard/deep-dive-chat";
 import { ExportPdfMenu } from "@/components/dashboard/export-pdf-menu";
+import { CreativoIa } from "@/components/dashboard/creativo-ia";
 
 const MODES: { id: AppMode; label: string; icon: typeof BarChart3 }[] = [
   { id: "strategic", label: "Análisis Estratégico", icon: BarChart3 },
   { id: "pmax", label: "Generador PMAX", icon: Megaphone },
   { id: "slides", label: "Estructura de Slides", icon: Presentation },
+  { id: "creativo", label: "Creativo IA", icon: Sparkles },
 ];
 
 export function MinervaDashboard() {
@@ -196,7 +204,7 @@ export function MinervaDashboard() {
   const handlePrimaryAction = () => {
     if (activeMode === "strategic") void runStrategic();
     else if (activeMode === "pmax") void runPmax();
-    else void runSlides();
+    else if (activeMode === "slides") void runSlides();
   };
 
   const primaryLabel =
@@ -204,7 +212,9 @@ export function MinervaDashboard() {
       ? "Generar análisis estratégico"
       : activeMode === "pmax"
         ? "Generar activos PMAX"
-        : "Generar estructura de slides";
+        : activeMode === "slides"
+          ? "Generar estructura de slides"
+          : "";
 
   const report = getReportForMode(activeMode, {
     strategicAnalysis,
@@ -213,9 +223,11 @@ export function MinervaDashboard() {
   });
 
   const canRun =
-    activeMode === "strategic" ||
-    (!!strategicAnalysis?.trim() &&
-      (activeMode === "pmax" || activeMode === "slides"));
+    activeMode === "creativo"
+      ? false
+      : activeMode === "strategic" ||
+        (!!strategicAnalysis?.trim() &&
+          (activeMode === "pmax" || activeMode === "slides"));
 
   return (
     <div className="flex min-h-screen flex-col bg-white md:flex-row">
@@ -277,7 +289,8 @@ export function MinervaDashboard() {
           })}
         </nav>
         <div className="mt-auto p-4 text-[10px] leading-relaxed text-white/55">
-          Módulos enlazados al análisis guardado en memoria (Zustand).
+          Análisis, PMAX y slides comparten contexto en memoria. Creativo IA es
+          independiente (subida de imagen propia).
         </div>
       </aside>
 
@@ -286,121 +299,136 @@ export function MinervaDashboard() {
           <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
               <h1 className="font-[family-name:var(--font-heading)] text-2xl font-bold text-[#002147] md:text-3xl">
-                Minerva Strategic AI Hub
+                {activeMode === "creativo"
+                  ? "Creativo IA"
+                  : "Minerva Strategic AI Hub"}
               </h1>
               <p className="mt-1 max-w-2xl text-sm text-slate-600">
-                Consultoría estratégica asistida por IA: diagnóstico B2B,
-                activos PMAX y narrativa ejecutiva en formato McKinsey-style.
+                {activeMode === "creativo"
+                  ? "Diseñador de anuncios con IA: sube tu producto, define el copy y obtén tres formatos optimizados para Google y Meta. Edita cada pieza con instrucciones en lenguaje natural."
+                  : "Consultoría estratégica asistida por IA: diagnóstico B2B, activos PMAX y narrativa ejecutiva en formato McKinsey-style."}
               </p>
             </div>
-            <ExportPdfMenu mode={activeMode} />
+            {activeMode !== "creativo" && <ExportPdfMenu mode={activeMode} />}
           </div>
 
-          <Card className="border-[#002147]/15 bg-slate-50/50 shadow-sm">
-            <CardContent className="grid gap-4 p-4 md:grid-cols-3 md:gap-5 md:p-5">
-              <div className="md:col-span-1">
-                <Label htmlFor="url" className="text-[#002147]">
-                  URL del sitio / empresa
-                </Label>
-                <Input
-                  id="url"
-                  placeholder="https://www.ejemplo.com"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  className="mt-1.5 rounded-xl border-[#002147]/25"
-                  disabled={loading}
-                />
-              </div>
-              <div>
-                <Label htmlFor="country">País / mercado (opcional)</Label>
-                <Input
-                  id="country"
-                  placeholder="ej. España, LATAM…"
-                  value={country}
-                  onChange={(e) => setCountry(e.target.value)}
-                  className="mt-1.5 rounded-xl border-[#002147]/25"
-                  disabled={loading}
-                />
-              </div>
-              <div>
-                <Label htmlFor="target">Cliente objetivo (opcional)</Label>
-                <Input
-                  id="target"
-                  placeholder="Sector o perfil B2B…"
-                  value={targetClient}
-                  onChange={(e) => setTargetClient(e.target.value)}
-                  className="mt-1.5 rounded-xl border-[#002147]/25"
-                  disabled={loading}
-                />
-              </div>
-            </CardContent>
-          </Card>
+          {activeMode !== "creativo" && (
+            <>
+              <Card className="border-[#002147]/15 bg-slate-50/50 shadow-sm">
+                <CardContent className="grid gap-4 p-4 md:grid-cols-3 md:gap-5 md:p-5">
+                  <div className="md:col-span-1">
+                    <Label htmlFor="url" className="text-[#002147]">
+                      URL del sitio / empresa
+                    </Label>
+                    <Input
+                      id="url"
+                      placeholder="https://www.ejemplo.com"
+                      value={url}
+                      onChange={(e) => setUrl(e.target.value)}
+                      className="mt-1.5 rounded-xl border-[#002147]/25"
+                      disabled={loading}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="country">País / mercado (opcional)</Label>
+                    <Input
+                      id="country"
+                      placeholder="ej. España, LATAM…"
+                      value={country}
+                      onChange={(e) => setCountry(e.target.value)}
+                      className="mt-1.5 rounded-xl border-[#002147]/25"
+                      disabled={loading}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="target">Cliente objetivo (opcional)</Label>
+                    <Input
+                      id="target"
+                      placeholder="Sector o perfil B2B…"
+                      value={targetClient}
+                      onChange={(e) => setTargetClient(e.target.value)}
+                      className="mt-1.5 rounded-xl border-[#002147]/25"
+                      disabled={loading}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
 
-          <div className="mt-5 flex flex-wrap items-center gap-3">
-            <Button
-              type="button"
-              className="rounded-xl bg-[#C69C2B] px-5 font-semibold text-[#002147] hover:bg-[#b38a26] disabled:opacity-50"
-              onClick={handlePrimaryAction}
-              disabled={loading || !canRun}
-            >
-              {primaryLabel}
-            </Button>
-            {loading && (
-              <Button
-                type="button"
-                variant="outline"
-                className="gap-2 rounded-xl border-red-400/60 text-red-700 hover:bg-red-50"
-                onClick={stopGeneration}
-              >
-                <SquareStop className="size-4" />
-                {activeMode === "strategic"
-                  ? "Parar análisis"
-                  : "Parar generación"}
-              </Button>
-            )}
-          </div>
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  className="rounded-xl bg-[#C69C2B] px-5 font-semibold text-[#002147] hover:bg-[#b38a26] disabled:opacity-50"
+                  onClick={handlePrimaryAction}
+                  disabled={loading || !canRun}
+                >
+                  {primaryLabel}
+                </Button>
+                {loading && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-2 rounded-xl border-red-400/60 text-red-700 hover:bg-red-50"
+                    onClick={stopGeneration}
+                  >
+                    <SquareStop className="size-4" />
+                    {activeMode === "strategic"
+                      ? "Parar análisis"
+                      : "Parar generación"}
+                  </Button>
+                )}
+              </div>
 
-          {error && (
-            <p className="mt-3 text-sm text-red-600" role="alert">
-              {error}
-            </p>
-          )}
+              {error && (
+                <p className="mt-3 text-sm text-red-600" role="alert">
+                  {error}
+                </p>
+              )}
 
-          {loading && (
-            <div className="mt-6">
-              <GenerationProgress value={progress} />
-            </div>
+              {loading && (
+                <div className="mt-6">
+                  <GenerationProgress value={progress} />
+                </div>
+              )}
+            </>
           )}
         </header>
 
         <main className="flex-1 px-4 py-8 md:px-10 md:py-10">
-          {!report && !loading && (
-            <div className="rounded-2xl border border-dashed border-[#002147]/20 bg-slate-50/30 px-6 py-16 text-center">
-              <p className="text-muted-foreground text-sm">
-                {activeMode === "strategic" &&
-                  "Introduce la URL y genera el informe estratégico. Los demás módulos reutilizarán ese análisis sin volver a consumir el prompt inicial completo."}
-                {activeMode === "pmax" &&
-                  !strategicAnalysis &&
-                  "El Generador PMAX usa el análisis estratégico guardado. Ejecuta primero el módulo principal."}
-                {activeMode === "slides" &&
-                  !strategicAnalysis &&
-                  "La estructura de slides se nutre del análisis guardado. Genera antes el Análisis Estratégico."}
-                {(activeMode === "pmax" || activeMode === "slides") &&
-                  strategicAnalysis &&
-                  "Pulsa el botón de generación para crear contenido en este módulo."}
-              </p>
+          {activeMode === "creativo" ? (
+            <div className="mx-auto max-w-6xl">
+              <CreativoIa />
             </div>
-          )}
+          ) : (
+            <>
+              {!report && !loading && (
+                <div className="rounded-2xl border border-dashed border-[#002147]/20 bg-slate-50/30 px-6 py-16 text-center">
+                  <p className="text-muted-foreground text-sm">
+                    {activeMode === "strategic" &&
+                      "Introduce la URL y genera el informe estratégico. Los demás módulos reutilizarán ese análisis sin volver a consumir el prompt inicial completo."}
+                    {activeMode === "pmax" &&
+                      !strategicAnalysis &&
+                      "El Generador PMAX usa el análisis estratégico guardado. Ejecuta primero el módulo principal."}
+                    {activeMode === "slides" &&
+                      !strategicAnalysis &&
+                      "La estructura de slides se nutre del análisis guardado. Genera antes el Análisis Estratégico."}
+                    {(activeMode === "pmax" || activeMode === "slides") &&
+                      strategicAnalysis &&
+                      "Pulsa el botón de generación para crear contenido en este módulo."}
+                  </p>
+                </div>
+              )}
 
-          {report && (
-            <article className="mx-auto max-w-4xl rounded-2xl border border-[#002147]/10 bg-white p-5 shadow-sm md:p-8">
-              <ReportBody content={report} />
-            </article>
-          )}
+              {report && (
+                <article className="mx-auto max-w-4xl rounded-2xl border border-[#002147]/10 bg-white p-5 shadow-sm md:p-8">
+                  <ReportBody content={report} />
+                </article>
+              )}
 
-          <div className="mx-auto max-w-4xl">
-            <DeepDiveChat mode={activeMode} originalReport={report} />
-          </div>
+              <div className="mx-auto max-w-4xl">
+                <DeepDiveChat mode={activeMode} originalReport={report} />
+              </div>
+            </>
+          )}
         </main>
 
         <footer className="mt-auto border-t border-[#002147]/15 bg-[#002147]/[0.03] px-4 py-8 md:px-10">
@@ -421,7 +449,10 @@ export function MinervaDashboard() {
             <address className="not-italic leading-relaxed">
               MINERVA PACKAGING & PRINT, S.A. — Carrer Cabrera 13-15, 08192
               Sant Quirze del Vallès (Barcelona) — T.{" "}
-              <a className="text-[#002147] underline" href="tel:+34937113061">
+              <a
+                className="text-[#002147] underline"
+                href="tel:+34937113061"
+              >
                 93 711 30 61
               </a>{" "}
               —{" "}
@@ -433,7 +464,7 @@ export function MinervaDashboard() {
               </a>{" "}
               — Lun–Jue 8:00–16:00, Vie 8:00–14:00 —{" "}
               <a
-                className="text-[#C69C2B]"
+                className="text-[#C69C2B] hover:underline"
                 href="https://www.minervaglobal.es"
                 target="_blank"
                 rel="noopener noreferrer"

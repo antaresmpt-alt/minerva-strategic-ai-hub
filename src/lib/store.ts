@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type AppMode = "strategic" | "pmax" | "slides";
+export type AppMode = "strategic" | "pmax" | "slides" | "creativo";
 
 export type ChatMessage = {
   role: "user" | "model";
@@ -53,6 +53,7 @@ export const useHubStore = create<HubState>((set) => ({
   setSlidesContent: (v) => set({ slidesContent: v }),
   appendChat: (mode, msg) =>
     set((s) => {
+      if (mode === "creativo") return s;
       if (mode === "strategic")
         return { chatStrategic: [...s.chatStrategic, msg] };
       if (mode === "pmax") return { chatPmax: [...s.chatPmax, msg] };
@@ -68,12 +69,14 @@ export function getReportForMode(
     "strategicAnalysis" | "pmaxContent" | "slidesContent"
   >
 ): string | null {
+  if (mode === "creativo") return null;
   if (mode === "strategic") return s.strategicAnalysis;
   if (mode === "pmax") return s.pmaxContent;
   return s.slidesContent;
 }
 
 export function getChatForMode(mode: AppMode, s: HubState): ChatMessage[] {
+  if (mode === "creativo") return [];
   if (mode === "strategic") return s.chatStrategic;
   if (mode === "pmax") return s.chatPmax;
   return s.chatSlides;
