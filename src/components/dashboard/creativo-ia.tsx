@@ -8,12 +8,12 @@ import {
   Download,
   ImagePlus,
   LayoutGrid,
-  Loader2,
   RefreshCw,
   Sparkles,
   Trash2,
   Wand2,
 } from "lucide-react";
+import { MinervaThinkingLogo } from "@/components/brand/minerva-thinking-logo";
 import { ReportBody } from "@/components/dashboard/report-body";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -727,7 +727,7 @@ export function CreativoIa() {
               >
                 {batchRunning ? (
                   <span className="inline-flex items-center gap-2">
-                    <Loader2 className="size-5 animate-spin" />
+                    <MinervaThinkingLogo size={22} />
                     Generando…
                   </span>
                 ) : (
@@ -746,7 +746,7 @@ export function CreativoIa() {
               >
                 {videoLoading ? (
                   <span className="inline-flex items-center gap-2">
-                    <Loader2 className="size-5 animate-spin" />
+                    <MinervaThinkingLogo size={22} />
                     Generando guion…
                   </span>
                 ) : (
@@ -774,9 +774,8 @@ export function CreativoIa() {
           {batchRunning && (
             <div className="mb-6 overflow-hidden rounded-xl border border-[#C69C2B]/30 bg-gradient-to-r from-slate-50 via-white to-slate-50 px-4 py-4">
               <div className="flex items-center gap-3">
-                <div className="relative flex size-12 items-center justify-center">
-                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-[#C69C2B]/20" />
-                  <Loader2 className="relative size-8 animate-spin text-[#C69C2B]" />
+                <div className="relative flex size-12 shrink-0 items-center justify-center">
+                  <MinervaThinkingLogo size={44} />
                 </div>
                 <div>
                   <p className="text-sm font-medium text-[#002147]">
@@ -830,7 +829,7 @@ export function CreativoIa() {
                     <div className="relative bg-slate-100/60 p-4">
                       {slot.loading ? (
                         <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 py-12">
-                          <Loader2 className="size-10 animate-spin text-[#C69C2B]" />
+                          <MinervaThinkingLogo size={44} />
                           <p className="text-sm text-slate-600">
                             Aplicando IA…
                           </p>
@@ -968,7 +967,7 @@ export function CreativoIa() {
               {videoLoading && (
                 <div className="mb-6 overflow-hidden rounded-xl border border-[#C69C2B]/30 bg-gradient-to-r from-slate-50 via-white to-slate-50 px-4 py-6">
                   <div className="flex items-center gap-3">
-                    <Loader2 className="size-10 shrink-0 animate-spin text-[#C69C2B]" />
+                    <MinervaThinkingLogo size={44} className="shrink-0" />
                     <div>
                       <p className="text-sm font-medium text-[#002147]">
                         Redactando guion transaccional de 10 s…

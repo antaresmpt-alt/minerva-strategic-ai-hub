@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Send } from "lucide-react";
+
+import { MinervaThinkingLogo } from "@/components/brand/minerva-thinking-logo";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -121,7 +123,8 @@ export function DeepDiveChat({ mode, originalReport }: Props) {
             ))}
             {loading && (
               <div className="text-muted-foreground flex justify-start text-sm">
-                <span className="rounded-2xl rounded-bl-md border bg-white px-4 py-2">
+                <span className="flex items-center gap-2 rounded-2xl rounded-bl-md border bg-white px-4 py-2">
+                  <MinervaThinkingLogo size={28} />
                   Generando respuesta…
                 </span>
               </div>

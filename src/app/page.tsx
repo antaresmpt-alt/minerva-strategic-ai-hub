@@ -1,5 +1,5 @@
-import { MinervaDashboard } from "@/components/dashboard/minerva-dashboard";
+import { HubPortal } from "@/components/portal/hub-portal";
 
 export default function Home() {
-  return <MinervaDashboard />;
+  return <HubPortal />;
 }

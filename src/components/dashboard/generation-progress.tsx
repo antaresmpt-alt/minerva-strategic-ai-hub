@@ -1,5 +1,6 @@
 "use client";
 
+import { MinervaThinkingLogo } from "@/components/brand/minerva-thinking-logo";
 import { Progress, ProgressLabel } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 
@@ -29,11 +30,14 @@ export function GenerationProgress({
         value={rounded}
         className="[&_[data-slot=progress-track]]:h-2.5 [&_[data-slot=progress-track]]:bg-[#002147]/12 [&_[data-slot=progress-indicator]]:bg-gradient-to-r [&_[data-slot=progress-indicator]]:from-[#002147] [&_[data-slot=progress-indicator]]:to-[#C69C2B]"
       >
-        <div className="mb-2 flex w-full flex-wrap items-end justify-between gap-2">
-          <ProgressLabel className="max-w-[88%] text-xs font-medium text-[#002147] md:text-sm">
-            {label}
-          </ProgressLabel>
-          <span className="text-muted-foreground ml-auto text-sm tabular-nums">
+        <div className="mb-2 flex w-full flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 max-w-[min(100%,28rem)] items-center gap-2 md:gap-3">
+            <MinervaThinkingLogo size={36} />
+            <ProgressLabel className="text-xs font-medium text-[#002147] md:text-sm">
+              {label}
+            </ProgressLabel>
+          </div>
+          <span className="text-muted-foreground shrink-0 text-sm tabular-nums">
             {rounded}%
           </span>
         </div>

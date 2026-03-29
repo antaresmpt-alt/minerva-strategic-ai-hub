@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import { useCallback, useState } from "react";
-import { Loader2, RefreshCw, Download } from "lucide-react";
+import { RefreshCw, Download } from "lucide-react";
+import { MinervaThinkingLogo } from "@/components/brand/minerva-thinking-logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -138,7 +139,7 @@ export function MetaProposal() {
           className="flex items-center gap-3 rounded-xl border border-[#002147]/15 bg-[#002147]/[0.04] px-4 py-3 text-sm text-[#002147]"
           role="status"
         >
-          <Loader2 className="size-5 shrink-0 animate-spin text-[#C69C2B]" />
+          <MinervaThinkingLogo size={40} />
           <span>
             {loadingText
               ? "Generando tu propuesta… Esto puede tardar un momento."
@@ -354,8 +355,8 @@ export function MetaProposal() {
                               </div>
                               <div className="relative aspect-square w-full bg-slate-100">
                                 {loading && (
-                                  <div className="absolute inset-0 flex items-center justify-center">
-                                    <Loader2 className="size-8 animate-spin text-[#C69C2B]" />
+                                  <div className="absolute inset-0 flex items-center justify-center bg-white/40">
+                                    <MinervaThinkingLogo size={44} />
                                   </div>
                                 )}
                                 {!loading && b64 && (

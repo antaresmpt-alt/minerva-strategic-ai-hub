@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
   BarChart3,
@@ -263,10 +264,10 @@ export function MinervaDashboard() {
         <div className="flex items-center gap-3 p-5">
           <div className="relative h-10 w-32 shrink-0 overflow-hidden rounded-md bg-white/10">
             <Image
-              src="/minerva-logo.svg"
-              alt="Minerva Global — placeholder de marca"
+              src="/images/brand-minerva-wordmark.png"
+              alt="Minerva"
               fill
-              className="object-cover object-left"
+              className="object-contain object-left"
               sizes="128px"
               priority
             />
@@ -297,9 +298,17 @@ export function MinervaDashboard() {
             );
           })}
         </nav>
-        <div className="mt-auto p-4 text-[10px] leading-relaxed text-white/55">
-          Análisis, PMAX y slides comparten contexto en memoria. Creativo IA y
-          Propuesta Meta Ads son módulos independientes.
+        <div className="mt-auto space-y-3 p-4">
+          <Link
+            href="/"
+            className="block text-xs font-medium text-[#C69C2B]/95 underline-offset-4 hover:text-white hover:underline"
+          >
+            ← Volver al portal
+          </Link>
+          <p className="text-[10px] leading-relaxed text-white/55">
+            Análisis, PMAX y slides comparten contexto en memoria. Creativo IA y
+            Propuesta Meta Ads son módulos independientes.
+          </p>
         </div>
       </aside>
 

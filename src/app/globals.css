@@ -130,3 +130,22 @@
     @apply font-sans;
   }
 }
+
+.hub-portal-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background-color: oklch(0.98 0.01 264);
+  background-image: url("/images/marble-bg.png");
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+}
+
+.hub-portal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: oklch(1 0 0 / 0.87);
+  pointer-events: none;
+}
