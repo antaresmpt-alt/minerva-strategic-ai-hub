@@ -19,6 +19,7 @@ import {
   TrendingDown,
   TrendingUp,
   Minus,
+  Wrench,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -76,6 +77,62 @@ type PageSpeedScores = {
   bestPractices: number;
   seo: number;
 };
+
+export type PageSpeedOpportunity = {
+  title: string;
+  description: string;
+  savingsMs: number;
+};
+
+/** Quita enlaces Markdown [texto](url) y un poco de ruido típico de Lighthouse. */
+function stripAuditDescription(raw: string): string {
+  return raw
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .trim();
+}
+
+function extractPerformanceOpportunities(data: unknown): PageSpeedOpportunity[] {
+  const audits = (
+    data as {
+      lighthouseResult?: { audits?: Record<string, unknown> };
+    }
+  ).lighthouseResult?.audits;
+  if (!audits || typeof audits !== "object") return [];
+
+  const allAudits = Object.values(audits) as Array<{
+    title?: string;
+    description?: string;
+    score?: number | null;
+    details?: {
+      type?: string;
+      overallSavingsMs?: number;
+    };
+  }>;
+
+  const opps = allAudits.filter((a) => {
+    const d = a?.details;
+    const savings = d?.overallSavingsMs ?? 0;
+    return (
+      d?.type === "opportunity" &&
+      a?.score !== 1 &&
+      savings > 0
+    );
+  });
+
+  opps.sort((a, b) => {
+    const sa = a?.details?.overallSavingsMs ?? 0;
+    const sb = b?.details?.overallSavingsMs ?? 0;
+    return sb - sa;
+  });
+
+  return opps.slice(0, 3).map((a) => ({
+    title: String(a?.title ?? "Sin título"),
+    description: stripAuditDescription(String(a?.description ?? "")),
+    savingsMs: Math.max(0, Math.round(a?.details?.overallSavingsMs ?? 0)),
+  }));
+}
 
 function TrendCell({ trend }: { trend: number }) {
   if (trend > 0) {
@@ -237,21 +294,33 @@ function parseLighthouseScores(data: unknown): PageSpeedScores | null {
   };
 }
 
+function savingsBadgeClassName(savingsMs: number): string {
+  if (savingsMs >= 2000) {
+    return "border-0 bg-red-100 text-red-800 hover:bg-red-100";
+  }
+  return "border-0 bg-amber-100 text-amber-800 hover:bg-amber-100";
+}
+
 export function RankingMonitor() {
   const [device, setDevice] = useState<"mobile" | "desktop">("mobile");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [scores, setScores] = useState<PageSpeedScores | null>(null);
+  const [opportunities, setOpportunities] = useState<PageSpeedOpportunity[]>(
+    []
+  );
 
   useEffect(() => {
     setScores(null);
     setError(null);
+    setOpportunities([]);
   }, [device]);
 
   const runPageSpeedAudit = useCallback(async () => {
     setLoading(true);
     setError(null);
     setScores(null);
+    setOpportunities([]);
     try {
       const res = await fetch(
         `/api/pagespeed?strategy=${encodeURIComponent(device)}`,
@@ -276,8 +345,10 @@ export function RankingMonitor() {
         );
       }
       setScores(parsed);
+      setOpportunities(extractPerformanceOpportunities(data));
     } catch (e) {
       setScores(null);
+      setOpportunities([]);
       setError(
         e instanceof Error ? e.message : "No se pudo completar la auditoría."
       );
@@ -417,20 +488,66 @@ export function RankingMonitor() {
           ) : null}
 
           {!loading && scores ? (
-            <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
-              <CircularScore
-                title="Rendimiento (Performance)"
-                scorePercent={scores.performance}
-              />
-              <CircularScore
-                title="Accesibilidad"
-                scorePercent={scores.accessibility}
-              />
-              <CircularScore
-                title="Mejores prácticas"
-                scorePercent={scores.bestPractices}
-              />
-              <CircularScore title="SEO" scorePercent={scores.seo} />
+            <div className="space-y-8">
+              <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
+                <CircularScore
+                  title="Rendimiento (Performance)"
+                  scorePercent={scores.performance}
+                />
+                <CircularScore
+                  title="Accesibilidad"
+                  scorePercent={scores.accessibility}
+                />
+                <CircularScore
+                  title="Mejores prácticas"
+                  scorePercent={scores.bestPractices}
+                />
+                <CircularScore title="SEO" scorePercent={scores.seo} />
+              </div>
+
+              {opportunities.length > 0 ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Wrench
+                      className="size-5 shrink-0 text-[#C69C2B]"
+                      aria-hidden
+                    />
+                    <h3 className="font-heading text-base font-semibold text-[#002147]">
+                      Oportunidades de Mejora (Rendimiento)
+                    </h3>
+                  </div>
+                  <ul className="grid gap-3">
+                    {opportunities.map((opp, idx) => (
+                      <li key={`${opp.title}-${idx}`}>
+                        <Card className="border-slate-200/90 bg-white/95 shadow-sm">
+                          <CardHeader className="space-y-2 pb-2 pt-4">
+                            <div className="flex flex-wrap items-start justify-between gap-2 gap-y-1">
+                              <CardTitle className="text-sm font-semibold leading-snug text-[#002147]">
+                                {opp.title}
+                              </CardTitle>
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "shrink-0 font-medium tabular-nums",
+                                  savingsBadgeClassName(opp.savingsMs)
+                                )}
+                              >
+                                Ahorro est.:{" "}
+                                {(opp.savingsMs / 1000).toFixed(1)}s
+                              </Badge>
+                            </div>
+                          </CardHeader>
+                          <CardContent className="pb-4 pt-0">
+                            <p className="text-muted-foreground text-sm leading-relaxed">
+                              {opp.description || "—"}
+                            </p>
+                          </CardContent>
+                        </Card>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
