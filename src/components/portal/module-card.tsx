@@ -18,8 +18,8 @@ type ModuleCardProps = {
   title: string;
   description: string;
   icon: ReactNode;
-  /** Use larger frame for raster module marks (PNG). */
-  iconFrame?: "glyph" | "module";
+  /** Use larger frame for raster module marks (PNG), or circular avatar for chatbot. */
+  iconFrame?: "glyph" | "module" | "avatar";
   actionLabel: string;
   href?: string;
   disabled?: boolean;
@@ -50,7 +50,9 @@ export function ModuleCard({
             iconFrame === "glyph" &&
               "size-12 bg-primary/[0.07] text-primary ring-1 ring-primary/10",
             iconFrame === "module" &&
-              "min-h-[6.25rem] w-full max-w-[9.5rem] bg-transparent p-0 ring-0"
+              "min-h-[6.25rem] w-full max-w-[9.5rem] bg-transparent p-0 ring-0",
+            iconFrame === "avatar" &&
+              "size-20 shrink-0 overflow-hidden rounded-full bg-muted/60 p-0.5 ring-2 ring-[#002147]/12"
           )}
         >
           {icon}

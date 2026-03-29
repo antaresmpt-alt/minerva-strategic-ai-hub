@@ -83,7 +83,7 @@ export function HubPortal() {
           </p>
         </section>
 
-        <div className="grid flex-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 lg:items-stretch">
+        <div className="grid flex-1 gap-6 sm:grid-cols-2 xl:grid-cols-4 lg:items-stretch">
           <ModuleCard
             title="Minerva Sales & Tech Intelligence"
             description="Dashboard avanzado de ventas, márgenes reales y control operativo de la Oficina Técnica (pharma/cosmética)."
@@ -116,6 +116,23 @@ export function HubPortal() {
             }
             actionLabel="Próximamente"
             disabled
+          />
+          <ModuleCard
+            title="Minerva AI Assistant"
+            description="Tu asistente corporativo inteligente. Consultas generales, redacción y soporte."
+            iconFrame="avatar"
+            icon={
+              <Image
+                src="/images/module-chatbot.png"
+                alt="Minerva AI Assistant"
+                width={80}
+                height={80}
+                className="size-full object-cover"
+                unoptimized
+              />
+            }
+            actionLabel="Abrir Chat"
+            href="/chat"
           />
         </div>
       </div>
