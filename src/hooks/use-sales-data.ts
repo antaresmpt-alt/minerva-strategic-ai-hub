@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import { loadVentasCsv } from "@/lib/sales-csv";
+import { parseSalesFile } from "@/lib/sales-file";
+import { SalesParseError } from "@/lib/sales-ingest";
 import {
   type SalesOrderRow,
   type SalesRoleView,
@@ -22,40 +24,122 @@ export type MonthlyTrendPoint = {
   costes: number;
 };
 
+type DataSource =
+  | { kind: "file"; file: File }
+  | { kind: "url"; url: string };
+
 function filterByRole(rows: SalesOrderRow[], role: SalesRoleView): SalesOrderRow[] {
   const label = comercialLabelFromRole(role);
   if (!label) return rows;
   return rows.filter((r) => r.comercial === label);
 }
 
-export function useSalesData(csvUrl = "/data/ventasDataSet_mejorado.csv") {
+function formatParseError(e: unknown): string {
+  if (e instanceof SalesParseError) {
+    const headers =
+      e.detectedHeaders.length > 0
+        ? `\n\nCabeceras detectadas (${e.detectedHeaders.length}): ${e.detectedHeaders
+            .slice(0, 28)
+            .join(", ")}${e.detectedHeaders.length > 28 ? "…" : ""}`
+        : "";
+    const hint = e.hint ? `\n\n${e.hint}` : "";
+    return `${e.message}${headers}${hint}`;
+  }
+  return e instanceof Error ? e.message : "Error desconocido";
+}
+
+export function useSalesData() {
   const [allRows, setAllRows] = useState<SalesOrderRow[]>([]);
   const [roleView, setRoleView] = useState<SalesRoleView>("manager");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [parseWarnings, setParseWarnings] = useState<string[]>([]);
+  const [sourceLabel, setSourceLabel] = useState<string | null>(null);
+  const sourceRef = useRef<DataSource | null>(null);
 
-  const load = useCallback(async () => {
+  const applyRows = useCallback(
+    (rows: SalesOrderRow[], label: string, warnings: string[] = []) => {
+      setAllRows(rows);
+      setSourceLabel(label);
+      setError(null);
+      setParseWarnings(warnings);
+    },
+    []
+  );
+
+  const loadFromFile = useCallback(
+    async (file: File) => {
+      setLoading(true);
+      setError(null);
+      setParseWarnings([]);
+      try {
+        const data = await parseSalesFile(file);
+        sourceRef.current = { kind: "file", file };
+        applyRows(data.rows, file.name, data.warnings);
+      } catch (e) {
+        setError(formatParseError(e));
+        setAllRows([]);
+        sourceRef.current = null;
+        setSourceLabel(null);
+        setParseWarnings([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [applyRows]
+  );
+
+  const loadDemo = useCallback(
+    async (url = "/data/ventasDataSet_mejorado.csv") => {
+      setLoading(true);
+      setError(null);
+      setParseWarnings([]);
+      try {
+        const data = await loadVentasCsv(url);
+        sourceRef.current = { kind: "url", url };
+        applyRows(data.rows, "Datos de ejemplo", data.warnings);
+      } catch (e) {
+        setError(formatParseError(e));
+        setAllRows([]);
+        sourceRef.current = null;
+        setSourceLabel(null);
+        setParseWarnings([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [applyRows]
+  );
+
+  const reload = useCallback(async () => {
+    const src = sourceRef.current;
+    if (!src) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await loadVentasCsv(csvUrl);
-      setAllRows(data);
+      const data =
+        src.kind === "file"
+          ? await parseSalesFile(src.file)
+          : await loadVentasCsv(src.url);
+      setAllRows(data.rows);
+      setParseWarnings(data.warnings);
+      setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error al cargar datos");
+      setError(formatParseError(e));
       setAllRows([]);
+      setParseWarnings([]);
     } finally {
       setLoading(false);
     }
-  }, [csvUrl]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  }, []);
 
   const filteredRows = useMemo(
     () => filterByRole(allRows, roleView),
     [allRows, roleView]
   );
+
+  const hasData = allRows.length > 0;
+  const canReload = sourceLabel !== null;
 
   const kpis = useMemo(() => {
     const ventasReales = filteredRows.reduce((s, r) => s + r.valorReal, 0);
@@ -149,7 +233,13 @@ export function useSalesData(csvUrl = "/data/ventasDataSet_mejorado.csv") {
     setRoleView,
     loading,
     error,
-    reload: load,
+    parseWarnings,
+    hasData,
+    sourceLabel,
+    canReload,
+    loadFromFile,
+    loadDemo,
+    reload,
     kpis,
     topClientesMargen,
     ventasPorSector,

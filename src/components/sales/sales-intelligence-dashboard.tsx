@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRef } from "react";
 import {
   AlertTriangle,
   Euro,
@@ -9,6 +10,7 @@ import {
   RefreshCw,
   ScatterChart as ScatterIcon,
   TrendingUp,
+  Upload,
 } from "lucide-react";
 import {
   Bar,
@@ -29,6 +31,7 @@ import {
 } from "recharts";
 
 import { useSalesData } from "@/hooks/use-sales-data";
+import { SalesPdfExportMenu } from "@/components/sales/sales-pdf-export-menu";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -93,7 +96,7 @@ function KpiCard({
   valueClassName?: string;
 }) {
   return (
-    <Card className="border-slate-200/80 shadow-sm">
+    <Card className="border-slate-200/80 bg-white/85 shadow-sm backdrop-blur-sm">
       <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
         <div>
           <CardTitle className="text-sm font-medium text-slate-600">
@@ -116,12 +119,24 @@ function KpiCard({
   );
 }
 
+const FILE_ACCEPT =
+  ".csv,.xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv";
+
 export function SalesIntelligenceDashboard() {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const dashboardPdfRef = useRef<HTMLDivElement>(null);
+  const fullPdfRef = useRef<HTMLDivElement>(null);
   const {
     roleView,
     setRoleView,
     loading,
     error,
+    parseWarnings,
+    hasData,
+    canReload,
+    sourceLabel,
+    loadFromFile,
+    loadDemo,
     reload,
     kpis,
     topClientesMargen,
@@ -138,79 +153,162 @@ export function SalesIntelligenceDashboard() {
         ? "text-red-600"
         : "text-[#002147]";
 
-  return (
-    <div className="min-h-dvh bg-slate-50/80">
-      <header className="border-b border-slate-200/90 bg-white/90 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
-          <div>
-            <h1 className="font-heading text-xl font-bold tracking-tight text-[#002147] sm:text-2xl">
-              Minerva Sales Intelligence
-            </h1>
-            <p className="mt-0.5 text-sm text-slate-600">
-              Rentabilidad real y alertas de coste · Oficina Técnica
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <NativeSelect
-              label="Vista de datos"
-              options={roleOptions}
-              value={roleView}
-              onChange={(e) => setRoleView(e.target.value as SalesRoleView)}
-              className="border-[#002147]/20"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => void reload()}
-              disabled={loading}
-            >
-              <RefreshCw
-                className={cn("size-3.5", loading && "animate-spin")}
-              />
-              Actualizar
-            </Button>
-            <Link
-              href="/"
-              className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
-            >
-              Portal
-            </Link>
-            <Link
-              href="/sem"
-              className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
-            >
-              SEM
-            </Link>
-          </div>
-        </div>
-      </header>
+  const onFilePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (f) void loadFromFile(f);
+  };
 
-      <main className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
-        {error ? (
-          <Card className="border-red-200 bg-red-50/50">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-red-800">{error}</p>
+  return (
+    <div className="relative isolate min-h-dvh">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+      >
+        <div className="sem-workspace-marble" />
+        <div className="sem-workspace-overlay" />
+      </div>
+
+      <div className="relative z-10">
+        <header className="border-b border-slate-200/60 bg-white/75 backdrop-blur-md">
+          <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+            <div>
+              <h1 className="font-heading text-xl font-bold tracking-tight text-[#002147] sm:text-2xl">
+                Minerva Sales Intelligence
+              </h1>
+              <p className="mt-0.5 text-sm text-slate-600">
+                Rentabilidad real y alertas de coste · Oficina Técnica
+              </p>
+              <button
+                type="button"
+                onClick={() => void loadDemo()}
+                disabled={loading}
+                className="mt-1.5 text-left text-xs text-[#002147]/80 underline-offset-2 hover:underline disabled:opacity-50"
+              >
+                Cargar datos de ejemplo
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              {hasData ? (
+                <SalesPdfExportMenu
+                  dashboardRef={dashboardPdfRef}
+                  fullRef={fullPdfRef}
+                  sourceLabel={sourceLabel}
+                  disabled={loading}
+                />
+              ) : null}
+              <NativeSelect
+                label="Vista de datos"
+                options={roleOptions}
+                value={roleView}
+                onChange={(e) => setRoleView(e.target.value as SalesRoleView)}
+                className="border-[#002147]/20"
+                disabled={!hasData}
+              />
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="mt-3"
+                className="gap-1.5"
                 onClick={() => void reload()}
+                disabled={loading || !canReload}
+                title={
+                  canReload
+                    ? "Volver a leer el último archivo o ejemplo"
+                    : "Sube un archivo primero"
+                }
               >
-                Reintentar
+                <RefreshCw
+                  className={cn("size-3.5", loading && "animate-spin")}
+                />
+                Volver a cargar
               </Button>
+              <Link
+                href="/"
+                className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
+              >
+                Portal
+              </Link>
+              <Link
+                href="/sem"
+                className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
+              >
+                SEM
+              </Link>
+            </div>
+          </div>
+        </header>
+
+        <main className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
+        {error ? (
+          <Card className="border-red-200 bg-red-50/80 shadow-sm backdrop-blur-sm">
+            <CardContent className="pt-6">
+              <p className="whitespace-pre-line text-sm font-medium text-red-800">
+                {error}
+              </p>
+              {canReload ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => void reload()}
+                  disabled={loading}
+                >
+                  Reintentar
+                </Button>
+              ) : (
+                <p className="mt-2 text-xs text-red-900/80">
+                  Prueba con otro CSV o Excel (.xlsx) con las columnas del informe
+                  corporativo.
+                </p>
+              )}
             </CardContent>
           </Card>
         ) : null}
 
-        {loading && !error ? (
-          <div className="text-muted-foreground text-sm">Cargando dataset…</div>
+        {loading ? (
+          <div className="text-muted-foreground text-sm">
+            {hasData ? "Actualizando datos…" : "Leyendo archivo…"}
+          </div>
         ) : null}
 
-        {!loading && !error ? (
-          <>
+        {!loading && !error && !hasData ? (
+          <div className="flex min-h-[38vh] flex-col items-center justify-center gap-3 px-4 text-center">
+            <p className="max-w-md text-sm text-slate-700">
+              Sube el informe mensual que envía el director comercial (CSV o Excel).
+              Debe conservar las mismas columnas que el formato estándar.
+            </p>
+            <p className="text-xs text-slate-500">
+              Usa el botón flotante inferior derecho o &quot;Cargar datos de ejemplo&quot;
+              arriba.
+            </p>
+          </div>
+        ) : null}
+
+        {hasData && !error ? (
+          <div ref={fullPdfRef} className="space-y-8">
+            <div
+              ref={dashboardPdfRef}
+              data-sales-pdf-root
+              className="space-y-8 rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5"
+            >
+            {parseWarnings.length > 0 ? (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-300/90 bg-amber-50/95 px-4 py-3 text-sm text-amber-950">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-700" />
+                <div>
+                  <p className="font-medium text-amber-950">
+                    Archivo cargado con diferencias respecto al formato corporativo
+                  </p>
+                  <ul className="mt-2 list-inside list-disc text-xs text-amber-900/90">
+                    {parseWarnings.map((w, i) => (
+                      <li key={i}>{w}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            ) : null}
+
             {kpis.alertasCount > 0 ? (
               <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-950">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-700" />
@@ -252,7 +350,7 @@ export function SalesIntelligenceDashboard() {
             </section>
 
             <section className="grid gap-6 lg:grid-cols-2">
-              <Card className="border-slate-200/80 shadow-sm">
+              <Card className="border-slate-200/80 bg-white/85 shadow-sm backdrop-blur-sm">
                 <CardHeader>
                   <CardTitle className="text-base text-[#002147]">
                     Top 10 clientes · margen bruto
@@ -297,7 +395,7 @@ export function SalesIntelligenceDashboard() {
                 </CardContent>
               </Card>
 
-              <Card className="border-slate-200/80 shadow-sm">
+              <Card className="border-slate-200/80 bg-white/85 shadow-sm backdrop-blur-sm">
                 <CardHeader>
                   <CardTitle className="text-base text-[#002147]">
                     Ventas por sector
@@ -341,7 +439,7 @@ export function SalesIntelligenceDashboard() {
             </section>
 
             {roleView === "manager" ? (
-              <Card className="border-slate-200/80 shadow-sm">
+              <Card className="border-slate-200/80 bg-white/85 shadow-sm backdrop-blur-sm">
                 <CardHeader>
                   <div className="flex items-center gap-2">
                     <ScatterIcon className="size-5 text-[#002147]" />
@@ -402,7 +500,7 @@ export function SalesIntelligenceDashboard() {
               </Card>
             ) : null}
 
-            <Card className="border-slate-200/80 shadow-sm">
+            <Card className="border-slate-200/80 bg-white/85 shadow-sm backdrop-blur-sm">
               <CardHeader>
                 <CardTitle className="text-base text-[#002147]">
                   Evolución temporal
@@ -447,8 +545,9 @@ export function SalesIntelligenceDashboard() {
                 </ResponsiveContainer>
               </CardContent>
             </Card>
+            </div>
 
-            <Card className="border-slate-200/80 shadow-sm">
+            <Card className="border-slate-200/80 bg-white/85 shadow-sm backdrop-blur-sm">
               <CardHeader>
                 <CardTitle className="text-base text-[#002147]">
                   Tabla operativa
@@ -528,9 +627,38 @@ export function SalesIntelligenceDashboard() {
                 </Table>
               </CardContent>
             </Card>
-          </>
+          </div>
         ) : null}
       </main>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={FILE_ACCEPT}
+        className="sr-only"
+        onChange={onFilePicked}
+      />
+      <div className="pointer-events-auto fixed bottom-4 right-4 z-30 flex max-w-[min(11rem,42vw)] flex-col items-end gap-1.5">
+        <Button
+          type="button"
+          size="icon"
+          className="size-11 shrink-0 rounded-full border-[#002147]/20 bg-[#002147] text-white shadow-lg hover:bg-[#002147]/90"
+          onClick={() => fileInputRef.current?.click()}
+          title="Subir informe mensual (CSV o Excel)"
+        >
+          <Upload className="size-5" aria-hidden />
+          <span className="sr-only">Subir informe mensual</span>
+        </Button>
+        {sourceLabel ? (
+          <p
+            className="w-full truncate rounded-md border border-slate-200/80 bg-white/90 px-2 py-1 text-center text-[10px] leading-tight text-slate-600 shadow-sm backdrop-blur-sm"
+            title={sourceLabel}
+          >
+            {sourceLabel}
+          </p>
+        ) : null}
+      </div>
+      </div>
     </div>
   );
 }
