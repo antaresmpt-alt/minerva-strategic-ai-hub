@@ -17,6 +17,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "docx": "^9.6.1",
+    "dommatrix": "^0.1.1",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.7.0",
     "next": "16.2.1",

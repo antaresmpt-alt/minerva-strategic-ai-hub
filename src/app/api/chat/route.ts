@@ -1,3 +1,5 @@
+import "@/lib/pdf-node-globals";
+
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import {
   convertToModelMessages,
@@ -7,7 +9,6 @@ import {
 import fs from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
-import { PDFParse } from "pdf-parse";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -60,6 +61,7 @@ async function getKnowledgeBaseText(): Promise<string> {
   const chunks: string[] = [];
 
   try {
+    const { PDFParse } = await import("pdf-parse");
     const entries = await fs.readdir(KNOWLEDGE_BASE_DIR, { withFileTypes: true });
     const pdfNames = entries
       .filter((e) => e.isFile() && e.name.toLowerCase().endsWith(".pdf"))
