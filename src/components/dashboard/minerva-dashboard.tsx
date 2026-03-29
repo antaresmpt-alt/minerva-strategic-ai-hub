@@ -29,6 +29,7 @@ import { ExportPdfMenu } from "@/components/dashboard/export-pdf-menu";
 import { CreativoIa } from "@/components/dashboard/creativo-ia";
 import { MetaProposal } from "@/components/dashboard/meta-proposal";
 import { MetaProposalExports } from "@/components/dashboard/meta-proposal-exports";
+import { SemContactFooter } from "@/components/layout/sem-contact-footer";
 
 const MODES: { id: AppMode; label: string; icon: typeof BarChart3 }[] = [
   { id: "strategic", label: "Análisis Estratégico", icon: BarChart3 },
@@ -240,7 +241,7 @@ export function MinervaDashboard() {
           (activeMode === "pmax" || activeMode === "slides"));
 
   return (
-    <div className="flex min-h-screen flex-col bg-white md:flex-row">
+    <div className="flex min-h-screen flex-col md:flex-row">
       {/* Mobile mode tabs */}
       <div className="flex gap-1 overflow-x-auto border-b border-[#002147]/15 bg-[#002147] p-2 md:hidden">
         {MODES.map((m) => (
@@ -312,8 +313,16 @@ export function MinervaDashboard() {
         </div>
       </aside>
 
-      <div className="flex min-h-0 flex-1 flex-col">
-        <header className="border-b border-[#002147]/10 bg-white px-4 py-6 md:px-10">
+      <div className="relative isolate flex min-h-0 min-h-dvh flex-1 flex-col md:min-h-screen">
+        <div
+          className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+          aria-hidden
+        >
+          <div className="sem-workspace-marble" />
+          <div className="sem-workspace-overlay" />
+        </div>
+
+        <header className="relative z-10 border-b border-[#002147]/10 bg-white/80 px-4 py-6 shadow-sm backdrop-blur-md md:px-10">
           <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
               <h1 className="font-[family-name:var(--font-heading)] text-2xl font-bold text-[#002147] md:text-3xl">
@@ -340,7 +349,7 @@ export function MinervaDashboard() {
 
           {activeMode !== "creativo" && activeMode !== "metaProposal" && (
             <>
-              <Card className="border-[#002147]/15 bg-slate-50/50 shadow-sm">
+              <Card className="border-[#002147]/15 bg-white/60 shadow-sm backdrop-blur-sm">
                 <CardContent className="grid gap-4 p-4 md:grid-cols-3 md:gap-5 md:p-5">
                   <div className="md:col-span-1">
                     <Label htmlFor="url" className="text-[#002147]">
@@ -419,7 +428,7 @@ export function MinervaDashboard() {
           )}
         </header>
 
-        <main className="flex-1 px-4 py-8 md:px-10 md:py-10">
+        <main className="relative z-10 flex-1 px-4 py-8 md:px-10 md:py-10">
           {activeMode === "creativo" ? (
             <div className="mx-auto max-w-6xl">
               <CreativoIa />
@@ -431,7 +440,7 @@ export function MinervaDashboard() {
           ) : (
             <>
               {!report && !loading && (
-                <div className="rounded-2xl border border-dashed border-[#002147]/20 bg-slate-50/30 px-6 py-16 text-center">
+                <div className="rounded-2xl border border-dashed border-[#002147]/20 bg-white/45 px-6 py-16 text-center backdrop-blur-sm">
                   <p className="text-muted-foreground text-sm">
                     {activeMode === "strategic" &&
                       "Introduce la URL y genera el informe estratégico. Los demás módulos reutilizarán ese análisis sin volver a consumir el prompt inicial completo."}
@@ -449,7 +458,7 @@ export function MinervaDashboard() {
               )}
 
               {report && (
-                <article className="mx-auto max-w-4xl rounded-2xl border border-[#002147]/10 bg-white p-5 shadow-sm md:p-8">
+                <article className="mx-auto max-w-4xl rounded-2xl border border-[#002147]/10 bg-white/85 p-5 shadow-sm backdrop-blur-sm md:p-8">
                   <ReportBody content={report} />
                 </article>
               )}
@@ -461,49 +470,7 @@ export function MinervaDashboard() {
           )}
         </main>
 
-        <footer className="mt-auto border-t border-[#002147]/15 bg-[#002147]/[0.03] px-4 py-8 md:px-10">
-          <div className="mx-auto flex max-w-4xl flex-col gap-3 text-xs text-slate-600 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="relative h-8 w-24 shrink-0">
-                <Image
-                  src="/minerva-logo.svg"
-                  alt=""
-                  fill
-                  className="object-contain object-left"
-                />
-              </div>
-              <span className="font-medium text-[#002147]">
-                Datos de contacto (referencia minervaglobal.es)
-              </span>
-            </div>
-            <address className="not-italic leading-relaxed">
-              MINERVA PACKAGING & PRINT, S.A. — Carrer Cabrera 13-15, 08192
-              Sant Quirze del Vallès (Barcelona) — T.{" "}
-              <a
-                className="text-[#002147] underline"
-                href="tel:+34937113061"
-              >
-                93 711 30 61
-              </a>{" "}
-              —{" "}
-              <a
-                className="text-[#002147] underline"
-                href="mailto:minerva@minervaglobal.es"
-              >
-                minerva@minervaglobal.es
-              </a>{" "}
-              — Lun–Jue 8:00–16:00, Vie 8:00–14:00 —{" "}
-              <a
-                className="text-[#C69C2B] hover:underline"
-                href="https://www.minervaglobal.es"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                minervaglobal.es
-              </a>
-            </address>
-          </div>
-        </footer>
+        <SemContactFooter />
       </div>
     </div>
   );

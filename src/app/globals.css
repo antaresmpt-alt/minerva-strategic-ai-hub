@@ -149,3 +149,24 @@
   background: oklch(1 0 0 / 0.87);
   pointer-events: none;
 }
+
+/* Mármol detrás del área de trabajo SEM (columna derecha); sidebar y pie sin cambios. */
+.sem-workspace-marble {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-color: oklch(0.98 0.01 264);
+  background-image: url("/images/marble-bg.png");
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+}
+
+.sem-workspace-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  /* Menos opaco que el portal para que se perciba el veteado del mármol */
+  background: oklch(1 0 0 / 0.72);
+  pointer-events: none;
+}

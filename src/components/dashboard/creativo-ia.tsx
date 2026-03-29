@@ -453,7 +453,7 @@ export function CreativoIa() {
     : "";
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-[#002147]/15 bg-white shadow-sm">
+    <div className="overflow-hidden rounded-2xl border border-[#002147]/15 bg-white/75 shadow-md backdrop-blur-md">
       <div
         className="flex gap-1 border-b border-[#002147]/10 bg-slate-50/90 p-2"
         role="tablist"
@@ -761,7 +761,7 @@ export function CreativoIa() {
         </section>
 
         {/* Galería (estáticos) o guion (vídeo) */}
-        <section className="flex flex-col bg-white p-6 lg:p-8">
+        <section className="flex flex-col bg-white/60 p-6 backdrop-blur-sm lg:p-8">
           {creativoTab === "static" ? (
             <>
           <div className="mb-6 flex items-center gap-2">

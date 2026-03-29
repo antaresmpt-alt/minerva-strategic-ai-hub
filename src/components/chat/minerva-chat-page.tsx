@@ -4,13 +4,15 @@ import Link from "next/link";
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
-import { History, Menu, PanelLeftClose, Send } from "lucide-react";
+import { Menu, MessageSquare, Send } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import type { UIMessage } from "ai";
 
 import { MinervaThinkingLogo } from "@/components/brand/minerva-thinking-logo";
+import { SemContactFooter } from "@/components/layout/sem-contact-footer";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import {
   Sheet,
   SheetContent,
@@ -19,7 +21,6 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { buttonVariants } from "@/components/ui/button-variants";
 import { cn } from "@/lib/utils";
 
 const MOCK_CHATS = [
@@ -38,50 +39,47 @@ function textFromParts(message: UIMessage): string {
     .join("");
 }
 
-function SidebarBody({
-  onSelectMock,
-}: {
-  onSelectMock?: () => void;
-}) {
+function ChatSidebarNav({ onPickChat }: { onPickChat?: () => void }) {
   return (
-    <div className="flex h-full flex-col gap-4 p-4">
-      <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+    <>
+      <div className="flex items-center gap-3 rounded-lg bg-[#C69C2B] px-3 py-2.5 text-[#002147]">
+        <MessageSquare className="size-4 shrink-0 opacity-90" />
+        <span className="text-sm font-medium">Minerva AI Assistant</span>
+      </div>
+      <p className="px-3 pt-4 pb-1 text-[10px] tracking-wide text-white/45 uppercase">
         Historial
       </p>
-      <nav className="flex flex-1 flex-col gap-1">
+      <nav className="flex flex-col gap-1">
         {MOCK_CHATS.map((c) => (
           <button
             key={c.id}
             type="button"
-            onClick={onSelectMock}
-            className="hover:bg-muted/80 rounded-lg border border-transparent px-3 py-2.5 text-left text-sm transition-colors"
+            onClick={onPickChat}
+            className="rounded-lg px-3 py-2.5 text-left text-sm text-white/90 transition hover:bg-white/10"
           >
-            <span className="text-foreground line-clamp-2 font-medium">
-              {c.title}
-            </span>
-            <span className="text-muted-foreground mt-0.5 block text-xs">
-              {c.updated}
-            </span>
+            <span className="line-clamp-2 font-medium">{c.title}</span>
+            <span className="mt-0.5 block text-xs text-white/50">{c.updated}</span>
           </button>
         ))}
       </nav>
-      <Button
-        type="button"
-        variant="secondary"
-        className="h-auto min-h-10 w-full flex-col gap-0.5 py-2.5 text-center whitespace-normal"
-        disabled
-      >
-        <span>📚 Base de Conocimiento (PDFs)</span>
-        <span className="text-muted-foreground text-xs font-normal">
-          Próximamente
-        </span>
-      </Button>
-    </div>
+      <div className="mt-4 px-1">
+        <Button
+          type="button"
+          variant="secondary"
+          className="h-auto min-h-10 w-full flex-col gap-0.5 border border-white/10 bg-white/10 py-2.5 text-center text-white/80 whitespace-normal hover:bg-white/15"
+          disabled
+        >
+          <span>📚 Base de Conocimiento (PDFs)</span>
+          <span className="text-xs font-normal text-white/45">Próximamente</span>
+        </Button>
+      </div>
+    </>
   );
 }
 
 export function MinervaChatPage() {
   const [input, setInput] = useState("");
+  const [sheetOpen, setSheetOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -111,8 +109,7 @@ export function MinervaChatPage() {
   const showTyping =
     status === "submitted" ||
     (status === "streaming" &&
-      (last?.role !== "assistant" ||
-        textFromParts(last).trim() === ""));
+      (last?.role !== "assistant" || textFromParts(last).trim() === ""));
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -130,89 +127,123 @@ export function MinervaChatPage() {
     }
   }
 
+  const closeSheet = () => setSheetOpen(false);
+
   return (
-    <div className="bg-background flex min-h-dvh flex-col">
-      <header className="border-border flex shrink-0 items-center gap-3 border-b px-3 py-3 sm:px-4">
-        <Sheet>
+    <div className="flex min-h-dvh flex-col md:flex-row">
+      {/* Móvil: barra superior tipo SEM */}
+      <div className="flex items-center gap-2 overflow-x-auto border-b border-[#002147]/15 bg-[#002147] p-2 md:hidden">
+        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
           <SheetTrigger
             render={
               <Button
                 variant="ghost"
                 size="icon"
-                className="shrink-0 md:hidden"
-                aria-label="Abrir historial"
+                className="shrink-0 text-white hover:bg-white/10"
+                aria-label="Menú"
               />
             }
           >
             <Menu className="size-5" aria-hidden />
           </SheetTrigger>
-          <SheetContent side="left" className="flex w-[min(100%,280px)] flex-col p-0">
-            <SheetHeader className="border-border border-b px-4 py-3 text-left">
-              <SheetTitle className="font-heading text-[#002147]">
+          <SheetContent
+            side="left"
+            className="flex w-[min(100%,300px)] flex-col border-[#002147] bg-[#002147] p-0 text-white"
+            showCloseButton
+          >
+            <SheetHeader className="border-b border-white/10 px-4 py-4 text-left">
+              <SheetTitle className="font-heading text-white">
                 Minerva Chat
               </SheetTitle>
             </SheetHeader>
-            <SidebarBody onSelectMock={() => {}} />
+            <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-3">
+              <ChatSidebarNav onPickChat={closeSheet} />
+            </div>
+            <div className="mt-auto border-t border-white/10 p-4">
+              <Link
+                href="/"
+                onClick={closeSheet}
+                className="text-xs font-medium text-[#C69C2B]/95 underline-offset-4 hover:text-white hover:underline"
+              >
+                ← Volver al portal
+              </Link>
+            </div>
           </SheetContent>
         </Sheet>
-
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className="bg-muted relative size-9 shrink-0 overflow-hidden rounded-full ring-2 ring-[#002147]/15">
-            <Image
-              src="/images/module-chatbot.png"
-              alt=""
-              fill
-              className="object-cover object-center"
-              sizes="36px"
-            />
-          </div>
-          <div className="min-w-0">
-            <h1 className="font-heading text-[#002147] truncate text-base font-semibold sm:text-lg">
-              Minerva AI Assistant
-            </h1>
-            <p className="text-muted-foreground truncate text-xs sm:text-sm">
-              Asistente corporativo · respuestas concisas
-            </p>
-          </div>
-        </div>
-
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-white">
+          Minerva AI Assistant
+        </span>
         <Link
           href="/"
-          className={cn(
-            buttonVariants({ variant: "outline", size: "sm" }),
-            "hidden shrink-0 sm:inline-flex"
-          )}
+          className="shrink-0 rounded-md px-2 py-1.5 text-xs font-medium text-[#C69C2B] hover:text-white"
         >
-          <PanelLeftClose className="mr-1 size-4" />
           Portal
         </Link>
-        <Link
-          href="/"
-          className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }), "sm:hidden")}
-          aria-label="Volver al portal"
-        >
-          <PanelLeftClose className="size-4" />
-        </Link>
-      </header>
+      </div>
 
-      <div className="flex min-h-0 flex-1">
-        <aside className="border-border bg-muted/30 hidden w-64 shrink-0 flex-col border-r md:flex">
-          <div className="border-border flex items-center gap-2 border-b px-4 py-3">
-            <History className="text-muted-foreground size-4" />
-            <span className="font-heading text-sm font-medium text-[#002147]">
-              Conversaciones
-            </span>
+      {/* Desktop: barra lateral SEM */}
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-[#002147]/15 bg-[#002147] text-white md:flex">
+        <div className="flex items-center gap-3 p-5">
+          <div className="relative h-10 w-32 shrink-0 overflow-hidden rounded-md bg-white/10">
+            <Image
+              src="/images/brand-minerva-wordmark.png"
+              alt="Minerva"
+              fill
+              className="object-contain object-left"
+              sizes="128px"
+              priority
+            />
           </div>
-          <SidebarBody />
-        </aside>
+        </div>
+        <p className="px-5 font-[family-name:var(--font-heading)] text-xs leading-snug tracking-wide text-[#C69C2B]/95 uppercase">
+          Strategic AI Hub
+        </p>
+        <Separator className="my-4 bg-white/15" />
+        <div className="flex flex-1 flex-col gap-1 px-3">
+          <ChatSidebarNav />
+        </div>
+        <div className="mt-auto space-y-3 p-4">
+          <Link
+            href="/"
+            className="block text-xs font-medium text-[#C69C2B]/95 underline-offset-4 hover:text-white hover:underline"
+          >
+            ← Volver al portal
+          </Link>
+          <p className="text-[10px] leading-relaxed text-white/55">
+            Respuestas concisas. La base de conocimiento PDF llegará en una
+            futura versión.
+          </p>
+        </div>
+      </aside>
 
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <ScrollArea className="min-h-0 flex-1 px-3 py-4 sm:px-6">
+      {/* Área principal con mármol (misma pila que SEM) */}
+      <div className="relative isolate flex min-h-0 min-h-dvh flex-1 flex-col md:min-h-screen">
+        <div
+          className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+          aria-hidden
+        >
+          <div className="sem-workspace-marble" />
+          <div className="sem-workspace-overlay" />
+        </div>
+
+        <header className="relative z-10 border-b border-[#002147]/10 bg-white/80 px-4 py-6 shadow-sm backdrop-blur-md md:px-10">
+          <h1 className="font-[family-name:var(--font-heading)] text-2xl font-bold text-[#002147] md:text-3xl">
+            Minerva AI Assistant
+          </h1>
+          <p className="mt-1 max-w-2xl text-sm text-slate-600">
+            Asistente corporativo para consultas generales, redacción y soporte.
+            Respuestas breves y profesionales, alineadas con Minerva Global.
+          </p>
+        </header>
+
+        <main className="relative z-10 flex min-h-0 flex-1 flex-col px-4 py-6 md:px-10 md:py-8">
+          <ScrollArea className="min-h-0 flex-1 pr-2">
             <div className="mx-auto max-w-3xl space-y-4 pb-4">
               {messages.length === 0 && (
-                <div className="text-muted-foreground rounded-2xl border border-dashed border-[#002147]/20 bg-[#002147]/[0.03] px-4 py-8 text-center text-sm leading-relaxed">
+                <div className="rounded-2xl border border-dashed border-[#002147]/20 bg-white/50 px-4 py-8 text-center text-sm leading-relaxed text-slate-600 backdrop-blur-sm">
                   Escribe una consulta. Minerva AI responde de forma breve y
-                  profesional, alineada con el tono corporativo de Minerva Global.
+                  profesional, alineada con el tono corporativo de Minerva
+                  Global.
                 </div>
               )}
 
@@ -235,7 +266,7 @@ export function MinervaChatPage() {
                         "max-w-[min(100%,36rem)] rounded-2xl px-4 py-3 text-sm shadow-sm",
                         isUser
                           ? "rounded-br-md bg-[#002147] text-white"
-                          : "rounded-bl-md border border-slate-200/90 bg-white text-foreground"
+                          : "rounded-bl-md border border-slate-200/90 bg-white/90 text-foreground backdrop-blur-sm"
                       )}
                     >
                       {isUser ? (
@@ -252,7 +283,7 @@ export function MinervaChatPage() {
 
               {showTyping && (
                 <div className="flex justify-start">
-                  <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+                  <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-slate-200 bg-white/90 px-4 py-3 text-sm text-slate-600 backdrop-blur-sm">
                     <MinervaThinkingLogo size={28} />
                     Generando…
                   </div>
@@ -269,7 +300,7 @@ export function MinervaChatPage() {
             </div>
           </ScrollArea>
 
-          <footer className="border-border bg-background shrink-0 border-t px-3 py-3 sm:px-6">
+          <div className="relative z-10 mt-4 shrink-0 border-t border-[#002147]/10 bg-white/85 px-0 py-4 backdrop-blur-md md:mt-6">
             <form
               onSubmit={onSubmit}
               className="mx-auto flex max-w-3xl items-end gap-2"
@@ -282,7 +313,7 @@ export function MinervaChatPage() {
                 placeholder="Escribe tu mensaje… (Enter envía, Shift+Enter salto)"
                 disabled={busy}
                 rows={1}
-                className="min-h-11 max-h-[200px] resize-none rounded-xl border-[#002147]/20 py-3 text-sm"
+                className="min-h-11 max-h-[200px] resize-none rounded-xl border-[#002147]/25 bg-white/90 py-3 text-sm"
               />
               {busy ? (
                 <Button
@@ -298,15 +329,17 @@ export function MinervaChatPage() {
                   type="submit"
                   size="icon-lg"
                   disabled={!input.trim()}
-                  className="shrink-0 rounded-xl bg-[#002147] text-white hover:bg-[#002147]/90"
+                  className="shrink-0 rounded-xl bg-[#C69C2B] font-semibold text-[#002147] hover:bg-[#b38a26]"
                   aria-label="Enviar"
                 >
                   <Send className="size-5" />
                 </Button>
               )}
             </form>
-          </footer>
-        </div>
+          </div>
+        </main>
+
+        <SemContactFooter />
       </div>
     </div>
   );
