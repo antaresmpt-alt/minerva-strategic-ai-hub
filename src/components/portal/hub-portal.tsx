@@ -109,13 +109,13 @@ export function HubPortal() {
           />
           <ModuleCard
             title="SEO (Search Engine Optimization)"
-            description="Módulo en desarrollo para análisis orgánico y visibilidad web."
+            description="Monitor de visibilidad orgánica y optimizador de contenidos on-page para minervaglobal.es."
             iconFrame="module"
             icon={
               <ModuleMark src={MODULE_IMG.seo.src} alt={MODULE_IMG.seo.alt} />
             }
-            actionLabel="Próximamente"
-            disabled
+            actionLabel="Acceder a SEO"
+            href="/seo"
           />
           <ModuleCard
             title="Minerva AI Assistant"
