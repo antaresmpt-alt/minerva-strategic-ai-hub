@@ -41,6 +41,9 @@ export const SALES_ROLE_LABELS: Record<SalesRoleView, string> = {
   "comercial-6": "Vista Comercial 6",
 };
 
+/** Estado de plazo de entrega (se calcula en el hook; ver `sales-delivery-timing`). */
+export type DeliveryTimeStatus = "ok" | "risk" | "late" | "na";
+
 /** Umbral Oficina Técnica: coste estimado > 75% del valor real */
 export function isTechnicalMarginAlert(row: SalesOrderRow): boolean {
   if (row.valorReal <= 0) return false;

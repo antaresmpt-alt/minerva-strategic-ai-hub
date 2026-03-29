@@ -18,7 +18,20 @@ const KNOWLEDGE_BASE_DIR = path.join(
   "knowledge-base"
 );
 
-const MINERVA_AI_SYSTEM = `Eres Minerva AI, el asistente corporativo exclusivo de Minerva Global (empresa de packaging técnico para pharma y cosmética). Tus respuestas deben ser extremadamente concisas, directas y profesionales. No uses introducciones largas. Si te piden tareas muy largas, resume la idea principal para ahorrar tokens.`;
+const MINERVA_AI_SYSTEM = `Eres Minerva AI, el asistente corporativo exclusivo de Minerva Global (empresa de packaging técnico para pharma y cosmética). Tus respuestas deben ser extremadamente concisas, directas y profesionales. No uses introducciones largas. Si te piden tareas muy largas, resume la idea principal para ahorrar tokens.
+
+REGLAS DE CITAS Y FIABILIDAD (OBLIGATORIAS):
+- Cuando respondas basándote en la información proporcionada en la Base de Conocimiento, DEBES citar el nombre del documento original (el nombre aparece en cada bloque tras la etiqueta "DOCUMENTO:").
+- Añade la cita al final de la frase o párrafo relevante usando este formato exacto en cursiva: *(Fuente: NombreDelDocumento.pdf)* (sustituye NombreDelDocumento.pdf por el nombre real del archivo indicado en el bloque).
+- Si la respuesta combina información de varios documentos, cítalos todos (una o más citas *(Fuente: …)* según corresponda).
+- Si te preguntan algo que NO está en los documentos de la base de conocimiento ni en el contexto adicional delimitado abajo, responde amablemente que no tienes esa información en tu base de conocimiento actual, en lugar de inventarla (evita alucinaciones).
+- Si usas el contexto del documento adjunto por el usuario y puedes identificar un nombre de archivo en las instrucciones, cítalo con el mismo formato *(Fuente: …)*; si no hay nombre explícito, puedes usar *(Fuente: documento adjunto por el usuario)*.`;
+
+const KB_START = "--- BASE DE CONOCIMIENTO ---";
+const KB_END = "--- FIN BASE DE CONOCIMIENTO ---";
+
+const USER_DOC_START = "--- DOCUMENTO ADJUNTO POR EL USUARIO ---";
+const USER_DOC_END = "--- FIN DOCUMENTO ADJUNTO ---";
 
 /** Límite aproximado para la memoria base (Gemini 2.5 Flash admite contexto amplio). */
 const MAX_KNOWLEDGE_BASE_CHARS = 500_000;
@@ -86,8 +99,13 @@ function buildSystemPrompt(
         "\n\n[... base de conocimiento truncada por límite de contexto ...]";
     }
     sections.push(
-      "A CONTINUACIÓN SE TE PROPORCIONA LA BASE DE CONOCIMIENTO DE LA EMPRESA. USA ESTA INFORMACIÓN PARA RESPONDER CUANDO APLIQUE:\n\n" +
-        body
+      [
+        "La siguiente sección contiene solo texto extraído de PDFs corporativos. Úsala para responder cuando aplique y aplica siempre las reglas de citas anteriores.",
+        "",
+        KB_START,
+        body,
+        KB_END,
+      ].join("\n")
     );
   }
 
@@ -99,7 +117,15 @@ function buildSystemPrompt(
         "\n\n[... texto del documento truncado por límite de contexto ...]";
     }
     sections.push(
-      `CONTEXTO ADICIONAL DEL DOCUMENTO PROPORCIONADO POR EL USUARIO:\n${doc}\n\nResponde basándote en este contexto cuando sea relevante para la pregunta. Si la consulta no guarda relación con el documento, responde con conocimiento general (y con la base de empresa si aplica) manteniendo las mismas reglas de brevedad y tono corporativo.`
+      [
+        "Contexto adicional subido por el usuario en el chat (no confundir con la base de conocimiento salvo que lo indiques). Respeta las mismas reglas de citas y de no inventar información.",
+        "",
+        USER_DOC_START,
+        doc,
+        USER_DOC_END,
+        "",
+        "Si la consulta no guarda relación con este documento, responde con conocimiento general (y con la base de empresa si aplica) manteniendo brevedad y tono corporativo.",
+      ].join("\n")
     );
   }
 

@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useReactToPrint } from "react-to-print";
 import {
   AlertTriangle,
+  Clock,
+  Download,
   Euro,
   Info,
   LineChart as LineChartIcon,
@@ -53,9 +55,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  buildDelayReportXlsxBlob,
+  isOrderActiveForDelivery,
+} from "@/lib/sales-delivery-timing";
 import { cn } from "@/lib/utils";
 import {
   SALES_ROLE_LABELS,
+  type DeliveryTimeStatus,
   type SalesRoleView,
 } from "@/types/sales";
 
@@ -81,6 +88,38 @@ function SiBadge({ value }: { value: string }) {
     <Badge variant={ok ? "success" : "secondary"} className="font-normal">
       {value || "—"}
     </Badge>
+  );
+}
+
+function TimingBadge({ status }: { status: DeliveryTimeStatus }) {
+  if (status === "late") {
+    return (
+      <Badge variant="destructive" className="font-normal">
+        Retrasado
+      </Badge>
+    );
+  }
+  if (status === "risk") {
+    return (
+      <Badge
+        variant="warning"
+        className="border-orange-400/50 bg-orange-500/20 font-normal text-orange-950 dark:text-orange-100"
+      >
+        Riesgo {"<"} 7 días
+      </Badge>
+    );
+  }
+  if (status === "ok") {
+    return (
+      <Badge variant="success" className="font-normal">
+        A tiempo
+      </Badge>
+    );
+  }
+  return (
+    <span className="text-muted-foreground text-xs" title="Sin fecha o pedido cerrado">
+      —
+    </span>
   );
 }
 
@@ -156,7 +195,36 @@ export function SalesIntelligenceDashboard() {
     scatterComerciales,
     evolucionMensual,
     rowsWithAlerts,
+    deliveryRiskKpis,
+    displayRows,
   } = useSalesData();
+
+  const [deliveryTableFilter, setDeliveryTableFilter] = useState<
+    "all" | "alerts"
+  >("all");
+
+  const tableRowsFiltered = useMemo(() => {
+    if (deliveryTableFilter === "all") return rowsWithAlerts;
+    return rowsWithAlerts.filter(({ row, timeStatus }) => {
+      if (!isOrderActiveForDelivery(row.estado)) return false;
+      return timeStatus === "late" || timeStatus === "risk";
+    });
+  }, [rowsWithAlerts, deliveryTableFilter]);
+
+  const delayExportCount = deliveryRiskKpis.late + deliveryRiskKpis.risk;
+
+  const exportDelayXlsx = () => {
+    const blob = buildDelayReportXlsxBlob(displayRows);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `minerva-retrasos-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   const isPro = dashboardMode === "PRO";
 
@@ -373,6 +441,44 @@ export function SalesIntelligenceDashboard() {
                 </span>
               </div>
             ) : null}
+
+            <Card className="border-slate-200/80 bg-white/85 break-inside-avoid shadow-sm backdrop-blur-sm print:border-slate-300 print:bg-white print:shadow-none">
+              <CardHeader className="pb-2">
+                <div className="flex flex-wrap items-start gap-3">
+                  <Clock
+                    className="mt-0.5 size-5 shrink-0 text-[#002147]"
+                    aria-hidden
+                  />
+                  <div className="min-w-0">
+                    <CardTitle className="text-base text-[#002147]">
+                      Riesgo de Entregas
+                    </CardTitle>
+                    <CardDescription>
+                      Pedidos activos (excluye Entregado y Cancelado) · según
+                      Fecha_Entrega
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="flex flex-wrap gap-8 pb-6 pt-0">
+                <div className="flex items-baseline gap-2">
+                  <span className="font-heading text-3xl font-bold tabular-nums text-red-600">
+                    {deliveryRiskKpis.late}
+                  </span>
+                  <span className="text-sm font-medium text-slate-700">
+                    Retrasados
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-heading text-3xl font-bold tabular-nums text-orange-600">
+                    {deliveryRiskKpis.risk}
+                  </span>
+                  <span className="text-sm font-medium text-slate-700">
+                    En riesgo (plazo {"<"} 7 días)
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
 
             {isPro ? (
             <>
@@ -724,10 +830,60 @@ export function SalesIntelligenceDashboard() {
                 </CardTitle>
                 <CardDescription>
                   {isPro
-                    ? "Estados FSC, Prueba color, PDF · Alertas OT en rojo"
+                    ? "Estados FSC, Prueba color, PDF · Alertas OT en rojo · timing de entrega"
                     : "Resumen de pedidos (sin alertas de rentabilidad)"}
                 </CardDescription>
               </CardHeader>
+              <div className="flex flex-col gap-3 border-b border-slate-200/80 px-4 pb-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-6 print:hidden">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant={
+                      deliveryTableFilter === "all" ? "default" : "outline"
+                    }
+                    size="sm"
+                    className={
+                      deliveryTableFilter === "all"
+                        ? "bg-[#002147] hover:bg-[#002147]/90"
+                        : ""
+                    }
+                    onClick={() => setDeliveryTableFilter("all")}
+                  >
+                    Todos los pedidos
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={
+                      deliveryTableFilter === "alerts" ? "default" : "outline"
+                    }
+                    size="sm"
+                    className={
+                      deliveryTableFilter === "alerts"
+                        ? "bg-[#002147] hover:bg-[#002147]/90"
+                        : ""
+                    }
+                    onClick={() => setDeliveryTableFilter("alerts")}
+                  >
+                    Solo retrasados / en riesgo
+                  </Button>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="gap-1.5 border-amber-300/80 bg-amber-50 font-semibold text-amber-950 hover:bg-amber-100 disabled:opacity-50"
+                  disabled={delayExportCount === 0}
+                  onClick={exportDelayXlsx}
+                  title={
+                    delayExportCount === 0
+                      ? "No hay pedidos retrasados o en riesgo en tu vista"
+                      : `Exportar ${delayExportCount} pedido(s) a Excel`
+                  }
+                >
+                  <Download className="size-4 shrink-0" aria-hidden />
+                  Exportar Informe de Retrasos (Excel)
+                </Button>
+              </div>
               <CardContent className="p-0 sm:p-0 print:overflow-visible [&>div]:print:overflow-visible [&_table]:print:text-[10px]">
                 <Table>
                   <TableHeader>
@@ -735,6 +891,7 @@ export function SalesIntelligenceDashboard() {
                       <TableHead>Pedido</TableHead>
                       <TableHead>Cliente</TableHead>
                       <TableHead>Estado</TableHead>
+                      <TableHead>Timing</TableHead>
                       {isPro ? (
                         <>
                           <TableHead className="text-right">Valor real</TableHead>
@@ -756,7 +913,7 @@ export function SalesIntelligenceDashboard() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {rowsWithAlerts.map(({ row, critical }) => (
+                    {tableRowsFiltered.map(({ row, critical, timeStatus }) => (
                       <TableRow
                         key={row.idPedido}
                         data-state={critical ? "alert" : undefined}
@@ -777,6 +934,9 @@ export function SalesIntelligenceDashboard() {
                           <Badge variant="outline" className="font-normal">
                             {row.estado}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <TimingBadge status={timeStatus} />
                         </TableCell>
                         {isPro ? (
                           <>

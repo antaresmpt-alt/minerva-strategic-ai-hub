@@ -9,6 +9,10 @@ import {
   type DashboardMode,
 } from "@/lib/sales-ingest";
 import {
+  computeDeliveryTimeStatus,
+  isOrderActiveForDelivery,
+} from "@/lib/sales-delivery-timing";
+import {
   type SalesOrderRow,
   type SalesRoleView,
   comercialLabelFromRole,
@@ -270,9 +274,22 @@ export function useSalesData() {
         row: r,
         critical:
           dashboardMode === "PRO" ? isTechnicalMarginAlert(r) : false,
+        timeStatus: computeDeliveryTimeStatus(r),
       })),
     [displayRows, dashboardMode]
   );
+
+  const deliveryRiskKpis = useMemo(() => {
+    let late = 0;
+    let risk = 0;
+    for (const r of displayRows) {
+      if (!isOrderActiveForDelivery(r.estado)) continue;
+      const ts = computeDeliveryTimeStatus(r);
+      if (ts === "late") late += 1;
+      else if (ts === "risk") risk += 1;
+    }
+    return { late, risk };
+  }, [displayRows]);
 
   return {
     allRows,
@@ -300,5 +317,6 @@ export function useSalesData() {
     scatterComerciales,
     evolucionMensual,
     isTechnicalMarginAlert,
+    deliveryRiskKpis,
   };
 }
