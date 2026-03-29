@@ -170,3 +170,11 @@
   background: oklch(1 0 0 / 0.72);
   pointer-events: none;
 }
+
+/* Ventas: impresión / «Guardar como PDF» desde el navegador (react-to-print) */
+@media print {
+  @page {
+    size: a4 landscape;
+    margin: 12mm;
+  }
+}

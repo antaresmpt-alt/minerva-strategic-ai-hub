@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useRef } from "react";
+import { useReactToPrint } from "react-to-print";
 import {
   AlertTriangle,
   Euro,
   LineChart as LineChartIcon,
   PieChart as PieChartIcon,
+  Printer,
   RefreshCw,
   ScatterChart as ScatterIcon,
   TrendingUp,
@@ -31,7 +33,6 @@ import {
 } from "recharts";
 
 import { useSalesData } from "@/hooks/use-sales-data";
-import { SalesPdfExportMenu } from "@/components/sales/sales-pdf-export-menu";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -96,7 +97,7 @@ function KpiCard({
   valueClassName?: string;
 }) {
   return (
-    <Card className="border-slate-200/80 bg-white/85 shadow-sm backdrop-blur-sm">
+    <Card className="border-slate-200/80 bg-white/85 break-inside-avoid shadow-sm backdrop-blur-sm print:border-slate-300 print:bg-white print:shadow-none">
       <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
         <div>
           <CardTitle className="text-sm font-medium text-slate-600">
@@ -124,8 +125,14 @@ const FILE_ACCEPT =
 
 export function SalesIntelligenceDashboard() {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const dashboardPdfRef = useRef<HTMLDivElement>(null);
-  const fullPdfRef = useRef<HTMLDivElement>(null);
+  const salesPrintRef = useRef<HTMLDivElement>(null);
+  const handlePrint = useReactToPrint({
+    contentRef: salesPrintRef,
+    documentTitle: `Minerva-Ventas-${new Date().toISOString().slice(0, 10)}`,
+    pageStyle: `
+      @page { size: A4 landscape; margin: 12mm; }
+    `,
+  });
   const {
     roleView,
     setRoleView,
@@ -160,17 +167,17 @@ export function SalesIntelligenceDashboard() {
   };
 
   return (
-    <div className="relative isolate min-h-dvh">
+    <div className="relative isolate min-h-dvh print:min-h-0">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+        className="pointer-events-none absolute inset-0 z-0 overflow-hidden print:hidden"
       >
         <div className="sem-workspace-marble" />
         <div className="sem-workspace-overlay" />
       </div>
 
-      <div className="relative z-10">
-        <header className="border-b border-slate-200/60 bg-white/75 backdrop-blur-md">
+      <div className="relative z-10 print:bg-white">
+        <header className="border-b border-slate-200/60 bg-white/75 backdrop-blur-md print:hidden">
           <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
             <div>
               <h1 className="font-heading text-xl font-bold tracking-tight text-[#002147] sm:text-2xl">
@@ -183,19 +190,25 @@ export function SalesIntelligenceDashboard() {
                 type="button"
                 onClick={() => void loadDemo()}
                 disabled={loading}
-                className="mt-1.5 text-left text-xs text-[#002147]/80 underline-offset-2 hover:underline disabled:opacity-50"
+                className="mt-1.5 text-left text-xs text-[#002147]/80 underline-offset-2 hover:underline disabled:opacity-50 print:hidden"
               >
                 Cargar datos de ejemplo
               </button>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               {hasData ? (
-                <SalesPdfExportMenu
-                  dashboardRef={dashboardPdfRef}
-                  fullRef={fullPdfRef}
-                  sourceLabel={sourceLabel}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 print:hidden"
+                  onClick={() => void handlePrint()}
                   disabled={loading}
-                />
+                  title="Abre el cuadro de impresión del navegador; elige «Guardar como PDF»"
+                >
+                  <Printer className="size-3.5" aria-hidden />
+                  Exportar PDF
+                </Button>
               ) : null}
               <NativeSelect
                 label="Vista de datos"
@@ -239,7 +252,7 @@ export function SalesIntelligenceDashboard() {
           </div>
         </header>
 
-        <main className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
+        <main className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8 print:max-w-none print:px-3 print:py-4">
         {error ? (
           <Card className="border-red-200 bg-red-50/80 shadow-sm backdrop-blur-sm">
             <CardContent className="pt-6">
@@ -287,14 +300,24 @@ export function SalesIntelligenceDashboard() {
         ) : null}
 
         {hasData && !error ? (
-          <div ref={fullPdfRef} className="space-y-8">
+          <div ref={salesPrintRef} className="space-y-8 print:space-y-5">
+            <div className="hidden border-b border-slate-200 pb-3 print:block">
+              <h1 className="font-heading text-xl font-bold tracking-tight text-[#002147] print:text-2xl">
+                Minerva Sales Intelligence
+              </h1>
+              <p className="text-sm text-slate-600">
+                Rentabilidad real y alertas de coste · Oficina Técnica
+              </p>
+              {sourceLabel ? (
+                <p className="mt-1 text-xs text-slate-500">Origen: {sourceLabel}</p>
+              ) : null}
+            </div>
             <div
-              ref={dashboardPdfRef}
               data-sales-pdf-root
-              className="space-y-8 rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5"
+              className="space-y-8 rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5 print:rounded-lg print:border print:border-slate-200 print:bg-white print:p-4 print:shadow-none"
             >
             {parseWarnings.length > 0 ? (
-              <div className="flex items-start gap-2 rounded-lg border border-amber-300/90 bg-amber-50/95 px-4 py-3 text-sm text-amber-950">
+              <div className="flex break-inside-avoid items-start gap-2 rounded-lg border border-amber-300/90 bg-amber-50/95 px-4 py-3 text-sm text-amber-950">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-700" />
                 <div>
                   <p className="font-medium text-amber-950">
@@ -310,7 +333,7 @@ export function SalesIntelligenceDashboard() {
             ) : null}
 
             {kpis.alertasCount > 0 ? (
-              <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-950">
+              <div className="flex break-inside-avoid items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-950">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-700" />
                 <span>
                   <strong>{kpis.alertasCount}</strong> pedido
@@ -321,7 +344,7 @@ export function SalesIntelligenceDashboard() {
               </div>
             ) : null}
 
-            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 print:gap-3">
               <KpiCard
                 title="Ventas reales"
                 subtitle="Suma Valor_Real"
@@ -349,15 +372,15 @@ export function SalesIntelligenceDashboard() {
               />
             </section>
 
-            <section className="grid gap-6 lg:grid-cols-2">
-              <Card className="border-slate-200/80 bg-white/85 shadow-sm backdrop-blur-sm">
+            <section className="grid gap-6 lg:grid-cols-2 print:gap-4">
+              <Card className="border-slate-200/80 bg-white/85 break-inside-avoid shadow-sm backdrop-blur-sm print:border-slate-300 print:bg-white print:shadow-none">
                 <CardHeader>
                   <CardTitle className="text-base text-[#002147]">
                     Top 10 clientes · margen bruto
                   </CardTitle>
                   <CardDescription>€ acumulados por cliente</CardDescription>
                 </CardHeader>
-                <CardContent className="h-80 pl-0">
+                <CardContent className="h-80 min-h-[240px] pl-0 print:h-[260px] print:min-h-[240px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       data={topClientesMargen}
@@ -395,7 +418,7 @@ export function SalesIntelligenceDashboard() {
                 </CardContent>
               </Card>
 
-              <Card className="border-slate-200/80 bg-white/85 shadow-sm backdrop-blur-sm">
+              <Card className="border-slate-200/80 bg-white/85 break-inside-avoid shadow-sm backdrop-blur-sm print:border-slate-300 print:bg-white print:shadow-none">
                 <CardHeader>
                   <CardTitle className="text-base text-[#002147]">
                     Ventas por sector
@@ -404,7 +427,7 @@ export function SalesIntelligenceDashboard() {
                     Distribución por Tipo_Cliente (Valor_Real)
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="h-80">
+                <CardContent className="h-80 min-h-[240px] print:h-[260px] print:min-h-[240px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -439,7 +462,7 @@ export function SalesIntelligenceDashboard() {
             </section>
 
             {roleView === "manager" ? (
-              <Card className="border-slate-200/80 bg-white/85 shadow-sm backdrop-blur-sm">
+              <Card className="border-slate-200/80 bg-white/85 break-inside-avoid shadow-sm backdrop-blur-sm print:border-slate-300 print:bg-white print:shadow-none">
                 <CardHeader>
                   <div className="flex items-center gap-2">
                     <ScatterIcon className="size-5 text-[#002147]" />
@@ -454,7 +477,7 @@ export function SalesIntelligenceDashboard() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="h-96">
+                <CardContent className="h-96 min-h-[280px] print:h-[300px] print:min-h-[280px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <ScatterChart margin={{ top: 16, right: 16, bottom: 8, left: 8 }}>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-slate-200" />
@@ -500,7 +523,7 @@ export function SalesIntelligenceDashboard() {
               </Card>
             ) : null}
 
-            <Card className="border-slate-200/80 bg-white/85 shadow-sm backdrop-blur-sm">
+            <Card className="border-slate-200/80 bg-white/85 break-inside-avoid shadow-sm backdrop-blur-sm print:border-slate-300 print:bg-white print:shadow-none">
               <CardHeader>
                 <CardTitle className="text-base text-[#002147]">
                   Evolución temporal
@@ -509,7 +532,7 @@ export function SalesIntelligenceDashboard() {
                   Ventas reales vs costes estimados (por mes de apertura)
                 </CardDescription>
               </CardHeader>
-              <CardContent className="h-80">
+              <CardContent className="h-80 min-h-[240px] print:h-[260px] print:min-h-[240px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={evolucionMensual} margin={{ left: 8, right: 8 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-slate-200" />
@@ -547,7 +570,7 @@ export function SalesIntelligenceDashboard() {
             </Card>
             </div>
 
-            <Card className="border-slate-200/80 bg-white/85 shadow-sm backdrop-blur-sm">
+            <Card className="border-slate-200/80 bg-white/85 break-inside-avoid shadow-sm backdrop-blur-sm print:border-slate-300 print:bg-white print:shadow-none">
               <CardHeader>
                 <CardTitle className="text-base text-[#002147]">
                   Tabla operativa
@@ -556,7 +579,7 @@ export function SalesIntelligenceDashboard() {
                   Estados FSC, Prueba color, PDF · Alertas OT en rojo
                 </CardDescription>
               </CardHeader>
-              <CardContent className="p-0 sm:p-0">
+              <CardContent className="p-0 sm:p-0 print:overflow-visible [&>div]:print:overflow-visible [&_table]:print:text-[10px]">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
@@ -578,6 +601,7 @@ export function SalesIntelligenceDashboard() {
                         key={row.idPedido}
                         data-state={critical ? "alert" : undefined}
                         className={cn(
+                          "break-inside-avoid",
                           critical &&
                             "border-l-4 border-l-red-500 bg-red-50/60 hover:bg-red-50/80"
                         )}
@@ -638,7 +662,7 @@ export function SalesIntelligenceDashboard() {
         className="sr-only"
         onChange={onFilePicked}
       />
-      <div className="pointer-events-auto fixed bottom-4 right-4 z-30 flex max-w-[min(11rem,42vw)] flex-col items-end gap-1.5">
+      <div className="pointer-events-auto fixed bottom-4 right-4 z-30 flex max-w-[min(11rem,42vw)] flex-col items-end gap-1.5 print:hidden">
         <Button
           type="button"
           size="icon"
