@@ -6,11 +6,18 @@ import {
 } from "ai";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { NextResponse } from "next/server";
 import { PDFParse } from "pdf-parse";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+/**
+ * PDFs empaquetados en el deploy (p. ej. `public/data/knowledge-base`).
+ * En Vercel el FS es efímero y de solo lectura: no uses carpetas tipo `uploads/` o
+ * `contexto/` escritas en runtime; si el directorio no existe, `getKnowledgeBaseText`
+ * devuelve cadena vacía (sin tirar la petición).
+ */
 const KNOWLEDGE_BASE_DIR = path.join(
   process.cwd(),
   "public",
@@ -134,9 +141,11 @@ function buildSystemPrompt(
 
 function getGoogleModel() {
   const apiKey =
-    process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY o GOOGLE_GENERATIVE_AI_API_KEY no configurada");
+    throw new Error(
+      "GOOGLE_GENERATIVE_AI_API_KEY (o GEMINI_API_KEY) no configurada"
+    );
   }
   const google = createGoogleGenerativeAI({ apiKey });
   return google("gemini-2.5-flash");
@@ -179,11 +188,13 @@ export async function POST(req: Request) {
     });
 
     return result.toUIMessageStreamResponse();
-  } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : "Error del servidor";
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json(
+      {
+        text: "Lo siento, el servidor tiene un problema: " + message,
+      },
+      { status: 200 }
+    );
   }
 }

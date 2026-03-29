@@ -8,6 +8,7 @@ import { FileText, Menu, MessageSquare, Send, Trash } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { DefaultChatTransport, type UIMessage } from "ai";
 
+import { chatApiFetch } from "@/lib/chat-json-error-to-stream";
 import { extractTextFromPDF } from "@/lib/extract-pdf-text";
 
 import { MinervaThinkingLogo } from "@/components/brand/minerva-thinking-logo";
@@ -121,6 +122,7 @@ export function MinervaChatPage() {
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
+        fetch: chatApiFetch,
         body: () => ({
           documentContext: documentContextRef.current,
         }),
