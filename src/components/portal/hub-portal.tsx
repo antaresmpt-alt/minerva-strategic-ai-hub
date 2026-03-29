@@ -120,14 +120,14 @@ export function HubPortal() {
           <ModuleCard
             title="Minerva AI Assistant"
             description="Tu asistente corporativo inteligente. Consultas generales, redacción y soporte."
-            iconFrame="avatar"
+            iconFrame="module"
             icon={
               <Image
                 src="/images/module-chatbot.png"
                 alt="Minerva AI Assistant"
-                width={80}
-                height={80}
-                className="size-full object-cover"
+                width={152}
+                height={176}
+                className="h-auto max-h-[7.25rem] w-full object-contain object-center"
                 unoptimized
               />
             }

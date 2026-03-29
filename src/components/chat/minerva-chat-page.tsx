@@ -72,7 +72,17 @@ function ChatSidebarNav({
           </button>
         ))}
       </nav>
-      <div className="mt-4 px-1">
+      <div className="mt-4 space-y-2 px-1">
+        <div className="flex items-start gap-2.5 rounded-lg border border-emerald-500/35 bg-emerald-950/25 px-3 py-2.5">
+          <span
+            className="mt-1 size-2 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.55)]"
+            title="Activa"
+            aria-hidden
+          />
+          <p className="text-xs leading-snug text-white/90">
+            📚 Base de Conocimiento Activa (Autocargada desde sistema)
+          </p>
+        </div>
         <Button
           type="button"
           variant="secondary"
@@ -83,10 +93,10 @@ function ChatSidebarNav({
           <FileText className="size-4 shrink-0 opacity-90" aria-hidden />
           <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
             <span className="text-sm font-medium leading-tight">
-              Base de Conocimiento (PDFs)
+              PDF adicional (opcional)
             </span>
             <span className="text-xs font-normal text-white/55">
-              {pdfLoading ? "Leyendo PDF…" : "Adjuntar como contexto"}
+              {pdfLoading ? "Leyendo PDF…" : "Añadir contexto extra al mensaje"}
             </span>
           </span>
         </Button>
@@ -292,8 +302,8 @@ export function MinervaChatPage() {
             ← Volver al portal
           </Link>
           <p className="text-[10px] leading-relaxed text-white/55">
-            Respuestas concisas. Puedes adjuntar un PDF como contexto desde la
-            barra lateral.
+            Respuestas concisas. La normativa corporativa se carga desde la base
+            del sistema; puedes adjuntar un PDF extra si lo necesitas.
           </p>
         </div>
       </aside>

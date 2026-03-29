@@ -1,6 +1,35 @@
 import type { SalesOrderRow } from "@/types/sales";
 import { normalizeSalesRecord, parseSalesRowRecord } from "@/lib/sales-parse-rows";
 
+/** PRO: columnas de rentabilidad presentes en el archivo. LEGACY: formato básico (p. ej. solo potencial y estado). */
+export type DashboardMode = "LEGACY" | "PRO";
+
+function columnSetHas(keys: Set<string>, ...aliases: string[]): boolean {
+  return aliases.some((a) => keys.has(a));
+}
+
+/**
+ * PRO si existen columnas `Margen_Euros` o `Coste_Estimado` (incl. variantes con espacio).
+ * En caso contrario, vista básica sin KPIs de rentabilidad avanzados.
+ */
+export function detectDashboardMode(normalizedKeys: string[]): DashboardMode {
+  const set = new Set(normalizedKeys);
+  const hasMargen = columnSetHas(
+    set,
+    "Margen_Euros",
+    "Margen Euros",
+    "Margen euros"
+  );
+  const hasCoste = columnSetHas(
+    set,
+    "Coste_Estimado",
+    "Coste Estimado",
+    "Coste estimado"
+  );
+  if (hasMargen || hasCoste) return "PRO";
+  return "LEGACY";
+}
+
 export class SalesParseError extends Error {
   readonly detectedHeaders: string[];
   readonly hint?: string;
@@ -72,6 +101,7 @@ function buildColumnWarnings(keys: string[]): string[] {
 export type IngestSalesResult = {
   rows: SalesOrderRow[];
   warnings: string[];
+  dashboardMode: DashboardMode;
 };
 
 const CORPORATE_HINT =
@@ -111,8 +141,9 @@ export function ingestSalesRecords(records: Record<string, unknown>[]): IngestSa
   }
 
   const warnings = buildColumnWarnings(normalizedKeys);
+  const dashboardMode = detectDashboardMode(normalizedKeys);
 
-  return { rows, warnings };
+  return { rows, warnings, dashboardMode };
 }
 
 /** Solo filas, sin avisos (p. ej. tests); lanza SalesParseError si no hay datos válidos. */

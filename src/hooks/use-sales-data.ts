@@ -4,7 +4,10 @@ import { useCallback, useMemo, useRef, useState } from "react";
 
 import { loadVentasCsv } from "@/lib/sales-csv";
 import { parseSalesFile } from "@/lib/sales-file";
-import { SalesParseError } from "@/lib/sales-ingest";
+import {
+  SalesParseError,
+  type DashboardMode,
+} from "@/lib/sales-ingest";
 import {
   type SalesOrderRow,
   type SalesRoleView,
@@ -51,6 +54,7 @@ function formatParseError(e: unknown): string {
 export function useSalesData() {
   const [allRows, setAllRows] = useState<SalesOrderRow[]>([]);
   const [roleView, setRoleView] = useState<SalesRoleView>("manager");
+  const [dashboardMode, setDashboardMode] = useState<DashboardMode>("PRO");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [parseWarnings, setParseWarnings] = useState<string[]>([]);
@@ -58,11 +62,17 @@ export function useSalesData() {
   const sourceRef = useRef<DataSource | null>(null);
 
   const applyRows = useCallback(
-    (rows: SalesOrderRow[], label: string, warnings: string[] = []) => {
+    (
+      rows: SalesOrderRow[],
+      label: string,
+      warnings: string[] = [],
+      mode: DashboardMode = "PRO"
+    ) => {
       setAllRows(rows);
       setSourceLabel(label);
       setError(null);
       setParseWarnings(warnings);
+      setDashboardMode(mode);
     },
     []
   );
@@ -75,7 +85,7 @@ export function useSalesData() {
       try {
         const data = await parseSalesFile(file);
         sourceRef.current = { kind: "file", file };
-        applyRows(data.rows, file.name, data.warnings);
+        applyRows(data.rows, file.name, data.warnings, data.dashboardMode);
       } catch (e) {
         setError(formatParseError(e));
         setAllRows([]);
@@ -97,7 +107,7 @@ export function useSalesData() {
       try {
         const data = await loadVentasCsv(url);
         sourceRef.current = { kind: "url", url };
-        applyRows(data.rows, "Datos de ejemplo", data.warnings);
+        applyRows(data.rows, "Datos de ejemplo", data.warnings, data.dashboardMode);
       } catch (e) {
         setError(formatParseError(e));
         setAllRows([]);
@@ -123,6 +133,7 @@ export function useSalesData() {
           : await loadVentasCsv(src.url);
       setAllRows(data.rows);
       setParseWarnings(data.warnings);
+      setDashboardMode(data.dashboardMode);
       setError(null);
     } catch (e) {
       setError(formatParseError(e));
@@ -138,47 +149,84 @@ export function useSalesData() {
     [allRows, roleView]
   );
 
+  /** LEGACY ignora filtro por comercial (no hay selector). */
+  const displayRows = useMemo(() => {
+    if (dashboardMode === "LEGACY") return allRows;
+    return filteredRows;
+  }, [dashboardMode, allRows, filteredRows]);
+
   const hasData = allRows.length > 0;
   const canReload = sourceLabel !== null;
 
   const kpis = useMemo(() => {
-    const ventasReales = filteredRows.reduce((s, r) => s + r.valorReal, 0);
-    const margenBruto = filteredRows.reduce((s, r) => s + r.margenEuros, 0);
-    const potencial = filteredRows.reduce((s, r) => s + r.valorPotencial, 0);
+    const ventasReales = displayRows.reduce((s, r) => s + r.valorReal, 0);
+    const margenBruto = displayRows.reduce((s, r) => s + r.margenEuros, 0);
+    const potencial = displayRows.reduce((s, r) => s + r.valorPotencial, 0);
     const margenPromedioPct =
       ventasReales > 0 ? (margenBruto / ventasReales) * 100 : 0;
     const ratioEficiencia = potencial > 0 ? ventasReales / potencial : 0;
-    const alertasCount = filteredRows.filter(isTechnicalMarginAlert).length;
+    const alertasCount = displayRows.filter(isTechnicalMarginAlert).length;
 
     return {
       ventasReales,
       margenBruto,
       margenPromedioPct,
       ratioEficiencia,
-      pedidosCount: filteredRows.length,
+      pedidosCount: displayRows.length,
       alertasCount,
     };
-  }, [filteredRows]);
+  }, [displayRows]);
+
+  const legacyKpis = useMemo(() => {
+    const totalValorPotencial = displayRows.reduce(
+      (s, r) => s + r.valorPotencial,
+      0
+    );
+    const pedidosCount = displayRows.length;
+    const ticketMedioPotencial =
+      pedidosCount > 0 ? totalValorPotencial / pedidosCount : 0;
+    return { totalValorPotencial, pedidosCount, ticketMedioPotencial };
+  }, [displayRows]);
 
   const topClientesMargen = useMemo(() => {
     const map = new Map<string, number>();
-    for (const r of filteredRows) {
+    for (const r of displayRows) {
       map.set(r.cliente, (map.get(r.cliente) ?? 0) + r.margenEuros);
     }
     return [...map.entries()]
       .map(([name, margen]) => ({ name, margen }))
       .sort((a, b) => b.margen - a.margen)
       .slice(0, 10);
-  }, [filteredRows]);
+  }, [displayRows]);
+
+  const topClientesPorPotencial = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of displayRows) {
+      map.set(r.cliente, (map.get(r.cliente) ?? 0) + r.valorPotencial);
+    }
+    return [...map.entries()]
+      .map(([name, potencial]) => ({ name, potencial }))
+      .sort((a, b) => b.potencial - a.potencial)
+      .slice(0, 10);
+  }, [displayRows]);
 
   const ventasPorSector = useMemo(() => {
     const map = new Map<string, number>();
-    for (const r of filteredRows) {
+    for (const r of displayRows) {
       const key = r.tipoCliente || "Otros";
       map.set(key, (map.get(key) ?? 0) + r.valorReal);
     }
     return [...map.entries()].map(([name, value]) => ({ name, value }));
-  }, [filteredRows]);
+  }, [displayRows]);
+
+  const pedidosPorEstado = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of displayRows) {
+      const k = r.estado?.trim() || "Sin estado";
+      map.set(k, (map.get(k) ?? 0) + 1);
+    }
+    return [...map.entries()].map(([name, value]) => ({ name, value }));
+  }, [displayRows]);
 
   const scatterComerciales = useMemo((): CommercialScatterPoint[] => {
     const map = new Map<string, { ventas: number; margen: number }>();
@@ -199,7 +247,7 @@ export function useSalesData() {
 
   const evolucionMensual = useMemo((): MonthlyTrendPoint[] => {
     const map = new Map<string, { ventas: number; costes: number }>();
-    for (const r of filteredRows) {
+    for (const r of displayRows) {
       const d = r.fechaApertura.slice(0, 7);
       if (!/^\d{4}-\d{2}$/.test(d)) continue;
       const prev = map.get(d) ?? { ventas: 0, costes: 0 };
@@ -214,20 +262,23 @@ export function useSalesData() {
         ventas,
         costes,
       }));
-  }, [filteredRows]);
+  }, [displayRows]);
 
   const rowsWithAlerts = useMemo(
     () =>
-      filteredRows.map((r) => ({
+      displayRows.map((r) => ({
         row: r,
-        critical: isTechnicalMarginAlert(r),
+        critical:
+          dashboardMode === "PRO" ? isTechnicalMarginAlert(r) : false,
       })),
-    [filteredRows]
+    [displayRows, dashboardMode]
   );
 
   return {
     allRows,
     filteredRows,
+    displayRows,
+    dashboardMode,
     rowsWithAlerts,
     roleView,
     setRoleView,
@@ -241,8 +292,11 @@ export function useSalesData() {
     loadDemo,
     reload,
     kpis,
+    legacyKpis,
     topClientesMargen,
+    topClientesPorPotencial,
     ventasPorSector,
+    pedidosPorEstado,
     scatterComerciales,
     evolucionMensual,
     isTechnicalMarginAlert,

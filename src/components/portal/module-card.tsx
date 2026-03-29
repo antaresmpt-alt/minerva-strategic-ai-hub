@@ -18,8 +18,8 @@ type ModuleCardProps = {
   title: string;
   description: string;
   icon: ReactNode;
-  /** Use larger frame for raster module marks (PNG), or circular avatar for chatbot. */
-  iconFrame?: "glyph" | "module" | "avatar";
+  /** `module`: marca PNG grande (misma caja para todos los módulos del hub). */
+  iconFrame?: "glyph" | "module";
   actionLabel: string;
   href?: string;
   disabled?: boolean;
@@ -43,22 +43,20 @@ export function ModuleCard({
         isDisabled && "opacity-90"
       )}
     >
-      <CardHeader className="gap-3">
+      <CardHeader className="gap-3 text-center justify-items-center">
         <div
           className={cn(
             "flex items-center justify-center rounded-xl",
             iconFrame === "glyph" &&
-              "size-12 bg-primary/[0.07] text-primary ring-1 ring-primary/10",
+              "mx-auto size-12 bg-primary/[0.07] text-primary ring-1 ring-primary/10",
             iconFrame === "module" &&
-              "min-h-[6.25rem] w-full max-w-[9.5rem] bg-transparent p-0 ring-0",
-            iconFrame === "avatar" &&
-              "size-20 shrink-0 overflow-hidden rounded-full bg-muted/60 p-0.5 ring-2 ring-[#002147]/12"
+              "mx-auto min-h-[6.25rem] w-full max-w-[9.5rem] bg-transparent p-0 ring-0"
           )}
         >
           {icon}
         </div>
         <CardTitle className="text-lg leading-snug">{title}</CardTitle>
-        <CardDescription className="text-pretty leading-relaxed">
+        <CardDescription className="text-pretty leading-relaxed text-center">
           {description}
         </CardDescription>
       </CardHeader>

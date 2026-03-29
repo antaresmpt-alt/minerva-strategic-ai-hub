@@ -6,6 +6,7 @@ import { useReactToPrint } from "react-to-print";
 import {
   AlertTriangle,
   Euro,
+  Info,
   LineChart as LineChartIcon,
   PieChart as PieChartIcon,
   Printer,
@@ -136,6 +137,7 @@ export function SalesIntelligenceDashboard() {
   const {
     roleView,
     setRoleView,
+    dashboardMode,
     loading,
     error,
     parseWarnings,
@@ -146,12 +148,17 @@ export function SalesIntelligenceDashboard() {
     loadDemo,
     reload,
     kpis,
+    legacyKpis,
     topClientesMargen,
+    topClientesPorPotencial,
     ventasPorSector,
+    pedidosPorEstado,
     scatterComerciales,
     evolucionMensual,
     rowsWithAlerts,
   } = useSalesData();
+
+  const isPro = dashboardMode === "PRO";
 
   const margenColor =
     kpis.margenPromedioPct >= 30
@@ -184,7 +191,9 @@ export function SalesIntelligenceDashboard() {
                 Minerva Sales Intelligence
               </h1>
               <p className="mt-0.5 text-sm text-slate-600">
-                Rentabilidad real y alertas de coste · Oficina Técnica
+                {hasData && !isPro
+                  ? "Análisis básico de volumen y estados (formato clásico)"
+                  : "Rentabilidad real y alertas de coste · Oficina Técnica"}
               </p>
               <button
                 type="button"
@@ -210,14 +219,18 @@ export function SalesIntelligenceDashboard() {
                   Exportar PDF
                 </Button>
               ) : null}
-              <NativeSelect
-                label="Vista de datos"
-                options={roleOptions}
-                value={roleView}
-                onChange={(e) => setRoleView(e.target.value as SalesRoleView)}
-                className="border-[#002147]/20"
-                disabled={!hasData}
-              />
+              {hasData && isPro ? (
+                <NativeSelect
+                  label="Vista de datos"
+                  options={roleOptions}
+                  value={roleView}
+                  onChange={(e) =>
+                    setRoleView(e.target.value as SalesRoleView)
+                  }
+                  className="border-[#002147]/20"
+                  disabled={!hasData}
+                />
+              ) : null}
               <Button
                 type="button"
                 variant="outline"
@@ -289,8 +302,9 @@ export function SalesIntelligenceDashboard() {
         {!loading && !error && !hasData ? (
           <div className="flex min-h-[38vh] flex-col items-center justify-center gap-3 px-4 text-center">
             <p className="max-w-md text-sm text-slate-700">
-              Sube el informe mensual que envía el director comercial (CSV o Excel).
-              Debe conservar las mismas columnas que el formato estándar.
+              Sube el informe mensual (CSV o Excel). El formato completo con rentabilidad
+              desbloquea KPIs y alertas OT; los archivos básicos siguen mostrando volumen
+              y estados sin romper la vista.
             </p>
             <p className="text-xs text-slate-500">
               Usa el botón flotante inferior derecho o &quot;Cargar datos de ejemplo&quot;
@@ -306,7 +320,9 @@ export function SalesIntelligenceDashboard() {
                 Minerva Sales Intelligence
               </h1>
               <p className="text-sm text-slate-600">
-                Rentabilidad real y alertas de coste · Oficina Técnica
+                {isPro
+                  ? "Rentabilidad real y alertas de coste · Oficina Técnica"
+                  : "Análisis básico de volumen y estados · formato clásico"}
               </p>
               {sourceLabel ? (
                 <p className="mt-1 text-xs text-slate-500">Origen: {sourceLabel}</p>
@@ -316,7 +332,21 @@ export function SalesIntelligenceDashboard() {
               data-sales-pdf-root
               className="space-y-8 rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5 print:rounded-lg print:border print:border-slate-200 print:bg-white print:p-4 print:shadow-none"
             >
-            {parseWarnings.length > 0 ? (
+            {!isPro ? (
+              <div className="print:hidden flex break-inside-avoid items-start gap-3 rounded-lg border border-blue-200/90 bg-gradient-to-r from-blue-50/95 to-amber-50/90 px-4 py-3 text-sm text-slate-800 shadow-sm">
+                <Info
+                  className="mt-0.5 size-5 shrink-0 text-[#002147]"
+                  aria-hidden
+                />
+                <p className="leading-snug">
+                  ℹ️ Estás viendo el análisis Básico. Utiliza el nuevo formato de
+                  Excel de Ventas para desbloquear los datos de Rentabilidad y
+                  Alertas de la Oficina Técnica.
+                </p>
+              </div>
+            ) : null}
+
+            {isPro && parseWarnings.length > 0 ? (
               <div className="flex break-inside-avoid items-start gap-2 rounded-lg border border-amber-300/90 bg-amber-50/95 px-4 py-3 text-sm text-amber-950">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-700" />
                 <div>
@@ -332,7 +362,7 @@ export function SalesIntelligenceDashboard() {
               </div>
             ) : null}
 
-            {kpis.alertasCount > 0 ? (
+            {isPro && kpis.alertasCount > 0 ? (
               <div className="flex break-inside-avoid items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-950">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-700" />
                 <span>
@@ -344,6 +374,8 @@ export function SalesIntelligenceDashboard() {
               </div>
             ) : null}
 
+            {isPro ? (
+            <>
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 print:gap-3">
               <KpiCard
                 title="Ventas reales"
@@ -461,7 +493,7 @@ export function SalesIntelligenceDashboard() {
               </Card>
             </section>
 
-            {roleView === "manager" ? (
+            {isPro && roleView === "manager" ? (
               <Card className="border-slate-200/80 bg-white/85 break-inside-avoid shadow-sm backdrop-blur-sm print:border-slate-300 print:bg-white print:shadow-none">
                 <CardHeader>
                   <div className="flex items-center gap-2">
@@ -568,6 +600,121 @@ export function SalesIntelligenceDashboard() {
                 </ResponsiveContainer>
               </CardContent>
             </Card>
+            </>
+            ) : (
+              <>
+                <section className="grid gap-4 sm:grid-cols-3 print:gap-3">
+                  <KpiCard
+                    title="Total valor potencial"
+                    subtitle="Σ Valor potencial"
+                    value={fmtEuro(legacyKpis.totalValorPotencial)}
+                    icon={Euro}
+                  />
+                  <KpiCard
+                    title="Número de pedidos"
+                    subtitle="Filas importadas"
+                    value={legacyKpis.pedidosCount}
+                    icon={PieChartIcon}
+                  />
+                  <KpiCard
+                    title="Ticket medio potencial"
+                    subtitle="Potencial ÷ pedidos"
+                    value={fmtEuro(legacyKpis.ticketMedioPotencial)}
+                    icon={TrendingUp}
+                  />
+                </section>
+
+                <section className="grid gap-6 lg:grid-cols-2 print:gap-4">
+                  <Card className="border-slate-200/80 bg-white/85 break-inside-avoid shadow-sm backdrop-blur-sm print:border-slate-300 print:bg-white print:shadow-none">
+                    <CardHeader>
+                      <CardTitle className="text-base text-[#002147]">
+                        Top clientes por volumen potencial
+                      </CardTitle>
+                      <CardDescription>
+                        Suma de valor potencial por cliente
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-80 min-h-[240px] pl-0 print:h-[260px] print:min-h-[240px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={topClientesPorPotencial}
+                          layout="vertical"
+                          margin={{ left: 8, right: 16 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-slate-200" />
+                          <XAxis
+                            type="number"
+                            tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
+                            className="text-xs"
+                          />
+                          <YAxis
+                            type="category"
+                            dataKey="name"
+                            width={120}
+                            tick={{ fontSize: 11 }}
+                            className="text-xs"
+                          />
+                          <Tooltip
+                            formatter={(v) => [
+                              fmtEuro(typeof v === "number" ? v : Number(v)),
+                              "Potencial",
+                            ]}
+                            contentStyle={{ borderRadius: 8 }}
+                          />
+                          <Bar
+                            dataKey="potencial"
+                            name="Potencial €"
+                            fill="#1e4976"
+                            radius={[0, 4, 4, 0]}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-slate-200/80 bg-white/85 break-inside-avoid shadow-sm backdrop-blur-sm print:border-slate-300 print:bg-white print:shadow-none">
+                    <CardHeader>
+                      <CardTitle className="text-base text-[#002147]">
+                        Distribución por estado del pedido
+                      </CardTitle>
+                      <CardDescription>Número de pedidos por estado</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-80 min-h-[240px] print:h-[260px] print:min-h-[240px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={pedidosPorEstado}
+                            dataKey="value"
+                            nameKey="name"
+                            cx="50%"
+                            cy="50%"
+                            outerRadius={100}
+                            label={({ name, percent }) =>
+                              `${name ?? ""} ${((percent ?? 0) * 100).toFixed(0)}%`
+                            }
+                          >
+                            {pedidosPorEstado.map((_, i) => (
+                              <Cell
+                                key={i}
+                                fill={PIE_COLORS[i % PIE_COLORS.length]}
+                              />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            formatter={(v) => [
+                              `${typeof v === "number" ? v : Number(v)} pedidos`,
+                              "Cantidad",
+                            ]}
+                            contentStyle={{ borderRadius: 8 }}
+                          />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                </section>
+              </>
+            )}
             </div>
 
             <Card className="border-slate-200/80 bg-white/85 break-inside-avoid shadow-sm backdrop-blur-sm print:border-slate-300 print:bg-white print:shadow-none">
@@ -576,7 +723,9 @@ export function SalesIntelligenceDashboard() {
                   Tabla operativa
                 </CardTitle>
                 <CardDescription>
-                  Estados FSC, Prueba color, PDF · Alertas OT en rojo
+                  {isPro
+                    ? "Estados FSC, Prueba color, PDF · Alertas OT en rojo"
+                    : "Resumen de pedidos (sin alertas de rentabilidad)"}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-0 sm:p-0 print:overflow-visible [&>div]:print:overflow-visible [&_table]:print:text-[10px]">
@@ -586,13 +735,24 @@ export function SalesIntelligenceDashboard() {
                       <TableHead>Pedido</TableHead>
                       <TableHead>Cliente</TableHead>
                       <TableHead>Estado</TableHead>
-                      <TableHead className="text-right">Valor real</TableHead>
-                      <TableHead className="text-right">Coste est.</TableHead>
-                      <TableHead className="text-right">Margen %</TableHead>
+                      {isPro ? (
+                        <>
+                          <TableHead className="text-right">Valor real</TableHead>
+                          <TableHead className="text-right">Coste est.</TableHead>
+                          <TableHead className="text-right">Margen %</TableHead>
+                        </>
+                      ) : (
+                        <>
+                          <TableHead className="text-right">
+                            Valor potencial
+                          </TableHead>
+                          <TableHead className="text-right">Valor real</TableHead>
+                        </>
+                      )}
                       <TableHead>FSC</TableHead>
                       <TableHead>Color</TableHead>
                       <TableHead>PDF</TableHead>
-                      <TableHead>OT</TableHead>
+                      {isPro ? <TableHead>OT</TableHead> : null}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -602,7 +762,8 @@ export function SalesIntelligenceDashboard() {
                         data-state={critical ? "alert" : undefined}
                         className={cn(
                           "break-inside-avoid",
-                          critical &&
+                          isPro &&
+                            critical &&
                             "border-l-4 border-l-red-500 bg-red-50/60 hover:bg-red-50/80"
                         )}
                       >
@@ -617,15 +778,28 @@ export function SalesIntelligenceDashboard() {
                             {row.estado}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {fmtEuro(row.valorReal)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {fmtEuro(row.costeEstimado)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {fmtPct(row.margenPorcentaje)}
-                        </TableCell>
+                        {isPro ? (
+                          <>
+                            <TableCell className="text-right tabular-nums">
+                              {fmtEuro(row.valorReal)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {fmtEuro(row.costeEstimado)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {fmtPct(row.margenPorcentaje)}
+                            </TableCell>
+                          </>
+                        ) : (
+                          <>
+                            <TableCell className="text-right tabular-nums">
+                              {fmtEuro(row.valorPotencial)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {fmtEuro(row.valorReal)}
+                            </TableCell>
+                          </>
+                        )}
                         <TableCell>
                           <SiBadge value={row.fsc} />
                         </TableCell>
@@ -635,16 +809,20 @@ export function SalesIntelligenceDashboard() {
                         <TableCell>
                           <SiBadge value={row.pdfOk} />
                         </TableCell>
-                        <TableCell>
-                          {critical ? (
-                            <Badge variant="destructive" className="gap-1">
-                              <AlertTriangle className="size-3" />
-                              Crítico
-                            </Badge>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">—</span>
-                          )}
-                        </TableCell>
+                        {isPro ? (
+                          <TableCell>
+                            {critical ? (
+                              <Badge variant="destructive" className="gap-1">
+                                <AlertTriangle className="size-3" />
+                                Crítico
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">
+                                —
+                              </span>
+                            )}
+                          </TableCell>
+                        ) : null}
                       </TableRow>
                     ))}
                   </TableBody>
