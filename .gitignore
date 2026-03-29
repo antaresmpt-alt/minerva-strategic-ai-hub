@@ -43,3 +43,21 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+# --- Minerva Global - Custom Ignores ---
+
+# Archivos de notas y claves filtradas
+datos.txt
+notas.txt
+secrets.txt
+
+# Archivos de datos (Excel y CSV) 
+# Ignoramos todos para evitar subir datos reales de clientes por error
+*.xlsx
+*.xls
+*.csv
+
+# Excepto los que queramos mantener como ejemplos (opcional)
+# !public/data/ejemplo_ventas.csv
+

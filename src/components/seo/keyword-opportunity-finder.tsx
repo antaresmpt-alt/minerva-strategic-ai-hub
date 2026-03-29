@@ -14,7 +14,14 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NativeSelect } from "@/components/ui/select-native";
+import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -29,8 +36,9 @@ import { cn } from "@/lib/utils";
 export type KeywordIdeaRow = {
   keyword: string;
   intent: string;
-  difficulty: string;
   titleIdea: string;
+  monthlyVolume: number;
+  difficultyPercent: number;
 };
 
 type IntentFilterValue =
@@ -39,7 +47,13 @@ type IntentFilterValue =
   | "commercial"
   | "transactional";
 
-type DifficultyFilterValue = "any" | "low_only";
+const volumeFormatter = new Intl.NumberFormat("es-ES", {
+  maximumFractionDigits: 0,
+});
+
+function formatMonthlyVolume(n: number): string {
+  return volumeFormatter.format(Math.max(0, Math.round(n)));
+}
 
 function intentBadgeClassName(intent: string): string {
   const n = intent.trim().toLowerCase();
@@ -55,14 +69,15 @@ function intentBadgeClassName(intent: string): string {
   return "border-0 bg-slate-100 text-slate-800 hover:bg-slate-100";
 }
 
-function difficultyBadgeProps(difficulty: string): {
-  variant: "secondary" | "success" | "warning" | "destructive" | "outline";
-} {
-  const n = difficulty.trim().toLowerCase();
-  if (n.startsWith("baj")) return { variant: "success" };
-  if (n.startsWith("medi")) return { variant: "warning" };
-  if (n.startsWith("alt")) return { variant: "destructive" };
-  return { variant: "outline" };
+function difficultyProgressClassName(p: number): string {
+  const v = Math.min(100, Math.max(0, Math.round(p)));
+  if (v < 40) {
+    return "[&_[data-slot=progress-indicator]]:bg-emerald-500";
+  }
+  if (v < 70) {
+    return "[&_[data-slot=progress-indicator]]:bg-amber-500";
+  }
+  return "[&_[data-slot=progress-indicator]]:bg-red-500";
 }
 
 function escapeCsvCell(value: string): string {
@@ -73,13 +88,20 @@ function downloadKeywordIdeasCsv(items: KeywordIdeaRow[]) {
   const headers = [
     "Palabra clave long-tail",
     "Intención",
-    "Dificultad estimada",
+    "Volumen mensual (estimado)",
+    "Dificultad SEO (%)",
     "Idea de artículo / página",
   ];
   const lines = [
     headers.map(escapeCsvCell).join(","),
     ...items.map((r) =>
-      [r.keyword, r.intent, r.difficulty, r.titleIdea]
+      [
+        r.keyword,
+        r.intent,
+        String(r.monthlyVolume),
+        String(r.difficultyPercent),
+        r.titleIdea,
+      ]
         .map(escapeCsvCell)
         .join(",")
     ),
@@ -95,55 +117,60 @@ function downloadKeywordIdeasCsv(items: KeywordIdeaRow[]) {
   URL.revokeObjectURL(url);
 }
 
-const INTENT_OPTIONS = [
+const INTENT_OPTIONS: { value: IntentFilterValue; label: string }[] = [
   { value: "all", label: "Todas" },
-  {
-    value: "informational",
-    label: "Informativa (Blog/Educación)",
-  },
-  {
-    value: "commercial",
-    label: "Comercial (Comparativas/Reseñas)",
-  },
-  {
-    value: "transactional",
-    label: "Transaccional (Compra/Presupuesto)",
-  },
-] as const;
+  { value: "informational", label: "Informativa" },
+  { value: "commercial", label: "Comercial" },
+  { value: "transactional", label: "Transaccional" },
+];
 
 const COUNT_OPTIONS = [
   { value: "5", label: "5 resultados" },
   { value: "10", label: "10 resultados" },
-  { value: "15", label: "15 resultados" },
   { value: "20", label: "20 resultados" },
 ] as const;
 
-const DIFFICULTY_OPTIONS = [
-  { value: "any", label: "Cualquiera" },
-  {
-    value: "low_only",
-    label: "Solo Baja Dificultad (Quick Wins)",
-  },
-] as const;
+function SeoDifficultyCell({ value }: { value: number }) {
+  const v = Math.min(100, Math.max(0, Math.round(value)));
+  return (
+    <div className="flex min-w-[140px] max-w-[200px] flex-col gap-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-muted-foreground text-xs">SEO</span>
+        <span className="text-xs font-medium tabular-nums text-slate-800">
+          {v}%
+        </span>
+      </div>
+      <Progress
+        value={v}
+        className={cn(
+          "[&_[data-slot=progress-track]]:h-2 [&_[data-slot=progress-track]]:bg-slate-200/80",
+          difficultyProgressClassName(v)
+        )}
+      >
+        <span className="sr-only">Dificultad SEO {v} por ciento</span>
+      </Progress>
+    </div>
+  );
+}
 
 function ResultsTableSkeleton({ rows }: { rows: number }) {
   return (
     <div className="space-y-3 p-4 sm:p-6">
-      <div className="hidden sm:grid sm:grid-cols-[minmax(0,1.2fr)_minmax(0,0.7fr)_minmax(0,0.6fr)_minmax(0,1.1fr)] sm:gap-3">
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-full" />
+      <div className="hidden md:grid md:grid-cols-[minmax(6rem,1.1fr)_5.5rem_4.5rem_7rem_minmax(6rem,1fr)] md:gap-3">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} className="h-4 w-full" />
+        ))}
       </div>
       {Array.from({ length: rows }).map((_, i) => (
         <div
           key={i}
-          className="grid gap-3 rounded-lg border border-slate-100 p-3 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,0.7fr)_minmax(0,0.6fr)_minmax(0,1.1fr)] sm:border-0 sm:p-0"
+          className="grid gap-3 rounded-lg border border-slate-100 p-3 md:grid-cols-[minmax(6rem,1.1fr)_5.5rem_4.5rem_7rem_minmax(6rem,1fr)] md:border-0 md:p-0"
         >
           <Skeleton className="h-5 w-full" />
-          <Skeleton className="h-6 w-24" />
-          <Skeleton className="h-6 w-16" />
-          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-6 w-20" />
+          <Skeleton className="h-5 w-14" />
+          <Skeleton className="h-8 w-full max-w-[180px]" />
+          <Skeleton className="h-10 w-full" />
         </div>
       ))}
     </div>
@@ -155,8 +182,6 @@ export function KeywordOpportunityFinder() {
   const [intentFilter, setIntentFilter] =
     useState<IntentFilterValue>("all");
   const [count, setCount] = useState<string>("10");
-  const [difficultyFilter, setDifficultyFilter] =
-    useState<DifficultyFilterValue>("any");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<KeywordIdeaRow[]>([]);
@@ -177,7 +202,6 @@ export function KeywordOpportunityFinder() {
           seed: q,
           intentFilter,
           count: countNum,
-          difficultyFilter,
         }),
       });
       const data = (await res.json()) as {
@@ -221,22 +245,73 @@ export function KeywordOpportunityFinder() {
         </CardHeader>
         <CardContent>
           <form onSubmit={onGenerate} className="space-y-4">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-              <div className="min-w-0 flex-1 space-y-2">
-                <Label htmlFor="seo-seed">Palabra clave semilla</Label>
-                <Input
-                  id="seo-seed"
-                  placeholder="ej. cajas para cosmética"
-                  value={seed}
-                  onChange={(e) => setSeed(e.target.value)}
-                  disabled={loading}
-                  className="border-[#002147]/20"
-                />
+            <div className="space-y-2">
+              <Label htmlFor="seo-seed">Palabra clave semilla</Label>
+              <Input
+                id="seo-seed"
+                placeholder="ej. cajas para cosmética"
+                value={seed}
+                onChange={(e) => setSeed(e.target.value)}
+                disabled={loading}
+                className="border-[#002147]/20"
+              />
+            </div>
+
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
+              <div className="grid min-w-0 flex-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="seo-intent">Intención</Label>
+                  <Select
+                    value={intentFilter}
+                    onValueChange={(v) =>
+                      setIntentFilter(v as IntentFilterValue)
+                    }
+                    disabled={loading}
+                  >
+                    <SelectTrigger
+                      id="seo-intent"
+                      className="h-9 w-full min-w-0 border-[#002147]/20"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {INTENT_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="seo-count">Cantidad</Label>
+                  <Select
+                    value={count}
+                    onValueChange={(v) => {
+                      if (v) setCount(v);
+                    }}
+                    disabled={loading}
+                  >
+                    <SelectTrigger
+                      id="seo-count"
+                      className="h-9 w-full min-w-0 border-[#002147]/20"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {COUNT_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <Button
                 type="submit"
                 disabled={loading || !seed.trim()}
-                className="shrink-0 gap-2 bg-[#002147] hover:bg-[#002147]/90"
+                className="h-9 shrink-0 gap-2 self-stretch bg-[#002147] hover:bg-[#002147]/90 lg:self-auto"
               >
                 {loading ? (
                   <>
@@ -247,34 +322,6 @@ export function KeywordOpportunityFinder() {
                   "Generar Estrategia SEO"
                 )}
               </Button>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-3">
-              <NativeSelect
-                label="Intención de búsqueda"
-                value={intentFilter}
-                onChange={(e) =>
-                  setIntentFilter(e.target.value as IntentFilterValue)
-                }
-                disabled={loading}
-                options={[...INTENT_OPTIONS]}
-              />
-              <NativeSelect
-                label="Cantidad de resultados"
-                value={count}
-                onChange={(e) => setCount(e.target.value)}
-                disabled={loading}
-                options={[...COUNT_OPTIONS]}
-              />
-              <NativeSelect
-                label="Dificultad SEO"
-                value={difficultyFilter}
-                onChange={(e) =>
-                  setDifficultyFilter(e.target.value as DifficultyFilterValue)
-                }
-                disabled={loading}
-                options={[...DIFFICULTY_OPTIONS]}
-              />
             </div>
           </form>
         </CardContent>
@@ -295,9 +342,7 @@ export function KeywordOpportunityFinder() {
             <CardTitle className="text-base text-[#002147]">
               Ideas de contenido orgánico
             </CardTitle>
-            <CardDescription>
-              Generando sugerencias…
-            </CardDescription>
+            <CardDescription>Generando sugerencias…</CardDescription>
           </CardHeader>
           <CardContent className="p-0 sm:p-0">
             <ResultsTableSkeleton rows={Math.min(countNum, 6)} />
@@ -325,7 +370,7 @@ export function KeywordOpportunityFinder() {
               onClick={() => downloadKeywordIdeasCsv(items)}
             >
               <Download className="size-4" aria-hidden />
-              Exportar CSV
+              Descargar CSV
             </Button>
           </CardHeader>
           <CardContent className="p-0 sm:p-0">
@@ -333,14 +378,17 @@ export function KeywordOpportunityFinder() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
-                    <TableHead className="min-w-[180px] whitespace-nowrap">
+                    <TableHead className="min-w-[160px] whitespace-nowrap">
                       Palabra clave long-tail
                     </TableHead>
-                    <TableHead className="min-w-[140px] whitespace-nowrap">
-                      Intención de búsqueda
+                    <TableHead className="min-w-[100px] whitespace-nowrap">
+                      Intención
                     </TableHead>
-                    <TableHead className="min-w-[120px] whitespace-nowrap">
-                      Dificultad estimada
+                    <TableHead className="min-w-[110px] whitespace-nowrap text-right">
+                      Volumen / mes
+                    </TableHead>
+                    <TableHead className="min-w-[160px] whitespace-nowrap">
+                      Dificultad
                     </TableHead>
                     <TableHead className="min-w-[200px]">
                       Idea de artículo / página
@@ -348,35 +396,33 @@ export function KeywordOpportunityFinder() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.map((row, i) => {
-                    const db = difficultyBadgeProps(row.difficulty);
-                    return (
-                      <TableRow key={`${row.keyword}-${i}`}>
-                        <TableCell className="align-top font-medium text-slate-800">
-                          {row.keyword}
-                        </TableCell>
-                        <TableCell className="align-top">
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "font-normal",
-                              intentBadgeClassName(row.intent)
-                            )}
-                          >
-                            {row.intent}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="align-top">
-                          <Badge variant={db.variant} className="font-normal">
-                            {row.difficulty}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="max-w-[min(100vw-2rem,28rem)] align-top text-sm leading-snug text-slate-700 sm:max-w-md">
-                          {row.titleIdea}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {items.map((row, i) => (
+                    <TableRow key={`${row.keyword}-${i}`}>
+                      <TableCell className="align-top font-medium text-slate-800">
+                        {row.keyword}
+                      </TableCell>
+                      <TableCell className="align-top">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "font-normal",
+                            intentBadgeClassName(row.intent)
+                          )}
+                        >
+                          {row.intent}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="align-top text-right font-medium tabular-nums text-slate-800">
+                        {formatMonthlyVolume(row.monthlyVolume)}
+                      </TableCell>
+                      <TableCell className="align-top">
+                        <SeoDifficultyCell value={row.difficultyPercent} />
+                      </TableCell>
+                      <TableCell className="max-w-[min(100vw-2rem,28rem)] align-top text-sm leading-snug text-slate-700 sm:max-w-md">
+                        {row.titleIdea}
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </div>

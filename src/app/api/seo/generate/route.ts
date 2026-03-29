@@ -4,7 +4,7 @@ import { generateText } from "ai";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const COUNT_OPTIONS = [5, 10, 15, 20] as const;
+const COUNT_OPTIONS = [5, 10, 20] as const;
 export type KeywordCount = (typeof COUNT_OPTIONS)[number];
 
 export type IntentFilter =
@@ -13,13 +13,7 @@ export type IntentFilter =
   | "commercial"
   | "transactional";
 
-export type DifficultyFilter = "any" | "low_only";
-
-function buildSystemPrompt(
-  count: number,
-  intentFilter: IntentFilter,
-  difficultyFilter: DifficultyFilter
-): string {
+function buildSystemPrompt(count: number, intentFilter: IntentFilter): string {
   let intentBlock: string;
   switch (intentFilter) {
     case "informational":
@@ -35,23 +29,22 @@ function buildSystemPrompt(
       intentBlock = `Cada ítem puede tener intención "Informativa", "Comercial" o "Transaccional"; mezcla según convenga al sector B2B packaging.`;
   }
 
-  const difficultyBlock =
-    difficultyFilter === "low_only"
-      ? `La dificultad SEO estimada de TODAS las palabras clave debe ser estrictamente "Baja" (quick wins; no uses "Media" ni "Alta").`
-      : `Estima la dificultad SEO como "Baja", "Media" o "Alta" según corresponda al nicho.`;
-
   return `Eres un experto en SEO B2B para el sector del packaging (Minerva Global). El usuario te dará una palabra clave semilla.
 
 REQUISITOS DEL USUARIO (aplícalos con rigor):
 - El usuario ha solicitado exactamente ${count} palabras clave long-tail (cola larga).
 - ${intentBlock}
-- ${difficultyBlock}
+
+Para cada palabra clave debes estimar de forma razonada (no inventes cifras exactas de herramientas; indica que son orientativas):
+- "monthlyVolume": número entero ≥ 0, búsquedas mensuales estimadas en Google para ese término (mercado relevante para Minerva / España-Europa si aplica).
+- "difficultyPercent": entero de 0 a 100, dificultad SEO para posicionar (0 = muy fácil, 100 = muy difícil). Sé coherente: nichos muy competidos → valores altos; long-tails muy específicas → valores más bajos.
 
 Cada objeto del array debe incluir las claves exactas:
 - "keyword": string (la long-tail)
 - "intent": exactamente uno de "Informativa", "Comercial" o "Transaccional" (debe coincidir con las reglas anteriores)
-- "difficulty": exactamente uno de "Baja", "Media" o "Alta"
 - "titleIdea": string (título sugerido para blog o página)
+- "monthlyVolume": número entero (volumen mensual estimado)
+- "difficultyPercent": número entero entre 0 y 100 inclusive
 
 Devuelve la respuesta ESTRICTAMENTE como un único JSON válido: un array de exactamente ${count} objetos. Sin texto antes ni después, sin markdown, sin comentarios.`;
 }
@@ -66,11 +59,42 @@ function getGoogleModel() {
   return google("gemini-2.5-flash");
 }
 
+function parseDifficultyPercent(o: Record<string, unknown>): number {
+  const raw =
+    o.difficultyPercent ?? o.difficulty_percent ?? o.seoDifficultyPercent;
+  const n =
+    typeof raw === "number" ? raw : Number(String(raw).replace(",", "."));
+  if (!Number.isFinite(n)) return 50;
+  return Math.min(100, Math.max(0, Math.round(n)));
+}
+
+function parseMonthlyVolume(o: Record<string, unknown>): number {
+  const raw =
+    o.monthlyVolume ?? o.monthly_volume ?? o.volume ?? o.searchVolume;
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    return Math.min(999_999_999, Math.max(0, Math.round(raw)));
+  }
+  let s = String(raw ?? "")
+    .trim()
+    .replace(/\s/g, "");
+  if (!s) return 0;
+  // Enteros con separador de miles tipo 1.234 (ES)
+  if (/^\d{1,3}(\.\d{3})+$/.test(s)) {
+    s = s.replace(/\./g, "");
+  } else if (s.includes(",") && !s.includes(".")) {
+    s = s.replace(",", ".");
+  }
+  const n = Number.parseFloat(s);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(999_999_999, Math.round(n));
+}
+
 function parseKeywordJson(text: string): Array<{
   keyword: string;
   intent: string;
-  difficulty: string;
   titleIdea: string;
+  monthlyVolume: number;
+  difficultyPercent: number;
 }> {
   let t = text.trim();
   const fenced = /^```(?:json)?\s*([\s\S]*?)```\s*$/m.exec(t);
@@ -98,8 +122,9 @@ function parseKeywordJson(text: string): Array<{
     return {
       keyword: String(o.keyword ?? ""),
       intent: String(o.intent ?? ""),
-      difficulty: String(o.difficulty ?? ""),
       titleIdea: String(o.titleIdea ?? ""),
+      monthlyVolume: parseMonthlyVolume(o),
+      difficultyPercent: parseDifficultyPercent(o),
     };
   });
 }
@@ -112,7 +137,6 @@ function parseBody(body: unknown): {
   seed: string;
   intentFilter: IntentFilter;
   count: KeywordCount;
-  difficultyFilter: DifficultyFilter;
 } | { error: string } {
   if (!body || typeof body !== "object") {
     return { error: "Cuerpo de petición inválido." };
@@ -140,13 +164,7 @@ function parseBody(body: unknown): {
     count = c;
   }
 
-  const diffRaw = o.difficultyFilter ?? o.difficulty;
-  let difficultyFilter: DifficultyFilter = "any";
-  if (diffRaw === "low_only" || diffRaw === "any") {
-    difficultyFilter = diffRaw;
-  }
-
-  return { seed, intentFilter, count, difficultyFilter };
+  return { seed, intentFilter, count };
 }
 
 export async function POST(req: Request) {
@@ -157,8 +175,8 @@ export async function POST(req: Request) {
       return Response.json({ error: parsed.error }, { status: 400 });
     }
 
-    const { seed, intentFilter, count, difficultyFilter } = parsed;
-    const system = buildSystemPrompt(count, intentFilter, difficultyFilter);
+    const { seed, intentFilter, count } = parsed;
+    const system = buildSystemPrompt(count, intentFilter);
     const prompt = `Palabra clave semilla del usuario: ${seed}`;
 
     const maxOutputTokens = count <= 10 ? 4096 : 8192;
@@ -174,9 +192,6 @@ export async function POST(req: Request) {
     let rows = parseKeywordJson(result.text);
     if (rows.length > count) {
       rows = rows.slice(0, count);
-    }
-    if (rows.length < count && rows.length > 0) {
-      // Devolvemos lo obtenido; el front puede mostrar aviso si se desea
     }
     if (!rows.length) {
       throw new Error("No se obtuvieron filas válidas del modelo");
