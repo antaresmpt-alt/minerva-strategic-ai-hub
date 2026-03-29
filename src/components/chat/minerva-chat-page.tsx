@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
-import { Menu, MessageSquare, Send } from "lucide-react";
+import { FileText, Menu, MessageSquare, Send, Trash } from "lucide-react";
 import ReactMarkdown from "react-markdown";
-import type { UIMessage } from "ai";
+import { DefaultChatTransport, type UIMessage } from "ai";
+
+import { extractTextFromPDF } from "@/lib/extract-pdf-text";
 
 import { MinervaThinkingLogo } from "@/components/brand/minerva-thinking-logo";
 import { SemContactFooter } from "@/components/layout/sem-contact-footer";
@@ -39,7 +41,15 @@ function textFromParts(message: UIMessage): string {
     .join("");
 }
 
-function ChatSidebarNav({ onPickChat }: { onPickChat?: () => void }) {
+function ChatSidebarNav({
+  onPickChat,
+  onPdfAttachClick,
+  pdfLoading,
+}: {
+  onPickChat?: () => void;
+  onPdfAttachClick: () => void;
+  pdfLoading: boolean;
+}) {
   return (
     <>
       <div className="flex items-center gap-3 rounded-lg bg-[#C69C2B] px-3 py-2.5 text-[#002147]">
@@ -66,11 +76,19 @@ function ChatSidebarNav({ onPickChat }: { onPickChat?: () => void }) {
         <Button
           type="button"
           variant="secondary"
-          className="h-auto min-h-10 w-full flex-col gap-0.5 border border-white/10 bg-white/10 py-2.5 text-center text-white/80 whitespace-normal hover:bg-white/15"
-          disabled
+          className="h-auto min-h-10 w-full gap-2 border border-white/10 bg-white/10 py-2.5 text-left text-white/90 hover:bg-white/15"
+          onClick={onPdfAttachClick}
+          disabled={pdfLoading}
         >
-          <span>📚 Base de Conocimiento (PDFs)</span>
-          <span className="text-xs font-normal text-white/45">Próximamente</span>
+          <FileText className="size-4 shrink-0 opacity-90" aria-hidden />
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
+            <span className="text-sm font-medium leading-tight">
+              Base de Conocimiento (PDFs)
+            </span>
+            <span className="text-xs font-normal text-white/55">
+              {pdfLoading ? "Leyendo PDF…" : "Adjuntar como contexto"}
+            </span>
+          </span>
         </Button>
       </div>
     </>
@@ -80,10 +98,27 @@ function ChatSidebarNav({ onPickChat }: { onPickChat?: () => void }) {
 export function MinervaChatPage() {
   const [input, setInput] = useState("");
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [pdfContext, setPdfContext] = useState<string | null>(null);
+  const [pdfFileName, setPdfFileName] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const documentContextRef = useRef<string | null>(null);
+  documentContextRef.current = pdfContext;
 
-  const { messages, sendMessage, status, error, stop } = useChat();
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        body: () => ({
+          documentContext: documentContextRef.current,
+        }),
+      }),
+    []
+  );
+
+  const { messages, sendMessage, status, error, stop } = useChat({ transport });
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -129,6 +164,46 @@ export function MinervaChatPage() {
 
   const closeSheet = () => setSheetOpen(false);
 
+  const openPdfPicker = useCallback(() => {
+    pdfInputRef.current?.click();
+  }, []);
+
+  const clearPdfContext = useCallback(() => {
+    setPdfContext(null);
+    setPdfFileName(null);
+    setPdfError(null);
+  }, []);
+
+  const onPdfSelected = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      if (!file) return;
+      setPdfError(null);
+      setPdfLoading(true);
+      try {
+        const text = await extractTextFromPDF(file);
+        if (!text.trim()) {
+          setPdfContext(null);
+          setPdfFileName(null);
+          setPdfError(
+            "No se extrajo texto de este PDF (puede ser escaneado o protegido)."
+          );
+          return;
+        }
+        setPdfContext(text);
+        setPdfFileName(file.name);
+      } catch {
+        setPdfContext(null);
+        setPdfFileName(null);
+        setPdfError("No se pudo leer el PDF. Prueba con otro archivo.");
+      } finally {
+        setPdfLoading(false);
+      }
+    },
+    []
+  );
+
   return (
     <div className="flex min-h-dvh flex-col md:flex-row">
       {/* Móvil: barra superior tipo SEM */}
@@ -157,7 +232,11 @@ export function MinervaChatPage() {
               </SheetTitle>
             </SheetHeader>
             <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-3">
-              <ChatSidebarNav onPickChat={closeSheet} />
+              <ChatSidebarNav
+                onPickChat={closeSheet}
+                onPdfAttachClick={openPdfPicker}
+                pdfLoading={pdfLoading}
+              />
             </div>
             <div className="mt-auto border-t border-white/10 p-4">
               <Link
@@ -200,7 +279,10 @@ export function MinervaChatPage() {
         </p>
         <Separator className="my-4 bg-white/15" />
         <div className="flex flex-1 flex-col gap-1 px-3">
-          <ChatSidebarNav />
+          <ChatSidebarNav
+            onPdfAttachClick={openPdfPicker}
+            pdfLoading={pdfLoading}
+          />
         </div>
         <div className="mt-auto space-y-3 p-4">
           <Link
@@ -210,8 +292,8 @@ export function MinervaChatPage() {
             ← Volver al portal
           </Link>
           <p className="text-[10px] leading-relaxed text-white/55">
-            Respuestas concisas. La base de conocimiento PDF llegará en una
-            futura versión.
+            Respuestas concisas. Puedes adjuntar un PDF como contexto desde la
+            barra lateral.
           </p>
         </div>
       </aside>
@@ -237,6 +319,15 @@ export function MinervaChatPage() {
         </header>
 
         <main className="relative z-10 flex min-h-0 flex-1 flex-col px-4 py-6 md:px-10 md:py-8">
+          <input
+            ref={pdfInputRef}
+            type="file"
+            accept=".pdf,application/pdf"
+            className="hidden"
+            tabIndex={-1}
+            aria-hidden
+            onChange={onPdfSelected}
+          />
           <ScrollArea className="min-h-0 flex-1 pr-2">
             <div className="mx-auto max-w-3xl space-y-4 pb-4">
               {messages.length === 0 && (
@@ -301,6 +392,41 @@ export function MinervaChatPage() {
           </ScrollArea>
 
           <div className="relative z-10 mt-4 shrink-0 border-t border-[#002147]/10 bg-white/85 px-0 py-4 backdrop-blur-md md:mt-6">
+            <div className="mx-auto mb-3 max-w-3xl space-y-2">
+              {pdfLoading && (
+                <p className="flex items-center gap-2 text-sm text-slate-600">
+                  <FileText
+                    className="size-4 shrink-0 text-[#002147]/70"
+                    aria-hidden
+                  />
+                  Leyendo PDF…
+                </p>
+              )}
+              {pdfError && (
+                <p className="text-destructive text-sm" role="alert">
+                  {pdfError}
+                </p>
+              )}
+              {pdfFileName && pdfContext && !pdfLoading && (
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-[#002147]/15 bg-white/90 px-3 py-2 text-sm text-slate-700 shadow-sm backdrop-blur-sm">
+                  <span className="min-w-0 truncate">
+                    📄{" "}
+                    <span className="font-medium">{pdfFileName}</span> cargado
+                    como contexto
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0 text-slate-500 hover:text-destructive"
+                    onClick={clearPdfContext}
+                    aria-label="Quitar documento del contexto"
+                  >
+                    <Trash className="size-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
             <form
               onSubmit={onSubmit}
               className="mx-auto flex max-w-3xl items-end gap-2"
