@@ -56,6 +56,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { LeadsManagementPanel } from "@/components/sales/leads-management-panel";
 import { SalesOrdersGestionPanel } from "@/components/sales/sales-orders-gestion-panel";
 import {
   buildDelayReportXlsxBlob,
@@ -369,21 +370,7 @@ export function SalesIntelligenceDashboard() {
           </div>
         ) : null}
 
-        {!loading && !error && !hasData ? (
-          <div className="flex min-h-[38vh] flex-col items-center justify-center gap-3 px-4 text-center">
-            <p className="max-w-md text-sm text-slate-700">
-              Sube el informe mensual (CSV o Excel). El formato completo con rentabilidad
-              desbloquea KPIs y alertas OT; los archivos básicos siguen mostrando volumen
-              y estados sin romper la vista.
-            </p>
-            <p className="text-xs text-slate-500">
-              Usa el botón flotante inferior derecho o &quot;Cargar datos de ejemplo&quot;
-              arriba.
-            </p>
-          </div>
-        ) : null}
-
-        {hasData && !error ? (
+        {!error ? (
           <>
             <Card className="print:hidden border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
               <CardContent className="flex flex-col gap-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:py-5">
@@ -423,8 +410,12 @@ export function SalesIntelligenceDashboard() {
                 <TabsTrigger value="gestion" className="px-4 py-2 text-sm">
                   Gestión de Pedidos
                 </TabsTrigger>
+                <TabsTrigger value="leads" className="px-4 py-2 text-sm">
+                  Gestión de Leads
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="dashboard" className="mt-0 outline-none">
+          {hasData ? (
           <div ref={salesPrintRef} className="space-y-8 print:space-y-5">
             <div className="hidden border-b border-slate-200 pb-3 print:block">
               <h1 className="font-heading text-xl font-bold tracking-tight text-[#002147] print:text-2xl">
@@ -1033,9 +1024,35 @@ export function SalesIntelligenceDashboard() {
               </CardContent>
             </Card>
           </div>
+          ) : (
+            <Card className="border-slate-200/80 bg-white/90 shadow-sm">
+              <CardContent className="py-10 text-center">
+                <p className="mx-auto max-w-md text-sm text-slate-700">
+                  Sube el informe mensual de ventas (CSV o Excel) con el botón inferior
+                  o &quot;Cargar datos de ejemplo&quot; en la cabecera. El formato completo
+                  desbloquea KPIs y alertas OT.
+                </p>
+                <p className="mt-2 text-xs text-slate-500">
+                  También puedes abrir la pestaña <strong>Gestión de Leads</strong> para
+                  trabajar con el pipeline comercial sin cargar ventas.
+                </p>
+              </CardContent>
+            </Card>
+          )}
               </TabsContent>
               <TabsContent value="gestion" className="mt-0 print:hidden outline-none">
-                <SalesOrdersGestionPanel rows={displayRows} />
+                {hasData ? (
+                  <SalesOrdersGestionPanel rows={displayRows} />
+                ) : (
+                  <Card className="border-slate-200/80 bg-white/90 shadow-sm">
+                    <CardContent className="py-10 text-center text-sm text-slate-600">
+                      Carga primero un informe de ventas para ver y filtrar pedidos.
+                    </CardContent>
+                  </Card>
+                )}
+              </TabsContent>
+              <TabsContent value="leads" className="mt-0 print:hidden outline-none">
+                <LeadsManagementPanel />
               </TabsContent>
             </Tabs>
           </>
