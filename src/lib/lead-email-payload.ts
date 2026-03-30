@@ -24,3 +24,15 @@ export function leadRowToEmailPayload(lead: LeadRow): LeadEmailApiPayload {
     Ultimo_Contacto: lead.ultimoContacto ?? "",
   };
 }
+
+/** Payload para scoring IA: mismos campos que email + Prioridad (CRM). */
+export type LeadScoringApiPayload = LeadEmailApiPayload & {
+  Prioridad: string;
+};
+
+export function leadRowToScoringPayload(lead: LeadRow): LeadScoringApiPayload {
+  return {
+    ...leadRowToEmailPayload(lead),
+    Prioridad: lead.prioridad ?? "",
+  };
+}

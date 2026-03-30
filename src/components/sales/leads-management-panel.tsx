@@ -6,6 +6,7 @@ import {
   FileSpreadsheet,
   FileText,
   Search,
+  Target,
   Upload,
   Wand2,
 } from "lucide-react";
@@ -13,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LeadEmailAiDialog } from "@/components/sales/lead-email-ai-dialog";
+import { LeadScoringAiDialog } from "@/components/sales/lead-scoring-ai-dialog";
 import {
   Card,
   CardContent,
@@ -169,6 +171,8 @@ export function LeadsManagementPanel() {
   const [prioridadF, setPrioridadF] = useState("__all__");
   const [emailLead, setEmailLead] = useState<LeadRow | null>(null);
   const [emailOpen, setEmailOpen] = useState(false);
+  const [scoringLead, setScoringLead] = useState<LeadRow | null>(null);
+  const [scoringOpen, setScoringOpen] = useState(false);
 
   const comercialOptions = useMemo(() => {
     const set = new Set<string>();
@@ -505,7 +509,7 @@ export function LeadsManagementPanel() {
                       <TableHead className="min-w-[10rem]">
                         Próxima acción
                       </TableHead>
-                      <TableHead className="w-[4.5rem] text-center">
+                      <TableHead className="min-w-[6.75rem] text-center">
                         IA
                       </TableHead>
                     </TableRow>
@@ -542,20 +546,36 @@ export function LeadsManagementPanel() {
                           </span>
                         </TableCell>
                         <TableCell className="text-center">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon-sm"
-                            className="size-8 border-[#002147]/20 text-[#002147] hover:bg-[#002147]/10"
-                            title="Redactar email con IA"
-                            aria-label="Redactar email con IA"
-                            onClick={() => {
-                              setEmailLead(lead);
-                              setEmailOpen(true);
-                            }}
-                          >
-                            <Wand2 className="size-3.5" aria-hidden />
-                          </Button>
+                          <div className="flex flex-wrap items-center justify-center gap-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon-sm"
+                              className="size-8 border-[#002147]/20 text-[#002147] hover:bg-[#002147]/10"
+                              title="Redactar email con IA"
+                              aria-label="Redactar email con IA"
+                              onClick={() => {
+                                setEmailLead(lead);
+                                setEmailOpen(true);
+                              }}
+                            >
+                              <Wand2 className="size-3.5" aria-hidden />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon-sm"
+                              className="size-8 border-[#002147]/20 text-[#002147] hover:bg-[#002147]/10"
+                              title="Analizar probabilidad de cierre"
+                              aria-label="Analizar probabilidad de cierre"
+                              onClick={() => {
+                                setScoringLead(lead);
+                                setScoringOpen(true);
+                              }}
+                            >
+                              <Target className="size-3.5" aria-hidden />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -578,6 +598,14 @@ export function LeadsManagementPanel() {
         onOpenChange={(o) => {
           setEmailOpen(o);
           if (!o) setEmailLead(null);
+        }}
+      />
+      <LeadScoringAiDialog
+        lead={scoringLead}
+        open={scoringOpen}
+        onOpenChange={(o) => {
+          setScoringOpen(o);
+          if (!o) setScoringLead(null);
         }}
       />
     </div>
