@@ -7,10 +7,12 @@ import {
   FileText,
   Search,
   Upload,
+  Wand2,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { LeadEmailAiDialog } from "@/components/sales/lead-email-ai-dialog";
 import {
   Card,
   CardContent,
@@ -165,6 +167,8 @@ export function LeadsManagementPanel() {
   const [comercial, setComercial] = useState("__all__");
   const [estadoF, setEstadoF] = useState("__all__");
   const [prioridadF, setPrioridadF] = useState("__all__");
+  const [emailLead, setEmailLead] = useState<LeadRow | null>(null);
+  const [emailOpen, setEmailOpen] = useState(false);
 
   const comercialOptions = useMemo(() => {
     const set = new Set<string>();
@@ -501,6 +505,9 @@ export function LeadsManagementPanel() {
                       <TableHead className="min-w-[10rem]">
                         Próxima acción
                       </TableHead>
+                      <TableHead className="w-[4.5rem] text-center">
+                        IA
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -534,6 +541,22 @@ export function LeadsManagementPanel() {
                             {lead.proximaAccion || "—"}
                           </span>
                         </TableCell>
+                        <TableCell className="text-center">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon-sm"
+                            className="size-8 border-[#002147]/20 text-[#002147] hover:bg-[#002147]/10"
+                            title="Redactar email con IA"
+                            aria-label="Redactar email con IA"
+                            onClick={() => {
+                              setEmailLead(lead);
+                              setEmailOpen(true);
+                            }}
+                          >
+                            <Wand2 className="size-3.5" aria-hidden />
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -548,6 +571,15 @@ export function LeadsManagementPanel() {
           KPIs y tabla.
         </p>
       ) : null}
+
+      <LeadEmailAiDialog
+        lead={emailLead}
+        open={emailOpen}
+        onOpenChange={(o) => {
+          setEmailOpen(o);
+          if (!o) setEmailLead(null);
+        }}
+      />
     </div>
   );
 }
