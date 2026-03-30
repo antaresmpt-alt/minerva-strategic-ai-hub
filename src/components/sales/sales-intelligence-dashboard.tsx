@@ -55,6 +55,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SalesOrdersGestionPanel } from "@/components/sales/sales-orders-gestion-panel";
 import {
   buildDelayReportXlsxBlob,
   isOrderActiveForDelivery,
@@ -382,6 +384,47 @@ export function SalesIntelligenceDashboard() {
         ) : null}
 
         {hasData && !error ? (
+          <>
+            <Card className="print:hidden border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
+              <CardContent className="flex flex-col gap-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:py-5">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-[#002147]">
+                    Centro de mando comercial
+                  </p>
+                  <p className="mt-0.5 text-xs text-slate-600">
+                    Archivo activo:{" "}
+                    <span className="font-medium text-slate-800" title={sourceLabel ?? ""}>
+                      {sourceLabel ?? "—"}
+                    </span>
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 gap-2 border-[#002147]/25"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={loading}
+                >
+                  <Upload className="size-4" aria-hidden />
+                  Subir otro Excel / CSV
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Tabs defaultValue="dashboard" className="w-full">
+              <TabsList
+                variant="line"
+                className="print:hidden mb-6 h-auto w-full flex-wrap justify-start gap-1 rounded-lg border border-slate-200/60 bg-slate-50/90 p-1 sm:w-fit"
+              >
+                <TabsTrigger value="dashboard" className="px-4 py-2 text-sm">
+                  Dashboard Resumen
+                </TabsTrigger>
+                <TabsTrigger value="gestion" className="px-4 py-2 text-sm">
+                  Gestión de Pedidos
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="dashboard" className="mt-0 outline-none">
           <div ref={salesPrintRef} className="space-y-8 print:space-y-5">
             <div className="hidden border-b border-slate-200 pb-3 print:block">
               <h1 className="font-heading text-xl font-bold tracking-tight text-[#002147] print:text-2xl">
@@ -990,6 +1033,12 @@ export function SalesIntelligenceDashboard() {
               </CardContent>
             </Card>
           </div>
+              </TabsContent>
+              <TabsContent value="gestion" className="mt-0 print:hidden outline-none">
+                <SalesOrdersGestionPanel rows={displayRows} />
+              </TabsContent>
+            </Tabs>
+          </>
         ) : null}
       </main>
 
