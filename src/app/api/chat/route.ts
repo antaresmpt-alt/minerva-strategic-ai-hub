@@ -26,20 +26,20 @@ const KNOWLEDGE_BASE_DIR = path.join(
   "knowledge-base"
 );
 
-const MINERVA_AI_SYSTEM = `Eres Minerva AI, el asistente corporativo exclusivo de Minerva Global (empresa de packaging técnico para pharma y cosmética). Tus respuestas deben ser extremadamente concisas, directas y profesionales. No uses introducciones largas. Si te piden tareas muy largas, resume la idea principal para ahorrar tokens.
+const MINERVA_AI_SYSTEM = `Eres el Asistente Inteligente de Minerva Global. Tu prioridad absoluta es responder utilizando la información de los DOCUMENTOS ADJUNTOS (PDF/TXT).
 
-REGLAS DE CITAS Y FIABILIDAD (OBLIGATORIAS):
-- Cuando respondas basándote en la información proporcionada en la Base de Conocimiento, DEBES citar el nombre del documento original (el nombre aparece en cada bloque tras la etiqueta "DOCUMENTO:").
-- Añade la cita al final de la frase o párrafo relevante usando este formato exacto en cursiva: *(Fuente: NombreDelDocumento.pdf)* (sustituye NombreDelDocumento.pdf por el nombre real del archivo indicado en el bloque).
-- Si la respuesta combina información de varios documentos, cítalos todos (una o más citas *(Fuente: …)* según corresponda).
-- Si te preguntan algo que NO está en los documentos de la base de conocimiento ni en el contexto adicional delimitado abajo, responde amablemente que no tienes esa información en tu base de conocimiento actual, en lugar de inventarla (evita alucinaciones).
-- Si usas el contexto del documento adjunto por el usuario y puedes identificar un nombre de archivo en las instrucciones, cítalo con el mismo formato *(Fuente: …)*; si no hay nombre explícito, puedes usar *(Fuente: documento adjunto por el usuario)*.`;
+Tienes acceso a varios manuales: Seguridad, Formación y Horarios. Si el usuario pregunta por tiempos o jornadas, busca en 'Horarios'. Si pregunta por cursos, busca en 'Formación'.
 
-const KB_START = "--- BASE DE CONOCIMIENTO ---";
-const KB_END = "--- FIN BASE DE CONOCIMIENTO ---";
+- Si el usuario pregunta por 'formación', busca específicamente en el documento de formación.
+- Si la información está en el contexto, úsala obligatoriamente citando el nombre del archivo si es posible.
+- Si NO encuentras la información en los documentos, di exactamente: "No encuentro información específica sobre eso en los manuales de Minerva, pero basándome en mi conocimiento general..."
+  Tras esa frase, solo completa con conocimiento general breve y profesional; no inventes datos corporativos.
 
-const USER_DOC_START = "--- DOCUMENTO ADJUNTO POR EL USUARIO ---";
-const USER_DOC_END = "--- FIN DOCUMENTO ADJUNTO ---";
+Sé conciso. El contexto corporativo usa bloques "ARCHIVO: …" y "CONTENIDO: …"; cita el nombre de archivo que aparezca en ARCHIVO cuando respondas.`;
+
+/** Delimita todo el texto extraído de PDFs que recibe el modelo en el system prompt. */
+const CONTEXT_START = "--- INICIO DEL CONTEXTO DE MINERVA ---";
+const CONTEXT_END = "--- FIN DEL CONTEXTO ---";
 
 /** Límite aproximado para la memoria base (Gemini 2.5 Flash admite contexto amplio). */
 const MAX_KNOWLEDGE_BASE_CHARS = 500_000;
@@ -48,49 +48,79 @@ const MAX_KNOWLEDGE_BASE_CHARS = 500_000;
 const MAX_DOCUMENT_CONTEXT_CHARS = 80_000;
 
 /**
- * Caché global: el texto parseado de todos los PDF de la carpeta.
+ * Caché global: texto concatenado de todos los .pdf y .txt de la carpeta.
  * `null` = aún no se ha cargado; tras el primer intento queda string (posiblemente vacío).
  */
 let cachedKnowledgeBase: string | null = null;
+
+function isKnowledgeBaseFile(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  return lower.endsWith(".pdf") || lower.endsWith(".txt");
+}
+
+async function loadSingleKnowledgeFile(
+  name: string,
+  PDFParse: typeof import("pdf-parse").PDFParse
+): Promise<string | null> {
+  const fullPath = path.join(KNOWLEDGE_BASE_DIR, name);
+  if (name.toLowerCase().endsWith(".txt")) {
+    const text = (await fs.readFile(fullPath, "utf8")).trim();
+    if (!text) return null;
+    return `ARCHIVO: ${name}\nCONTENIDO: ${text}`;
+  }
+  const buffer = await fs.readFile(fullPath);
+  const parser = new PDFParse({ data: new Uint8Array(buffer) });
+  try {
+    const result = await parser.getText();
+    const text = (result.text ?? "").trim();
+    if (!text) return null;
+    return `ARCHIVO: ${name}\nCONTENIDO: ${text}`;
+  } finally {
+    await parser.destroy();
+  }
+}
 
 async function getKnowledgeBaseText(): Promise<string> {
   if (cachedKnowledgeBase !== null) {
     return cachedKnowledgeBase;
   }
 
-  const chunks: string[] = [];
-
   try {
-    const { PDFParse } = await import("pdf-parse");
     const entries = await fs.readdir(KNOWLEDGE_BASE_DIR, { withFileTypes: true });
-    const pdfNames = entries
-      .filter((e) => e.isFile() && e.name.toLowerCase().endsWith(".pdf"))
+    const fileNamesArray = entries
+      .filter((e) => e.isFile() && isKnowledgeBaseFile(e.name))
       .map((e) => e.name)
       .sort((a, b) => a.localeCompare(b));
 
-    for (const name of pdfNames) {
-      const fullPath = path.join(KNOWLEDGE_BASE_DIR, name);
-      const buffer = await fs.readFile(fullPath);
-      const parser = new PDFParse({ data: new Uint8Array(buffer) });
-      try {
-        const result = await parser.getText();
-        const text = (result.text ?? "").trim();
-        if (text) {
-          chunks.push(`DOCUMENTO: ${name}\n${text}`);
-        }
-      } finally {
-        await parser.destroy();
-      }
+    console.log("Archivos leídos para el contexto:", fileNamesArray);
+
+    if (fileNamesArray.length === 0) {
+      cachedKnowledgeBase = "";
+      return cachedKnowledgeBase;
     }
+
+    const { PDFParse } = await import("pdf-parse");
+    const chunks = await Promise.all(
+      fileNamesArray.map((name) =>
+        loadSingleKnowledgeFile(name, PDFParse).catch((err: unknown) => {
+          console.error(`[api/chat] Error leyendo "${name}":`, err);
+          return null;
+        })
+      )
+    );
+
+    cachedKnowledgeBase = chunks
+      .filter((c): c is string => c != null && c.length > 0)
+      .join("\n\n");
   } catch (e: unknown) {
     const code = e && typeof e === "object" && "code" in e ? (e as NodeJS.ErrnoException).code : undefined;
     if (code !== "ENOENT") {
       console.error("[api/chat] Error leyendo knowledge-base:", e);
     }
+    cachedKnowledgeBase = "";
   }
 
-  cachedKnowledgeBase = chunks.join("\n\n");
-  return cachedKnowledgeBase;
+  return cachedKnowledgeBase ?? "";
 }
 
 function buildSystemPrompt(
@@ -99,41 +129,41 @@ function buildSystemPrompt(
 ): string {
   const sections: string[] = [MINERVA_AI_SYSTEM];
 
-  const kb = knowledgeBaseText.trim();
+  let kb = knowledgeBaseText.trim();
+  if (kb.length > MAX_KNOWLEDGE_BASE_CHARS) {
+    kb =
+      kb.slice(0, MAX_KNOWLEDGE_BASE_CHARS) +
+      "\n\n[... contexto corporativo truncado por límite ...]";
+  }
+
+  let userDoc = documentContext?.trim() ?? "";
+  if (userDoc.length > MAX_DOCUMENT_CONTEXT_CHARS) {
+    userDoc =
+      userDoc.slice(0, MAX_DOCUMENT_CONTEXT_CHARS) +
+      "\n\n[... documento adjunto truncado por límite ...]";
+  }
+
+  const contextPieces: string[] = [];
   if (kb) {
-    let body = kb;
-    if (body.length > MAX_KNOWLEDGE_BASE_CHARS) {
-      body =
-        body.slice(0, MAX_KNOWLEDGE_BASE_CHARS) +
-        "\n\n[... base de conocimiento truncada por límite de contexto ...]";
-    }
-    sections.push(
-      [
-        "La siguiente sección contiene solo texto extraído de PDFs corporativos. Úsala para responder cuando aplique y aplica siempre las reglas de citas anteriores.",
-        "",
-        KB_START,
-        body,
-        KB_END,
-      ].join("\n")
+    contextPieces.push(
+      "Base de conocimiento corporativa (cada manual: líneas ARCHIVO: nombre y CONTENIDO: texto):\n\n" +
+        kb
+    );
+  }
+  if (userDoc) {
+    contextPieces.push(
+      "Documento adicional aportado por el usuario en esta conversación:\n\n" + userDoc
     );
   }
 
-  if (documentContext?.trim()) {
-    let doc = documentContext.trim();
-    if (doc.length > MAX_DOCUMENT_CONTEXT_CHARS) {
-      doc =
-        doc.slice(0, MAX_DOCUMENT_CONTEXT_CHARS) +
-        "\n\n[... texto del documento truncado por límite de contexto ...]";
-    }
+  if (contextPieces.length > 0) {
     sections.push(
       [
-        "Contexto adicional subido por el usuario en el chat (no confundir con la base de conocimiento salvo que lo indiques). Respeta las mismas reglas de citas y de no inventar información.",
+        "Todo el texto entre las etiquetas siguientes es contexto documental de Minerva. Respétalo con prioridad absoluta.",
         "",
-        USER_DOC_START,
-        doc,
-        USER_DOC_END,
-        "",
-        "Si la consulta no guarda relación con este documento, responde con conocimiento general (y con la base de empresa si aplica) manteniendo brevedad y tono corporativo.",
+        CONTEXT_START,
+        contextPieces.join("\n\n---\n\n"),
+        CONTEXT_END,
       ].join("\n")
     );
   }
@@ -187,6 +217,7 @@ export async function POST(req: Request) {
       system: buildSystemPrompt(knowledgeBaseText, documentContext),
       messages: modelMessages,
       maxOutputTokens: 1024,
+      temperature: 0.25,
     });
 
     return result.toUIMessageStreamResponse();
