@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FileDown,
   FileSpreadsheet,
@@ -158,7 +158,11 @@ function EstadoLeadBadge({ value }: { value: string }) {
   );
 }
 
-export function LeadsManagementPanel() {
+export function LeadsManagementPanel({
+  onFilteredLeadsChange,
+}: {
+  onFilteredLeadsChange?: (leads: LeadRow[]) => void;
+} = {}) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [leadsData, setLeadsData] = useState<LeadRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -205,6 +209,10 @@ export function LeadsManagementPanel() {
       return emp.includes(q) || con.includes(q);
     });
   }, [leadsData, search, comercial, estadoF, prioridadF]);
+
+  useEffect(() => {
+    onFilteredLeadsChange?.(filteredLeads);
+  }, [filteredLeads, onFilteredLeadsChange]);
 
   const kpis = useMemo(() => {
     const total = filteredLeads.length;

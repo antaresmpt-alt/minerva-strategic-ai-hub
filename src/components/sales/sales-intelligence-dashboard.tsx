@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useReactToPrint } from "react-to-print";
 import {
   AlertTriangle,
@@ -9,13 +9,17 @@ import {
   Download,
   Euro,
   Info,
+  Loader2,
   LineChart as LineChartIcon,
   PieChart as PieChartIcon,
   Printer,
   RefreshCw,
   ScatterChart as ScatterIcon,
+  Send,
+  Sparkles,
   TrendingUp,
   Upload,
+  X,
 } from "lucide-react";
 import {
   Bar,
@@ -37,6 +41,7 @@ import {
 
 import { useSalesData } from "@/hooks/use-sales-data";
 import { buttonVariants } from "@/components/ui/button-variants";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,6 +51,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/select-native";
 import {
   Table,
@@ -63,9 +69,11 @@ import {
   isOrderActiveForDelivery,
 } from "@/lib/sales-delivery-timing";
 import { cn } from "@/lib/utils";
+import type { LeadRow } from "@/types/leads";
 import {
   SALES_ROLE_LABELS,
   type DeliveryTimeStatus,
+  type SalesOrderRow,
   type SalesRoleView,
 } from "@/types/sales";
 
@@ -163,6 +171,37 @@ function KpiCard({
   );
 }
 
+const CHAT_ROW_CAP = 280;
+
+function capRows<T>(arr: T[], n: number): T[] {
+  return arr.length <= n ? arr : arr.slice(0, n);
+}
+
+function slimOrderForChat(r: SalesOrderRow) {
+  return {
+    idPedido: r.idPedido,
+    estado: r.estado,
+    cliente: r.cliente,
+    comercial: r.comercial,
+    fechaEntrega: r.fechaEntrega,
+    valorReal: r.valorReal,
+    margenPorcentaje: r.margenPorcentaje,
+  };
+}
+
+function slimLeadForChat(l: LeadRow) {
+  return {
+    idLead: l.idLead,
+    empresa: l.empresa,
+    contacto: l.contacto,
+    comercial: l.comercial,
+    estado: l.estado,
+    prioridad: l.prioridad,
+    ultimoContacto: l.ultimoContacto,
+    proximaAccion: l.proximaAccion,
+  };
+}
+
 const FILE_ACCEPT =
   ".csv,.xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv";
 
@@ -213,6 +252,124 @@ export function SalesIntelligenceDashboard() {
       return timeStatus === "late" || timeStatus === "risk";
     });
   }, [rowsWithAlerts, deliveryTableFilter]);
+
+  const [salesTab, setSalesTab] = useState("dashboard");
+  const [filteredPedidos, setFilteredPedidos] = useState<SalesOrderRow[]>([]);
+  const [filteredLeads, setFilteredLeads] = useState<LeadRow[]>([]);
+
+  const [dataChatQuery, setDataChatQuery] = useState("");
+  const [dataChatLoading, setDataChatLoading] = useState(false);
+  const [dataChatError, setDataChatError] = useState<string | null>(null);
+  const [dataChatReply, setDataChatReply] = useState<string | null>(null);
+  const [dataChatPanelOpen, setDataChatPanelOpen] = useState(false);
+
+  const onFilteredPedidosChange = useCallback((rows: SalesOrderRow[]) => {
+    setFilteredPedidos(rows);
+  }, []);
+
+  const onFilteredLeadsChange = useCallback((rows: LeadRow[]) => {
+    setFilteredLeads(rows);
+  }, []);
+
+  const buildChatTableData = useCallback((): string => {
+    if (salesTab === "gestion" && hasData) {
+      const filas = capRows(filteredPedidos, CHAT_ROW_CAP).map(slimOrderForChat);
+      return JSON.stringify({
+        vista: "gestion_pedidos",
+        descripcion:
+          "Pedidos visibles según filtros de la pestaña Gestión de Pedidos",
+        totalFilasCoinciden: filteredPedidos.length,
+        filas,
+      });
+    }
+    if (salesTab === "leads") {
+      const filas = capRows(filteredLeads, CHAT_ROW_CAP).map(slimLeadForChat);
+      return JSON.stringify({
+        vista: "gestion_leads",
+        descripcion:
+          "Leads visibles según filtros de la pestaña Gestión de Leads",
+        totalFilasCoinciden: filteredLeads.length,
+        filas,
+      });
+    }
+    if (!hasData) {
+      return JSON.stringify({
+        vista: "dashboard",
+        sinDatosVentas: true,
+        nota:
+          "No hay informe de ventas cargado en esta sesión. La pestaña Leads puede tener datos si se cargó un archivo ahí.",
+      });
+    }
+    return JSON.stringify({
+      vista: "dashboard_resumen",
+      descripcion:
+        "Resumen del dashboard de ventas y muestra de pedidos con timing de entrega",
+      archivo: sourceLabel,
+      kpis: {
+        ventasRealesEUR: kpis.ventasReales,
+        margenBrutoEUR: kpis.margenBruto,
+        margenPromedioPct: kpis.margenPromedioPct,
+        ratioEficiencia: kpis.ratioEficiencia,
+        pedidosCount: kpis.pedidosCount,
+        alertasCosteOT: kpis.alertasCount,
+        retrasosEntrega: deliveryRiskKpis.late,
+        riesgoPlazoMenos7d: deliveryRiskKpis.risk,
+      },
+      pedidosPorEstado,
+      topClientesPorMargen: topClientesMargen.slice(0, 12),
+      muestraPedidos: capRows(displayRows, 200).map(slimOrderForChat),
+      alertasEntregaYtiming: capRows(tableRowsFiltered, 180).map(
+        ({ row, timeStatus, critical }) => ({
+          ...slimOrderForChat(row),
+          estadoPlazoEntrega: timeStatus,
+          alertaCosteOT: critical,
+        })
+      ),
+    });
+  }, [
+    salesTab,
+    hasData,
+    filteredPedidos,
+    filteredLeads,
+    sourceLabel,
+    kpis,
+    deliveryRiskKpis,
+    pedidosPorEstado,
+    topClientesMargen,
+    displayRows,
+    tableRowsFiltered,
+  ]);
+
+  const submitDataChat = useCallback(async () => {
+    const q = dataChatQuery.trim();
+    if (!q) return;
+    setDataChatLoading(true);
+    setDataChatError(null);
+    setDataChatReply(null);
+    setDataChatPanelOpen(true);
+    try {
+      const tableData = buildChatTableData();
+      const res = await fetch("/api/sales-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: q, tableData }),
+      });
+      const data = (await res.json()) as { text?: string; error?: string };
+      if (data.error) {
+        setDataChatError(data.error);
+        return;
+      }
+      if (typeof data.text === "string") {
+        setDataChatReply(data.text);
+      } else {
+        setDataChatError("Respuesta inesperada del servidor.");
+      }
+    } catch (e) {
+      setDataChatError(e instanceof Error ? e.message : "Error de red");
+    } finally {
+      setDataChatLoading(false);
+    }
+  }, [dataChatQuery, buildChatTableData]);
 
   const delayExportCount = deliveryRiskKpis.late + deliveryRiskKpis.risk;
 
@@ -399,7 +556,78 @@ export function SalesIntelligenceDashboard() {
               </CardContent>
             </Card>
 
-            <Tabs defaultValue="dashboard" className="w-full">
+            <Card className="print:hidden border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
+              <CardContent className="flex flex-col gap-3 py-4 sm:py-5">
+                <div className="flex items-center gap-2 text-xs font-medium text-[#002147]">
+                  <Sparkles className="size-3.5 shrink-0" aria-hidden />
+                  Asistente de datos IA
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                  <Input
+                    value={dataChatQuery}
+                    onChange={(e) => setDataChatQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        void submitDataChat();
+                      }
+                    }}
+                    placeholder='✨ Pregúntale a Minerva sobre estos datos... (Ej: ¿Cuántos pedidos retrasados tiene el Comercial 2?)'
+                    className="min-h-10 flex-1 border-[#002147]/20 bg-white text-sm"
+                    disabled={dataChatLoading}
+                    aria-label="Pregunta al asistente de datos"
+                  />
+                  <Button
+                    type="button"
+                    className="shrink-0 gap-2 bg-[#002147] hover:bg-[#002147]/90 sm:min-w-[7rem]"
+                    onClick={() => void submitDataChat()}
+                    disabled={dataChatLoading || !dataChatQuery.trim()}
+                  >
+                    {dataChatLoading ? (
+                      <Loader2 className="size-4 animate-spin" aria-hidden />
+                    ) : (
+                      <Send className="size-4" aria-hidden />
+                    )}
+                    Enviar
+                  </Button>
+                </div>
+                {dataChatPanelOpen ? (
+                  <Alert className="border-[#002147]/15 bg-white/95">
+                    <div className="flex items-start justify-between gap-2">
+                      <AlertTitle className="pr-6">Respuesta</AlertTitle>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="-mr-1 -mt-1 shrink-0 text-slate-600"
+                        onClick={() => setDataChatPanelOpen(false)}
+                        aria-label="Cerrar respuesta"
+                      >
+                        <X className="size-4" />
+                      </Button>
+                    </div>
+                    {dataChatLoading ? (
+                      <div className="flex items-center gap-2 text-sm text-slate-600">
+                        <Loader2 className="size-4 animate-spin text-[#002147]" />
+                        Analizando los datos…
+                      </div>
+                    ) : dataChatError ? (
+                      <AlertDescription className="text-red-800">
+                        {dataChatError}
+                      </AlertDescription>
+                    ) : dataChatReply ? (
+                      <AlertDescription>{dataChatReply}</AlertDescription>
+                    ) : null}
+                  </Alert>
+                ) : null}
+              </CardContent>
+            </Card>
+
+            <Tabs
+              value={salesTab}
+              onValueChange={setSalesTab}
+              className="w-full"
+            >
               <TabsList
                 variant="line"
                 className="print:hidden mb-6 h-auto w-full flex-wrap justify-start gap-1 rounded-lg border border-slate-200/60 bg-slate-50/90 p-1 sm:w-fit"
@@ -1042,7 +1270,10 @@ export function SalesIntelligenceDashboard() {
               </TabsContent>
               <TabsContent value="gestion" className="mt-0 print:hidden outline-none">
                 {hasData ? (
-                  <SalesOrdersGestionPanel rows={displayRows} />
+                  <SalesOrdersGestionPanel
+                    rows={displayRows}
+                    onFilteredRowsChange={onFilteredPedidosChange}
+                  />
                 ) : (
                   <Card className="border-slate-200/80 bg-white/90 shadow-sm">
                     <CardContent className="py-10 text-center text-sm text-slate-600">
@@ -1052,7 +1283,9 @@ export function SalesIntelligenceDashboard() {
                 )}
               </TabsContent>
               <TabsContent value="leads" className="mt-0 print:hidden outline-none">
-                <LeadsManagementPanel />
+                <LeadsManagementPanel
+                  onFilteredLeadsChange={onFilteredLeadsChange}
+                />
               </TabsContent>
             </Tabs>
           </>

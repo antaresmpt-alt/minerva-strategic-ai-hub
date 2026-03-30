@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -95,7 +95,13 @@ function SortIcon({
   );
 }
 
-export function SalesOrdersGestionPanel({ rows }: { rows: SalesOrderRow[] }) {
+export function SalesOrdersGestionPanel({
+  rows,
+  onFilteredRowsChange,
+}: {
+  rows: SalesOrderRow[];
+  onFilteredRowsChange?: (rows: SalesOrderRow[]) => void;
+}) {
   const [search, setSearch] = useState("");
   const [comercial, setComercial] = useState<string>("__all__");
   const [estadoFilter, setEstadoFilter] = useState<GestionEstadoFilter>("todos");
@@ -139,6 +145,10 @@ export function SalesOrdersGestionPanel({ rows }: { rows: SalesOrderRow[] }) {
       );
     });
   }, [rows, search, comercial, estadoFilter]);
+
+  useEffect(() => {
+    onFilteredRowsChange?.(filtered);
+  }, [filtered, onFilteredRowsChange]);
 
   const kpis = useMemo(() => {
     let retrasados = 0;
