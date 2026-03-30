@@ -16,6 +16,10 @@ const MODULE_IMG = {
     src: "/images/module-seo.png",
     alt: "SEO — icono del módulo",
   },
+  produccion: {
+    src: "/images/module-produccion.png",
+    alt: "Producción — icono del módulo",
+  },
 } as const;
 
 function ModuleMark({
@@ -83,7 +87,7 @@ export function HubPortal() {
           </p>
         </section>
 
-        <div className="grid flex-1 gap-6 sm:grid-cols-2 xl:grid-cols-4 lg:items-stretch">
+        <div className="grid flex-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 lg:items-stretch">
           <ModuleCard
             title="Minerva Sales & Tech Intelligence"
             description="Dashboard avanzado de ventas, márgenes reales y control operativo de la Oficina Técnica (pharma/cosmética)."
@@ -116,6 +120,19 @@ export function HubPortal() {
             }
             actionLabel="Acceder a SEO"
             href="/seo"
+          />
+          <ModuleCard
+            title="Producción"
+            description="Órdenes de trabajo, fichas técnicas y almacén. Panel alineado con el hub estratégico."
+            iconFrame="module"
+            icon={
+              <ModuleMark
+                src={MODULE_IMG.produccion.src}
+                alt={MODULE_IMG.produccion.alt}
+              />
+            }
+            actionLabel="Acceder a Producción"
+            href="/produccion"
           />
           <ModuleCard
             title="Minerva AI Assistant"
