@@ -14,7 +14,7 @@ function getEmbeddingModel() {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error("GEMINI_API_KEY no configurada");
   const genAI = new GoogleGenerativeAI(key);
-  /* Modelo actual de la Gemini API para embedContent (text-embedding-004 ya no está en v1beta). */
+  /* Recurso REST: `models/gemini-embedding-001`. */
   return genAI.getGenerativeModel({ model: RAG_EMBEDDING_MODEL });
 }
 

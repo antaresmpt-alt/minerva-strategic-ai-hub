@@ -7,7 +7,11 @@ import {
 } from "ai";
 import { NextResponse } from "next/server";
 
-import { RAG_EMBEDDING_DIMENSIONS, RAG_EMBEDDING_MODEL } from "@/lib/rag-embedding";
+import {
+  RAG_EMBEDDING_DIMENSIONS,
+  RAG_EMBEDDING_MODEL,
+  RAG_EMBEDDING_MODEL_RESOURCE,
+} from "@/lib/rag-embedding";
 import { supabase } from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -129,14 +133,14 @@ export async function POST(req: Request) {
       );
     }
 
-    /* Mismo modelo y dimensión que en /api/ingest (text-embedding-004 no existe en v1beta para embedContent). */
+    /* Mismo modelo que /api/ingest: `models/gemini-embedding-001` (embedContent). */
     const embeddingResp = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${RAG_EMBEDDING_MODEL}:embedContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: `models/${RAG_EMBEDDING_MODEL}`,
+          model: RAG_EMBEDDING_MODEL_RESOURCE,
           content: { role: "user", parts: [{ text: ultimaPregunta }] },
           taskType: "RETRIEVAL_QUERY",
           outputDimensionality: RAG_EMBEDDING_DIMENSIONS,

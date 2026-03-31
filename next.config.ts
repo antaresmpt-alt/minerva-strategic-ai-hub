@@ -6,6 +6,8 @@ import { fileURLToPath } from "url";
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
+  /** Evita que el bundler rompa la resolución del worker de pdf.js (pdf-parse). */
+  serverExternalPackages: ["pdf-parse", "pdfjs-dist"],
   /* Ayuda en algunos despliegues con payloads grandes (imagen en JSON). */
   experimental: {
     serverActions: {

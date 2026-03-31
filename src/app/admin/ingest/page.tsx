@@ -1,6 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
+
+type IngestPdfStreamMsg =
+  | { type: "progress"; percent: number; step: string }
+  | { type: "complete"; chunksProcessed: number; source: string }
+  | { type: "error"; message: string };
 
 export default function AdminIngestPage() {
   const [source, setSource] = useState("");
@@ -10,6 +15,15 @@ export default function AdminIngestPage() {
   >("idle");
   const [chunksSaved, setChunksSaved] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+
+  const [pdfSource, setPdfSource] = useState("");
+  const [pdfStatus, setPdfStatus] = useState<
+    "idle" | "processing" | "success" | "error"
+  >("idle");
+  const [pdfProgress, setPdfProgress] = useState(0);
+  const [pdfStep, setPdfStep] = useState("");
+  const [pdfMessage, setPdfMessage] = useState<string | null>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -49,6 +63,90 @@ export default function AdminIngestPage() {
     }
   }
 
+  const ingestPdfStream = useCallback(async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append(
+      "source",
+      pdfSource.trim() || file.name
+    );
+
+    const res = await fetch("/api/ingest-pdf", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!res.ok || !res.body) {
+      const errText = await res.text();
+      let msg = `Error ${res.status}`;
+      try {
+        const j = JSON.parse(errText) as { error?: string };
+        if (j.error) msg = j.error;
+      } catch {
+        if (errText) msg = errText;
+      }
+      throw new Error(msg);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const msg = JSON.parse(line) as IngestPdfStreamMsg;
+        if (msg.type === "progress") {
+          setPdfProgress(msg.percent);
+          setPdfStep(msg.step);
+        } else if (msg.type === "complete") {
+          setPdfProgress(100);
+          setPdfStep("Completado");
+          setPdfMessage(
+            `Ingesta permanente: ${msg.chunksProcessed} chunk(s) guardados en \`documents\` (origen: ${msg.source}).`
+          );
+          setPdfStatus("success");
+        } else if (msg.type === "error") {
+          throw new Error(msg.message);
+        }
+      }
+    }
+  }, [pdfSource]);
+
+  async function handlePdfSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const input = pdfInputRef.current;
+    const file = input?.files?.[0];
+    if (!file) {
+      setPdfStatus("error");
+      setPdfMessage("Selecciona un archivo PDF.");
+      return;
+    }
+
+    setPdfStatus("processing");
+    setPdfMessage(null);
+    setPdfProgress(0);
+    setPdfStep("Iniciando…");
+
+    try {
+      await ingestPdfStream(file);
+    } catch (err) {
+      setPdfStatus("error");
+      setPdfMessage(
+        err instanceof Error ? err.message : "Error al ingerir el PDF."
+      );
+      setPdfProgress(0);
+      setPdfStep("");
+    } finally {
+      if (pdfInputRef.current) pdfInputRef.current.value = "";
+    }
+  }
+
   return (
     <div className="min-h-screen bg-muted/40">
       <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
@@ -59,88 +157,181 @@ export default function AdminIngestPage() {
           Panel de Ingesta de Conocimiento (RAG)
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Pega el manual y asigna un nombre de origen para vectorizar y almacenar
-          en Supabase.
+          Ingesta de texto manual o PDF permanente en Supabase (vectorización).
         </p>
 
-        <form
-          onSubmit={handleSubmit}
-          className="mt-8 space-y-6 rounded-xl border border-border bg-card p-6 shadow-sm"
-        >
-          <div className="space-y-2">
-            <label
-              htmlFor="source"
-              className="text-sm font-medium text-foreground"
-            >
-              Nombre del Documento / Origen
-            </label>
-            <input
-              id="source"
-              type="text"
-              value={source}
-              onChange={(e) => setSource(e.target.value)}
-              placeholder="ej. Manual_Tolerancias.txt"
-              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none ring-ring/50 focus-visible:border-ring focus-visible:ring-[3px]"
-              required
-              disabled={status === "processing"}
-            />
-          </div>
+        <section className="mt-10 rounded-xl border border-border bg-card p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-foreground">
+            Ingesta permanente de PDF
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            El PDF se procesa en el servidor (pdf-parse), se estructura en Markdown
+            con Gemini y se vectoriza en la tabla{" "}
+            <code className="rounded bg-muted px-1 text-xs">documents</code>.
+          </p>
 
-          <div className="space-y-2">
-            <label
-              htmlFor="text"
-              className="text-sm font-medium text-foreground"
-            >
-              Contenido del manual
-            </label>
-            <textarea
-              id="text"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              rows={18}
-              placeholder="Pega aquí el texto completo. Los párrafos se separan por líneas en blanco (doble salto de línea)."
-              className="w-full resize-y rounded-lg border border-input bg-background px-3 py-2 font-mono text-sm leading-relaxed shadow-xs outline-none ring-ring/50 focus-visible:border-ring focus-visible:ring-[3px]"
-              disabled={status === "processing"}
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={status === "processing"}
-            className="inline-flex w-full items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-          >
-            {status === "processing" ? "Procesando…" : "Procesar y Vectorizar"}
-          </button>
-
-          {status === "processing" && (
-            <p className="text-sm text-muted-foreground" aria-live="polite">
-              Procesando… generando embeddings y guardando en la base de datos.
-            </p>
-          )}
-
-          {status === "success" && message && (
-            <p
-              className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100"
-              role="status"
-            >
-              {message}
-            </p>
-          )}
-
-          {status === "error" && message && (
-            <div
-              className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-              role="alert"
-            >
-              <p>{message}</p>
-              {chunksSaved !== null && chunksSaved > 0 && (
-                <p className="mt-1 text-muted-foreground">
-                  Parcialmente guardados antes del error: {chunksSaved} chunk(s).
-                </p>
-              )}
+          <form onSubmit={handlePdfSubmit} className="mt-6 space-y-4">
+            <div className="space-y-2">
+              <label
+                htmlFor="pdf-source"
+                className="text-sm font-medium text-foreground"
+              >
+                Nombre de origen / documento
+              </label>
+              <input
+                id="pdf-source"
+                type="text"
+                value={pdfSource}
+                onChange={(e) => setPdfSource(e.target.value)}
+                placeholder="ej. ALASKA-STRONG_ficha.pdf (vacío = nombre del archivo)"
+                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none ring-ring/50 focus-visible:border-ring focus-visible:ring-[3px]"
+                disabled={pdfStatus === "processing"}
+              />
             </div>
-          )}
-        </form>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">
+                Archivo PDF
+              </label>
+              <input
+                ref={pdfInputRef}
+                type="file"
+                accept=".pdf,application/pdf"
+                className="block w-full text-sm text-muted-foreground file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-foreground"
+                disabled={pdfStatus === "processing"}
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={pdfStatus === "processing"}
+              className="inline-flex w-full items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+            >
+              {pdfStatus === "processing"
+                ? "Procesando PDF…"
+                : "Ingerir PDF en base vectorial"}
+            </button>
+
+            {pdfStatus === "processing" && (
+              <div className="space-y-2" aria-live="polite">
+                <progress
+                  className="h-2 w-full overflow-hidden rounded-full accent-[#002147]"
+                  value={pdfProgress}
+                  max={100}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {pdfProgress}% — {pdfStep}
+                </p>
+              </div>
+            )}
+
+            {pdfStatus === "success" && pdfMessage && (
+              <p
+                className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100"
+                role="status"
+              >
+                {pdfMessage}
+              </p>
+            )}
+
+            {pdfStatus === "error" && pdfMessage && (
+              <p className="text-destructive text-sm" role="alert">
+                {pdfMessage}
+              </p>
+            )}
+          </form>
+        </section>
+
+        <section className="mt-10">
+          <h2 className="text-lg font-semibold text-foreground">
+            Ingesta por texto (manual)
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Pega el manual y asigna un nombre de origen. Se guarda en{" "}
+            <code className="rounded bg-muted px-1 text-xs">minerva_documents</code>{" "}
+            vía <code className="rounded bg-muted px-1 text-xs">/api/ingest</code>.
+          </p>
+
+          <form
+            onSubmit={handleSubmit}
+            className="mt-6 space-y-6 rounded-xl border border-border bg-card p-6 shadow-sm"
+          >
+            <div className="space-y-2">
+              <label
+                htmlFor="source"
+                className="text-sm font-medium text-foreground"
+              >
+                Nombre del Documento / Origen
+              </label>
+              <input
+                id="source"
+                type="text"
+                value={source}
+                onChange={(e) => setSource(e.target.value)}
+                placeholder="ej. Manual_Tolerancias.txt"
+                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none ring-ring/50 focus-visible:border-ring focus-visible:ring-[3px]"
+                required
+                disabled={status === "processing"}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label
+                htmlFor="text"
+                className="text-sm font-medium text-foreground"
+              >
+                Contenido del manual
+              </label>
+              <textarea
+                id="text"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                rows={12}
+                placeholder="Pega aquí el texto completo. Los párrafos se separan por líneas en blanco (doble salto de línea)."
+                className="w-full resize-y rounded-lg border border-input bg-background px-3 py-2 font-mono text-sm leading-relaxed shadow-xs outline-none ring-ring/50 focus-visible:border-ring focus-visible:ring-[3px]"
+                disabled={status === "processing"}
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={status === "processing"}
+              className="inline-flex w-full items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+            >
+              {status === "processing" ? "Procesando…" : "Procesar y Vectorizar"}
+            </button>
+
+            {status === "processing" && (
+              <p className="text-sm text-muted-foreground" aria-live="polite">
+                Procesando… generando embeddings y guardando en la base de datos.
+              </p>
+            )}
+
+            {status === "success" && message && (
+              <p
+                className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100"
+                role="status"
+              >
+                {message}
+              </p>
+            )}
+
+            {status === "error" && message && (
+              <div
+                className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                role="alert"
+              >
+                <p>{message}</p>
+                {chunksSaved !== null && chunksSaved > 0 && (
+                  <p className="mt-1 text-muted-foreground">
+                    Parcialmente guardados antes del error: {chunksSaved}{" "}
+                    chunk(s).
+                  </p>
+                )}
+              </div>
+            )}
+          </form>
+        </section>
       </div>
     </div>
   );
