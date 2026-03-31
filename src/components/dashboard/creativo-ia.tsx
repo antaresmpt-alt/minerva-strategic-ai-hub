@@ -28,6 +28,7 @@ import {
 import { compressImageForApi } from "@/lib/compress-product-image-client";
 import { readApiJson } from "@/lib/read-api-json";
 import {
+  CREATIVO_VARIANT_STORAGE_KEY,
   VARIANT_META,
   VARIANT_ORDER,
   type CreativoVariant,
@@ -95,8 +96,9 @@ export function CreativoIa() {
 
   const [ads, setAds] = useState<Record<CreativoVariant, AdSlot>>(emptySlots);
   const [batchRunning, setBatchRunning] = useState(false);
-  const [batchIndex, setBatchIndex] = useState(0);
   const [started, setStarted] = useState(false);
+  const [selectedVariant, setSelectedVariant] =
+    useState<CreativoVariant>("square");
   const [panelError, setPanelError] = useState<string | null>(null);
 
   const [creativoTab, setCreativoTab] = useState<CreativoTab>("static");
@@ -129,11 +131,33 @@ export function CreativoIa() {
     }
   }, [imageModelId]);
 
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(CREATIVO_VARIANT_STORAGE_KEY);
+      if (
+        stored &&
+        VARIANT_ORDER.includes(stored as CreativoVariant)
+      ) {
+        setSelectedVariant(stored as CreativoVariant);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CREATIVO_VARIANT_STORAGE_KEY, selectedVariant);
+    } catch {
+      /* ignore */
+    }
+  }, [selectedVariant]);
+
   const selectedImageModel = CREATIVO_IMAGE_MODEL_OPTIONS.find(
     (o) => o.id === imageModelId
   );
 
-  const anyAdSlotLoading = VARIANT_ORDER.some((v) => ads[v].loading);
+  const anyAdSlotLoading = ads[selectedVariant].loading;
 
   const ingestFile = useCallback(async (file: File | null) => {
     if (!file || !file.type.startsWith("image/")) return;
@@ -219,51 +243,46 @@ export function CreativoIa() {
       return;
     }
 
+    const variant = selectedVariant;
+
     setStarted(true);
     setBatchRunning(true);
+    setAds((s) => ({
+      ...s,
+      [variant]: { ...s[variant], loading: true },
+    }));
 
-    for (let i = 0; i < VARIANT_ORDER.length; i++) {
-      const variant = VARIANT_ORDER[i];
-      setBatchIndex(i + 1);
+    try {
+      const res = await fetch("/api/gemini/creativo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          buildBody(variant, payload.base64, payload.mime)
+        ),
+      });
+      const data = await readApiJson<{
+        imageBase64: string;
+        mimeType?: string;
+      }>(res);
+
       setAds((s) => ({
         ...s,
-        [variant]: { ...s[variant], loading: true },
+        [variant]: {
+          ...s[variant],
+          loading: false,
+          base64: data.imageBase64,
+          mime: data.mimeType || "image/png",
+        },
       }));
-
-      try {
-        const res = await fetch("/api/gemini/creativo", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(
-            buildBody(variant, payload.base64, payload.mime)
-          ),
-        });
-        const data = await readApiJson<{
-          imageBase64: string;
-          mimeType?: string;
-        }>(res);
-
-        setAds((s) => ({
-          ...s,
-          [variant]: {
-            ...s[variant],
-            loading: false,
-            base64: data.imageBase64,
-            mime: data.mimeType || "image/png",
-          },
-        }));
-      } catch (e) {
-        setAds((s) => ({
-          ...s,
-          [variant]: { ...s[variant], loading: false },
-        }));
-        setPanelError(e instanceof Error ? e.message : "Error de generación");
-        setBatchRunning(false);
-        return;
-      }
+    } catch (e) {
+      setAds((s) => ({
+        ...s,
+        [variant]: { ...s[variant], loading: false },
+      }));
+      setPanelError(e instanceof Error ? e.message : "Error de generación");
+    } finally {
+      setBatchRunning(false);
     }
-
-    setBatchRunning(false);
   };
 
   const runEdit = async (variant: CreativoVariant) => {
@@ -447,10 +466,13 @@ export function CreativoIa() {
     }
   };
 
-  const progressVariant = VARIANT_ORDER[batchIndex - 1];
-  const progressLabel = progressVariant
-    ? VARIANT_META[progressVariant].title
-    : "";
+  const progressLabel = VARIANT_META[selectedVariant].title;
+  const resultMeta = VARIANT_META[selectedVariant];
+  const resultSlot = ads[selectedVariant];
+  const resultSrc =
+    resultSlot.base64 && resultSlot.mime
+      ? `data:${resultSlot.mime};base64,${resultSlot.base64}`
+      : null;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-[#002147]/15 bg-white/75 shadow-md backdrop-blur-md">
@@ -674,42 +696,75 @@ export function CreativoIa() {
             </div>
 
             {creativoTab === "static" && (
-              <div className="space-y-2">
-                <Label
-                  htmlFor="creativo-image-model"
-                  className="text-[#002147]"
-                >
-                  Modelo de imagen
-                </Label>
-                <select
-                  id="creativo-image-model"
-                  value={imageModelId}
-                  onChange={(e) => setImageModelId(e.target.value)}
-                  disabled={batchRunning || anyAdSlotLoading}
-                  className="w-full rounded-xl border border-[#002147]/25 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-[#C69C2B]/30 focus:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {CREATIVO_IMAGE_MODEL_OPTIONS.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-                {selectedImageModel && (
-                  <p className="text-xs leading-relaxed text-slate-500">
-                    {selectedImageModel.hint}
+              <>
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="creativo-output-variant"
+                    className="text-[#002147]"
+                  >
+                    Formato de salida
+                  </Label>
+                  <select
+                    id="creativo-output-variant"
+                    value={selectedVariant}
+                    onChange={(e) =>
+                      setSelectedVariant(e.target.value as CreativoVariant)
+                    }
+                    disabled={batchRunning || anyAdSlotLoading}
+                    className="w-full rounded-xl border border-[#002147]/25 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-[#C69C2B]/30 focus:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {VARIANT_ORDER.map((v) => {
+                      const m = VARIANT_META[v];
+                      return (
+                        <option key={v} value={v}>
+                          {m.title} · {m.short}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <p className="text-xs text-slate-500">
+                    Un anuncio por generación. La elección se guarda en este
+                    navegador.
                   </p>
-                )}
-                {selectedImageModel?.isPro && (
-                  <p className="text-xs leading-relaxed text-amber-900/85">
-                    Este perfil suele consumir más tokens y cuota que Flash
-                    Image.
+                </div>
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="creativo-image-model"
+                    className="text-[#002147]"
+                  >
+                    Modelo de imagen
+                  </Label>
+                  <select
+                    id="creativo-image-model"
+                    value={imageModelId}
+                    onChange={(e) => setImageModelId(e.target.value)}
+                    disabled={batchRunning || anyAdSlotLoading}
+                    className="w-full rounded-xl border border-[#002147]/25 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-[#C69C2B]/30 focus:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {CREATIVO_IMAGE_MODEL_OPTIONS.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedImageModel && (
+                    <p className="text-xs leading-relaxed text-slate-500">
+                      {selectedImageModel.hint}
+                    </p>
+                  )}
+                  {selectedImageModel?.isPro && (
+                    <p className="text-xs leading-relaxed text-amber-900/85">
+                      Este perfil suele consumir más tokens y cuota que Flash
+                      Image.
+                    </p>
+                  )}
+                  <p className="text-xs text-slate-500">
+                    Flash = iteración más económica; opciones Pro / preview altas
+                    = más calidad y coste. La elección se guarda en este
+                    navegador.
                   </p>
-                )}
-                <p className="text-xs text-slate-500">
-                  Flash = iteración más económica; opciones Pro / preview altas =
-                  más calidad y coste. La elección se guarda en este navegador.
-                </p>
-              </div>
+                </div>
+              </>
             )}
 
             {panelError && (
@@ -733,7 +788,7 @@ export function CreativoIa() {
                 ) : (
                   <span className="inline-flex items-center gap-2">
                     <Wand2 className="size-5" />
-                    Generar anuncios
+                    Generar anuncio
                   </span>
                 )}
               </Button>
@@ -767,7 +822,7 @@ export function CreativoIa() {
           <div className="mb-6 flex items-center gap-2">
             <Sparkles className="size-5 text-[#C69C2B]" />
             <h2 className="font-[family-name:var(--font-heading)] text-lg font-semibold text-[#002147]">
-              Galería de resultados
+              Resultado
             </h2>
           </div>
 
@@ -779,9 +834,8 @@ export function CreativoIa() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-[#002147]">
-                    Generando anuncio{" "}
-                    <span className="text-[#C69C2B]">{progressLabel}</span> (
-                    {batchIndex} de 3)…
+                    Generando{" "}
+                    <span className="text-[#C69C2B]">{progressLabel}</span>…
                   </p>
                   <p className="text-xs text-slate-600">
                     Recortamos tu foto al formato exacto y la IA compone el
@@ -790,10 +844,7 @@ export function CreativoIa() {
                 </div>
               </div>
               <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200">
-                <div
-                  className="h-full rounded-full bg-[#C69C2B] transition-all duration-500 ease-out"
-                  style={{ width: `${(batchIndex / 3) * 100}%` }}
-                />
+                <div className="h-full w-full rounded-full bg-[#C69C2B] transition-all duration-500 ease-out" />
               </div>
             </div>
           )}
@@ -801,126 +852,115 @@ export function CreativoIa() {
           {!started && !batchRunning && (
             <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-[#002147]/20 bg-slate-50/50 px-6 py-16 text-center">
               <p className="max-w-md text-sm leading-relaxed text-slate-600">
-                Tus anuncios aparecerán aquí. ¡Completa los pasos de la izquierda
-                para empezar! Obtendrás tres formatos listos para Google y Meta.
+                Tu anuncio aparecerá aquí. Completa los pasos de la izquierda y
+                elige el formato de salida; obtendrás una imagen lista para
+                publicar.
               </p>
             </div>
           )}
 
           {(started || batchRunning) && (
             <div className="grid gap-6 sm:grid-cols-1 xl:grid-cols-1">
-              {VARIANT_ORDER.map((variant) => {
-                const meta = VARIANT_META[variant];
-                const slot = ads[variant];
-                const src =
-                  slot.base64 && slot.mime
-                    ? `data:${slot.mime};base64,${slot.base64}`
-                    : null;
-
-                return (
-                  <article
-                    key={variant}
-                    className="overflow-hidden rounded-xl border border-[#002147]/10 bg-white shadow-sm"
-                  >
-                    <div className="border-b border-[#002147]/10 bg-slate-50/50 px-4 py-3">
-                      <h3 className="font-medium text-[#002147]">{meta.title}</h3>
-                      <p className="text-xs text-slate-500">{meta.short}</p>
+              <article className="overflow-hidden rounded-xl border border-[#002147]/10 bg-white shadow-sm">
+                <div className="border-b border-[#002147]/10 bg-slate-50/50 px-4 py-3">
+                  <h3 className="font-medium text-[#002147]">{resultMeta.title}</h3>
+                  <p className="text-xs text-slate-500">{resultMeta.short}</p>
+                </div>
+                <div className="relative bg-slate-100/60 p-4">
+                  {resultSlot.loading ? (
+                    <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 py-12">
+                      <MinervaThinkingLogo size={44} />
+                      <p className="text-sm text-slate-600">
+                        Aplicando IA…
+                      </p>
                     </div>
-                    <div className="relative bg-slate-100/60 p-4">
-                      {slot.loading ? (
-                        <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 py-12">
-                          <MinervaThinkingLogo size={44} />
-                          <p className="text-sm text-slate-600">
-                            Aplicando IA…
-                          </p>
-                        </div>
-                      ) : src ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={src}
-                          alt={meta.title}
-                          className="mx-auto max-h-[min(420px,55vh)] w-auto rounded-lg object-contain shadow-md"
-                        />
-                      ) : (
-                        <div className="flex min-h-[120px] items-center justify-center text-sm text-slate-500">
-                          Pendiente…
-                        </div>
-                      )}
+                  ) : resultSrc ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={resultSrc}
+                      alt={resultMeta.title}
+                      className="mx-auto max-h-[min(420px,55vh)] w-auto rounded-lg object-contain shadow-md"
+                    />
+                  ) : (
+                    <div className="flex min-h-[120px] items-center justify-center text-sm text-slate-500">
+                      Pendiente…
                     </div>
-                    <div className="space-y-3 border-t border-[#002147]/10 p-4">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                        <div className="min-w-0 flex-1">
-                          <Label
-                            htmlFor={`edit-${variant}`}
-                            className="text-xs text-slate-500"
-                          >
-                            Instrucción de edición (solo este formato)
-                          </Label>
-                          <Input
-                            id={`edit-${variant}`}
-                            value={slot.editText ?? ""}
-                            onChange={(e) =>
-                              setAds((s) => ({
-                                ...s,
-                                [variant]: {
-                                  ...s[variant],
-                                  editText: e.target.value,
-                                },
-                              }))
-                            }
-                            placeholder='ej. "Cambia el fondo a azul marino"'
-                            disabled={slot.loading || !slot.base64}
-                            className="mt-1 rounded-xl border-[#002147]/25 bg-white text-slate-900 placeholder:text-slate-400 disabled:opacity-50"
-                          />
-                        </div>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          disabled={
-                            slot.loading || !slot.base64 || batchRunning
-                          }
-                          onClick={() => void runEdit(variant)}
-                          className="shrink-0 rounded-lg border-[#002147]/20 bg-slate-100 text-[#002147] hover:bg-slate-200"
-                        >
-                          Editar
-                        </Button>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={
-                            slot.loading || !product || batchRunning
-                          }
-                          onClick={() => void runRegenerate(variant)}
-                          className="gap-1.5 rounded-lg border-[#002147]/25 text-[#002147] hover:bg-slate-50"
-                        >
-                          <RefreshCw className="size-3.5" />
-                          Regenerar
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={!slot.base64 || slot.loading}
-                          onClick={() =>
-                            slot.base64 &&
-                            downloadImage(
-                              slot.base64,
-                              slot.mime ?? "image/png",
-                              `creativo-${variant}-${meta.w}x${meta.h}.png`
-                            )
-                          }
-                          className="gap-1.5 rounded-lg bg-[#C69C2B] text-[#002147] hover:bg-[#b38a26]"
-                        >
-                          <Download className="size-3.5" />
-                          Descargar
-                        </Button>
-                      </div>
+                  )}
+                </div>
+                <div className="space-y-3 border-t border-[#002147]/10 p-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                    <div className="min-w-0 flex-1">
+                      <Label
+                        htmlFor={`edit-${selectedVariant}`}
+                        className="text-xs text-slate-500"
+                      >
+                        Instrucción de edición
+                      </Label>
+                      <Input
+                        id={`edit-${selectedVariant}`}
+                        value={resultSlot.editText ?? ""}
+                        onChange={(e) =>
+                          setAds((s) => ({
+                            ...s,
+                            [selectedVariant]: {
+                              ...s[selectedVariant],
+                              editText: e.target.value,
+                            },
+                          }))
+                        }
+                        placeholder='ej. "Cambia el fondo a azul marino"'
+                        disabled={resultSlot.loading || !resultSlot.base64}
+                        className="mt-1 rounded-xl border-[#002147]/25 bg-white text-slate-900 placeholder:text-slate-400 disabled:opacity-50"
+                      />
                     </div>
-                  </article>
-                );
-              })}
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={
+                        resultSlot.loading ||
+                        !resultSlot.base64 ||
+                        batchRunning
+                      }
+                      onClick={() => void runEdit(selectedVariant)}
+                      className="shrink-0 rounded-lg border-[#002147]/20 bg-slate-100 text-[#002147] hover:bg-slate-200"
+                    >
+                      Editar
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={
+                        resultSlot.loading || !product || batchRunning
+                      }
+                      onClick={() => void runRegenerate(selectedVariant)}
+                      className="gap-1.5 rounded-lg border-[#002147]/25 text-[#002147] hover:bg-slate-50"
+                    >
+                      <RefreshCw className="size-3.5" />
+                      Regenerar
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={!resultSlot.base64 || resultSlot.loading}
+                      onClick={() =>
+                        resultSlot.base64 &&
+                        downloadImage(
+                          resultSlot.base64,
+                          resultSlot.mime ?? "image/png",
+                          `creativo-${selectedVariant}-${resultMeta.w}x${resultMeta.h}.png`
+                        )
+                      }
+                      className="gap-1.5 rounded-lg bg-[#C69C2B] text-[#002147] hover:bg-[#b38a26]"
+                    >
+                      <Download className="size-3.5" />
+                      Descargar
+                    </Button>
+                  </div>
+                </div>
+              </article>
             </div>
           )}
             </>

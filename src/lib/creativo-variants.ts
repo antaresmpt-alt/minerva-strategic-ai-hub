@@ -1,5 +1,8 @@
 export type CreativoVariant = "square" | "horizontal" | "vertical";
 
+/** Persistencia en el cliente: formato de salida (Creativo estático). */
+export const CREATIVO_VARIANT_STORAGE_KEY = "minerva-creativo-output-variant";
+
 export const VARIANT_ORDER: CreativoVariant[] = [
   "square",
   "horizontal",

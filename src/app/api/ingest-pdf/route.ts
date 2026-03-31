@@ -9,6 +9,7 @@ import {
 import { NextRequest } from "next/server";
 import { PDFParse } from "pdf-parse";
 
+import { delay } from "@/lib/delay";
 import { RAG_EMBEDDING_DIMENSIONS, RAG_EMBEDDING_MODEL } from "@/lib/rag-embedding";
 import { RAG_DOCUMENTS_TABLE } from "@/lib/rag-table";
 import { sanitizeExtractedDocumentText } from "@/lib/sanitize-text";
@@ -19,7 +20,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 /** Gemini para estructurar Markdown (1.5-flash suele no estar en v1beta; 2.5-flash es estable). */
-const MARKDOWN_MODEL = "gemini-1.5-flash";
+const MARKDOWN_MODEL = "gemini-2.5-flash";
 
 const MAX_RAW_CHARS_FOR_GEMINI = 450_000;
 const CHUNK_TARGET_CHARS = 2200;
@@ -215,7 +216,17 @@ export async function POST(req: NextRequest) {
         let saved = 0;
         const total = chunks.length;
 
+        send({
+          type: "progress",
+          percent: 56,
+          step:
+            "Iniciando vectorización: iremos despacio (2 s entre fragmentos) para reducir errores 429 por cuota",
+        });
+
         for (let i = 0; i < chunks.length; i++) {
+          if (i > 0) {
+            await delay(2000);
+          }
           const chunk = chunks[i];
           const result = await embedModel.embedContent({
             content: { role: "user", parts: [{ text: chunk }] },
@@ -243,7 +254,7 @@ export async function POST(req: NextRequest) {
           send({
             type: "progress",
             percent: Math.min(99, pct),
-            step: `Vectorizando (${saved}/${total})`,
+            step: `Vectorizando (${saved}/${total}) — ritmo lento entre fragmentos para evitar bloqueos de cuota`,
           });
         }
 

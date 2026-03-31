@@ -5,6 +5,7 @@ import {
 } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
 
+import { delay } from "@/lib/delay";
 import { RAG_EMBEDDING_DIMENSIONS, RAG_EMBEDDING_MODEL } from "@/lib/rag-embedding";
 import { supabase } from "@/lib/supabase";
 
@@ -46,7 +47,11 @@ export async function POST(req: NextRequest) {
     const model = getEmbeddingModel();
     let saved = 0;
 
-    for (const chunk of chunks) {
+    for (let i = 0; i < chunks.length; i++) {
+      if (i > 0) {
+        await delay(2000);
+      }
+      const chunk = chunks[i];
       const result = await model.embedContent({
         content: { role: "user", parts: [{ text: chunk }] },
         taskType: TaskType.RETRIEVAL_DOCUMENT,
