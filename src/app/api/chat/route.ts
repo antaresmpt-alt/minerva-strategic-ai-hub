@@ -1,190 +1,113 @@
-import "@/lib/pdf-node-globals";
-
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import {
   convertToModelMessages,
   streamText,
   type UIMessage,
 } from "ai";
-import fs from "node:fs/promises";
-import path from "node:path";
 import { NextResponse } from "next/server";
+
+import { RAG_EMBEDDING_DIMENSIONS, RAG_EMBEDDING_MODEL } from "@/lib/rag-embedding";
+import { supabase } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-/**
- * PDFs empaquetados en el deploy (p. ej. `public/data/knowledge-base`).
- * En Vercel el FS es efímero y de solo lectura: no uses carpetas tipo `uploads/` o
- * `contexto/` escritas en runtime; si el directorio no existe, `getKnowledgeBaseText`
- * devuelve cadena vacía (sin tirar la petición).
- */
-const KNOWLEDGE_BASE_DIR = path.join(
-  process.cwd(),
-  "public",
-  "data",
-  "knowledge-base"
-);
+/** Modelo generativo actual en la API Gemini (1.5 ya no está en v1beta). */
+const CHAT_MODEL_ID = "gemini-2.5-flash";
 
-const MINERVA_AI_SYSTEM = `Eres el Asistente Inteligente de Minerva Global. Tu prioridad absoluta es responder utilizando la información de los DOCUMENTOS ADJUNTOS (PDF/TXT).
+const SYSTEM_PROMPT_PREFIX =
+  "Eres Minerva AI, el asistente corporativo de Minerva Global. Usa ÚNICAMENTE el siguiente contexto para responder a la pregunta del usuario. Si la respuesta no está en el contexto, di amablemente que no tienes esa información. Contexto: \n\n";
 
-Tienes acceso a varios manuales: Seguridad, Formación y Horarios. Si el usuario pregunta por tiempos o jornadas, busca en 'Horarios'. Si pregunta por cursos, busca en 'Formación'.
+const FUENTE_INSTRUCTION = `Instrucción obligatoria sobre el origen de la información:
+- Al terminar tu respuesta, añade SIEMPRE una última línea nueva con este formato exacto: Fuente: [lista]
+- En [lista] pon el valor "source" del documento del contexto que hayas utilizado (nombre de archivo u origen). Si has usado varios fragmentos con distinto origen, incluye TODOS los nombres separados por comas y un espacio (ej.: Fuente: Manual_Tolerancias.txt, Politica_Vacaciones.txt).
+- Si solo has usado el bloque "Documento adicional aportado por el usuario", escribe: Fuente: Documento adjunto por el usuario
+- Si no has podido basarte en ningún texto del contexto para responder, escribe: Fuente: N/A`;
 
-- Si el usuario pregunta por 'formación', busca específicamente en el documento de formación.
-- Si la información está en el contexto, úsala obligatoriamente citando el nombre del archivo si es posible.
-- Si NO encuentras la información en los documentos, di exactamente: "No encuentro información específica sobre eso en los manuales de Minerva, pero basándome en mi conocimiento general..."
-  Tras esa frase, solo completa con conocimiento general breve y profesional; no inventes datos corporativos.
-
-Sé conciso. El contexto corporativo usa bloques "ARCHIVO: …" y "CONTENIDO: …"; cita el nombre de archivo que aparezca en ARCHIVO cuando respondas.`;
-
-/** Delimita todo el texto extraído de PDFs que recibe el modelo en el system prompt. */
-const CONTEXT_START = "--- INICIO DEL CONTEXTO DE MINERVA ---";
-const CONTEXT_END = "--- FIN DEL CONTEXTO ---";
-
-/** Límite aproximado para la memoria base (Gemini 2.5 Flash admite contexto amplio). */
-const MAX_KNOWLEDGE_BASE_CHARS = 500_000;
-
-/** Límite para el PDF adjunto por el usuario en cada petición. */
-const MAX_DOCUMENT_CONTEXT_CHARS = 80_000;
-
-/**
- * Caché global: texto concatenado de todos los .pdf y .txt de la carpeta.
- * `null` = aún no se ha cargado; tras el primer intento queda string (posiblemente vacío).
- */
-let cachedKnowledgeBase: string | null = null;
-
-function isKnowledgeBaseFile(fileName: string): boolean {
-  const lower = fileName.toLowerCase();
-  return lower.endsWith(".pdf") || lower.endsWith(".txt");
-}
-
-async function loadSingleKnowledgeFile(
-  name: string,
-  PDFParse: typeof import("pdf-parse").PDFParse
-): Promise<string | null> {
-  const fullPath = path.join(KNOWLEDGE_BASE_DIR, name);
-  if (name.toLowerCase().endsWith(".txt")) {
-    const text = (await fs.readFile(fullPath, "utf8")).trim();
-    if (!text) return null;
-    return `ARCHIVO: ${name}\nCONTENIDO: ${text}`;
-  }
-  const buffer = await fs.readFile(fullPath);
-  const parser = new PDFParse({ data: new Uint8Array(buffer) });
-  try {
-    const result = await parser.getText();
-    const text = (result.text ?? "").trim();
-    if (!text) return null;
-    return `ARCHIVO: ${name}\nCONTENIDO: ${text}`;
-  } finally {
-    await parser.destroy();
-  }
-}
-
-async function getKnowledgeBaseText(): Promise<string> {
-  if (cachedKnowledgeBase !== null) {
-    return cachedKnowledgeBase;
-  }
-
-  try {
-    const entries = await fs.readdir(KNOWLEDGE_BASE_DIR, { withFileTypes: true });
-    const fileNamesArray = entries
-      .filter((e) => e.isFile() && isKnowledgeBaseFile(e.name))
-      .map((e) => e.name)
-      .sort((a, b) => a.localeCompare(b));
-
-    console.log("Archivos leídos para el contexto:", fileNamesArray);
-
-    if (fileNamesArray.length === 0) {
-      cachedKnowledgeBase = "";
-      return cachedKnowledgeBase;
+function extractMetadataSource(row: Record<string, unknown>): string | null {
+  let meta: unknown = row.metadata;
+  if (typeof meta === "string") {
+    try {
+      meta = JSON.parse(meta) as unknown;
+    } catch {
+      meta = null;
     }
-
-    const { PDFParse } = await import("pdf-parse");
-    const chunks = await Promise.all(
-      fileNamesArray.map((name) =>
-        loadSingleKnowledgeFile(name, PDFParse).catch((err: unknown) => {
-          console.error(`[api/chat] Error leyendo "${name}":`, err);
-          return null;
-        })
-      )
-    );
-
-    cachedKnowledgeBase = chunks
-      .filter((c): c is string => c != null && c.length > 0)
-      .join("\n\n");
-  } catch (e: unknown) {
-    const code = e && typeof e === "object" && "code" in e ? (e as NodeJS.ErrnoException).code : undefined;
-    if (code !== "ENOENT") {
-      console.error("[api/chat] Error leyendo knowledge-base:", e);
+  }
+  if (meta && typeof meta === "object" && meta !== null && !Array.isArray(meta)) {
+    const m = meta as Record<string, unknown>;
+    if (typeof m.source === "string" && m.source.trim()) {
+      return m.source.trim();
     }
-    cachedKnowledgeBase = "";
   }
-
-  return cachedKnowledgeBase ?? "";
+  if (typeof row.source === "string" && row.source.trim()) {
+    return row.source.trim();
+  }
+  return null;
 }
 
-function buildSystemPrompt(
-  knowledgeBaseText: string,
-  documentContext: string | undefined
-): string {
-  const sections: string[] = [MINERVA_AI_SYSTEM];
-
-  let kb = knowledgeBaseText.trim();
-  if (kb.length > MAX_KNOWLEDGE_BASE_CHARS) {
-    kb =
-      kb.slice(0, MAX_KNOWLEDGE_BASE_CHARS) +
-      "\n\n[... contexto corporativo truncado por límite ...]";
-  }
-
-  let userDoc = documentContext?.trim() ?? "";
-  if (userDoc.length > MAX_DOCUMENT_CONTEXT_CHARS) {
-    userDoc =
-      userDoc.slice(0, MAX_DOCUMENT_CONTEXT_CHARS) +
-      "\n\n[... documento adjunto truncado por límite ...]";
-  }
-
-  const contextPieces: string[] = [];
-  if (kb) {
-    contextPieces.push(
-      "Base de conocimiento corporativa (cada manual: líneas ARCHIVO: nombre y CONTENIDO: texto):\n\n" +
-        kb
-    );
-  }
-  if (userDoc) {
-    contextPieces.push(
-      "Documento adicional aportado por el usuario en esta conversación:\n\n" + userDoc
-    );
-  }
-
-  if (contextPieces.length > 0) {
-    sections.push(
-      [
-        "Todo el texto entre las etiquetas siguientes es contexto documental de Minerva. Respétalo con prioridad absoluta.",
-        "",
-        CONTEXT_START,
-        contextPieces.join("\n\n---\n\n"),
-        CONTEXT_END,
-      ].join("\n")
-    );
-  }
-
-  return sections.join("\n\n");
+function textFromUIMessage(message: UIMessage): string {
+  return message.parts
+    .filter(
+      (p): p is { type: "text"; text: string } =>
+        p.type === "text" && typeof (p as { text?: string }).text === "string"
+    )
+    .map((p) => p.text)
+    .join("");
 }
 
-function getGoogleModel() {
-  const apiKey =
-    process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error(
-      "GOOGLE_GENERATIVE_AI_API_KEY (o GEMINI_API_KEY) no configurada"
-    );
+function getLastUserQuestion(messages: UIMessage[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "user") {
+      return textFromUIMessage(messages[i]).trim();
+    }
   }
-  const google = createGoogleGenerativeAI({ apiKey });
-  return google("gemini-2.5-flash");
+  return "";
+}
+
+function buildContextFromRpcRows(documents: unknown): {
+  contexto: string;
+  chunks: string[];
+  sources: string[];
+} {
+  if (!Array.isArray(documents) || documents.length === 0) {
+    return { contexto: "", chunks: [], sources: [] };
+  }
+  const chunks: string[] = [];
+  const sources: string[] = [];
+  const seenSources = new Set<string>();
+  for (const row of documents) {
+    if (row && typeof row === "object") {
+      const r = row as Record<string, unknown>;
+      const src = extractMetadataSource(r);
+      if (src && !seenSources.has(src)) {
+        seenSources.add(src);
+        sources.push(src);
+      }
+      const text =
+        typeof r.content === "string"
+          ? r.content
+          : typeof r.text === "string"
+            ? r.text
+            : typeof r.chunk === "string"
+              ? r.chunk
+              : "";
+      if (text.trim()) chunks.push(text.trim());
+    }
+  }
+  return { contexto: chunks.join("\n\n"), chunks, sources };
 }
 
 export async function POST(req: Request) {
   try {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return new Response(JSON.stringify({ error: "GEMINI_API_KEY no configurada" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     const body = (await req.json()) as {
       messages?: UIMessage[];
       documentContext?: string | null;
@@ -198,6 +121,94 @@ export async function POST(req: Request) {
       });
     }
 
+    const ultimaPregunta = getLastUserQuestion(raw);
+    if (!ultimaPregunta) {
+      return new Response(
+        JSON.stringify({ error: "Se requiere un mensaje de usuario con texto" }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    /* Mismo modelo y dimensión que en /api/ingest (text-embedding-004 no existe en v1beta para embedContent). */
+    const embeddingResp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${RAG_EMBEDDING_MODEL}:embedContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: `models/${RAG_EMBEDDING_MODEL}`,
+          content: { role: "user", parts: [{ text: ultimaPregunta }] },
+          taskType: "RETRIEVAL_QUERY",
+          outputDimensionality: RAG_EMBEDDING_DIMENSIONS,
+        }),
+      }
+    );
+
+    if (!embeddingResp.ok) {
+      const errText = await embeddingResp.text();
+      return new Response(
+        JSON.stringify({
+          error: `Embedding API: ${embeddingResp.status} ${errText}`,
+        }),
+        { status: 502, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    const embeddingJson = (await embeddingResp.json()) as {
+      embedding?: { values?: number[] };
+    };
+    const embeddingVector = embeddingJson.embedding?.values;
+    if (!Array.isArray(embeddingVector) || embeddingVector.length === 0) {
+      return new Response(JSON.stringify({ error: "Respuesta de embedding inválida" }), {
+        status: 502,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const { data: documents, error: rpcError } = await supabase.rpc("match_documents", {
+      query_embedding: embeddingVector,
+      match_threshold: 0.5,
+      match_count: 3,
+    });
+
+    if (rpcError) {
+      return new Response(JSON.stringify({ error: rpcError.message }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    let { contexto, sources: ragSources } = buildContextFromRpcRows(documents);
+
+    const documentContext =
+      typeof body.documentContext === "string" ? body.documentContext.trim() : "";
+    const hasUserAttachment = documentContext.length > 0;
+    if (documentContext) {
+      contexto =
+        contexto +
+        (contexto ? "\n\n---\n\n" : "") +
+        "Documento adicional aportado por el usuario:\n\n" +
+        documentContext;
+    }
+
+    const sourcesHint =
+      ragSources.length > 0
+        ? `Orígenes (metadata.source) de los fragmentos recuperados: ${ragSources.join(", ")}.`
+        : "No se recuperaron fragmentos desde la base vectorial para esta consulta.";
+
+    const attachmentHint = hasUserAttachment
+      ? "Hay además un documento adjunto por el usuario en el contexto (bloque indicado arriba)."
+      : "";
+
+    const systemPrompt = [
+      SYSTEM_PROMPT_PREFIX + contexto,
+      sourcesHint,
+      attachmentHint,
+      FUENTE_INSTRUCTION,
+    ]
+      .filter((s) => s.length > 0)
+      .join("\n\n");
+
     const forModel = raw.map((m) => {
       const copy = { ...m };
       delete (copy as { id?: string }).id;
@@ -205,23 +216,28 @@ export async function POST(req: Request) {
     });
     const modelMessages = await convertToModelMessages(forModel);
 
-    const documentContext =
-      typeof body.documentContext === "string"
-        ? body.documentContext
-        : undefined;
-
-    const knowledgeBaseText = await getKnowledgeBaseText();
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const geminiChat = genAI.getGenerativeModel({ model: CHAT_MODEL_ID });
+    const google = createGoogleGenerativeAI({ apiKey });
+    const languageModel = google(
+      geminiChat.model.startsWith("models/")
+        ? geminiChat.model.slice("models/".length)
+        : geminiChat.model
+    );
 
     const result = streamText({
-      model: getGoogleModel(),
-      system: buildSystemPrompt(knowledgeBaseText, documentContext),
+      model: languageModel,
+      system: systemPrompt,
       messages: modelMessages,
       maxOutputTokens: 1024,
       temperature: 0.25,
     });
+    
+    console.log("--- 🧠 Consulta RAG procesada con éxito ---");
 
     return result.toUIMessageStreamResponse();
   } catch (error: unknown) {
+    console.error("[Error en Chat RAG]:", error);
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
       {
