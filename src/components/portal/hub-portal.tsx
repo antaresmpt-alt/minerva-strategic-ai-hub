@@ -1,6 +1,8 @@
 import Image from "next/image";
+import { FileText } from "lucide-react";
 
 import { MinervaSiteFooter } from "@/components/layout/minerva-site-footer";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ModuleCard } from "@/components/portal/module-card";
 
 const MODULE_IMG = {
@@ -46,7 +48,17 @@ const BRAND_WORDMARK_H = 68;
 const BRAND_FULL_W = 268;
 const BRAND_FULL_H = 106;
 
-export function HubPortal() {
+export type HubPortalProps = {
+  /** Rol `admin` en `profiles`: muestra ingesta RAG y enlaces /admin. */
+  isAdmin: boolean;
+  /** Tras intento de acceso a /admin sin permiso (query `?acceso=restringido`). */
+  showAccessRestrictedNotice?: boolean;
+};
+
+export function HubPortal({
+  isAdmin,
+  showAccessRestrictedNotice,
+}: HubPortalProps) {
   return (
     <div className="hub-portal-root relative flex min-h-dvh flex-col">
       <div className="hub-portal-bg" aria-hidden />
@@ -77,6 +89,24 @@ export function HubPortal() {
             </p>
           </div>
         </header>
+
+        {showAccessRestrictedNotice && (
+          <div className="mb-8 w-full max-w-2xl self-center">
+            <Alert
+              role="alert"
+              className="border-amber-200/90 bg-amber-50/95 text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-50"
+            >
+              <AlertTitle>Acceso restringido</AlertTitle>
+              <AlertDescription>
+                El área de administración (ingesta de conocimiento RAG) está
+                reservada a perfiles con rol de administrador. Comercial,
+                producción y el resto de equipos usan los módulos del hub sin
+                acceso a /admin. Si necesitas documentación vectorizada, contacta
+                con gerencia o administración.
+              </AlertDescription>
+            </Alert>
+          </div>
+        )}
 
         <section className="mb-10 text-center sm:mb-12">
           <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground sm:text-3xl md:text-4xl">
@@ -151,6 +181,21 @@ export function HubPortal() {
             actionLabel="Abrir Chat"
             href="/chat"
           />
+          {isAdmin && (
+            <ModuleCard
+              title="Ingesta de conocimiento (Admin)"
+              description="Ingesta permanente de PDF y texto en la base vectorial (RAG) para el asistente. Uso interno."
+              iconFrame="glyph"
+              icon={
+                <FileText
+                  className="size-7 text-[var(--minerva-navy)]"
+                  aria-hidden
+                />
+              }
+              actionLabel="Abrir panel de ingesta"
+              href="/admin/ingest"
+            />
+          )}
         </div>
       </div>
 
