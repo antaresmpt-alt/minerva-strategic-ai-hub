@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter, Montserrat } from "next/font/google";
 
 import { UserNav } from "@/components/layout/user-nav";
+import { AppToaster } from "@/components/ui/app-toaster";
+import { canAccessSettings } from "@/lib/permissions";
 import { getCurrentUserProfile } from "@/lib/supabase/server";
 
 import "./globals.css";
@@ -36,8 +38,13 @@ export default async function RootLayout({
       className={`${inter.variable} ${montserrat.variable} h-full antialiased`}
     >
       <body className="min-h-full">
+        <AppToaster />
         {profile ? (
-          <UserNav email={profile.email} role={profile.role} />
+          <UserNav
+            email={profile.email}
+            role={profile.role}
+            showSettingsLink={canAccessSettings(profile.role)}
+          />
         ) : null}
         {children}
       </body>

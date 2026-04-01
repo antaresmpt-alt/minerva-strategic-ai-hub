@@ -1,46 +1,8 @@
 import Image from "next/image";
-import { FileText } from "lucide-react";
 
+import { HubModulesGrid } from "@/components/portal/hub-modules-grid";
 import { MinervaSiteFooter } from "@/components/layout/minerva-site-footer";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ModuleCard } from "@/components/portal/module-card";
-
-const MODULE_IMG = {
-  sales: {
-    src: "/images/module-sales.png",
-    alt: "Sales Intelligence — icono del módulo",
-  },
-  sem: {
-    src: "/images/module-sem.png",
-    alt: "SEM — icono del módulo",
-  },
-  seo: {
-    src: "/images/module-seo.png",
-    alt: "SEO — icono del módulo",
-  },
-  produccion: {
-    src: "/images/module-produccion.png",
-    alt: "Producción — icono del módulo",
-  },
-} as const;
-
-function ModuleMark({
-  src,
-  alt,
-}: {
-  src: string;
-  alt: string;
-}) {
-  return (
-    <Image
-      src={src}
-      alt={alt}
-      width={152}
-      height={176}
-      className="h-auto max-h-[7.25rem] w-full object-contain"
-    />
-  );
-}
 
 /** PNG corporativos (~268×106 / 205×68): no ampliar mucho más del tamaño nativo para evitar pixelado. */
 const BRAND_WORDMARK_W = 205;
@@ -49,15 +11,17 @@ const BRAND_FULL_W = 268;
 const BRAND_FULL_H = 106;
 
 export type HubPortalProps = {
-  /** Rol `admin` en `profiles`: muestra ingesta RAG y enlaces /admin. */
-  isAdmin: boolean;
-  /** Tras intento de acceso a /admin sin permiso (query `?acceso=restringido`). */
+  role: string | null;
+  moduleAccess: Record<string, boolean> | null;
   showAccessRestrictedNotice?: boolean;
+  showModuleDeniedNotice?: boolean;
 };
 
 export function HubPortal({
-  isAdmin,
+  role,
+  moduleAccess,
   showAccessRestrictedNotice,
+  showModuleDeniedNotice,
 }: HubPortalProps) {
   return (
     <div className="hub-portal-root relative flex min-h-dvh flex-col">
@@ -98,11 +62,24 @@ export function HubPortal({
             >
               <AlertTitle>Acceso restringido</AlertTitle>
               <AlertDescription>
-                El área de administración (ingesta de conocimiento RAG) está
-                reservada a perfiles con rol de administrador. Comercial,
-                producción y el resto de equipos usan los módulos del hub sin
-                acceso a /admin. Si necesitas documentación vectorizada, contacta
-                con gerencia o administración.
+                El área solicitada no está disponible para tu perfil. Si
+                necesitas documentación vectorizada o permisos adicionales,
+                contacta con gerencia o administración.
+              </AlertDescription>
+            </Alert>
+          </div>
+        )}
+
+        {showModuleDeniedNotice && (
+          <div className="mb-8 w-full max-w-2xl self-center">
+            <Alert
+              role="alert"
+              className="border-slate-300/90 bg-slate-50/95 text-slate-900 dark:border-slate-600 dark:bg-slate-900/50 dark:text-slate-100"
+            >
+              <AlertTitle>Sin permiso para ese módulo</AlertTitle>
+              <AlertDescription>
+                No puedes acceder a esa sección con tu rol actual. Vuelve al Hub
+                y elige un módulo permitido, o contacta con Gerencia.
               </AlertDescription>
             </Alert>
           </div>
@@ -117,86 +94,7 @@ export function HubPortal({
           </p>
         </section>
 
-        <div className="grid flex-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 lg:items-stretch">
-          <ModuleCard
-            title="Minerva Sales & Tech Intelligence"
-            description="Dashboard avanzado de ventas, márgenes reales y control operativo de la Oficina Técnica (pharma/cosmética)."
-            iconFrame="module"
-            icon={
-              <ModuleMark
-                src={MODULE_IMG.sales.src}
-                alt={MODULE_IMG.sales.alt}
-              />
-            }
-            actionLabel="Acceder a Ventas"
-            href="/analytics/sales"
-          />
-          <ModuleCard
-            title="SEM (Search Engine Marketing)"
-            description="Herramientas de análisis SEM, PMAX, propuestas Meta Ads y generación ejecutiva con IA."
-            iconFrame="module"
-            icon={
-              <ModuleMark src={MODULE_IMG.sem.src} alt={MODULE_IMG.sem.alt} />
-            }
-            actionLabel="Acceder a SEM"
-            href="/sem"
-          />
-          <ModuleCard
-            title="SEO (Search Engine Optimization)"
-            description="Monitor de visibilidad orgánica y optimizador de contenidos on-page para minervaglobal.es."
-            iconFrame="module"
-            icon={
-              <ModuleMark src={MODULE_IMG.seo.src} alt={MODULE_IMG.seo.alt} />
-            }
-            actionLabel="Acceder a SEO"
-            href="/seo"
-          />
-          <ModuleCard
-            title="Producción"
-            description="Órdenes de trabajo, fichas técnicas y almacén. Panel alineado con el hub estratégico."
-            iconFrame="module"
-            icon={
-              <ModuleMark
-                src={MODULE_IMG.produccion.src}
-                alt={MODULE_IMG.produccion.alt}
-              />
-            }
-            actionLabel="Acceder a Producción"
-            href="/produccion"
-          />
-          <ModuleCard
-            title="Minerva AI Assistant"
-            description="Tu asistente corporativo inteligente. Consultas generales, redacción y soporte."
-            iconFrame="module"
-            icon={
-              <Image
-                src="/images/module-chatbot.png"
-                alt="Minerva AI Assistant"
-                width={152}
-                height={176}
-                className="h-auto max-h-[7.25rem] w-full object-contain object-center"
-                unoptimized
-              />
-            }
-            actionLabel="Abrir Chat"
-            href="/chat"
-          />
-          {isAdmin && (
-            <ModuleCard
-              title="Ingesta de conocimiento (Admin)"
-              description="Ingesta permanente de PDF y texto en la base vectorial (RAG) para el asistente. Uso interno."
-              iconFrame="glyph"
-              icon={
-                <FileText
-                  className="size-7 text-[var(--minerva-navy)]"
-                  aria-hidden
-                />
-              }
-              actionLabel="Abrir panel de ingesta"
-              href="/admin/ingest"
-            />
-          )}
-        </div>
+        <HubModulesGrid role={role} moduleAccess={moduleAccess} />
       </div>
 
       <div className="relative z-10 mt-auto w-full shrink-0">

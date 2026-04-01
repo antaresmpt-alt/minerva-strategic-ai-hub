@@ -1,4 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
+import { canAccessApiRoute, canAccessPagePath } from "@/lib/permissions";
+import { fetchRolePermissionMap } from "@/lib/role-permissions-fetch";
 import { NextResponse, type NextRequest } from "next/server";
 
 function copyAuthCookies(from: NextResponse, to: NextResponse) {
@@ -45,12 +47,10 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
 
-  // Siempre permitir la página de login (sin sesión o con sesión caducada).
   if (isLoginPath(pathname)) {
     return response;
   }
 
-  // API: sin sesión válida → 401 JSON (no redirigir HTML; no romper fetch).
   if (pathname.startsWith("/api")) {
     if (userError || !user) {
       const unauthorized = NextResponse.json(
@@ -63,10 +63,32 @@ export async function updateSession(request: NextRequest) {
       copyAuthCookies(response, unauthorized);
       return unauthorized;
     }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+    const role = profile?.role ?? null;
+
+    const dynamic = role ? await fetchRolePermissionMap(role) : null;
+
+    if (!canAccessApiRoute(role, pathname, dynamic)) {
+      const forbidden = NextResponse.json(
+        {
+          error: "Forbidden",
+          message:
+            "Tu perfil no tiene permiso para esta operación. Contacta con Gerencia.",
+        },
+        { status: 403 }
+      );
+      copyAuthCookies(response, forbidden);
+      return forbidden;
+    }
+
     return response;
   }
 
-  // Resto del sitio: sesión obligatoria (getUser valida con el servidor Auth).
   if (userError || !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
@@ -80,21 +102,29 @@ export async function updateSession(request: NextRequest) {
     return redirect;
   }
 
-  // /admin: solo rol admin en profiles
-  if (pathname.startsWith("/admin")) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  const role = profile?.role ?? null;
 
-    if (profile?.role !== "admin") {
-      const url = new URL("/", request.url);
-      url.searchParams.set("acceso", "restringido");
-      const redirect = NextResponse.redirect(url);
-      copyAuthCookies(response, redirect);
-      return redirect;
-    }
+  const dynamic = role ? await fetchRolePermissionMap(role) : null;
+
+  if (pathname.startsWith("/admin")) {
+    const url = new URL("/settings", request.url);
+    url.searchParams.set("tab", "ingest");
+    const redirect = NextResponse.redirect(url);
+    copyAuthCookies(response, redirect);
+    return redirect;
+  }
+
+  if (!canAccessPagePath(role, pathname, dynamic)) {
+    const url = new URL("/", request.url);
+    url.searchParams.set("permiso", "denegado");
+    const redirect = NextResponse.redirect(url);
+    copyAuthCookies(response, redirect);
+    return redirect;
   }
 
   return response;

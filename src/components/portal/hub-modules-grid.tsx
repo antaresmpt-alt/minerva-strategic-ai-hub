@@ -1,0 +1,160 @@
+"use client";
+
+import Image from "next/image";
+import { useCallback, useState } from "react";
+
+import {
+  accessDeniedMessage,
+  canAccessHubModule,
+  type HubModuleId,
+} from "@/lib/permissions";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ModuleCard } from "@/components/portal/module-card";
+
+const MODULE_IMG = {
+  sales: {
+    src: "/images/module-sales.png",
+    alt: "Sales Intelligence — icono del módulo",
+  },
+  sem: {
+    src: "/images/module-sem.png",
+    alt: "SEM — icono del módulo",
+  },
+  seo: {
+    src: "/images/module-seo.png",
+    alt: "SEO — icono del módulo",
+  },
+  produccion: {
+    src: "/images/module-produccion.png",
+    alt: "Producción — icono del módulo",
+  },
+} as const;
+
+function ModuleMark({ src, alt }: { src: string; alt: string }) {
+  return (
+    <Image
+      src={src}
+      alt={alt}
+      width={152}
+      height={176}
+      className="h-auto max-h-[7.25rem] w-full object-contain"
+    />
+  );
+}
+
+export function HubModulesGrid({
+  role,
+  moduleAccess,
+}: {
+  role: string | null;
+  /** Desde `role_permissions`; si hay filas, prevalece sobre la matriz por defecto. */
+  moduleAccess: Record<string, boolean> | null;
+}) {
+  const [accessNotice, setAccessNotice] = useState<string | null>(null);
+
+  const onDenied = useCallback(() => {
+    setAccessNotice(accessDeniedMessage(role));
+  }, [role]);
+
+  const allow = useCallback(
+    (id: HubModuleId) => {
+      if (moduleAccess && Object.keys(moduleAccess).length > 0) {
+        return moduleAccess[id] === true;
+      }
+      return canAccessHubModule(role, id);
+    },
+    [role, moduleAccess]
+  );
+
+  return (
+    <>
+      {accessNotice && (
+        <div className="mb-6 w-full max-w-2xl self-center">
+          <Alert
+            role="alert"
+            className="border-slate-300/90 bg-slate-50/95 text-slate-900 dark:border-slate-600 dark:bg-slate-900/50 dark:text-slate-100"
+          >
+            <AlertTitle>Acceso no permitido</AlertTitle>
+            <AlertDescription>{accessNotice}</AlertDescription>
+          </Alert>
+        </div>
+      )}
+
+      <div className="grid flex-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 lg:items-stretch">
+        <ModuleCard
+          title="Minerva Sales & Tech Intelligence"
+          description="Dashboard avanzado de ventas, márgenes reales y control operativo de la Oficina Técnica (pharma/cosmética)."
+          iconFrame="module"
+          icon={
+            <ModuleMark
+              src={MODULE_IMG.sales.src}
+              alt={MODULE_IMG.sales.alt}
+            />
+          }
+          actionLabel="Acceder a Ventas"
+          href="/analytics/sales"
+          accessAllowed={allow("sales")}
+          onAccessDenied={onDenied}
+        />
+        <ModuleCard
+          title="SEM (Search Engine Marketing)"
+          description="Herramientas de análisis SEM, PMAX, propuestas Meta Ads y generación ejecutiva con IA."
+          iconFrame="module"
+          icon={
+            <ModuleMark src={MODULE_IMG.sem.src} alt={MODULE_IMG.sem.alt} />
+          }
+          actionLabel="Acceder a SEM"
+          href="/sem"
+          accessAllowed={allow("sem")}
+          onAccessDenied={onDenied}
+        />
+        <ModuleCard
+          title="SEO (Search Engine Optimization)"
+          description="Monitor de visibilidad orgánica y optimizador de contenidos on-page para minervaglobal.es."
+          iconFrame="module"
+          icon={
+            <ModuleMark src={MODULE_IMG.seo.src} alt={MODULE_IMG.seo.alt} />
+          }
+          actionLabel="Acceder a SEO"
+          href="/seo"
+          accessAllowed={allow("seo")}
+          onAccessDenied={onDenied}
+        />
+        <ModuleCard
+          title="Producción"
+          description="Órdenes de trabajo, fichas técnicas y almacén. Panel alineado con el hub estratégico."
+          iconFrame="module"
+          icon={
+            <ModuleMark
+              src={MODULE_IMG.produccion.src}
+              alt={MODULE_IMG.produccion.alt}
+            />
+          }
+          actionLabel="Acceder a Producción"
+          href="/produccion"
+          accessAllowed={allow("produccion")}
+          onAccessDenied={onDenied}
+        />
+        <ModuleCard
+          title="Minerva AI Assistant"
+          description="Tu asistente corporativo inteligente. Consultas generales, redacción y soporte."
+          iconFrame="module"
+          icon={
+            <Image
+              src="/images/module-chatbot.png"
+              alt="Minerva AI Assistant"
+              width={152}
+              height={176}
+              className="h-auto max-h-[7.25rem] w-full object-contain object-center"
+              unoptimized
+            />
+          }
+          actionLabel="Abrir Chat"
+          href="/chat"
+          accessAllowed={allow("chat")}
+          onAccessDenied={onDenied}
+        />
+      </div>
+    </>
+  );
+}

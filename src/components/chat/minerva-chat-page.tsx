@@ -43,10 +43,10 @@ function textFromParts(message: UIMessage): string {
 
 function ChatSidebarNav({
   onPickChat,
-  showAdminIngestLink,
+  showSettingsLink,
 }: {
   onPickChat?: () => void;
-  showAdminIngestLink: boolean;
+  showSettingsLink: boolean;
 }) {
   return (
     <>
@@ -79,19 +79,19 @@ function ChatSidebarNav({
           />
           <p className="text-xs leading-snug text-white/90">
             Base de conocimiento RAG (Supabase).
-            {showAdminIngestLink
-              ? " Para añadir PDFs de forma permanente, usa el panel de ingesta."
+            {showSettingsLink
+              ? " Para añadir PDFs de forma permanente, usa Configuración → Ingesta."
               : " La ingesta de documentos la gestiona el equipo de administración."}
           </p>
         </div>
-        {showAdminIngestLink && (
+        {showSettingsLink && (
           <Link
-            href="/admin/ingest"
+            href="/settings?tab=ingest"
             className="flex min-h-10 items-center gap-2 rounded-lg border border-white/10 bg-white/10 px-3 py-2.5 text-sm text-white/90 transition hover:bg-white/15"
           >
             <FileText className="size-4 shrink-0 opacity-90" aria-hidden />
             <span className="font-medium leading-tight">
-              Ingesta de PDF (admin)
+              Configuración — Ingesta
             </span>
           </Link>
         )}
@@ -101,9 +101,9 @@ function ChatSidebarNav({
 }
 
 export function MinervaChatPage({
-  showAdminIngestLink,
+  showSettingsLink,
 }: {
-  showAdminIngestLink: boolean;
+  showSettingsLink: boolean;
 }) {
   const [input, setInput] = useState("");
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -194,7 +194,7 @@ export function MinervaChatPage({
             <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-3">
               <ChatSidebarNav
                 onPickChat={closeSheet}
-                showAdminIngestLink={showAdminIngestLink}
+                showSettingsLink={showSettingsLink}
               />
             </div>
             <div className="mt-auto border-t border-white/10 p-4">
@@ -238,7 +238,7 @@ export function MinervaChatPage({
         </p>
         <Separator className="my-4 bg-white/15" />
         <div className="flex flex-1 flex-col gap-1 px-3">
-          <ChatSidebarNav showAdminIngestLink={showAdminIngestLink} />
+          <ChatSidebarNav showSettingsLink={showSettingsLink} />
         </div>
         <div className="mt-auto space-y-3 p-4">
           <Link
@@ -249,8 +249,8 @@ export function MinervaChatPage({
           </Link>
           <p className="text-[10px] leading-relaxed text-white/55">
             Respuestas concisas.
-            {showAdminIngestLink
-              ? " Los PDFs se ingieren de forma permanente desde Admin → Ingesta."
+            {showSettingsLink
+              ? " Los PDFs se ingieren desde Configuración → Ingesta de conocimiento."
               : " La ingesta de PDFs la coordina administración."}
           </p>
         </div>

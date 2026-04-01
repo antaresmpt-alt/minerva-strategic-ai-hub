@@ -23,6 +23,9 @@ type ModuleCardProps = {
   actionLabel: string;
   href?: string;
   disabled?: boolean;
+  /** Si es `false`, el módulo se muestra en escala de grises y el CTA abre `onAccessDenied` en lugar de navegar. */
+  accessAllowed?: boolean;
+  onAccessDenied?: () => void;
 };
 
 export function ModuleCard({
@@ -33,14 +36,18 @@ export function ModuleCard({
   actionLabel,
   href,
   disabled,
+  accessAllowed = true,
+  onAccessDenied,
 }: ModuleCardProps) {
-  const isDisabled = disabled || !href;
+  const locked = accessAllowed === false;
+  const isDisabled = (!locked && (disabled || !href)) || (locked && !onAccessDenied);
 
   return (
     <Card
       className={cn(
         "flex h-full flex-col border-border/80 bg-card/95 shadow-md ring-1 ring-foreground/[0.06] backdrop-blur-sm transition-shadow hover:shadow-lg",
-        isDisabled && "opacity-90"
+        locked && "opacity-[0.88] grayscale",
+        isDisabled && !locked && "opacity-90"
       )}
     >
       <CardHeader className="gap-3 text-center justify-items-center">
@@ -62,7 +69,17 @@ export function ModuleCard({
       </CardHeader>
       <div className="min-h-0 flex-1" aria-hidden />
       <CardFooter className="mt-auto border-t border-border/60 bg-muted/30">
-        {isDisabled ? (
+        {locked ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="lg"
+            className="w-full cursor-pointer"
+            onClick={() => onAccessDenied?.()}
+          >
+            {actionLabel}
+          </Button>
+        ) : isDisabled ? (
           <Button
             type="button"
             variant="secondary"
@@ -73,7 +90,7 @@ export function ModuleCard({
           </Button>
         ) : (
           <Link
-            href={href}
+            href={href!}
             className={buttonVariants({
               variant: "default",
               size: "lg",
