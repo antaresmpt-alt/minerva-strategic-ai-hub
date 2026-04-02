@@ -36,7 +36,7 @@ export function normalizeSalesRecord(raw: Record<string, unknown>): Record<strin
 }
 
 /** Normaliza valor de celda CSV/Excel a número */
-function cellNum(v: unknown): number {
+export function cellNum(v: unknown): number {
   if (v == null || v === "") return NaN;
   if (typeof v === "number" && Number.isFinite(v)) return v;
   const s = String(v).trim().replace(/\s/g, "").replace(",", ".");
@@ -45,7 +45,7 @@ function cellNum(v: unknown): number {
 }
 
 /** Normaliza a string (fechas Excel como string ISO o display) */
-function cellStr(v: unknown): string {
+export function cellStr(v: unknown): string {
   if (v == null) return "";
   if (v instanceof Date) {
     const y = v.getFullYear();
@@ -56,9 +56,24 @@ function cellStr(v: unknown): string {
   return String(v).trim();
 }
 
-function pick(r: Record<string, unknown>, ...keys: string[]): unknown {
+/** Igualdad de cabeceras ignorando mayúsculas, acentos y espacios extra. */
+function canonicalPickKey(key: string): string {
+  return normalizeSalesHeaderKey(key)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+export function pick(r: Record<string, unknown>, ...keys: string[]): unknown {
   for (const k of keys) {
     if (k in r && r[k] !== undefined && r[k] !== "") return r[k];
+  }
+  for (const want of keys) {
+    const target = canonicalPickKey(want);
+    for (const [rk, val] of Object.entries(r)) {
+      if (val === undefined || val === "") continue;
+      if (canonicalPickKey(rk) === target) return val;
+    }
   }
   return undefined;
 }

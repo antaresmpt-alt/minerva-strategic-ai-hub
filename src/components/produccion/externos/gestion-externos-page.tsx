@@ -7,8 +7,15 @@ import {
   Pencil,
   Printer,
   Trash2,
+  Upload,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useReactToPrint } from "react-to-print";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
@@ -48,6 +55,10 @@ import {
 } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Toggle } from "@/components/ui/toggle";
+import {
+  formatEntregaClienteSoloFecha,
+  parseExternosImportFile,
+} from "@/lib/externos-excel-import";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
 
@@ -114,6 +125,27 @@ function dateInputToTimestamptz(yyyyMmDd: string): string {
   const dt = new Date(y, m - 1, d, 12, 0, 0, 0);
   return dt.toISOString();
 }
+
+function defaultYmdLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+type ImportPreviewRow = {
+  key: string;
+  id_pedido: number;
+  cliente: string;
+  ref_cliente: string;
+  titulo: string;
+  fecha_entrega_excel: string;
+  fecha_prevista: string;
+  /** Editable; se persiste en prod_seguimiento_externos.notas_logistica */
+  notas: string;
+  proveedor_id: string;
+  acabado_id: string;
+  selected: boolean;
+  duplicate: boolean;
+};
 
 function isEnvioRetrasado(
   fechaPrevista: string | null,
@@ -359,6 +391,15 @@ export function GestionExternosPage() {
   const [envFecha, setEnvFecha] = useState("");
   const [envNotas, setEnvNotas] = useState("");
 
+  const [importPreviewRows, setImportPreviewRows] = useState<ImportPreviewRow[]>(
+    []
+  );
+  const [importDragOver, setImportDragOver] = useState(false);
+  const [bulkImportProv, setBulkImportProv] = useState("");
+  const [bulkImportAcab, setBulkImportAcab] = useState("");
+  const importFileInputRef = useRef<HTMLInputElement>(null);
+  const importMasterCheckboxRef = useRef<HTMLInputElement>(null);
+
   const [verHistorial, setVerHistorial] = useState(false);
   const [filtroEstado, setFiltroEstado] = useState("");
   const [filtroProveedorId, setFiltroProveedorId] = useState("");
@@ -413,6 +454,43 @@ export function GestionExternosPage() {
     acabadosCatalogo.forEach((a) => m.set(a.id, a.nombre));
     return m;
   }, [acabadosCatalogo]);
+
+  const otEnSeguimiento = useMemo(
+    () => new Set(seguimientos.map((s) => s.id_pedido)),
+    [seguimientos]
+  );
+
+  const bulkImportAcabadoOptions: Option[] = useMemo(() => {
+    if (!bulkImportProv) return emptySelect;
+    const prov = proveedores.find((p) => p.id === bulkImportProv);
+    if (!prov) return emptySelect;
+    const opts = acabadosCatalogo.filter(
+      (a) => a.tipo_proveedor_id === prov.tipo_proveedor_id
+    );
+    return [
+      ...emptySelect,
+      ...opts.map((a) => ({ value: a.id, label: a.nombre })),
+    ];
+  }, [bulkImportProv, proveedores, acabadosCatalogo]);
+
+  const importSelectionStats = useMemo(() => {
+    const selectable = importPreviewRows.filter((r) => !r.duplicate);
+    const n = selectable.length;
+    const selectedCount = selectable.filter((r) => r.selected).length;
+    const allSelectableSelected = n > 0 && selectedCount === n;
+    const masterIndeterminate = selectedCount > 0 && selectedCount < n;
+    return {
+      selectableCount: n,
+      allSelectableSelected,
+      masterIndeterminate,
+    };
+  }, [importPreviewRows]);
+
+  useEffect(() => {
+    const el = importMasterCheckboxRef.current;
+    if (!el) return;
+    el.indeterminate = importSelectionStats.masterIndeterminate;
+  }, [importSelectionStats.masterIndeterminate]);
 
   const estadoFiltroOptions: Option[] = useMemo(
     () => [
@@ -724,6 +802,188 @@ export function GestionExternosPage() {
     setEnvFecha("");
     setEnvNotas("");
     setTab("seguimiento");
+    void loadCore();
+  }
+
+  function acabadoOptionsForProveedorId(provId: string): Option[] {
+    if (!provId) return emptySelect;
+    const prov = proveedores.find((p) => p.id === provId);
+    if (!prov) return emptySelect;
+    const opts = acabadosCatalogo.filter(
+      (a) => a.tipo_proveedor_id === prov.tipo_proveedor_id
+    );
+    return [
+      ...emptySelect,
+      ...opts.map((a) => ({ value: a.id, label: a.nombre })),
+    ];
+  }
+
+  const processImportFile = useCallback(
+    async (file: File) => {
+      const lower = file.name.toLowerCase();
+      if (!lower.endsWith(".xlsx") && !lower.endsWith(".csv")) {
+        toast.error("Solo se admiten archivos .xlsx o .csv.");
+        return;
+      }
+      try {
+        const { rows, parseWarnings } = await parseExternosImportFile(file);
+        if (parseWarnings.length > 0) {
+          toast.info(parseWarnings.slice(0, 5).join(" · "));
+        }
+        if (rows.length === 0) {
+          toast.error(
+            "No hay filas importables (estado Abierto / En Curso y OT válida)."
+          );
+          return;
+        }
+        setImportPreviewRows(
+          rows.map((c) => {
+            const dup = otEnSeguimiento.has(c.id_pedido);
+            return {
+              key: crypto.randomUUID(),
+              id_pedido: c.id_pedido,
+              cliente: c.cliente,
+              ref_cliente: c.ref_cliente,
+              titulo: c.titulo,
+              fecha_entrega_excel: c.fecha_entrega_excel,
+              fecha_prevista: c.fecha_prevista_default || defaultYmdLocal(),
+              notas: "",
+              proveedor_id: "",
+              acabado_id: "",
+              selected: false,
+              duplicate: dup,
+            };
+          })
+        );
+        setBulkImportProv("");
+        setBulkImportAcab("");
+        toast.success(`${rows.length} fila(s) en la sala de validación.`);
+      } catch (err) {
+        console.error(err);
+        toast.error(
+          err instanceof Error ? err.message : "No se pudo leer el Excel."
+        );
+      }
+    },
+    [otEnSeguimiento]
+  );
+
+  function setImportRowProveedor(key: string, provId: string) {
+    setImportPreviewRows((prev) =>
+      prev.map((r) => {
+        if (r.key !== key) return r;
+        const prov = proveedores.find((p) => p.id === provId);
+        if (!prov) return { ...r, proveedor_id: provId, acabado_id: "" };
+        const opts = acabadosCatalogo.filter(
+          (a) => a.tipo_proveedor_id === prov.tipo_proveedor_id
+        );
+        let acab = r.acabado_id;
+        if (!opts.some((o) => o.id === acab)) acab = "";
+        return { ...r, proveedor_id: provId, acabado_id: acab };
+      })
+    );
+  }
+
+  function toggleImportSelectAllSelectable() {
+    setImportPreviewRows((prev) => {
+      const selectable = prev.filter((r) => !r.duplicate);
+      if (selectable.length === 0) return prev;
+      const allSelected = selectable.every((r) => r.selected);
+      const nextSelect = !allSelected;
+      return prev.map((r) =>
+        r.duplicate ? r : { ...r, selected: nextSelect }
+      );
+    });
+  }
+
+  function clearImportPreviewList() {
+    setImportPreviewRows([]);
+    setBulkImportProv("");
+    setBulkImportAcab("");
+  }
+
+  function applyImportBulkAssignment() {
+    if (!bulkImportProv) {
+      toast.error("Elige un proveedor para la asignación masiva.");
+      return;
+    }
+    const hasTargets = importPreviewRows.some((r) => r.selected && !r.duplicate);
+    if (!hasTargets) {
+      toast.error(
+        "Selecciona al menos una fila importable para aplicar la asignación."
+      );
+      return;
+    }
+    setImportPreviewRows((prev) =>
+      prev.map((r) => {
+        if (!r.selected || r.duplicate) return r;
+        const prov = proveedores.find((p) => p.id === bulkImportProv);
+        if (!prov) return r;
+        const opts = acabadosCatalogo.filter(
+          (a) => a.tipo_proveedor_id === prov.tipo_proveedor_id
+        );
+        let acab = bulkImportAcab;
+        if (!acab || !opts.some((o) => o.id === acab)) acab = "";
+        return {
+          ...r,
+          proveedor_id: bulkImportProv,
+          acabado_id: acab,
+        };
+      })
+    );
+    toast.success("Asignación aplicada a las filas seleccionadas.");
+  }
+
+  async function confirmImportSelection() {
+    const seleccionadas = importPreviewRows.filter(
+      (r) => r.selected && !r.duplicate
+    );
+    if (seleccionadas.length === 0) {
+      toast.error(
+        "Selecciona al menos una fila importable con la casilla junto a la OT."
+      );
+      return;
+    }
+    const toInsert = seleccionadas.filter(
+      (r) => r.proveedor_id && r.acabado_id && r.fecha_prevista
+    );
+    if (toInsert.length === 0) {
+      toast.error(
+        "En las filas seleccionadas, completa proveedor, acabado y fecha prevista."
+      );
+      return;
+    }
+    setSaving(true);
+    const payload = toInsert.map((r) => ({
+      id_pedido: r.id_pedido,
+      cliente_nombre: r.cliente,
+      trabajo_titulo: r.titulo,
+      pedido_cliente: r.ref_cliente,
+      proveedor_id: r.proveedor_id,
+      acabado_id: r.acabado_id,
+      estado: "Pendiente",
+      fecha_prevista: dateInputToTimestamptz(r.fecha_prevista),
+      notas_logistica: r.notas.trim() || null,
+    }));
+    const { error } = await supabase
+      .from("prod_seguimiento_externos")
+      .insert(payload);
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(
+      `Se han importado ${toInsert.length} trabajos correctamente a Seguimiento`
+    );
+    const importedKeys = new Set(toInsert.map((r) => r.key));
+    const remainingCount = importPreviewRows.length - toInsert.length;
+    setImportPreviewRows((prev) => prev.filter((r) => !importedKeys.has(r.key)));
+    if (remainingCount === 0) {
+      setBulkImportProv("");
+      setBulkImportAcab("");
+      setTab("seguimiento");
+    }
     void loadCore();
   }
 
@@ -1163,7 +1423,326 @@ export function GestionExternosPage() {
           <Card className="border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
             <CardHeader>
               <CardTitle className="text-lg text-[#002147]">
-                Nuevo envío externo (OT)
+                Importación inteligente (Excel Optimus)
+              </CardTitle>
+              <CardDescription>
+                Archivo .xlsx o .csv con las mismas cabeceras que ventas
+                (normalizadas automáticamente). Solo filas «Abierto» o «En
+                Curso». La fecha prevista sugerida es un día antes de la
+                entrega al cliente. Asigna proveedor y acabado antes de
+                confirmar.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <input
+                ref={importFileInputRef}
+                type="file"
+                accept=".xlsx,.csv,text/csv"
+                className="sr-only"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void processImportFile(f);
+                  e.target.value = "";
+                }}
+              />
+              <button
+                type="button"
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setImportDragOver(true);
+                }}
+                onDragLeave={() => setImportDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setImportDragOver(false);
+                  const f = e.dataTransfer.files?.[0];
+                  if (f) void processImportFile(f);
+                }}
+                onClick={() => importFileInputRef.current?.click()}
+                className={cn(
+                  "flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-10 text-center transition",
+                  importDragOver
+                    ? "border-[#C69C2B] bg-[#C69C2B]/10"
+                    : "border-slate-300 bg-slate-50/80 hover:border-[#002147]/40 hover:bg-slate-100/80"
+                )}
+              >
+                <Upload
+                  className="size-10 text-[#002147]/70"
+                  strokeWidth={1.5}
+                  aria-hidden
+                />
+                <span className="text-sm font-medium text-[#002147]">
+                  Arrastra aquí tu Excel o haz clic para elegir archivo
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  .xlsx o .csv · primera hoja (Excel)
+                </span>
+              </button>
+
+              {importPreviewRows.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-[#002147]">
+                        Sala de validación
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {importPreviewRows.length} fila(s) cargadas · marca las
+                        que quieras importar
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="shrink-0 border-destructive/40 text-destructive hover:bg-destructive/10"
+                      onClick={clearImportPreviewList}
+                    >
+                      <Trash2 className="mr-2 size-4" aria-hidden />
+                      Limpiar listado
+                    </Button>
+                  </div>
+
+                  <div className="rounded-lg border border-slate-200 bg-slate-50/90 p-4">
+                    <p className="mb-3 text-sm font-medium text-[#002147]">
+                      Asignación masiva (solo filas seleccionadas)
+                    </p>
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+                      <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
+                        <NativeSelect
+                          label="Proveedor"
+                          options={proveedorOptions}
+                          value={bulkImportProv}
+                          onChange={(e) => {
+                            setBulkImportProv(e.target.value);
+                            setBulkImportAcab("");
+                          }}
+                        />
+                        <NativeSelect
+                          label="Acabado"
+                          options={bulkImportAcabadoOptions}
+                          value={bulkImportAcab}
+                          onChange={(e) => setBulkImportAcab(e.target.value)}
+                          disabled={!bulkImportProv}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="shrink-0"
+                        onClick={applyImportBulkAssignment}
+                      >
+                        Aplicar a seleccionadas
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="w-full max-w-none overflow-x-auto rounded-lg border border-slate-200">
+                    <Table className="w-full min-w-[72rem]">
+                      <TableHeader>
+                        <TableRow className="bg-slate-50/90">
+                          <TableHead className="w-10 px-2">
+                            <input
+                              ref={importMasterCheckboxRef}
+                              type="checkbox"
+                              className="size-4 rounded border"
+                              checked={importSelectionStats.allSelectableSelected}
+                              disabled={
+                                importSelectionStats.selectableCount === 0
+                              }
+                              onChange={toggleImportSelectAllSelectable}
+                              title="Seleccionar o quitar todas las filas importables (no afecta a «Ya en seguimiento»)"
+                              aria-label="Seleccionar todas las filas importables"
+                            />
+                          </TableHead>
+                          <TableHead className="whitespace-nowrap">OT</TableHead>
+                          <TableHead className="max-w-[8rem]">Cliente</TableHead>
+                          <TableHead className="min-w-[18rem] max-w-[28rem]">
+                            Trabajo
+                          </TableHead>
+                          <TableHead className="max-w-[7rem]">
+                            Pedido cliente
+                          </TableHead>
+                          <TableHead className="whitespace-nowrap">
+                            Entrega (Excel)
+                          </TableHead>
+                          <TableHead className="whitespace-nowrap">
+                            Fecha prevista
+                          </TableHead>
+                          <TableHead className="min-w-[10rem]">Proveedor</TableHead>
+                          <TableHead className="min-w-[10rem]">Acabado</TableHead>
+                          <TableHead className="min-w-[12rem] max-w-[20rem]">
+                            Notas
+                          </TableHead>
+                          <TableHead className="min-w-[7rem]" />
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {importPreviewRows.map((row) => (
+                          <TableRow
+                            key={row.key}
+                            className={cn(
+                              row.duplicate &&
+                                "bg-orange-50/95 text-orange-950 dark:bg-orange-950/30 dark:text-orange-100"
+                            )}
+                          >
+                            <TableCell>
+                              <input
+                                type="checkbox"
+                                className="size-4 rounded border"
+                                checked={row.selected}
+                                disabled={row.duplicate}
+                                onChange={(e) =>
+                                  setImportPreviewRows((prev) =>
+                                    prev.map((r) =>
+                                      r.key === row.key
+                                        ? { ...r, selected: e.target.checked }
+                                        : r
+                                    )
+                                  )
+                                }
+                                aria-label={`Incluir OT ${row.id_pedido}`}
+                              />
+                            </TableCell>
+                            <TableCell className="font-medium whitespace-nowrap">
+                              {row.id_pedido}
+                            </TableCell>
+                            <TableCell className="truncate text-sm">
+                              {row.cliente || "—"}
+                            </TableCell>
+                            <TableCell className="min-w-0 align-top whitespace-normal break-words py-2 text-sm leading-snug">
+                              {row.titulo || "—"}
+                            </TableCell>
+                            <TableCell className="truncate text-xs">
+                              {row.ref_cliente || "—"}
+                            </TableCell>
+                            <TableCell className="max-w-[100px] truncate text-xs text-muted-foreground">
+                              {formatEntregaClienteSoloFecha(row.fecha_entrega_excel)}
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="date"
+                                className="h-8 min-w-[9.5rem] text-xs"
+                                value={row.fecha_prevista}
+                                onChange={(e) =>
+                                  setImportPreviewRows((prev) =>
+                                    prev.map((r) =>
+                                      r.key === row.key
+                                        ? {
+                                            ...r,
+                                            fecha_prevista: e.target.value,
+                                          }
+                                        : r
+                                    )
+                                  )
+                                }
+                                disabled={row.duplicate}
+                              />
+                            </TableCell>
+                            <TableCell className="min-w-[10rem]">
+                              <select
+                                className="border-input bg-background h-8 w-full max-w-[11rem] rounded-md border px-2 text-xs"
+                                value={row.proveedor_id}
+                                onChange={(e) =>
+                                  setImportRowProveedor(row.key, e.target.value)
+                                }
+                                disabled={row.duplicate || !proveedores.length}
+                              >
+                                <option value="">—</option>
+                                {proveedores.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.nombre}
+                                  </option>
+                                ))}
+                              </select>
+                            </TableCell>
+                            <TableCell className="min-w-[10rem]">
+                              <select
+                                className="border-input bg-background h-8 w-full max-w-[11rem] rounded-md border px-2 text-xs"
+                                value={row.acabado_id}
+                                onChange={(e) =>
+                                  setImportPreviewRows((prev) =>
+                                    prev.map((r) =>
+                                      r.key === row.key
+                                        ? {
+                                            ...r,
+                                            acabado_id: e.target.value,
+                                          }
+                                        : r
+                                    )
+                                  )
+                                }
+                                disabled={row.duplicate || !row.proveedor_id}
+                              >
+                                {acabadoOptionsForProveedorId(
+                                  row.proveedor_id
+                                ).map((o) => (
+                                  <option key={o.value || "empty"} value={o.value}>
+                                    {o.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </TableCell>
+                            <TableCell className="min-w-0 align-top p-2">
+                              <Textarea
+                                className="min-h-[2.75rem] resize-y text-xs leading-snug"
+                                rows={2}
+                                placeholder="Notas logística…"
+                                value={row.notas}
+                                disabled={row.duplicate}
+                                onChange={(e) =>
+                                  setImportPreviewRows((prev) =>
+                                    prev.map((r) =>
+                                      r.key === row.key
+                                        ? { ...r, notas: e.target.value }
+                                        : r
+                                    )
+                                  )
+                                }
+                                aria-label={`Notas OT ${row.id_pedido}`}
+                              />
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              {row.duplicate ? (
+                                <span className="font-medium text-orange-700 dark:text-orange-300">
+                                  Ya en seguimiento
+                                </span>
+                              ) : (
+                                "—"
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => void confirmImportSelection()}
+                    >
+                      Confirmar e importar selección
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={clearImportPreviewList}
+                    >
+                      Limpiar listado
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          <Card className="border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="text-lg text-[#002147]">
+                Nuevo envío externo (OT) — manual
               </CardTitle>
               <CardDescription>
                 El acabado disponible depende del tipo del proveedor elegido.
