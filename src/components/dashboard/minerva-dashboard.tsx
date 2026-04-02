@@ -23,6 +23,7 @@ import {
   getReportForMode,
   useHubStore,
 } from "@/lib/store";
+import { GlobalModelSelector } from "@/components/layout/header";
 import { GenerationProgress } from "@/components/dashboard/generation-progress";
 import { ReportBody } from "@/components/dashboard/report-body";
 import { DeepDiveChat } from "@/components/dashboard/deep-dive-chat";
@@ -66,6 +67,7 @@ export function MinervaDashboard() {
   const setStrategicAnalysis = useHubStore((s) => s.setStrategicAnalysis);
   const setPmaxContent = useHubStore((s) => s.setPmaxContent);
   const setSlidesContent = useHubStore((s) => s.setSlidesContent);
+  const globalModel = useHubStore((s) => s.globalModel);
 
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -121,6 +123,7 @@ export function MinervaDashboard() {
           url: u,
           country: country.trim() || undefined,
           targetClient: targetClient.trim() || undefined,
+          model: globalModel,
         }),
         signal: ctrl.signal,
       });
@@ -163,7 +166,7 @@ export function MinervaDashboard() {
       const res = await fetch("/api/gemini/pmax", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ strategicAnalysis }),
+        body: JSON.stringify({ strategicAnalysis, model: globalModel }),
         signal: ctrl.signal,
       });
       const data = await res.json();
@@ -199,7 +202,7 @@ export function MinervaDashboard() {
       const res = await fetch("/api/gemini/slides", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ strategicAnalysis }),
+        body: JSON.stringify({ strategicAnalysis, model: globalModel }),
         signal: ctrl.signal,
       });
       const data = await res.json();
@@ -333,7 +336,7 @@ export function MinervaDashboard() {
 
         <header className="relative z-10 border-b border-[#002147]/10 bg-white/80 px-4 py-6 shadow-sm backdrop-blur-md md:px-10">
           <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-            <div>
+            <div className="min-w-0 flex-1">
               <h1 className="font-[family-name:var(--font-heading)] text-2xl font-bold text-[#002147] md:text-3xl">
                 {activeMode === "creativo"
                   ? "Creativo IA"
@@ -353,13 +356,16 @@ export function MinervaDashboard() {
                       : "Consultoría estratégica asistida por IA: diagnóstico B2B, activos PMAX y narrativa ejecutiva en formato McKinsey-style."}
               </p>
             </div>
-            {activeMode === "metaProposal" && metaProposalPayload ? (
-              <MetaProposalExports payload={metaProposalPayload} />
-            ) : activeMode !== "creativo" &&
-              activeMode !== "metaProposal" &&
-              activeMode !== "semCreativeLab" ? (
-              <ExportPdfMenu mode={activeMode} />
-            ) : null}
+            <div className="flex max-w-full flex-wrap items-start justify-end gap-3">
+              <GlobalModelSelector layout="row" className="shrink-0" />
+              {activeMode === "metaProposal" && metaProposalPayload ? (
+                <MetaProposalExports payload={metaProposalPayload} />
+              ) : activeMode !== "creativo" &&
+                activeMode !== "metaProposal" &&
+                activeMode !== "semCreativeLab" ? (
+                <ExportPdfMenu mode={activeMode} />
+              ) : null}
+            </div>
           </div>
 
           {activeMode !== "creativo" &&

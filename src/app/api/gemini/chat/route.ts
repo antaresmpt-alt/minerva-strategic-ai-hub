@@ -1,23 +1,16 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
-import { resolveGeminiModel } from "@/lib/gemini-model";
+
+import {
+  generateLlmText,
+  llmFieldsForApiResponse,
+  parseModelFromBody,
+} from "@/lib/llm-router";
 import { DEEP_DIVE_SYSTEM } from "@/lib/prompts";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
 
 type ChatTurn = { role: "user" | "model"; content: string };
-
-function getModel() {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error("GEMINI_API_KEY no configurada");
-  const gen = new GoogleGenerativeAI(key);
-  const name = resolveGeminiModel();
-  return gen.getGenerativeModel({
-    model: name,
-    systemInstruction: DEEP_DIVE_SYSTEM,
-  });
-}
 
 function buildPrompt(originalReport: string, history: ChatTurn[], question: string) {
   const hist = history
@@ -41,6 +34,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
+    const modelId = parseModelFromBody(
+      (body as { model?: unknown }).model
+    );
     const originalReport = String(body.originalReport ?? "").trim();
     const question = String(body.question ?? "").trim();
     const history = (body.history ?? []) as ChatTurn[];
@@ -52,16 +48,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Pregunta requerida" }, { status: 400 });
     }
 
-    const model = getModel();
     const prompt = buildPrompt(originalReport, history, question);
 
-    const result = await model.generateContent(
-      { contents: [{ role: "user", parts: [{ text: prompt }] }] },
-      { signal }
-    );
-
-    const text = result.response.text();
-    return NextResponse.json({ text });
+    const result = await generateLlmText({
+      modelId,
+      system: DEEP_DIVE_SYSTEM,
+      user: prompt,
+      maxOutputTokens: 8192,
+      temperature: 0.4,
+      signal,
+    });
+    return NextResponse.json({
+      text: result.text,
+      ...llmFieldsForApiResponse(result),
+    });
   } catch (e: unknown) {
     if (e instanceof Error && e.name === "AbortError") {
       return NextResponse.json({ error: "cancelado" }, { status: 499 });

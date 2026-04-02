@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
+import { GlobalModelSelector } from "@/components/layout/header";
 import { IngestKnowledgeTab } from "@/components/settings/ingest-knowledge-tab";
 import { UsersManagementPanel } from "@/components/settings/users-management-panel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -22,12 +23,17 @@ export function SettingsShell({ defaultTab }: SettingsShellProps) {
           <ArrowLeft className="size-4" aria-hidden />
           Volver al Hub
         </Link>
-        <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-          Configuración
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Ingesta de conocimiento y gestión de usuarios (admin / gerencia).
-        </p>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+              Configuración
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Ingesta de conocimiento y gestión de usuarios (admin / gerencia).
+            </p>
+          </div>
+          <GlobalModelSelector layout="row" className="shrink-0" />
+        </div>
 
         <Tabs defaultValue={defaultTab} className="mt-8 w-full gap-4">
           <TabsList variant="line" className="w-full justify-start gap-1">

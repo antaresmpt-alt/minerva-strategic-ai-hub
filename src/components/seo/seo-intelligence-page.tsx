@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 
+import { GlobalModelSelector } from "@/components/layout/header";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
@@ -50,7 +51,8 @@ export function SeoIntelligencePage() {
                 </span>
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+              <GlobalModelSelector layout="row" className="shrink-0" />
               <Link
                 href="/"
                 className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}

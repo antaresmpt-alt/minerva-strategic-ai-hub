@@ -1,5 +1,9 @@
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { generateText } from "ai";
+import type { GlobalModelId } from "@/lib/global-model";
+import {
+  generateLlmText,
+  llmFieldsForApiResponse,
+  parseModelFromBody,
+} from "@/lib/llm-router";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -47,16 +51,6 @@ Cada objeto del array debe incluir las claves exactas:
 - "difficultyPercent": número entero entre 0 y 100 inclusive
 
 Devuelve la respuesta ESTRICTAMENTE como un único JSON válido: un array de exactamente ${count} objetos. Sin texto antes ni después, sin markdown, sin comentarios.`;
-}
-
-function getGoogleModel() {
-  const apiKey =
-    process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY o GOOGLE_GENERATIVE_AI_API_KEY no configurada");
-  }
-  const google = createGoogleGenerativeAI({ apiKey });
-  return google("gemini-2.5-flash");
 }
 
 function parseDifficultyPercent(o: Record<string, unknown>): number {
@@ -137,6 +131,7 @@ function parseBody(body: unknown): {
   seed: string;
   intentFilter: IntentFilter;
   count: KeywordCount;
+  modelId: GlobalModelId;
 } | { error: string } {
   if (!body || typeof body !== "object") {
     return { error: "Cuerpo de petición inválido." };
@@ -146,6 +141,8 @@ function parseBody(body: unknown): {
   if (!seed) {
     return { error: "Indica un producto o servicio (semilla)." };
   }
+
+  const modelId = parseModelFromBody(o.model);
 
   const intentRaw = o.intentFilter ?? o.intent;
   let intentFilter: IntentFilter = "all";
@@ -164,7 +161,7 @@ function parseBody(body: unknown): {
     count = c;
   }
 
-  return { seed, intentFilter, count };
+  return { seed, intentFilter, count, modelId };
 }
 
 export async function POST(req: Request) {
@@ -175,16 +172,16 @@ export async function POST(req: Request) {
       return Response.json({ error: parsed.error }, { status: 400 });
     }
 
-    const { seed, intentFilter, count } = parsed;
+    const { seed, intentFilter, count, modelId } = parsed;
     const system = buildSystemPrompt(count, intentFilter);
     const prompt = `Palabra clave semilla del usuario: ${seed}`;
 
     const maxOutputTokens = count <= 10 ? 4096 : 8192;
 
-    const result = await generateText({
-      model: getGoogleModel(),
+    const result = await generateLlmText({
+      modelId,
       system,
-      prompt,
+      user: prompt,
       maxOutputTokens,
       temperature: 0.4,
     });
@@ -197,7 +194,10 @@ export async function POST(req: Request) {
       throw new Error("No se obtuvieron filas válidas del modelo");
     }
 
-    return Response.json({ items: rows });
+    return Response.json({
+      items: rows,
+      ...llmFieldsForApiResponse(result),
+    });
   } catch (e: unknown) {
     const message =
       e instanceof Error ? e.message : "No se pudo generar la estrategia SEO";

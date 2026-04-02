@@ -1,7 +1,11 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
 import type { LeadEmailApiPayload } from "@/lib/lead-email-payload";
+import {
+  generateLlmText,
+  llmFieldsForApiResponse,
+  parseModelFromBody,
+} from "@/lib/llm-router";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -47,8 +51,9 @@ function isPayload(v: unknown): v is LeadEmailApiPayload {
 
 export async function POST(req: Request) {
   try {
-    const json = (await req.json()) as { leadData?: unknown };
+    const json = (await req.json()) as { leadData?: unknown; model?: unknown };
     const leadData = json.leadData;
+    const modelId = parseModelFromBody(json.model);
 
     if (!leadData || !isPayload(leadData)) {
       return NextResponse.json(
@@ -57,24 +62,18 @@ export async function POST(req: Request) {
       );
     }
 
-    const apiKey =
-      process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error(
-        "GOOGLE_GENERATIVE_AI_API_KEY (o GEMINI_API_KEY) no configurada"
-      );
-    }
-
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const prompt = buildPrompt(leadData);
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    if (!text?.trim()) {
-      throw new Error("El modelo no devolvió texto.");
-    }
+    const result = await generateLlmText({
+      modelId,
+      user: prompt,
+      maxOutputTokens: 4096,
+      temperature: 0.5,
+    });
 
-    return NextResponse.json({ text: text.trim() });
+    return NextResponse.json({
+      text: result.text.trim(),
+      ...llmFieldsForApiResponse(result),
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json(

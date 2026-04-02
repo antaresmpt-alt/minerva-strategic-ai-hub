@@ -51,6 +51,11 @@ export async function updateSession(request: NextRequest) {
     return response;
   }
 
+  /** CSV/xlsx de ejemplo en `public/data/*`. Deben servirse sin `canAccessPagePath` (no son rutas de módulo). */
+  if (pathname.startsWith("/data/")) {
+    return response;
+  }
+
   if (pathname.startsWith("/api")) {
     if (userError || !user) {
       const unauthorized = NextResponse.json(

@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { leadRowToEmailPayload } from "@/lib/lead-email-payload";
+import { useHubStore } from "@/lib/store";
 import { parseSalesEmailText } from "@/lib/lead-email-parse-response";
 import { cn } from "@/lib/utils";
 import type { LeadRow } from "@/types/leads";
@@ -26,6 +27,7 @@ type Props = {
 };
 
 export function LeadEmailAiDialog({ lead, open, onOpenChange }: Props) {
+  const globalModel = useHubStore((s) => s.globalModel);
   const titleId = useId();
   const descId = useId();
   const [loading, setLoading] = useState(false);
@@ -70,7 +72,10 @@ export function LeadEmailAiDialog({ lead, open, onOpenChange }: Props) {
         const res = await fetch("/api/sales-email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ leadData: leadRowToEmailPayload(leadRow) }),
+          body: JSON.stringify({
+            leadData: leadRowToEmailPayload(leadRow),
+            model: globalModel,
+          }),
         });
         const data = (await res.json()) as { text?: string; error?: string };
         if (cancelled) return;
@@ -98,7 +103,7 @@ export function LeadEmailAiDialog({ lead, open, onOpenChange }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [open, lead, payloadKey]);
+  }, [open, lead, payloadKey, globalModel]);
 
   const copyAll = useCallback(async () => {
     const text = `Asunto: ${subject}\n\n${body}`.trim();

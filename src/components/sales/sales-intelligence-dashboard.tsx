@@ -39,7 +39,9 @@ import {
   YAxis,
 } from "recharts";
 
-import { useSalesData } from "@/hooks/use-sales-data";
+import { GlobalModelSelector } from "@/components/layout/header";
+import { LeadsManagementPanel } from "@/components/sales/leads-management-panel";
+import { SalesOrdersGestionPanel } from "@/components/sales/sales-orders-gestion-panel";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -62,12 +64,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LeadsManagementPanel } from "@/components/sales/leads-management-panel";
-import { SalesOrdersGestionPanel } from "@/components/sales/sales-orders-gestion-panel";
+import { useSalesData } from "@/hooks/use-sales-data";
 import {
   buildDelayReportXlsxBlob,
   isOrderActiveForDelivery,
 } from "@/lib/sales-delivery-timing";
+import { useHubStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import type { LeadRow } from "@/types/leads";
 import {
@@ -206,6 +208,7 @@ const FILE_ACCEPT =
   ".csv,.xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv";
 
 export function SalesIntelligenceDashboard() {
+  const globalModel = useHubStore((s) => s.globalModel);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const salesPrintRef = useRef<HTMLDivElement>(null);
   const handlePrint = useReactToPrint({
@@ -352,7 +355,7 @@ export function SalesIntelligenceDashboard() {
       const res = await fetch("/api/sales-chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: q, tableData }),
+        body: JSON.stringify({ query: q, tableData, model: globalModel }),
       });
       const data = (await res.json()) as { text?: string; error?: string };
       if (data.error) {
@@ -369,7 +372,7 @@ export function SalesIntelligenceDashboard() {
     } finally {
       setDataChatLoading(false);
     }
-  }, [dataChatQuery, buildChatTableData]);
+  }, [dataChatQuery, buildChatTableData, globalModel]);
 
   const delayExportCount = deliveryRiskKpis.late + deliveryRiskKpis.risk;
 
@@ -433,6 +436,7 @@ export function SalesIntelligenceDashboard() {
               </button>
             </div>
             <div className="flex flex-wrap items-center gap-3">
+              <GlobalModelSelector layout="row" className="shrink-0" />
               {hasData ? (
                 <Button
                   type="button"

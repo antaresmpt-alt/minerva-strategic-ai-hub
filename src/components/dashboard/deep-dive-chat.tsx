@@ -18,6 +18,7 @@ type Props = {
 
 export function DeepDiveChat({ mode, originalReport }: Props) {
   const appendChat = useHubStore((s) => s.appendChat);
+  const globalModel = useHubStore((s) => s.globalModel);
   const history = useHubStore((s) =>
     mode === "strategic"
       ? s.chatStrategic
@@ -59,6 +60,7 @@ export function DeepDiveChat({ mode, originalReport }: Props) {
           originalReport,
           question: q,
           history: history.map((m) => ({ role: m.role, content: m.content })),
+          model: globalModel,
         }),
         signal: ctrl.signal,
       });

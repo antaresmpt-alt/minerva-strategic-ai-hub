@@ -1,7 +1,11 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
+
 import { fetchSiteContext } from "@/lib/fetch-site-context";
-import { resolveGeminiModel } from "@/lib/gemini-model";
+import {
+  generateLlmText,
+  llmFieldsForApiResponse,
+  parseModelFromBody,
+} from "@/lib/llm-router";
 import {
   STRATEGIC_ANALYSIS_INSTRUCTION,
   buildStrategicUserPrompt,
@@ -10,22 +14,14 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-function getModel() {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error("GEMINI_API_KEY no configurada");
-  const gen = new GoogleGenerativeAI(key);
-  const name = resolveGeminiModel();
-  return gen.getGenerativeModel({
-    model: name,
-    systemInstruction: STRATEGIC_ANALYSIS_INSTRUCTION,
-  });
-}
-
 export async function POST(req: NextRequest) {
   const signal = req.signal;
 
   try {
     const body = await req.json();
+    const modelId = parseModelFromBody(
+      (body as { model?: unknown }).model
+    );
     const url = String(body.url ?? "").trim();
     const country = body.country ? String(body.country).trim() : "";
     const targetClient = body.targetClient
@@ -46,14 +42,18 @@ export async function POST(req: NextRequest) {
       siteText: siteText || undefined,
     });
 
-    const model = getModel();
-    const result = await model.generateContent(
-      { contents: [{ role: "user", parts: [{ text: userText }] }] },
-      { signal }
-    );
-
-    const text = result.response.text();
-    return NextResponse.json({ text });
+    const result = await generateLlmText({
+      modelId,
+      system: STRATEGIC_ANALYSIS_INSTRUCTION,
+      user: userText,
+      maxOutputTokens: 8192,
+      temperature: 0.4,
+      signal,
+    });
+    return NextResponse.json({
+      text: result.text,
+      ...llmFieldsForApiResponse(result),
+    });
   } catch (e: unknown) {
     if (e instanceof Error && e.name === "AbortError") {
       return NextResponse.json({ error: "cancelado" }, { status: 499 });

@@ -11,6 +11,7 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import { chatApiFetch } from "@/lib/chat-json-error-to-stream";
 
 import { MinervaThinkingLogo } from "@/components/brand/minerva-thinking-logo";
+import { GlobalModelSelector } from "@/components/layout/header";
 import { SemContactFooter } from "@/components/layout/sem-contact-footer";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -267,13 +268,18 @@ export function MinervaChatPage({
         </div>
 
         <header className="relative z-10 border-b border-[#002147]/10 bg-white/80 px-4 py-6 shadow-sm backdrop-blur-md md:px-10">
-          <h1 className="font-[family-name:var(--font-heading)] text-2xl font-bold text-[#002147] md:text-3xl">
-            Minerva AI Assistant
-          </h1>
-          <p className="mt-1 max-w-2xl text-sm text-slate-600">
-            Asistente corporativo para consultas generales, redacción y soporte.
-            Respuestas breves y profesionales, alineadas con Minerva Global.
-          </p>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <h1 className="font-[family-name:var(--font-heading)] text-2xl font-bold text-[#002147] md:text-3xl">
+                Minerva AI Assistant
+              </h1>
+              <p className="mt-1 max-w-2xl text-sm text-slate-600">
+                Asistente corporativo para consultas generales, redacción y soporte.
+                Respuestas breves y profesionales, alineadas con Minerva Global.
+              </p>
+            </div>
+            <GlobalModelSelector layout="row" className="shrink-0" />
+          </div>
         </header>
 
         <main className="relative z-10 flex min-h-0 flex-1 flex-col px-4 py-6 md:px-10 md:py-8">

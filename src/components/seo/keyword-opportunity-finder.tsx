@@ -31,6 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useHubStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 export type KeywordIdeaRow = {
@@ -178,6 +179,7 @@ function ResultsTableSkeleton({ rows }: { rows: number }) {
 }
 
 export function KeywordOpportunityFinder() {
+  const globalModel = useHubStore((s) => s.globalModel);
   const [seed, setSeed] = useState("");
   const [intentFilter, setIntentFilter] =
     useState<IntentFilterValue>("all");
@@ -202,6 +204,7 @@ export function KeywordOpportunityFinder() {
           seed: q,
           intentFilter,
           count: countNum,
+          model: globalModel,
         }),
       });
       const data = (await res.json()) as {

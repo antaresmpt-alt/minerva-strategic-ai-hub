@@ -1,7 +1,11 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
 import type { LeadScoringApiPayload } from "@/lib/lead-email-payload";
+import {
+  generateLlmText,
+  llmFieldsForApiResponse,
+  parseModelFromBody,
+} from "@/lib/llm-router";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -61,8 +65,9 @@ function parseLeadScoringJson(raw: string): { score: number; advice: string } {
 
 export async function POST(req: Request) {
   try {
-    const json = (await req.json()) as { leadData?: unknown };
+    const json = (await req.json()) as { leadData?: unknown; model?: unknown };
     const leadData = json.leadData;
+    const modelId = parseModelFromBody(json.model);
 
     if (!leadData || !isScoringPayload(leadData)) {
       return NextResponse.json(
@@ -71,29 +76,21 @@ export async function POST(req: Request) {
       );
     }
 
-    const apiKey =
-      process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error(
-        "GOOGLE_GENERATIVE_AI_API_KEY (o GEMINI_API_KEY) no configurada"
-      );
-    }
-
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      systemInstruction: SYSTEM_PROMPT,
+    const userText = `Datos del prospecto (JSON):\n${JSON.stringify(leadData, null, 2)}`;
+    const result = await generateLlmText({
+      modelId,
+      system: SYSTEM_PROMPT,
+      user: userText,
+      maxOutputTokens: 2048,
+      temperature: 0.3,
     });
 
-    const userText = `Datos del prospecto (JSON):\n${JSON.stringify(leadData, null, 2)}`;
-    const result = await model.generateContent(userText);
-    const text = result.response.text();
-    if (!text?.trim()) {
-      throw new Error("El modelo no devolvió texto.");
-    }
-
-    const { score, advice } = parseLeadScoringJson(text);
-    return NextResponse.json({ score, advice });
+    const { score, advice } = parseLeadScoringJson(result.text);
+    return NextResponse.json({
+      score,
+      advice,
+      ...llmFieldsForApiResponse(result),
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: message }, { status: 200 });

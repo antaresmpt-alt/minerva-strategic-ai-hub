@@ -1,5 +1,10 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
+
+import {
+  generateLlmText,
+  llmFieldsForApiResponse,
+  parseModelFromBody,
+} from "@/lib/llm-router";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -13,7 +18,9 @@ export async function POST(req: Request) {
     const json = (await req.json()) as {
       query?: unknown;
       tableData?: unknown;
+      model?: unknown;
     };
+    const modelId = parseModelFromBody(json.model);
 
     const query =
       typeof json.query === "string" ? json.query.trim() : "";
@@ -52,29 +59,20 @@ export async function POST(req: Request) {
       );
     }
 
-    const apiKey =
-      process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error(
-        "GOOGLE_GENERATIVE_AI_API_KEY (o GEMINI_API_KEY) no configurada"
-      );
-    }
-
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      systemInstruction: SYSTEM_PROMPT,
-    });
-
     const userMessage = `Pregunta del Director Comercial:\n${query}\n\nDatos disponibles (JSON):\n${tableData}`;
 
-    const result = await model.generateContent(userMessage);
-    const text = result.response.text();
-    if (!text?.trim()) {
-      throw new Error("El modelo no devolvió texto.");
-    }
+    const result = await generateLlmText({
+      modelId,
+      system: SYSTEM_PROMPT,
+      user: userMessage,
+      maxOutputTokens: 8192,
+      temperature: 0.3,
+    });
 
-    return NextResponse.json({ text: text.trim() });
+    return NextResponse.json({
+      text: result.text.trim(),
+      ...llmFieldsForApiResponse(result),
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: message }, { status: 200 });

@@ -1,27 +1,23 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
-import { resolveGeminiModel } from "@/lib/gemini-model";
+
+import {
+  generateLlmText,
+  llmFieldsForApiResponse,
+  parseModelFromBody,
+} from "@/lib/llm-router";
 import { PMAX_INSTRUCTION } from "@/lib/prompts";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
-
-function getModel() {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error("GEMINI_API_KEY no configurada");
-  const gen = new GoogleGenerativeAI(key);
-  const name = resolveGeminiModel();
-  return gen.getGenerativeModel({
-    model: name,
-    systemInstruction: PMAX_INSTRUCTION,
-  });
-}
 
 export async function POST(req: NextRequest) {
   const signal = req.signal;
 
   try {
     const body = await req.json();
+    const modelId = parseModelFromBody(
+      (body as { model?: unknown }).model
+    );
     const strategicAnalysis = String(body.strategicAnalysis ?? "").trim();
 
     if (!strategicAnalysis) {
@@ -31,25 +27,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const model = getModel();
-    const result = await model.generateContent(
-      {
-        contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                text: `Análisis estratégico previo (base, no repetir como informe):\n\n${strategicAnalysis}\n\n---\nGenera únicamente los activos PMAX solicitados.`,
-              },
-            ],
-          },
-        ],
-      },
-      { signal }
-    );
-
-    const text = result.response.text();
-    return NextResponse.json({ text });
+    const userText = `Análisis estratégico previo (base, no repetir como informe):\n\n${strategicAnalysis}\n\n---\nGenera únicamente los activos PMAX solicitados.`;
+    const result = await generateLlmText({
+      modelId,
+      system: PMAX_INSTRUCTION,
+      user: userText,
+      maxOutputTokens: 8192,
+      temperature: 0.4,
+      signal,
+    });
+    return NextResponse.json({
+      text: result.text,
+      ...llmFieldsForApiResponse(result),
+    });
   } catch (e: unknown) {
     if (e instanceof Error && e.name === "AbortError") {
       return NextResponse.json({ error: "cancelado" }, { status: 499 });

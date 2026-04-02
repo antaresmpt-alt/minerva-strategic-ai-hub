@@ -1,4 +1,8 @@
 import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
+
+import type { GlobalModelId } from "@/lib/global-model";
+import { DEFAULT_GLOBAL_MODEL, isGlobalModelId } from "@/lib/global-model";
 import type { MetaProposalPayload } from "@/lib/meta-proposal-types";
 
 export type AppMode =
@@ -15,6 +19,9 @@ export type ChatMessage = {
 };
 
 type HubState = {
+  /** Modelo de IA elegido en el Header (ventas, SEO, análisis SEM genérico, etc.). */
+  globalModel: GlobalModelId;
+  setGlobalModel: (m: GlobalModelId) => void;
   url: string;
   country: string;
   targetClient: string;
@@ -39,6 +46,7 @@ type HubState = {
 };
 
 const initial = {
+  globalModel: DEFAULT_GLOBAL_MODEL,
   url: "",
   country: "",
   targetClient: "",
@@ -52,31 +60,76 @@ const initial = {
   activeMode: "strategic" as AppMode,
 };
 
-export const useHubStore = create<HubState>((set) => ({
-  ...initial,
-  setUrl: (v) => set({ url: v }),
-  setCountry: (v) => set({ country: v }),
-  setTargetClient: (v) => set({ targetClient: v }),
-  setActiveMode: (m) => set({ activeMode: m }),
-  setStrategicAnalysis: (v) => set({ strategicAnalysis: v }),
-  setPmaxContent: (v) => set({ pmaxContent: v }),
-  setSlidesContent: (v) => set({ slidesContent: v }),
-  setMetaProposalPayload: (v) => set({ metaProposalPayload: v }),
-  appendChat: (mode, msg) =>
-    set((s) => {
-      if (
-        mode === "creativo" ||
-        mode === "metaProposal" ||
-        mode === "semCreativeLab"
-      )
-        return s;
-      if (mode === "strategic")
-        return { chatStrategic: [...s.chatStrategic, msg] };
-      if (mode === "pmax") return { chatPmax: [...s.chatPmax, msg] };
-      return { chatSlides: [...s.chatSlides, msg] };
+const PERSIST_KEY = "minerva-hub-storage";
+
+function safeLocalStorage(): Storage {
+  if (typeof window !== "undefined") {
+    return window.localStorage;
+  }
+  const memory = new Map<string, string>();
+  return {
+    get length() {
+      return memory.size;
+    },
+    clear: () => memory.clear(),
+    getItem: (key) => memory.get(key) ?? null,
+    key: (i) => [...memory.keys()][i] ?? null,
+    removeItem: (key) => {
+      memory.delete(key);
+    },
+    setItem: (key, value) => {
+      memory.set(key, value);
+    },
+  } as Storage;
+}
+
+export const useHubStore = create<HubState>()(
+  persist(
+    (set) => ({
+      ...initial,
+      setGlobalModel: (m) => set({ globalModel: m }),
+      setUrl: (v) => set({ url: v }),
+      setCountry: (v) => set({ country: v }),
+      setTargetClient: (v) => set({ targetClient: v }),
+      setActiveMode: (m) => set({ activeMode: m }),
+      setStrategicAnalysis: (v) => set({ strategicAnalysis: v }),
+      setPmaxContent: (v) => set({ pmaxContent: v }),
+      setSlidesContent: (v) => set({ slidesContent: v }),
+      setMetaProposalPayload: (v) => set({ metaProposalPayload: v }),
+      appendChat: (mode, msg) =>
+        set((s) => {
+          if (
+            mode === "creativo" ||
+            mode === "metaProposal" ||
+            mode === "semCreativeLab"
+          )
+            return s;
+          if (mode === "strategic")
+            return { chatStrategic: [...s.chatStrategic, msg] };
+          if (mode === "pmax") return { chatPmax: [...s.chatPmax, msg] };
+          return { chatSlides: [...s.chatSlides, msg] };
+        }),
+      resetAll: () => set({ ...initial }),
     }),
-  resetAll: () => set({ ...initial }),
-}));
+    {
+      name: PERSIST_KEY,
+      storage: createJSONStorage(() => safeLocalStorage()),
+      partialize: (state) => ({ globalModel: state.globalModel }),
+      merge: (persisted, current) => {
+        const p = persisted as Partial<Pick<HubState, "globalModel">> | undefined;
+        const gm = p?.globalModel;
+        return {
+          ...current,
+          globalModel:
+            typeof gm === "string" && isGlobalModelId(gm)
+              ? gm
+              : current.globalModel,
+        };
+      },
+    }
+  )
+);
+
 
 export function getReportForMode(
   mode: AppMode,

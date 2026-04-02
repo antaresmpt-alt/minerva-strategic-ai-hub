@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { leadRowToScoringPayload } from "@/lib/lead-email-payload";
+import { useHubStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import type { LeadRow } from "@/types/leads";
 
@@ -29,6 +30,7 @@ function scoreColorClass(score: number): string {
 }
 
 export function LeadScoringAiDialog({ lead, open, onOpenChange }: Props) {
+  const globalModel = useHubStore((s) => s.globalModel);
   const titleId = useId();
   const descId = useId();
   const [loading, setLoading] = useState(false);
@@ -69,6 +71,7 @@ export function LeadScoringAiDialog({ lead, open, onOpenChange }: Props) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             leadData: leadRowToScoringPayload(leadRow),
+            model: globalModel,
           }),
         });
         const data = (await res.json()) as {
@@ -102,7 +105,7 @@ export function LeadScoringAiDialog({ lead, open, onOpenChange }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [open, lead, payloadKey]);
+  }, [open, lead, payloadKey, globalModel]);
 
   if (!open) return null;
 
