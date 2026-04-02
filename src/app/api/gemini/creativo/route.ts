@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import type { CreativoVariant } from "@/lib/creativo-variants";
 import { VARIANT_META } from "@/lib/creativo-variants";
 import {
+  buildEditUserPrompt,
   buildGenerateUserPrompt,
   buildRegenerateUserPrompt,
   type CreativoCopy,
 } from "@/lib/creativo-prompts";
-import { generateCreativoEditImagePrompt } from "@/lib/creativo-edit-prompt-llm";
+import {
+  analyzeProductImageDeep,
+  composeCreativoFluxPrompt,
+} from "@/lib/creativo-edit-prompt-llm";
 import { enforceDimensions } from "@/lib/creativo-gemini";
 import { generateImageWithHuggingFace } from "@/lib/hf-text-to-image";
 import { resolveCreativoImageModelForApi } from "@/lib/creativo-image-models";
@@ -33,15 +37,6 @@ function parseCopy(body: Record<string, unknown>): CreativoCopy {
   };
 }
 
-function wrapHfCreativoPrompt(
-  inner: string,
-  w: number,
-  h: number,
-  variantHint: string
-): string {
-  return `Create a single professional static advertising image for Meta (Facebook/Instagram). Target frame ${w}×${h} pixels (${variantHint}). ${inner} High CTR, bold composition, clean background, readable on mobile. Avoid illegible tiny text.`;
-}
-
 export async function POST(req: NextRequest) {
   const signal = req.signal;
   try {
@@ -54,7 +49,15 @@ export async function POST(req: NextRequest) {
     }
 
     const body = (await req.json()) as Record<string, unknown>;
-    const action = String(body.action ?? "generate");
+    const actionRaw = String(body.action ?? "generate");
+    if (
+      actionRaw !== "generate" &&
+      actionRaw !== "regenerate" &&
+      actionRaw !== "edit"
+    ) {
+      return NextResponse.json({ error: "action inválida" }, { status: 400 });
+    }
+    const action = actionRaw;
     const variantRaw = String(body.variant ?? "");
     if (!isVariant(variantRaw)) {
       return NextResponse.json({ error: "variant inválida" }, { status: 400 });
@@ -62,6 +65,9 @@ export async function POST(req: NextRequest) {
     const variant = variantRaw;
     const { w, h } = VARIANT_META[variant];
     const copy = parseCopy(body);
+    const extraInstructionsRaw = String(body.extraInstructions ?? "").trim();
+    const extraInstructions =
+      extraInstructionsRaw.length > 0 ? extraInstructionsRaw : undefined;
 
     if (!copy.productName || !copy.cta) {
       return NextResponse.json(
@@ -83,6 +89,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Imagen no válida" }, { status: 400 });
     }
 
+    const imageMime = String(body.imageMime ?? "image/png");
+    if (!imageMime.startsWith("image/")) {
+      return NextResponse.json(
+        { error: "Tipo de imagen no válido" },
+        { status: 400 }
+      );
+    }
+
     try {
       resolveCreativoImageModelForApi(body.imageModel);
     } catch (e) {
@@ -92,8 +106,6 @@ export async function POST(req: NextRequest) {
 
     const variantHint = VARIANT_META[variant].title;
 
-    let hfPrompt: string;
-
     if (action === "edit") {
       const editInstruction = String(body.editInstruction ?? "").trim();
       if (!editInstruction) {
@@ -102,22 +114,39 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
-      const fluxCore = await generateCreativoEditImagePrompt({
-        copy,
-        w,
-        h,
-        variantHint,
-        editInstruction,
-        signal,
-      });
-      hfPrompt = wrapHfCreativoPrompt(fluxCore, w, h, variantHint);
-    } else if (action === "regenerate") {
-      const inner = buildRegenerateUserPrompt(w, h, copy, variantHint);
-      hfPrompt = wrapHfCreativoPrompt(inner, w, h, variantHint);
-    } else {
-      const inner = buildGenerateUserPrompt(w, h, copy, variantHint);
-      hfPrompt = wrapHfCreativoPrompt(inner, w, h, variantHint);
     }
+
+    const analysis = await analyzeProductImageDeep({
+      imageBase64,
+      imageMime,
+      signal,
+    });
+
+    let creativeBriefText: string;
+    if (action === "edit") {
+      const editInstruction = String(body.editInstruction ?? "").trim();
+      creativeBriefText = buildEditUserPrompt(w, h, copy, editInstruction);
+    } else if (action === "regenerate") {
+      creativeBriefText = buildRegenerateUserPrompt(w, h, copy, variantHint);
+    } else {
+      creativeBriefText = buildGenerateUserPrompt(w, h, copy, variantHint);
+    }
+
+    const hfPrompt = await composeCreativoFluxPrompt({
+      analysis,
+      copy,
+      w,
+      h,
+      variantHint,
+      extraInstructions,
+      action,
+      editInstruction:
+        action === "edit"
+          ? String(body.editInstruction ?? "").trim()
+          : undefined,
+      creativeBriefText,
+      signal,
+    });
 
     const { buffer: rawOut } = await generateImageWithHuggingFace({
       prompt: hfPrompt,

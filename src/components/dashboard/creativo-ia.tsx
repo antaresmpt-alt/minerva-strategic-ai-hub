@@ -86,6 +86,8 @@ export function CreativoIa() {
   const [productName, setProductName] = useState("");
   const [cta, setCta] = useState("");
   const [description, setDescription] = useState("");
+  /** Modo manual: se fusiona con el análisis automático del pack (visión). */
+  const [extraInstructions, setExtraInstructions] = useState("");
   const [originalPrice, setOriginalPrice] = useState("");
   const [offerPrice, setOfferPrice] = useState("");
   const [discountPct, setDiscountPct] = useState("");
@@ -179,6 +181,7 @@ export function CreativoIa() {
     productName: productName.trim(),
     cta: cta.trim(),
     description: description.trim() || undefined,
+    extraInstructions: extraInstructions.trim() || undefined,
     originalPrice: originalPrice.trim() || undefined,
     offerPrice: offerPrice.trim() || undefined,
     discountPct: discountPct.trim() || undefined,
@@ -260,6 +263,10 @@ export function CreativoIa() {
       setPanelError("Escribe una instrucción para editar este anuncio.");
       return;
     }
+    if (!product) {
+      setPanelError("Sube la imagen del producto para analizar el pack con visión profunda.");
+      return;
+    }
     if (!slot.base64) return;
     setPanelError(null);
     setAds((s) => ({
@@ -268,10 +275,7 @@ export function CreativoIa() {
     }));
 
     try {
-      const payload = await compressImageForApi(
-        slot.base64,
-        slot.mime ?? "image/png"
-      );
+      const payload = await compressImageForApi(product.base64, product.mime);
       const res = await fetch("/api/gemini/creativo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -285,6 +289,7 @@ export function CreativoIa() {
           productName: productName.trim(),
           cta: cta.trim(),
           description: description.trim() || undefined,
+          extraInstructions: extraInstructions.trim() || undefined,
           originalPrice: originalPrice.trim() || undefined,
           offerPrice: offerPrice.trim() || undefined,
           discountPct: discountPct.trim() || undefined,
@@ -335,6 +340,7 @@ export function CreativoIa() {
           productName: productName.trim(),
           cta: cta.trim(),
           description: description.trim() || undefined,
+          extraInstructions: extraInstructions.trim() || undefined,
           originalPrice: originalPrice.trim() || undefined,
           offerPrice: offerPrice.trim() || undefined,
           discountPct: discountPct.trim() || undefined,
@@ -601,6 +607,26 @@ export function CreativoIa() {
                   className="mt-1.5 resize-none rounded-xl border-[#002147]/25 bg-white text-slate-900 placeholder:text-slate-400"
                 />
               </div>
+              {creativoTab === "static" && (
+                <div>
+                  <Label htmlFor="creativo-extra" className="text-[#002147]">
+                    Instrucciones extra{" "}
+                    <span className="font-normal text-slate-500">(opcional)</span>
+                  </Label>
+                  <Textarea
+                    id="creativo-extra"
+                    value={extraInstructions}
+                    onChange={(e) => setExtraInstructions(e.target.value)}
+                    placeholder="Ej. fondo degradado azul noche, sensación premium, sin sombras duras…"
+                    rows={2}
+                    className="mt-1.5 resize-none rounded-xl border-[#002147]/25 bg-white text-slate-900 placeholder:text-slate-400"
+                  />
+                  <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
+                    Se combinan con el análisis automático de tu foto (colores,
+                    textos del pack y forma) para el prompt final hacia FLUX.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="space-y-3">
@@ -781,8 +807,8 @@ export function CreativoIa() {
                     con IA de alta precisión…
                   </p>
                   <p className="text-xs text-slate-600">
-                    FLUX.1-schnell (Hugging Face) compone el creativo a partir de
-                    tus textos.
+                    Primero analizamos tu foto del producto (visión profunda);
+                    luego FLUX.1-schnell genera el creativo fiel al pack.
                   </p>
                 </div>
               </div>
@@ -862,6 +888,7 @@ export function CreativoIa() {
                       disabled={
                         resultSlot.loading ||
                         !resultSlot.base64 ||
+                        !product ||
                         batchRunning
                       }
                       onClick={() => void runEdit(selectedVariant)}
