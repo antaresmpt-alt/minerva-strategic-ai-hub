@@ -5,13 +5,34 @@ export function normalizeSalesHeaderKey(key: string): string {
   return key.replace(/\s+/g, " ").trim();
 }
 
-export function normalizeSalesRecord(raw: Record<string, unknown>): Record<string, unknown> {
+/**
+ * Alias manuales tras limpiar cabeceras (export Optimus y similares).
+ * Mantiene llaves estables para el resto del parseo.
+ */
+const OPTIMUS_HEADER_ALIASES: Record<string, string> = {
+  "Nº Pedido": "id_pedido",
+  "Estado.1": "estado_optimus",
+};
+
+/**
+ * Pre-procesa un objeto fila (cabeceras CSV/Excel): trim, espacios internos
+ * normalizados y alias Optimus → nombres canónicos.
+ */
+export function preprocessOptimusImportRecord(
+  raw: Record<string, unknown>
+): Record<string, unknown> {
   const r: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(raw)) {
-    const nk = normalizeSalesHeaderKey(k);
-    if (nk) r[nk] = v;
+    let nk = normalizeSalesHeaderKey(k);
+    if (!nk) continue;
+    nk = OPTIMUS_HEADER_ALIASES[nk] ?? nk;
+    r[nk] = v;
   }
   return r;
+}
+
+export function normalizeSalesRecord(raw: Record<string, unknown>): Record<string, unknown> {
+  return preprocessOptimusImportRecord(raw);
 }
 
 /** Normaliza valor de celda CSV/Excel a número */
@@ -51,6 +72,7 @@ export function parseSalesRowRecord(raw: Record<string, unknown>): SalesOrderRow
   const idPedido = cellNum(
     pick(
       r,
+      "id_pedido",
       "ID_Pedido",
       "ID Pedido",
       "Nº Pedido",
@@ -91,7 +113,9 @@ export function parseSalesRowRecord(raw: Record<string, unknown>): SalesOrderRow
 
   return {
     idPedido,
-    estado: cellStr(pick(r, "Estado")),
+    estado: cellStr(
+      pick(r, "estado_optimus", "Estado", "Estado Optimus", "Estado_Optimus")
+    ),
     cliente: cellStr(pick(r, "Cliente")),
     pedidoCliente: cellStr(pick(r, "Pedido Cliente", "Pedido_Cliente")),
     cantidadPedida: cellNum(pick(r, "Cantidad pedida", "Cantidad_pedida")),

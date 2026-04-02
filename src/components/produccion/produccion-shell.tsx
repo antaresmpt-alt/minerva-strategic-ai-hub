@@ -3,7 +3,13 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClipboardList, FileCog, Home, Package } from "lucide-react";
+import {
+  ClipboardList,
+  FileCog,
+  Home,
+  Package,
+  Truck,
+} from "lucide-react";
 
 import { SemContactFooter } from "@/components/layout/sem-contact-footer";
 import { Separator } from "@/components/ui/separator";
@@ -47,6 +53,14 @@ const NAV: NavItem[] = [
     match: (p) =>
       p === "/produccion/almacen" ||
       p.startsWith("/produccion/almacen/"),
+  },
+  {
+    href: "/produccion/externos",
+    label: "Gestión de Externos",
+    icon: Truck,
+    match: (p) =>
+      p === "/produccion/externos" ||
+      p.startsWith("/produccion/externos/"),
   },
 ];
 
