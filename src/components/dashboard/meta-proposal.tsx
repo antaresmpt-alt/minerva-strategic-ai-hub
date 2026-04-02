@@ -142,8 +142,8 @@ export function MetaProposal() {
           <MinervaThinkingLogo size={40} />
           <span>
             {loadingText
-              ? "Generando tu propuesta… Esto puede tardar un momento."
-              : "Generando creatividades para cada anuncio…"}
+              ? "Generando tu propuesta con IA de alta precisión… Esto puede tardar un momento."
+              : "Generando creatividades (FLUX.1-schnell, IA de alta precisión) para cada anuncio…"}
           </span>
         </div>
       )}

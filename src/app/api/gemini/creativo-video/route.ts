@@ -1,24 +1,8 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
-import { resolveGeminiModel } from "@/lib/gemini-model";
-import {
-  VIDEO_SCRIPT_SYSTEM,
-  buildVideoScriptUserPrompt,
-} from "@/lib/creativo-video-prompt";
+import { generateVideoScriptText } from "@/lib/creativo-video-llm";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
-
-function getModel() {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error("GEMINI_API_KEY no configurada");
-  const gen = new GoogleGenerativeAI(key);
-  const name = resolveGeminiModel();
-  return gen.getGenerativeModel({
-    model: name,
-    systemInstruction: VIDEO_SCRIPT_SYSTEM,
-  });
-}
 
 export async function POST(req: NextRequest) {
   const signal = req.signal;
@@ -64,37 +48,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Tipo de imagen no válido" }, { status: 400 });
     }
 
-    const userText = buildVideoScriptUserPrompt({
+    const text = await generateVideoScriptText({
       productName,
       cta,
       description: description || undefined,
       originalPrice,
       offerPrice,
       discountPct: discountPct || undefined,
+      imageBase64,
+      imageMime,
+      signal,
     });
 
-    const model = getModel();
-    const result = await model.generateContent(
-      {
-        contents: [
-          {
-            role: "user",
-            parts: [
-              { text: userText },
-              {
-                inlineData: {
-                  mimeType: imageMime,
-                  data: imageBase64,
-                },
-              },
-            ],
-          },
-        ],
-      },
-      { signal }
-    );
-
-    const text = result.response.text();
     return NextResponse.json({ text });
   } catch (e: unknown) {
     if (e instanceof Error && e.name === "AbortError") {

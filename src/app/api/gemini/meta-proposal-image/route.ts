@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateSquareAdImageFromPrompt } from "@/lib/creativo-gemini";
-import { resolveCreativoImageModelForApi } from "@/lib/creativo-image-models";
+import { generateImageWithHuggingFace } from "@/lib/hf-text-to-image";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
+  const signal = req.signal;
   try {
-    const key = process.env.GEMINI_API_KEY;
-    if (!key) {
+    const token = process.env.HF_TOKEN?.trim();
+    if (!token) {
       return NextResponse.json(
-        { error: "GEMINI_API_KEY no configurada" },
+        { error: "HF_TOKEN no configurada" },
         { status: 500 }
       );
     }
@@ -24,20 +24,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let imageModel: string;
-    try {
-      imageModel = resolveCreativoImageModelForApi(body.imageModel);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Modelo inválido";
-      return NextResponse.json({ error: msg }, { status: 400 });
-    }
+    const full = `Create a single square 1:1 advertising creative for Meta (Facebook/Instagram) feed. ${prompt} Professional, high CTR, bold composition, clean background. Avoid illegible small text.`;
 
-    const buf = await generateSquareAdImageFromPrompt({
-      apiKey: key,
-      model: imageModel,
-      prompt,
+    const { buffer } = await generateImageWithHuggingFace({
+      prompt: full,
+      token,
+      signal,
     });
-    const imageBase64 = buf.toString("base64");
+    const imageBase64 = buffer.toString("base64");
 
     return NextResponse.json({
       imageBase64,
@@ -46,6 +40,9 @@ export async function POST(req: NextRequest) {
       height: 1080,
     });
   } catch (e: unknown) {
+    if (e instanceof Error && e.name === "AbortError") {
+      return NextResponse.json({ error: "cancelado" }, { status: 499 });
+    }
     const message = e instanceof Error ? e.message : "Error desconocido";
     return NextResponse.json({ error: message }, { status: 500 });
   }

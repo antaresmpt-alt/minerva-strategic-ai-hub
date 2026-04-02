@@ -20,11 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import {
-  CREATIVO_IMAGE_MODEL_OPTIONS,
-  CREATIVO_IMAGE_MODEL_STORAGE_KEY,
-  DEFAULT_CREATIVO_UI_MODEL_ID,
-} from "@/lib/creativo-image-models";
+import { CREATIVO_IMAGE_MODEL_OPTIONS } from "@/lib/creativo-image-models";
 import { compressImageForApi } from "@/lib/compress-product-image-client";
 import { readApiJson } from "@/lib/read-api-json";
 import {
@@ -107,30 +103,6 @@ export function CreativoIa() {
   const [videoStarted, setVideoStarted] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const [imageModelId, setImageModelId] = useState(DEFAULT_CREATIVO_UI_MODEL_ID);
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(CREATIVO_IMAGE_MODEL_STORAGE_KEY);
-      if (
-        stored &&
-        CREATIVO_IMAGE_MODEL_OPTIONS.some((o) => o.id === stored)
-      ) {
-        setImageModelId(stored);
-      }
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(CREATIVO_IMAGE_MODEL_STORAGE_KEY, imageModelId);
-    } catch {
-      /* ignore */
-    }
-  }, [imageModelId]);
-
   useEffect(() => {
     try {
       const stored = localStorage.getItem(CREATIVO_VARIANT_STORAGE_KEY);
@@ -152,10 +124,6 @@ export function CreativoIa() {
       /* ignore */
     }
   }, [selectedVariant]);
-
-  const selectedImageModel = CREATIVO_IMAGE_MODEL_OPTIONS.find(
-    (o) => o.id === imageModelId
-  );
 
   const anyAdSlotLoading = ads[selectedVariant].loading;
 
@@ -207,7 +175,7 @@ export function CreativoIa() {
     variant,
     imageBase64,
     imageMime,
-    imageModel: imageModelId,
+    imageModel: CREATIVO_IMAGE_MODEL_OPTIONS[0].id,
     productName: productName.trim(),
     cta: cta.trim(),
     description: description.trim() || undefined,
@@ -312,7 +280,7 @@ export function CreativoIa() {
           variant,
           imageBase64: payload.base64,
           imageMime: payload.mime,
-          imageModel: imageModelId,
+          imageModel: CREATIVO_IMAGE_MODEL_OPTIONS[0].id,
           editInstruction: instruction,
           productName: productName.trim(),
           cta: cta.trim(),
@@ -363,7 +331,7 @@ export function CreativoIa() {
           variant,
           imageBase64: payload.base64,
           imageMime: payload.mime,
-          imageModel: imageModelId,
+          imageModel: CREATIVO_IMAGE_MODEL_OPTIONS[0].id,
           productName: productName.trim(),
           cta: cta.trim(),
           description: description.trim() || undefined,
@@ -727,41 +695,15 @@ export function CreativoIa() {
                     navegador.
                   </p>
                 </div>
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="creativo-image-model"
-                    className="text-[#002147]"
-                  >
+                <div className="space-y-2 rounded-xl border border-[#002147]/15 bg-white/80 px-3 py-3">
+                  <p className="text-sm font-medium text-[#002147]">
                     Modelo de imagen
-                  </Label>
-                  <select
-                    id="creativo-image-model"
-                    value={imageModelId}
-                    onChange={(e) => setImageModelId(e.target.value)}
-                    disabled={batchRunning || anyAdSlotLoading}
-                    className="w-full rounded-xl border border-[#002147]/25 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-[#C69C2B]/30 focus:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {CREATIVO_IMAGE_MODEL_OPTIONS.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                  {selectedImageModel && (
-                    <p className="text-xs leading-relaxed text-slate-500">
-                      {selectedImageModel.hint}
-                    </p>
-                  )}
-                  {selectedImageModel?.isPro && (
-                    <p className="text-xs leading-relaxed text-amber-900/85">
-                      Este perfil suele consumir más tokens y cuota que Flash
-                      Image.
-                    </p>
-                  )}
-                  <p className="text-xs text-slate-500">
-                    Flash = iteración más económica; opciones Pro / preview altas
-                    = más calidad y coste. La elección se guarda en este
-                    navegador.
+                  </p>
+                  <p className="text-sm text-slate-800">
+                    {CREATIVO_IMAGE_MODEL_OPTIONS[0].label}
+                  </p>
+                  <p className="text-xs leading-relaxed text-slate-500">
+                    {CREATIVO_IMAGE_MODEL_OPTIONS[0].hint}
                   </p>
                 </div>
               </>
@@ -783,7 +725,7 @@ export function CreativoIa() {
                 {batchRunning ? (
                   <span className="inline-flex items-center gap-2">
                     <MinervaThinkingLogo size={22} />
-                    Generando…
+                    Generando con IA de alta precisión…
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-2">
@@ -802,7 +744,7 @@ export function CreativoIa() {
                 {videoLoading ? (
                   <span className="inline-flex items-center gap-2">
                     <MinervaThinkingLogo size={22} />
-                    Generando guion…
+                    Generando guion (IA de alta precisión)…
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-2">
@@ -835,11 +777,12 @@ export function CreativoIa() {
                 <div>
                   <p className="text-sm font-medium text-[#002147]">
                     Generando{" "}
-                    <span className="text-[#C69C2B]">{progressLabel}</span>…
+                    <span className="text-[#C69C2B]">{progressLabel}</span>{" "}
+                    con IA de alta precisión…
                   </p>
                   <p className="text-xs text-slate-600">
-                    Recortamos tu foto al formato exacto y la IA compone el
-                    creativo.
+                    FLUX.1-schnell (Hugging Face) compone el creativo a partir de
+                    tus textos.
                   </p>
                 </div>
               </div>
@@ -871,7 +814,7 @@ export function CreativoIa() {
                     <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 py-12">
                       <MinervaThinkingLogo size={44} />
                       <p className="text-sm text-slate-600">
-                        Aplicando IA…
+                        Aplicando IA de alta precisión…
                       </p>
                     </div>
                   ) : resultSrc ? (
@@ -1010,7 +953,8 @@ export function CreativoIa() {
                     <MinervaThinkingLogo size={44} className="shrink-0" />
                     <div>
                       <p className="text-sm font-medium text-[#002147]">
-                        Redactando guion transaccional de 10 s…
+                        Redactando guion transaccional de 10 s (IA de alta
+                        precisión)…
                       </p>
                       <p className="text-xs text-slate-600">
                         Analizando la imagen del producto y tus precios.

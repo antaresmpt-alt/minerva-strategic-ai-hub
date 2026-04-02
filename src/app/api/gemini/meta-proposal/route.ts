@@ -1,11 +1,12 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
-import { resolveGeminiModel } from "@/lib/gemini-model";
 import {
-  META_PROPOSAL_SYSTEM,
   buildMetaProposalUserPrompt,
   isMetaProposalPayload,
 } from "@/lib/meta-proposal-prompt";
+import {
+  generateMetaProposalModelText,
+  parseMetaProposalJson,
+} from "@/lib/meta-proposal-llm";
 import { META_OBJECTIVE_OPTIONS } from "@/lib/meta-proposal-types";
 
 export const runtime = "nodejs";
@@ -14,14 +15,6 @@ export const maxDuration = 120;
 export async function POST(req: NextRequest) {
   const signal = req.signal;
   try {
-    const key = process.env.GEMINI_API_KEY;
-    if (!key) {
-      return NextResponse.json(
-        { error: "GEMINI_API_KEY no configurada" },
-        { status: 500 }
-      );
-    }
-
     const body = (await req.json()) as Record<string, unknown>;
     const websiteText = String(body.websiteText ?? "").trim();
     const businessType = String(body.businessType ?? "").trim();
@@ -57,25 +50,13 @@ export async function POST(req: NextRequest) {
       objectiveLabels: labels,
     });
 
-    const gen = new GoogleGenerativeAI(key);
-    const model = gen.getGenerativeModel({
-      model: resolveGeminiModel(),
-      systemInstruction: META_PROPOSAL_SYSTEM,
-      generationConfig: {
-        responseMimeType: "application/json",
-        temperature: 0.35,
-      },
+    const raw = await generateMetaProposalModelText({
+      userText,
+      signal,
     });
-
-    const result = await model.generateContent(
-      { contents: [{ role: "user", parts: [{ text: userText }] }] },
-      { signal }
-    );
-
-    const raw = result.response.text();
     let parsed: unknown;
     try {
-      parsed = JSON.parse(raw) as unknown;
+      parsed = parseMetaProposalJson(raw);
     } catch {
       return NextResponse.json(
         { error: "La IA no devolvió JSON válido. Vuelve a intentarlo." },

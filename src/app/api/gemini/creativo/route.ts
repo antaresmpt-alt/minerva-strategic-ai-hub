@@ -2,16 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import type { CreativoVariant } from "@/lib/creativo-variants";
 import { VARIANT_META } from "@/lib/creativo-variants";
 import {
-  buildEditUserPrompt,
   buildGenerateUserPrompt,
   buildRegenerateUserPrompt,
   type CreativoCopy,
 } from "@/lib/creativo-prompts";
-import {
-  cropProductToVariant,
-  enforceDimensions,
-  generateCreativoImageFromParts,
-} from "@/lib/creativo-gemini";
+import { generateCreativoEditImagePrompt } from "@/lib/creativo-edit-prompt-llm";
+import { enforceDimensions } from "@/lib/creativo-gemini";
+import { generateImageWithHuggingFace } from "@/lib/hf-text-to-image";
 import { resolveCreativoImageModelForApi } from "@/lib/creativo-image-models";
 
 export const runtime = "nodejs";
@@ -36,12 +33,22 @@ function parseCopy(body: Record<string, unknown>): CreativoCopy {
   };
 }
 
+function wrapHfCreativoPrompt(
+  inner: string,
+  w: number,
+  h: number,
+  variantHint: string
+): string {
+  return `Create a single professional static advertising image for Meta (Facebook/Instagram). Target frame ${w}×${h} pixels (${variantHint}). ${inner} High CTR, bold composition, clean background, readable on mobile. Avoid illegible tiny text.`;
+}
+
 export async function POST(req: NextRequest) {
+  const signal = req.signal;
   try {
-    const key = process.env.GEMINI_API_KEY;
-    if (!key) {
+    const token = process.env.HF_TOKEN?.trim();
+    if (!token) {
       return NextResponse.json(
-        { error: "GEMINI_API_KEY no configurada" },
+        { error: "HF_TOKEN no configurada" },
         { status: 500 }
       );
     }
@@ -76,17 +83,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Imagen no válida" }, { status: 400 });
     }
 
-    const variantHint = VARIANT_META[variant].title;
-
-    let imageModel: string;
     try {
-      imageModel = resolveCreativoImageModelForApi(body.imageModel);
+      resolveCreativoImageModelForApi(body.imageModel);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Modelo inválido";
       return NextResponse.json({ error: msg }, { status: 400 });
     }
 
-    let rawOut: Buffer;
+    const variantHint = VARIANT_META[variant].title;
+
+    let hfPrompt: string;
 
     if (action === "edit") {
       const editInstruction = String(body.editInstruction ?? "").trim();
@@ -96,56 +102,28 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
-      const prompt = buildEditUserPrompt(w, h, copy, editInstruction);
-      const mimeIn = String(body.imageMime ?? "image/png").startsWith("image/")
-        ? String(body.imageMime)
-        : "image/png";
-      rawOut = await generateCreativoImageFromParts({
-        apiKey: key,
-        model: imageModel,
-        parts: [
-          { text: prompt },
-          {
-            inlineData: {
-              mimeType: mimeIn,
-              data: imageBase64,
-            },
-          },
-        ],
+      const fluxCore = await generateCreativoEditImagePrompt({
+        copy,
+        w,
+        h,
+        variantHint,
+        editInstruction,
+        signal,
       });
+      hfPrompt = wrapHfCreativoPrompt(fluxCore, w, h, variantHint);
     } else if (action === "regenerate") {
-      const prompt = buildRegenerateUserPrompt(w, h, copy, variantHint);
-      const cropped = await cropProductToVariant(inputBuf, variant);
-      rawOut = await generateCreativoImageFromParts({
-        apiKey: key,
-        model: imageModel,
-        parts: [
-          { text: prompt },
-          {
-            inlineData: {
-              mimeType: cropped.mime,
-              data: cropped.buffer.toString("base64"),
-            },
-          },
-        ],
-      });
+      const inner = buildRegenerateUserPrompt(w, h, copy, variantHint);
+      hfPrompt = wrapHfCreativoPrompt(inner, w, h, variantHint);
     } else {
-      const prompt = buildGenerateUserPrompt(w, h, copy, variantHint);
-      const cropped = await cropProductToVariant(inputBuf, variant);
-      rawOut = await generateCreativoImageFromParts({
-        apiKey: key,
-        model: imageModel,
-        parts: [
-          { text: prompt },
-          {
-            inlineData: {
-              mimeType: cropped.mime,
-              data: cropped.buffer.toString("base64"),
-            },
-          },
-        ],
-      });
+      const inner = buildGenerateUserPrompt(w, h, copy, variantHint);
+      hfPrompt = wrapHfCreativoPrompt(inner, w, h, variantHint);
     }
+
+    const { buffer: rawOut } = await generateImageWithHuggingFace({
+      prompt: hfPrompt,
+      token,
+      signal,
+    });
 
     const finalBuf = await enforceDimensions(rawOut, w, h);
     const outB64 = finalBuf.toString("base64");
@@ -158,6 +136,9 @@ export async function POST(req: NextRequest) {
       height: h,
     });
   } catch (e: unknown) {
+    if (e instanceof Error && e.name === "AbortError") {
+      return NextResponse.json({ error: "cancelado" }, { status: 499 });
+    }
     const message = e instanceof Error ? e.message : "Error desconocido";
     return NextResponse.json({ error: message }, { status: 500 });
   }
