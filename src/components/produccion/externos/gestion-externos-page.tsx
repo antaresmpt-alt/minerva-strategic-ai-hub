@@ -6,23 +6,30 @@ import {
   FileOutput,
   FileSpreadsheet,
   History,
+  Loader2,
   PackageSearch,
   Pencil,
   Printer,
   Settings2,
+  Sparkles,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { useReactToPrint } from "react-to-print";
+import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+
+import { GlobalModelSelector } from "@/components/layout/header";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -30,6 +37,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -59,11 +67,9 @@ import {
 } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Toggle } from "@/components/ui/toggle";
-import {
-  formatEntregaClienteSoloFecha,
-  parseExternosImportFile,
-} from "@/lib/externos-excel-import";
+import { parseExternosImportFile } from "@/lib/externos-excel-import";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
+import { useHubStore } from "@/lib/store";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
 
@@ -339,6 +345,22 @@ function TipoProveedorNativeSelect({
   );
 }
 
+/** Fecha de fila import (YYYY-MM-DD u otros) → DD/MM/AA como el resto de la tabla. */
+function fechaExcelRowToCorta(raw: string): string {
+  if (raw == null || String(raw).trim() === "") return "—";
+  const s = String(raw).trim();
+  const ymd = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (ymd) {
+    const d = new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]), 12, 0, 0, 0);
+    if (!Number.isNaN(d.getTime())) return formatFechaEsCorta(d.toISOString());
+  }
+  const parsed = new Date(s.replace(" ", "T"));
+  if (!Number.isNaN(parsed.getTime())) {
+    return formatFechaEsCorta(parsed.toISOString());
+  }
+  return "—";
+}
+
 function formatPostgrestError(err: unknown): string {
   if (err && typeof err === "object") {
     const e = err as {
@@ -413,6 +435,24 @@ export function GestionExternosPage() {
   const [editSegAcabadoId, setEditSegAcabadoId] = useState("");
   const [editSegFecha, setEditSegFecha] = useState("");
   const [editSegNotas, setEditSegNotas] = useState("");
+
+  const [analistaOpen, setAnalistaOpen] = useState(false);
+  const [analistaLoading, setAnalistaLoading] = useState(false);
+  const [analistaText, setAnalistaText] = useState("");
+  const [analistaError, setAnalistaError] = useState<string | null>(null);
+  const abortAnalistaRef = useRef<AbortController | null>(null);
+  const globalModel = useHubStore((s) => s.globalModel);
+  const analistaDialogTitleId = useId();
+  const analistaDialogDescId = useId();
+
+  useEffect(() => {
+    if (!analistaOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [analistaOpen]);
 
   const printListadoRef = useRef<HTMLDivElement>(null);
   const handlePrintListado = useReactToPrint({
@@ -561,6 +601,49 @@ export function GestionExternosPage() {
     filtroEstado,
     filtroProveedorId,
     busquedaSeguimiento,
+  ]);
+
+  const runAnalistaProduccion = useCallback(async () => {
+    abortAnalistaRef.current?.abort();
+    const ac = new AbortController();
+    abortAnalistaRef.current = ac;
+    setAnalistaLoading(true);
+    setAnalistaError(null);
+    const rows = seguimientosFiltrados.map((r) => ({
+      ot: r.id_pedido,
+      cliente: r.cliente_nombre,
+      trabajo: r.trabajo_titulo,
+      proveedor: proveedorNombreById.get(r.proveedor_id) ?? "—",
+      acabado: acabadoNombreById.get(r.acabado_id) ?? "—",
+      estado: r.estado,
+      fechaPrevista: formatFechaEsCorta(r.fecha_prevista),
+      fechaEnvio: formatFechaEsCorta(r.fecha_envio),
+      semaforo: computeSemaforo(r).excelLabel,
+    }));
+    try {
+      const res = await fetch("/api/gemini/produccion-externos-analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: globalModel, rows }),
+        signal: ac.signal,
+      });
+      const data = (await res.json()) as { error?: string; text?: string };
+      if (!res.ok) throw new Error(data.error ?? "Error al analizar");
+      setAnalistaText(data.text ?? "");
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") return;
+      setAnalistaError(
+        e instanceof Error ? e.message : "Error desconocido"
+      );
+      setAnalistaText("");
+    } finally {
+      setAnalistaLoading(false);
+    }
+  }, [
+    seguimientosFiltrados,
+    globalModel,
+    proveedorNombreById,
+    acabadoNombreById,
   ]);
 
   const loadCore = useCallback(async () => {
@@ -1125,7 +1208,7 @@ export function GestionExternosPage() {
   }
 
   const tabTriggerClass =
-    "gap-1.5 rounded-md px-2.5 py-2 text-xs data-active:bg-[#C69C2B]/20 data-active:font-semibold data-active:text-[#002147] data-active:shadow-sm data-active:ring-2 data-active:ring-[#C69C2B]/45 sm:gap-2 sm:px-3 sm:text-sm";
+    "flex h-full min-h-8 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs data-active:bg-[#C69C2B]/20 data-active:font-semibold data-active:text-[#002147] data-active:shadow-sm data-active:ring-2 data-active:ring-[#C69C2B]/45 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm";
 
   return (
     <div className="w-full max-w-none space-y-6">
@@ -1142,7 +1225,7 @@ export function GestionExternosPage() {
 
       <Tabs value={tab} onValueChange={setTab} className="w-full max-w-none">
         <div className="mb-5 flex w-full justify-start sm:mb-6">
-          <TabsList className="inline-flex h-auto w-fit max-w-full flex-wrap gap-1 rounded-lg border border-slate-200/90 bg-slate-50/90 p-1 shadow-sm">
+          <TabsList className="box-border inline-flex h-auto min-h-9 w-fit max-w-full flex-wrap items-stretch gap-0 rounded-lg border border-slate-200/90 bg-slate-50/90 p-1 shadow-sm">
             <TabsTrigger value="seguimiento" className={tabTriggerClass}>
               <PackageSearch className="size-4 shrink-0 opacity-90" aria-hidden />
               Seguimiento
@@ -1198,7 +1281,7 @@ export function GestionExternosPage() {
                     fecha de envío.
                   </CardDescription>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
                     variant="outline"
@@ -1208,6 +1291,22 @@ export function GestionExternosPage() {
                   >
                     <FileSpreadsheet className="mr-1.5 size-4" aria-hidden />
                     Exportar Excel
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-sm"
+                    className="shrink-0 border-[#002147]/15"
+                    disabled={loading || seguimientosFiltrados.length === 0}
+                    title="Analista de Producción Minerva"
+                    aria-label="Abrir Analista de Producción Minerva"
+                    onClick={() => {
+                      setAnalistaOpen(true);
+                      setAnalistaError(null);
+                      void runAnalistaProduccion();
+                    }}
+                  >
+                    <Sparkles className="size-4 text-[#002147]/80" aria-hidden />
                   </Button>
                   <Button
                     type="button"
@@ -1272,7 +1371,7 @@ export function GestionExternosPage() {
                 </p>
               ) : (
                 <div className="max-h-[min(78vh,56rem)] w-full max-w-none overflow-auto rounded-lg border border-slate-200/80 sm:rounded-xl">
-                  <table className="w-full min-w-[110rem] caption-bottom border-collapse text-sm">
+                  <table className="w-full min-w-[104rem] caption-bottom border-collapse text-sm">
                     <thead>
                       <tr className="border-b border-slate-200">
                         <th className="sticky top-0 z-30 w-11 bg-slate-50/95 px-1 py-2.5 text-center text-xs font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
@@ -1281,10 +1380,10 @@ export function GestionExternosPage() {
                         <th className="sticky top-0 z-30 w-14 bg-slate-50/95 px-2 py-2.5 text-left text-xs font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           OT
                         </th>
-                        <th className="sticky top-0 z-30 min-w-[16rem] max-w-[22%] bg-slate-50/95 px-2 py-2.5 text-left text-xs font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                        <th className="sticky top-0 z-30 w-[8.5rem] min-w-[7rem] max-w-[9.5rem] bg-slate-50/95 px-1.5 py-2 text-left text-[13px] font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Cliente
                         </th>
-                        <th className="sticky top-0 z-30 min-w-[28rem] max-w-[34%] bg-slate-50/95 px-2 py-2.5 text-left text-xs font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                        <th className="sticky top-0 z-30 w-[11.5rem] min-w-[9rem] max-w-[13rem] bg-slate-50/95 px-1.5 py-2 text-left text-[13px] font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Trabajo
                         </th>
                         <th className="sticky top-0 z-30 min-w-[8rem] bg-slate-50/95 px-3 py-2.5 text-left text-xs font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
@@ -1293,22 +1392,22 @@ export function GestionExternosPage() {
                         <th className="sticky top-0 z-30 min-w-[8rem] bg-slate-50/95 px-3 py-2.5 text-left text-xs font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Acabado
                         </th>
-                        <th className="sticky top-0 z-30 min-w-[6.5rem] bg-slate-50/95 px-3 py-2.5 text-left text-xs font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                        <th className="sticky top-0 z-30 w-28 min-w-28 max-w-28 bg-slate-50/95 px-1.5 py-2 text-left text-xs font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Estado
                         </th>
-                        <th className="sticky top-0 z-30 w-[5.5rem] min-w-[5.5rem] max-w-[5.75rem] bg-slate-50/95 px-1 py-2 text-center text-[11px] font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                        <th className="sticky top-0 z-30 w-[5.25rem] min-w-[5.25rem] max-w-[5.5rem] bg-slate-50/95 px-1 py-2 text-center text-[13px] font-medium whitespace-nowrap tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Previsto
                         </th>
-                        <th className="sticky top-0 z-30 w-[5.5rem] min-w-[5.5rem] max-w-[5.75rem] bg-slate-50/95 px-1 py-2 text-center text-[11px] font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                        <th className="sticky top-0 z-30 w-[5.25rem] min-w-[5.25rem] max-w-[5.5rem] bg-slate-50/95 px-1 py-2 text-center text-[13px] font-medium whitespace-nowrap tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Envío
                         </th>
                         <th className="sticky top-0 z-30 min-w-[22rem] max-w-[28rem] bg-slate-50/95 px-3 py-2.5 text-left text-xs font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Notas
                         </th>
-                        <th className="sticky top-0 z-30 w-[5.5rem] min-w-[5.5rem] max-w-[5.75rem] bg-slate-50/95 px-1 py-2 text-center text-[11px] font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                        <th className="sticky top-0 z-30 w-[5.25rem] min-w-[5.25rem] max-w-[5.5rem] bg-slate-50/95 px-1 py-2 text-center text-[13px] font-medium whitespace-nowrap tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Alta
                         </th>
-                        <th className="sticky top-0 z-30 w-[5.5rem] min-w-[5.5rem] max-w-[5.75rem] bg-slate-50/95 px-1 py-2 text-center text-[11px] font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                        <th className="sticky top-0 z-30 w-[5.25rem] min-w-[5.25rem] max-w-[5.5rem] bg-slate-50/95 px-1 py-2 text-center text-[13px] font-medium whitespace-nowrap tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Modif.
                         </th>
                         <th className="sticky top-0 z-30 w-12 bg-slate-50/95 px-2 py-2.5 text-center text-xs font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
@@ -1341,12 +1440,12 @@ export function GestionExternosPage() {
                             <td className="w-14 px-2 py-1.5 font-medium whitespace-nowrap">
                               {row.id_pedido}
                             </td>
-                            <td className="max-w-[22%] min-w-[16rem] truncate py-1.5 text-[13px] leading-snug">
+                            <td className="w-[8.5rem] min-w-[7rem] max-w-[9.5rem] truncate px-1.5 py-1.5 text-[13px] leading-snug">
                               {row.cliente_nombre}
                             </td>
-                            <td className="min-w-[28rem] max-w-[34%] py-1.5 align-top leading-snug">
+                            <td className="w-[11.5rem] min-w-[9rem] max-w-[13rem] px-1.5 py-1.5 align-top leading-snug">
                               <span
-                                className="line-clamp-2 break-words whitespace-normal text-[13px]"
+                                className="line-clamp-2 max-w-full break-words whitespace-normal text-[13px]"
                                 title={row.trabajo_titulo}
                               >
                                 {row.trabajo_titulo}
@@ -1358,7 +1457,7 @@ export function GestionExternosPage() {
                             <td className="max-w-[10rem] truncate py-1.5 text-sm">
                               {acabadoNombreById.get(row.acabado_id) ?? "—"}
                             </td>
-                            <td className="py-1.5 align-middle">
+                            <td className="w-28 max-w-28 py-1.5 align-middle">
                               <NativeSelect
                                 label=""
                                 options={estadoRapidoOptions}
@@ -1367,14 +1466,14 @@ export function GestionExternosPage() {
                                   void updateEstado(row, e.target.value)
                                 }
                                 disabled={saving}
-                                className="h-8 min-h-8 min-w-[9.25rem] max-w-[11.5rem] py-0 text-[11px] leading-tight"
+                                className="h-8 min-h-8 w-28 min-w-0 max-w-28 shrink-0 px-1 py-0 text-[11px] leading-tight"
                                 aria-label={`Estado OT ${row.id_pedido}`}
                               />
                             </td>
-                            <td className="w-[5.5rem] min-w-[5.5rem] max-w-[5.75rem] px-1 py-1.5 text-center align-middle text-[11px] tabular-nums leading-tight">
+                            <td className="w-[5.25rem] min-w-[5.25rem] max-w-[5.5rem] px-1 py-1.5 text-center align-middle text-[13px] tabular-nums leading-tight">
                               {formatFechaEsCorta(row.fecha_prevista)}
                             </td>
-                            <td className="w-[5.5rem] min-w-[5.5rem] max-w-[5.75rem] px-1 py-1.5 text-center align-middle text-[11px] tabular-nums leading-tight">
+                            <td className="w-[5.25rem] min-w-[5.25rem] max-w-[5.5rem] px-1 py-1.5 text-center align-middle text-[13px] tabular-nums leading-tight">
                               {formatFechaEsCorta(row.fecha_envio)}
                             </td>
                             <td className="min-w-[22rem] max-w-[28rem] py-2 align-top text-xs text-muted-foreground">
@@ -1391,10 +1490,10 @@ export function GestionExternosPage() {
                                   : "—"}
                               </span>
                             </td>
-                            <td className="w-[5.5rem] min-w-[5.5rem] max-w-[5.75rem] px-1 py-1.5 text-center align-middle text-[11px] tabular-nums leading-tight">
+                            <td className="w-[5.25rem] min-w-[5.25rem] max-w-[5.5rem] px-1 py-1.5 text-center align-middle text-[13px] tabular-nums leading-tight">
                               {formatFechaEsCorta(row.created_at)}
                             </td>
-                            <td className="w-[5.5rem] min-w-[5.5rem] max-w-[5.75rem] px-1 py-1.5 text-center align-middle text-[11px] tabular-nums leading-tight">
+                            <td className="w-[5.25rem] min-w-[5.25rem] max-w-[5.5rem] px-1 py-1.5 text-center align-middle text-[13px] tabular-nums leading-tight">
                               {formatFechaEsCorta(
                                 row.updated_at != null && row.updated_at !== ""
                                   ? row.updated_at
@@ -1773,7 +1872,7 @@ export function GestionExternosPage() {
                               {row.ref_cliente || "—"}
                             </TableCell>
                             <TableCell className="max-w-[100px] truncate text-xs text-muted-foreground">
-                              {formatEntregaClienteSoloFecha(row.fecha_entrega_excel)}
+                              {fechaExcelRowToCorta(row.fecha_entrega_excel)}
                             </TableCell>
                             <TableCell>
                               <Input
@@ -2330,6 +2429,129 @@ export function GestionExternosPage() {
           </form>
         </SheetContent>
       </Sheet>
+
+      {analistaOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="presentation"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-[#002147]/40 backdrop-blur-[2px] transition-opacity"
+            aria-label="Cerrar analista"
+            onClick={() => {
+              abortAnalistaRef.current?.abort();
+              setAnalistaOpen(false);
+            }}
+          />
+          <Card
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={analistaDialogTitleId}
+            aria-describedby={analistaDialogDescId}
+            className="relative z-10 flex max-h-[min(90vh,720px)] w-full max-w-2xl flex-col overflow-hidden border-slate-200/90 bg-white shadow-xl"
+          >
+            <CardHeader className="shrink-0 space-y-4 border-b border-slate-200/80 bg-slate-50/90 pb-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <CardTitle
+                    id={analistaDialogTitleId}
+                    className="text-lg font-semibold text-[#002147]"
+                  >
+                    Analista de Producción Minerva
+                  </CardTitle>
+                  <CardDescription id={analistaDialogDescId}>
+                    Informe según la vista actual de la tabla (OT, estados,
+                    proveedores y fechas DD/MM/AA).
+                  </CardDescription>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="shrink-0 text-slate-600"
+                  onClick={() => {
+                    abortAnalistaRef.current?.abort();
+                    setAnalistaOpen(false);
+                  }}
+                  aria-label="Cerrar"
+                >
+                  <X className="size-4" aria-hidden />
+                </Button>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-xs font-medium text-slate-600">
+                  Modelo de IA
+                </span>
+                <GlobalModelSelector layout="row" className="w-full sm:w-auto sm:shrink-0" />
+              </div>
+            </CardHeader>
+            <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
+              {analistaLoading ? (
+                <div
+                  className="flex items-center gap-2 text-sm text-muted-foreground"
+                  aria-busy="true"
+                  aria-live="polite"
+                >
+                  <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+                  Generando análisis…
+                </div>
+              ) : null}
+              {analistaError ? (
+                <Alert className="border-red-200 bg-red-50/95 text-red-950">
+                  <AlertTitle className="text-red-900">
+                    No se pudo completar el análisis
+                  </AlertTitle>
+                  <AlertDescription className="text-red-800">
+                    {analistaError}
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+              {!analistaLoading && analistaText.trim() ? (
+                <div className="prose prose-sm prose-slate max-w-none dark:prose-invert [&_h2]:mt-5 [&_h2]:mb-2 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-[#002147] [&_p]:my-2 [&_ul]:my-2">
+                  <ReactMarkdown>{analistaText}</ReactMarkdown>
+                </div>
+              ) : null}
+              {!analistaLoading &&
+              !analistaError &&
+              !analistaText.trim() &&
+              seguimientosFiltrados.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No hay filas en la vista actual para analizar.
+                </p>
+              ) : null}
+            </CardContent>
+            <CardFooter className="shrink-0 flex-col gap-2 border-t border-slate-200/80 bg-white/95 px-4 py-3 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  abortAnalistaRef.current?.abort();
+                  setAnalistaOpen(false);
+                }}
+              >
+                Cerrar
+              </Button>
+              <Button
+                type="button"
+                disabled={
+                  analistaLoading || seguimientosFiltrados.length === 0
+                }
+                onClick={() => void runAnalistaProduccion()}
+              >
+                {analistaLoading ? (
+                  <>
+                    <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
+                    Analizando…
+                  </>
+                ) : (
+                  "Actualizar análisis"
+                )}
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      ) : null}
     </div>
   );
 }
