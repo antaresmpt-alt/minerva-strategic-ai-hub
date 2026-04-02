@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -43,16 +42,14 @@ const NAV: NavItem[] = [
     label: "Fichas Técnicas",
     icon: FileCog,
     match: (p) =>
-      p === "/produccion/fichas" ||
-      p.startsWith("/produccion/fichas/"),
+      p === "/produccion/fichas" || p.startsWith("/produccion/fichas/"),
   },
   {
     href: "/produccion/almacen",
     label: "Almacén",
     icon: Package,
     match: (p) =>
-      p === "/produccion/almacen" ||
-      p.startsWith("/produccion/almacen/"),
+      p === "/produccion/almacen" || p.startsWith("/produccion/almacen/"),
   },
   {
     href: "/produccion/externos",
@@ -66,79 +63,51 @@ const NAV: NavItem[] = [
 
 export function ProduccionShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const navLinks = NAV.filter((item) => item.href !== "/");
 
   return (
-    <div className="flex min-h-screen flex-col md:flex-row">
-      <div className="flex gap-1 overflow-x-auto border-b border-[#002147]/15 bg-[#002147] p-2 md:hidden">
-        {NAV.map((item) => {
-          const active = item.match(pathname);
-          return (
-            <Link
-              key={item.label}
-              href={item.href}
-              className={cn(
-                "shrink-0 rounded-md px-3 py-2 text-xs font-medium whitespace-nowrap transition",
-                active
-                  ? "bg-[#C69C2B] text-[#002147]"
-                  : "text-white/85 hover:bg-white/10"
-              )}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
-      </div>
-
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-[#002147]/15 bg-[#002147] text-white md:flex">
-        <div className="flex items-center gap-3 p-5">
-          <div className="relative h-10 w-32 shrink-0 overflow-hidden rounded-md bg-white/10">
-            <Image
-              src="/images/brand-minerva-wordmark.png"
-              alt="Minerva"
-              fill
-              className="object-contain object-left"
-              sizes="128px"
-              priority
-            />
-          </div>
-        </div>
-        <p className="font-[family-name:var(--font-heading)] px-5 text-xs leading-snug tracking-wide text-[#C69C2B]/95 uppercase">
-          Producción
-        </p>
-        <Separator className="my-4 bg-white/15" />
-        <nav className="flex flex-1 flex-col gap-1 px-3" aria-label="Módulo Producción">
-          {NAV.map((item) => {
-            const Icon = item.icon;
-            const active = item.match(pathname);
-            return (
-              <Link
-                key={item.label}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition",
-                  active
-                    ? "bg-[#C69C2B] text-[#002147]"
-                    : "text-white/90 hover:bg-white/10"
-                )}
-              >
-                <Icon className="size-4 shrink-0 opacity-90" aria-hidden />
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-        <div className="mt-auto space-y-3 p-4">
+    <div className="flex min-h-screen flex-col">
+      <header className="sticky top-0 z-40 border-b border-slate-200/90 bg-white/95 backdrop-blur-md">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 md:px-6">
           <Link
             href="/"
-            className="block text-xs font-medium text-[#C69C2B]/95 underline-offset-4 hover:text-white hover:underline"
+            className="text-sm font-semibold text-[#002147] transition hover:text-[#002147]/80"
           >
-            ← Volver al portal
+            Portal
           </Link>
-          <p className="text-[10px] leading-relaxed text-white/55">
-            Órdenes de trabajo, fichas técnicas y almacén. Módulo en expansión.
-          </p>
+          <Separator
+            orientation="vertical"
+            className="hidden h-6 sm:block"
+          />
+          <nav
+            className="flex flex-1 flex-wrap items-center gap-1"
+            aria-label="Módulo Producción"
+          >
+            {navLinks.map((item) => {
+              const Icon = item.icon;
+              const active = item.match(pathname);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium transition sm:px-3 sm:text-sm",
+                    active
+                      ? "bg-[#C69C2B]/25 font-semibold text-[#002147] shadow-sm"
+                      : "text-slate-600 hover:bg-slate-100 hover:text-[#002147]"
+                  )}
+                >
+                  <Icon
+                    className="size-4 shrink-0 opacity-90"
+                    aria-hidden
+                  />
+                  <span className="whitespace-nowrap">{item.label}</span>
+                </Link>
+              );
+            })}
+          </nav>
         </div>
-      </aside>
+      </header>
 
       <div className="relative isolate flex min-h-0 min-h-dvh flex-1 flex-col md:min-h-screen">
         <div
@@ -148,7 +117,7 @@ export function ProduccionShell({ children }: { children: React.ReactNode }) {
           <div className="sem-workspace-marble" />
           <div className="sem-workspace-overlay" />
         </div>
-        <main className="relative z-10 flex-1 px-4 py-8 md:px-10 md:py-10">
+        <main className="relative z-10 w-full min-w-0 max-w-none flex-1 px-4 py-6">
           {children}
         </main>
         <SemContactFooter />

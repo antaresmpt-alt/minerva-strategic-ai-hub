@@ -1,3 +1,5 @@
+"use client";
+
 import {
   Card,
   CardContent,
@@ -7,10 +9,11 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 
 export default function ProduccionFichasPage() {
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="w-full max-w-none space-y-6">
       <header>
         <h1 className="font-heading text-2xl font-bold text-[#002147] md:text-3xl">
           Generador de Fichas Técnicas
@@ -18,9 +21,15 @@ export default function ProduccionFichasPage() {
         <p className="mt-1 text-sm text-slate-600">
           Parámetros base para generar o ajustar fichas (placeholder).
         </p>
+        <p className="mt-2 text-xs tabular-nums text-slate-500">
+          Fechas en Producción (DD/MM/AA):{" "}
+          <span className="font-medium text-slate-700">
+            {formatFechaEsCorta(new Date().toISOString())}
+          </span>
+        </p>
       </header>
 
-      <Card className="border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
+      <Card className="mx-auto w-full max-w-4xl border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
         <CardHeader>
           <CardTitle className="text-lg text-[#002147]">
             Datos de impresión

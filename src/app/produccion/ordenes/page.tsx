@@ -18,10 +18,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 
 export default function ProduccionOrdenesPage() {
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="w-full max-w-none space-y-6">
       <header>
         <h1 className="font-heading text-2xl font-bold text-[#002147] md:text-3xl">
           Gestión de órdenes de trabajo
@@ -29,22 +30,33 @@ export default function ProduccionOrdenesPage() {
         <p className="mt-1 max-w-2xl text-sm text-slate-600">
           Listado de OT y planificación de producción (esqueleto).
         </p>
+        <p className="mt-2 text-xs tabular-nums text-slate-500">
+          Fechas en Producción (DD/MM/AA):{" "}
+          <span className="font-medium text-slate-700">
+            {formatFechaEsCorta(new Date().toISOString())}
+          </span>
+        </p>
       </header>
 
-      <Tabs defaultValue="listado" className="w-full">
-        <TabsList
-          variant="line"
-          className="h-auto w-full flex-wrap justify-start gap-1 rounded-lg border border-slate-200/60 bg-slate-50/90 p-1 sm:w-fit"
-        >
-          <TabsTrigger value="listado" className="px-4 py-2 text-sm">
-            Listado OT
-          </TabsTrigger>
-          <TabsTrigger value="planificador" className="px-4 py-2 text-sm">
-            Planificador
-          </TabsTrigger>
-        </TabsList>
+      <Tabs defaultValue="listado" className="w-full max-w-none">
+        <div className="flex w-full justify-start">
+          <TabsList className="inline-flex h-auto w-fit max-w-full flex-wrap gap-1 rounded-lg border border-slate-200/90 bg-slate-50/90 p-1 shadow-sm">
+            <TabsTrigger
+              value="listado"
+              className="px-3 py-2 text-sm data-active:bg-[#C69C2B]/20 data-active:font-semibold data-active:text-[#002147]"
+            >
+              Listado OT
+            </TabsTrigger>
+            <TabsTrigger
+              value="planificador"
+              className="px-3 py-2 text-sm data-active:bg-[#C69C2B]/20 data-active:font-semibold data-active:text-[#002147]"
+            >
+              Planificador
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
-        <TabsContent value="listado" className="mt-6 outline-none">
+        <TabsContent value="listado" className="mt-4 outline-none">
           <Card className="border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
             <CardHeader className="border-b border-slate-200/70 pb-4">
               <CardTitle className="text-lg text-[#002147]">
@@ -86,7 +98,7 @@ export default function ProduccionOrdenesPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="planificador" className="mt-6 outline-none">
+        <TabsContent value="planificador" className="mt-4 outline-none">
           <Card className="border border-dashed border-[#002147]/20 bg-white/80 shadow-sm backdrop-blur-sm">
             <CardContent className="flex flex-col items-center justify-center px-6 py-16 text-center">
               <div className="mb-6 flex size-20 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">

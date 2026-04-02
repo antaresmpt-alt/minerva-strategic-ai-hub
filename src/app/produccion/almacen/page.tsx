@@ -1,3 +1,5 @@
+"use client";
+
 import { Package } from "lucide-react";
 
 import {
@@ -7,16 +9,23 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 
 export default function ProduccionAlmacenPage() {
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="w-full max-w-none space-y-6">
       <header>
         <h1 className="font-heading text-2xl font-bold text-[#002147] md:text-3xl">
           Almacén
         </h1>
         <p className="mt-1 text-sm text-slate-600">
           Inventario y movimientos (próximamente).
+        </p>
+        <p className="mt-2 text-xs tabular-nums text-slate-500">
+          Referencia de fecha (DD/MM/AA):{" "}
+          <span className="font-medium text-slate-700">
+            {formatFechaEsCorta(new Date().toISOString())}
+          </span>
         </p>
       </header>
 
@@ -37,8 +46,9 @@ export default function ProduccionAlmacenPage() {
         </CardHeader>
         <CardContent>
           <p className="text-sm text-slate-600">
-            Usa el menú lateral para ir a <strong>Órdenes</strong> o{" "}
-            <strong>Fichas Técnicas</strong> mientras completamos esta sección.
+            Usa la barra superior para ir a <strong>Órdenes</strong>,{" "}
+            <strong>Fichas Técnicas</strong> o <strong>Gestión de Externos</strong>{" "}
+            mientras completamos esta sección.
           </p>
         </CardContent>
       </Card>
