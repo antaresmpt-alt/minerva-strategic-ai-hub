@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
   BarChart3,
+  FlaskConical,
   Megaphone,
   Presentation,
   Sparkles,
@@ -29,6 +30,7 @@ import { ExportPdfMenu } from "@/components/dashboard/export-pdf-menu";
 import { CreativoIa } from "@/components/dashboard/creativo-ia";
 import { MetaProposal } from "@/components/dashboard/meta-proposal";
 import { MetaProposalExports } from "@/components/dashboard/meta-proposal-exports";
+import { SemCreativeLab } from "@/components/dashboard/sem-creative-lab";
 import { SemContactFooter } from "@/components/layout/sem-contact-footer";
 
 const MODES: { id: AppMode; label: string; icon: typeof BarChart3 }[] = [
@@ -40,6 +42,11 @@ const MODES: { id: AppMode; label: string; icon: typeof BarChart3 }[] = [
     id: "metaProposal",
     label: "Propuesta Meta Ads",
     icon: Target,
+  },
+  {
+    id: "semCreativeLab",
+    label: "SEM Creative Lab",
+    icon: FlaskConical,
   },
 ];
 
@@ -234,7 +241,9 @@ export function MinervaDashboard() {
   });
 
   const canRun =
-    activeMode === "creativo" || activeMode === "metaProposal"
+    activeMode === "creativo" ||
+    activeMode === "metaProposal" ||
+    activeMode === "semCreativeLab"
       ? false
       : activeMode === "strategic" ||
         (!!strategicAnalysis?.trim() &&
@@ -307,8 +316,8 @@ export function MinervaDashboard() {
             ← Volver al portal
           </Link>
           <p className="text-[10px] leading-relaxed text-white/55">
-            Análisis, PMAX y slides comparten contexto en memoria. Creativo IA y
-            Propuesta Meta Ads son módulos independientes.
+            Análisis, PMAX y slides comparten contexto en memoria. Creativo IA,
+            Propuesta Meta Ads y SEM Creative Lab son módulos independientes.
           </p>
         </div>
       </aside>
@@ -330,24 +339,32 @@ export function MinervaDashboard() {
                   ? "Creativo IA"
                   : activeMode === "metaProposal"
                     ? "Propuesta Meta Ads"
-                    : "Minerva Strategic AI Hub"}
+                    : activeMode === "semCreativeLab"
+                      ? "SEM Creative Lab"
+                      : "Minerva Strategic AI Hub"}
               </h1>
               <p className="mt-1 max-w-2xl text-sm text-slate-600">
                 {activeMode === "creativo"
                   ? "Diseñador de anuncios con IA: sube tu producto, define el copy y obtén tres formatos optimizados para Google y Meta. Edita cada pieza con instrucciones en lenguaje natural."
                   : activeMode === "metaProposal"
                     ? "Genera propuestas completas para Facebook e Instagram: estrategia por objetivo, segmentación, copys con emojis y creatividades con IA, listas para presentar al cliente."
-                    : "Consultoría estratégica asistida por IA: diagnóstico B2B, activos PMAX y narrativa ejecutiva en formato McKinsey-style."}
+                    : activeMode === "semCreativeLab"
+                      ? "Convierte PDFs técnicos de packaging en mockups publicitarios: visión con Gemini Flash y render con Hugging Face (FLUX / SDXL), con reintentos ante cold start."
+                      : "Consultoría estratégica asistida por IA: diagnóstico B2B, activos PMAX y narrativa ejecutiva en formato McKinsey-style."}
               </p>
             </div>
             {activeMode === "metaProposal" && metaProposalPayload ? (
               <MetaProposalExports payload={metaProposalPayload} />
-            ) : activeMode !== "creativo" && activeMode !== "metaProposal" ? (
+            ) : activeMode !== "creativo" &&
+              activeMode !== "metaProposal" &&
+              activeMode !== "semCreativeLab" ? (
               <ExportPdfMenu mode={activeMode} />
             ) : null}
           </div>
 
-          {activeMode !== "creativo" && activeMode !== "metaProposal" && (
+          {activeMode !== "creativo" &&
+            activeMode !== "metaProposal" &&
+            activeMode !== "semCreativeLab" && (
             <>
               <Card className="border-[#002147]/15 bg-white/60 shadow-sm backdrop-blur-sm">
                 <CardContent className="grid gap-4 p-4 md:grid-cols-3 md:gap-5 md:p-5">
@@ -436,6 +453,10 @@ export function MinervaDashboard() {
           ) : activeMode === "metaProposal" ? (
             <div className="mx-auto max-w-6xl">
               <MetaProposal />
+            </div>
+          ) : activeMode === "semCreativeLab" ? (
+            <div className="mx-auto max-w-6xl">
+              <SemCreativeLab />
             </div>
           ) : (
             <>

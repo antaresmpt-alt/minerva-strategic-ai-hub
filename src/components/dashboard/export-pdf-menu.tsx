@@ -24,6 +24,7 @@ const TITLES: Record<AppMode, string> = {
   slides: "Estructura de Slides",
   creativo: "Creativo IA",
   metaProposal: "Propuesta Meta Ads",
+  semCreativeLab: "SEM Creative Lab",
 };
 
 export function ExportPdfMenu({ mode }: { mode: AppMode }) {
