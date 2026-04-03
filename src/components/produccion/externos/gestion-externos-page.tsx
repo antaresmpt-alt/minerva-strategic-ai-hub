@@ -7,6 +7,7 @@ import {
   FileSpreadsheet,
   History,
   Loader2,
+  Mail,
   PackageSearch,
   Pencil,
   Printer,
@@ -65,6 +66,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Toggle } from "@/components/ui/toggle";
 import { parseExternosImportFile } from "@/lib/externos-excel-import";
@@ -118,6 +120,39 @@ type SeguimientoRow = {
   /** Si existe en BD (trigger / columna), última modificación */
   updated_at?: string | null;
 };
+
+type ComunicacionLogRow = {
+  id: string;
+  created_at: string;
+  proveedor_id: string | null;
+  cuerpo: string;
+  id_pedidos: number[];
+};
+
+function buildComunicacionEmailBody(
+  rows: SeguimientoRow[],
+  acabadoNombreById: Map<string, string>,
+  nombreProveedor: string
+): string {
+  const sorted = [...rows].sort((a, b) => a.id_pedido - b.id_pedido);
+  const listaOts = sorted
+    .map((row) => {
+      const tipo = acabadoNombreById.get(row.acabado_id) ?? "—";
+      const notas = (row.notas_logistica ?? "").trim() || "—";
+      const fp = formatFechaEsCorta(row.fecha_prevista);
+      return `OT: ${row.id_pedido}\nTrabajo: ${row.trabajo_titulo} | Tipo: ${tipo}\nNotas: ${notas}\nEntrega prevista: ${fp}`;
+    })
+    .join("\n\n");
+
+  const nombre = nombreProveedor.trim();
+  const saludo = nombre ? `Hola ${nombre},` : "Hola,";
+  const intro =
+    "Te adjunto los detalles de los nuevos trabajos que te enviamos para gestionar. Por favor, confírmanos la recepción de este correo y las fechas previstas de entrega para cada uno:";
+  const cierre =
+    "Quedamos a la espera de tus noticias para organizar la logística. Muchas gracias.\nSaludos cordiales,";
+
+  return `${saludo}\n\n${intro}\n\n${listaOts}\n\n${cierre}\n\n`;
+}
 
 function dateInputToTimestamptz(yyyyMmDd: string): string {
   const [y, m, d] = yyyyMmDd.split("-").map(Number);
@@ -444,6 +479,19 @@ export function GestionExternosPage() {
   const globalModel = useHubStore((s) => s.globalModel);
   const analistaDialogTitleId = useId();
   const analistaDialogDescId = useId();
+  const comunicacionDialogTitleId = useId();
+  const comunicacionDialogDescId = useId();
+
+  const [selectedSeguimientoIds, setSelectedSeguimientoIds] = useState<string[]>(
+    []
+  );
+  const [comunicacionModalOpen, setComunicacionModalOpen] = useState(false);
+  const [segComunicacionLogs, setSegComunicacionLogs] = useState<
+    ComunicacionLogRow[]
+  >([]);
+  const [segComunicacionLogsLoading, setSegComunicacionLogsLoading] =
+    useState(false);
+  const seguimientoMasterCheckboxRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!analistaOpen) return;
@@ -453,6 +501,15 @@ export function GestionExternosPage() {
       document.body.style.overflow = prev;
     };
   }, [analistaOpen]);
+
+  useEffect(() => {
+    if (!comunicacionModalOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [comunicacionModalOpen]);
 
   const printListadoRef = useRef<HTMLDivElement>(null);
   const handlePrintListado = useReactToPrint({
@@ -603,6 +660,58 @@ export function GestionExternosPage() {
     busquedaSeguimiento,
   ]);
 
+  const seleccionSeguimientoRows = useMemo(() => {
+    if (selectedSeguimientoIds.length === 0) return [];
+    const idSet = new Set(selectedSeguimientoIds);
+    return seguimientos.filter((r) => idSet.has(r.id));
+  }, [seguimientos, selectedSeguimientoIds]);
+
+  const prepararEnvioEnabled = useMemo(() => {
+    const rows = seleccionSeguimientoRows;
+    if (rows.length === 0) return false;
+    const provId = rows[0].proveedor_id;
+    return rows.every((r) => r.proveedor_id === provId);
+  }, [seleccionSeguimientoRows]);
+
+  const comunicacionPreview = useMemo(() => {
+    if (!prepararEnvioEnabled || seleccionSeguimientoRows.length === 0) {
+      return null;
+    }
+    const rows = [...seleccionSeguimientoRows].sort(
+      (a, b) => a.id_pedido - b.id_pedido
+    );
+    const prov = proveedores.find((p) => p.id === rows[0].proveedor_id);
+    const body = buildComunicacionEmailBody(
+      rows,
+      acabadoNombreById,
+      prov?.nombre ?? ""
+    );
+    const ots = rows.map((r) => r.id_pedido);
+    const subject = `Envío de trabajos Minerva - OTs: ${ots.join(", ")}`;
+    return { rows, prov, body, subject };
+  }, [
+    prepararEnvioEnabled,
+    seleccionSeguimientoRows,
+    proveedores,
+    acabadoNombreById,
+  ]);
+
+  const seguimientoSelectionStats = useMemo(() => {
+    const n = seguimientosFiltrados.length;
+    const selectedInView = seguimientosFiltrados.filter((r) =>
+      selectedSeguimientoIds.includes(r.id)
+    ).length;
+    const allInViewSelected = n > 0 && selectedInView === n;
+    const masterIndeterminate = selectedInView > 0 && selectedInView < n;
+    return { selectedInView, allInViewSelected, masterIndeterminate, n };
+  }, [seguimientosFiltrados, selectedSeguimientoIds]);
+
+  useEffect(() => {
+    const el = seguimientoMasterCheckboxRef.current;
+    if (!el) return;
+    el.indeterminate = seguimientoSelectionStats.masterIndeterminate;
+  }, [seguimientoSelectionStats.masterIndeterminate]);
+
   const runAnalistaProduccion = useCallback(async () => {
     abortAnalistaRef.current?.abort();
     const ac = new AbortController();
@@ -748,6 +857,35 @@ export function GestionExternosPage() {
   useEffect(() => {
     void loadCore();
   }, [loadCore]);
+
+  useEffect(() => {
+    if (!seguimientoSheetOpen || !seguimientoEditing) {
+      setSegComunicacionLogs([]);
+      setSegComunicacionLogsLoading(false);
+      return;
+    }
+    const idPedido = seguimientoEditing.id_pedido;
+    let cancelled = false;
+    void (async () => {
+      setSegComunicacionLogsLoading(true);
+      const { data, error } = await supabase
+        .from("prod_comunicacion_logs")
+        .select("*")
+        .contains("id_pedidos", [idPedido])
+        .order("created_at", { ascending: false });
+      if (cancelled) return;
+      setSegComunicacionLogsLoading(false);
+      if (error) {
+        console.error("[prod_comunicacion_logs]", error);
+        setSegComunicacionLogs([]);
+        return;
+      }
+      setSegComunicacionLogs((data ?? []) as ComunicacionLogRow[]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [seguimientoSheetOpen, seguimientoEditing?.id, supabase]);
 
   useEffect(() => {
     if (!envProveedorId) {
@@ -937,15 +1075,42 @@ export function GestionExternosPage() {
         return;
       }
       try {
-        const { rows, parseWarnings } = await parseExternosImportFile(file);
+        const {
+          rows,
+          parseWarnings,
+          filasOmitidasPorEstado,
+          filasLeidas,
+        } = await parseExternosImportFile(file);
+        if (rows.length === 0) {
+          if (filasLeidas > 0 && filasOmitidasPorEstado === filasLeidas) {
+            toast.error(
+              'No se han encontrado trabajos en estado "En producción" o "No empezado" o "Abierto" o "En Curso" en este archivo'
+            );
+          } else if (filasLeidas > 0) {
+            toast.error(
+              "No hay filas importables: revisa OTs, estados y el formato del archivo."
+            );
+            if (parseWarnings.length > 0) {
+              toast.info(parseWarnings.slice(0, 5).join(" · "));
+            }
+          } else {
+            toast.error(
+              parseWarnings[0] ??
+                "No se encontraron filas de datos en el archivo."
+            );
+            if (parseWarnings.length > 1) {
+              toast.info(parseWarnings.slice(1, 6).join(" · "));
+            }
+          }
+          return;
+        }
         if (parseWarnings.length > 0) {
           toast.info(parseWarnings.slice(0, 5).join(" · "));
         }
-        if (rows.length === 0) {
-          toast.error(
-            "No hay filas importables (estado Abierto / En Curso y OT válida)."
+        if (filasOmitidasPorEstado > 0) {
+          toast.info(
+            `Se han omitido ${filasOmitidasPorEstado} filas con estados no procesables (Cancelado, Terminado, etc.)`
           );
-          return;
         }
         setImportPreviewRows(
           rows.map((c) => {
@@ -1207,6 +1372,79 @@ export function GestionExternosPage() {
     void loadCore();
   }
 
+  function toggleSeguimientoSelected(id: string, checked: boolean) {
+    setSelectedSeguimientoIds((prev) =>
+      checked
+        ? prev.includes(id)
+          ? prev
+          : [...prev, id]
+        : prev.filter((x) => x !== id)
+    );
+  }
+
+  function toggleSelectAllSeguimientoFiltrados(checked: boolean) {
+    if (checked) {
+      setSelectedSeguimientoIds((prev) => {
+        const set = new Set(prev);
+        seguimientosFiltrados.forEach((r) => set.add(r.id));
+        return Array.from(set);
+      });
+    } else {
+      const inView = new Set(seguimientosFiltrados.map((r) => r.id));
+      setSelectedSeguimientoIds((prev) => prev.filter((id) => !inView.has(id)));
+    }
+  }
+
+  async function handleComunicacionFinalizar() {
+    if (!prepararEnvioEnabled || seleccionSeguimientoRows.length === 0) return;
+    const rows = [...seleccionSeguimientoRows].sort(
+      (a, b) => a.id_pedido - b.id_pedido
+    );
+    const prov = proveedores.find((p) => p.id === rows[0].proveedor_id);
+    const email = prov?.email?.trim() ?? "";
+    const body = buildComunicacionEmailBody(
+      rows,
+      acabadoNombreById,
+      prov?.nombre ?? ""
+    );
+    const ots = rows.map((r) => r.id_pedido);
+    const subject = `Envío de trabajos Minerva - OTs: ${ots.join(", ")}`;
+    const now = new Date().toISOString();
+    const ids = rows.map((r) => r.id);
+    setSaving(true);
+    const { error: upErr } = await supabase
+      .from("prod_seguimiento_externos")
+      .update({
+        estado: "Enviado",
+        fecha_envio: now,
+        updated_at: now,
+      })
+      .in("id", ids);
+    if (upErr) {
+      setSaving(false);
+      toast.error(upErr.message);
+      return;
+    }
+    const { error: logErr } = await supabase.from("prod_comunicacion_logs").insert({
+      proveedor_id: rows[0].proveedor_id,
+      cuerpo: body,
+      id_pedidos: ots,
+    });
+    if (logErr) {
+      console.error("[prod_comunicacion_logs]", logErr);
+      toast.warning(
+        `Estado actualizado, pero no se guardó el historial: ${logErr.message}`
+      );
+    }
+    const url = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+    setComunicacionModalOpen(false);
+    setSelectedSeguimientoIds([]);
+    setSaving(false);
+    toast.success("Envío registrado. Se abrió Gmail en una pestaña nueva.");
+    void loadCore();
+  }
+
   const tabTriggerClass =
     "flex h-full min-h-8 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs data-active:bg-[#C69C2B]/20 data-active:font-semibold data-active:text-[#002147] data-active:shadow-sm data-active:ring-2 data-active:ring-[#C69C2B]/45 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm";
 
@@ -1282,6 +1520,23 @@ export function GestionExternosPage() {
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={loading || !prepararEnvioEnabled}
+                    title={
+                      !prepararEnvioEnabled
+                        ? seleccionSeguimientoRows.length === 0
+                          ? "Selecciona una o más OTs en la tabla"
+                          : "Las OTs seleccionadas deben tener el mismo proveedor"
+                        : "Preparar borrador de correo y registrar envío"
+                    }
+                    onClick={() => setComunicacionModalOpen(true)}
+                  >
+                    <Mail className="mr-1.5 size-4" aria-hidden />
+                    Preparar Envío
+                  </Button>
                   <Button
                     type="button"
                     variant="outline"
@@ -1371,9 +1626,25 @@ export function GestionExternosPage() {
                 </p>
               ) : (
                 <div className="max-h-[min(78vh,56rem)] w-full max-w-none overflow-auto rounded-lg border border-slate-200/80 sm:rounded-xl">
-                  <table className="w-full min-w-[104rem] caption-bottom border-collapse text-sm">
+                  <table className="w-full min-w-[107rem] caption-bottom border-collapse text-sm">
                     <thead>
                       <tr className="border-b border-slate-200">
+                        <th className="sticky top-0 z-30 w-10 bg-slate-50/95 px-1 py-2.5 text-center text-xs font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          <input
+                            ref={seguimientoMasterCheckboxRef}
+                            type="checkbox"
+                            className="size-4 rounded border"
+                            checked={seguimientoSelectionStats.allInViewSelected}
+                            disabled={seguimientoSelectionStats.n === 0}
+                            onChange={(e) =>
+                              toggleSelectAllSeguimientoFiltrados(
+                                e.target.checked
+                              )
+                            }
+                            title="Seleccionar o quitar todas las OTs visibles"
+                            aria-label="Seleccionar todas las OTs visibles en la tabla"
+                          />
+                        </th>
                         <th className="sticky top-0 z-30 w-11 bg-slate-50/95 px-1 py-2.5 text-center text-xs font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Semáforo
                         </th>
@@ -1434,6 +1705,20 @@ export function GestionExternosPage() {
                                 "bg-red-50/90 dark:bg-red-950/30"
                             )}
                           >
+                            <td className="w-10 px-1 py-1.5 text-center align-middle">
+                              <input
+                                type="checkbox"
+                                className="size-4 rounded border"
+                                checked={selectedSeguimientoIds.includes(row.id)}
+                                onChange={(e) =>
+                                  toggleSeguimientoSelected(
+                                    row.id,
+                                    e.target.checked
+                                  )
+                                }
+                                aria-label={`Seleccionar OT ${row.id_pedido}`}
+                              />
+                            </td>
                             <td className="w-11 px-1 py-1.5 text-center align-middle">
                               <SemaforoCell row={row} />
                             </td>
@@ -1681,10 +1966,11 @@ export function GestionExternosPage() {
               </CardTitle>
               <CardDescription>
                 Archivo .xlsx o .csv con las mismas cabeceras que ventas
-                (normalizadas automáticamente). Solo filas «Abierto» o «En
-                Curso». La fecha prevista sugerida es un día antes de la
-                entrega al cliente. Asigna proveedor y acabado antes de
-                confirmar.
+                (normalizadas automáticamente). Solo se importan trabajos en
+                estado Optimus «En producción», «No empezado», «En Curso» o
+                «Abierto» (el resto se omite sin error). La fecha prevista
+                sugerida es un día antes de la entrega al cliente. Asigna
+                proveedor y acabado antes de confirmar.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -2344,6 +2630,46 @@ export function GestionExternosPage() {
                 />
               </div>
             </div>
+            <div className="px-4 pb-2">
+              <Separator className="mb-4" />
+              <h3 className="text-sm font-semibold text-[#002147]">
+                Historial de comunicación
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Envíos registrados desde Comunicación Pro que incluyen esta OT.
+              </p>
+              {segComunicacionLogsLoading ? (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Cargando historial…
+                </p>
+              ) : segComunicacionLogs.length === 0 ? (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  No hay envíos registrados para esta OT.
+                </p>
+              ) : (
+                <ul className="mt-3 max-h-56 space-y-3 overflow-y-auto text-xs">
+                  {segComunicacionLogs.map((log) => (
+                    <li
+                      key={log.id}
+                      className="rounded-md border border-slate-200/90 bg-slate-50/80 p-2.5"
+                    >
+                      <p className="font-medium text-[#002147]">
+                        {formatFechaEsCorta(log.created_at)}
+                        {log.id_pedidos.length > 0 ? (
+                          <span className="font-normal text-slate-600">
+                            {" "}
+                            · OTs en el envío: {log.id_pedidos.join(", ")}
+                          </span>
+                        ) : null}
+                      </p>
+                      <pre className="mt-1.5 max-h-28 overflow-auto whitespace-pre-wrap break-words font-sans text-[11px] leading-snug text-slate-700">
+                        {log.cuerpo}
+                      </pre>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             <SheetFooter className="gap-3 border-t sm:flex-row sm:justify-end">
               <Button
                 type="button"
@@ -2429,6 +2755,81 @@ export function GestionExternosPage() {
           </form>
         </SheetContent>
       </Sheet>
+
+      {comunicacionModalOpen && comunicacionPreview ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="presentation"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-[#002147]/40 backdrop-blur-[2px] transition-opacity"
+            aria-label="Cerrar"
+            onClick={() => setComunicacionModalOpen(false)}
+          />
+          <Card
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={comunicacionDialogTitleId}
+            aria-describedby={comunicacionDialogDescId}
+            className="relative z-10 flex max-h-[min(92vh,760px)] w-full max-w-lg flex-col overflow-hidden border-slate-200/90 bg-white shadow-xl sm:max-w-xl"
+          >
+            <CardHeader className="shrink-0 space-y-1 border-b border-slate-200/80 bg-slate-50/90 pb-4">
+              <CardTitle
+                id={comunicacionDialogTitleId}
+                className="text-lg font-semibold text-[#002147]"
+              >
+                Preparar envío (Comunicación Pro)
+              </CardTitle>
+              <CardDescription id={comunicacionDialogDescId}>
+                Revisa destinatario, asunto y cuerpo. Al finalizar se actualizarán
+                las OTs, se registrará el historial y se abrirá Gmail.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
+              <div className="grid gap-1.5 text-sm">
+                <span className="font-medium text-[#002147]">Destinatario</span>
+                <p className="rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-800">
+                  {comunicacionPreview.prov?.email?.trim()
+                    ? comunicacionPreview.prov.email.trim()
+                    : "— (sin email en el proveedor)"}
+                </p>
+              </div>
+              <div className="grid gap-1.5 text-sm">
+                <span className="font-medium text-[#002147]">Asunto</span>
+                <p className="rounded-md border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-800 break-words">
+                  {comunicacionPreview.subject}
+                </p>
+              </div>
+              <div className="grid min-h-0 flex-1 gap-1.5 text-sm">
+                <span className="font-medium text-[#002147]">
+                  Cuerpo (vista previa)
+                </span>
+                <pre className="max-h-[min(42vh,22rem)] overflow-auto whitespace-pre-wrap break-words rounded-md border border-slate-200 bg-slate-50/90 px-3 py-2 font-sans text-xs text-slate-800">
+                  {comunicacionPreview.body}
+                </pre>
+              </div>
+            </CardContent>
+            <CardFooter className="shrink-0 flex-col gap-2 border-t border-slate-200/80 bg-white/95 px-4 py-3 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setComunicacionModalOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                disabled={saving}
+                className="bg-[#C69C2B] font-semibold text-[#002147] shadow-sm hover:bg-[#b58d26] hover:text-[#002147]"
+                onClick={() => void handleComunicacionFinalizar()}
+              >
+                Abrir Gmail y finalizar
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      ) : null}
 
       {analistaOpen ? (
         <div
