@@ -38,11 +38,14 @@ const NAV: NavItem[] = [
       p.startsWith("/produccion/ordenes/"),
   },
   {
-    href: "/produccion/fichas",
+    href: "/produccion/fichas-tecnicas",
     label: "Fichas Técnicas",
     icon: FileCog,
     match: (p) =>
-      p === "/produccion/fichas" || p.startsWith("/produccion/fichas/"),
+      p === "/produccion/fichas-tecnicas" ||
+      p.startsWith("/produccion/fichas-tecnicas/") ||
+      p === "/produccion/fichas" ||
+      p.startsWith("/produccion/fichas/"),
   },
   {
     href: "/produccion/almacen",
