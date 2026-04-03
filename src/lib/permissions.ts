@@ -162,6 +162,9 @@ export function canAccessApiRoute(
     ) {
       return canAccessHubModule(role, "seo", dynamic);
     }
+    if (pathname.startsWith("/api/gemini/produccion-externos-analyze")) {
+      return canAccessHubModule(role, "produccion", dynamic);
+    }
     if (pathname.startsWith("/api/gemini")) {
       return canAccessHubModule(role, "sem", dynamic);
     }
@@ -190,6 +193,10 @@ export function canAccessApiRoute(
     pathname.startsWith("/api/pagespeed")
   ) {
     return canAccessHubModule(role, "seo");
+  }
+
+  if (pathname.startsWith("/api/gemini/produccion-externos-analyze")) {
+    return canAccessHubModule(role, "produccion");
   }
 
   if (pathname.startsWith("/api/gemini")) {
