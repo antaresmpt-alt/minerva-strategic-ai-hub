@@ -69,18 +69,24 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Toggle } from "@/components/ui/toggle";
-import { parseExternosImportFile } from "@/lib/externos-excel-import";
+import {
+  ESTADOS_SEGUIMIENTO_EXTERNOS,
+  type ExternosImportFormat,
+  normalizeOtRawToString,
+  otRawToIdPedido,
+  OT_PLACEHOLDER_PEDIDO,
+  parseExternosImportFile,
+} from "@/lib/externos-excel-import";
+import {
+  fuzzyMatchAcabadoIdByIncludes,
+  fuzzyMatchIdByIncludes,
+} from "@/lib/externos-fuzzy-match";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import { useHubStore } from "@/lib/store";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
 
-const ESTADOS_SEGUIMIENTO = [
-  "Pendiente",
-  "Enviado",
-  "En Proveedor",
-  "Recibido",
-] as const;
+const ESTADOS_SEGUIMIENTO = ESTADOS_SEGUIMIENTO_EXTERNOS;
 
 type TipoProveedorRow = {
   id: string;
@@ -107,6 +113,8 @@ type AcabadoRow = {
 type SeguimientoRow = {
   id: string;
   id_pedido: number;
+  /** Columna citada "OT" en Postgres; identificador de orden en fábrica (no único). */
+  OT?: string | null;
   cliente_nombre: string;
   trabajo_titulo: string;
   pedido_cliente: string;
@@ -119,7 +127,50 @@ type SeguimientoRow = {
   created_at: string;
   /** Si existe en BD (trigger / columna), última modificación */
   updated_at?: string | null;
+  num_operacion?: number | null;
+  unidades?: number | null;
+  prioridad?: string | null;
+  palets?: number | null;
+  /** Opcional en BD; en UI se prefiere cálculo entre fechas */
+  dias_en_externo?: number | null;
+  observaciones?: string | null;
 };
+
+function getOtDisplay(row: SeguimientoRow): string {
+  const o = row.OT != null && String(row.OT).trim() !== "" ? String(row.OT).trim() : "";
+  if (o) return o;
+  return String(row.id_pedido);
+}
+
+/** Orden: OT numérica si aplica, luego num_operacion. */
+function compareSeguimientoRows(a: SeguimientoRow, b: SeguimientoRow): number {
+  const na = Number(String(getOtDisplay(a)).replace(/\D/g, ""));
+  const nb = Number(String(getOtDisplay(b)).replace(/\D/g, ""));
+  const aOk = Number.isFinite(na) && na > 0;
+  const bOk = Number.isFinite(nb) && nb > 0;
+  if (aOk && bOk && na !== nb) return na - nb;
+  if (aOk !== bOk) return aOk ? -1 : 1;
+  const sa = getOtDisplay(a);
+  const sb = getOtDisplay(b);
+  if (sa !== sb) return sa.localeCompare(sb, "es", { numeric: true });
+  const oa = a.num_operacion ?? 0;
+  const ob = b.num_operacion ?? 0;
+  return oa - ob;
+}
+
+/** Días naturales entre envío y previsto (UI). */
+function computeDiasEnExternoUi(
+  fecha_envio: string | null | undefined,
+  fecha_prevista: string | null | undefined
+): number | null {
+  if (!fecha_envio || !fecha_prevista) return null;
+  const a = new Date(fecha_envio);
+  const b = new Date(fecha_prevista);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return null;
+  a.setHours(0, 0, 0, 0);
+  b.setHours(0, 0, 0, 0);
+  return Math.round((b.getTime() - a.getTime()) / (24 * 60 * 60 * 1000));
+}
 
 type ComunicacionLogRow = {
   id: string;
@@ -134,13 +185,13 @@ function buildComunicacionEmailBody(
   acabadoNombreById: Map<string, string>,
   nombreProveedor: string
 ): string {
-  const sorted = [...rows].sort((a, b) => a.id_pedido - b.id_pedido);
+  const sorted = [...rows].sort(compareSeguimientoRows);
   const listaOts = sorted
     .map((row) => {
       const tipo = acabadoNombreById.get(row.acabado_id) ?? "—";
       const notas = (row.notas_logistica ?? "").trim() || "—";
       const fp = formatFechaEsCorta(row.fecha_prevista);
-      return `OT: ${row.id_pedido}\nTrabajo: ${row.trabajo_titulo} | Tipo: ${tipo}\nNotas: ${notas}\nEntrega prevista: ${fp}`;
+      return `OT: ${getOtDisplay(row)}\nTrabajo: ${row.trabajo_titulo} | Tipo: ${tipo}\nNotas: ${notas}\nEntrega prevista: ${fp}`;
     })
     .join("\n\n");
 
@@ -168,31 +219,37 @@ function isoToDateInput(iso: string | null | undefined): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function defaultYmdLocal(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 type ImportPreviewRow = {
   key: string;
+  ot_raw: string;
   id_pedido: number;
   cliente: string;
   ref_cliente: string;
   titulo: string;
   fecha_entrega_excel: string;
   fecha_prevista: string;
+  fecha_envio_default: string;
   /** Editable; se persiste en prod_seguimiento_externos.notas_logistica */
   notas: string;
   proveedor_id: string;
   acabado_id: string;
   selected: boolean;
-  duplicate: boolean;
+  estado_sugerido: string;
+  unidades: number | null;
+  prioridad: string | null;
+  palets: number | null;
+  observaciones: string | null;
+  importFormat: ExternosImportFormat;
+  /** Texto Excel (Hermano) para referencia si el fuzzy no acertó */
+  proveedor_excel: string | null;
+  proceso_excel: string | null;
 };
 
 function isEnvioRetrasado(
   fechaPrevista: string | null,
   estado: string
 ): boolean {
+  if (estado === "Retrasado") return true;
   if (!fechaPrevista || estado === "Recibido") return false;
   const fp = new Date(fechaPrevista);
   const today = new Date();
@@ -229,6 +286,13 @@ function computeSemaforo(row: SeguimientoRow): SemaforoInfo {
       excelLabel: "✅ Recibido / Finalizado",
     };
   }
+  if (row.estado === "Retrasado") {
+    return {
+      kind: "retraso",
+      tooltip: "Retrasado (estado explícito)",
+      excelLabel: "🔴 Retrasado",
+    };
+  }
   if (isEnvioRetrasado(row.fecha_prevista, row.estado)) {
     return {
       kind: "retraso",
@@ -244,11 +308,17 @@ function computeSemaforo(row: SeguimientoRow): SemaforoInfo {
       excelLabel: "🟡 Urgente",
     };
   }
-  if (row.estado === "Enviado" || row.estado === "En Proveedor") {
+  if (
+    row.estado === "Enviado" ||
+    row.estado === "En Proveedor" ||
+    row.estado === "En Minerva para salir" ||
+    row.estado === "Parcial" ||
+    row.estado === "Muelle Minerva"
+  ) {
     return {
       kind: "transito",
-      tooltip: "En tránsito o en proveedor — dentro de plazo",
-      excelLabel: "🔵 En plazo (envío/proveedor)",
+      tooltip: "En circuito externo / tránsito — dentro de plazo",
+      excelLabel: `🔵 ${row.estado}`,
     };
   }
   if (row.estado === "Pendiente") {
@@ -328,6 +398,23 @@ function SemaforoCell({ row }: { row: SeguimientoRow }) {
 }
 
 const emptySelect: Option[] = [{ value: "", label: "— Seleccionar —" }];
+
+const PRIORIDAD_MANUAL_OPTIONS: Option[] = [
+  { value: "", label: "—" },
+  { value: "Urgente", label: "Urgente" },
+  { value: "Normal", label: "Normal" },
+  { value: "Programado", label: "Programado" },
+];
+
+/** Importación: estos estados exigen fecha prevista antes de insertar. */
+const ESTADOS_IMPORT_REQUIEREN_FECHA_PREVISTA = new Set([
+  "Recibido",
+  "Muelle Minerva",
+]);
+
+function fechaPrevistaYmdValida(ymd: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(ymd.trim());
+}
 
 /** Tipos de referencia para poblar `prod_cat_tipos_proveedor` si está vacía (botón temporal). */
 const TIPOS_PROVEEDOR_BASE = [
@@ -448,6 +535,10 @@ export function GestionExternosPage() {
   const [envAcabadoId, setEnvAcabadoId] = useState("");
   const [envFecha, setEnvFecha] = useState("");
   const [envNotas, setEnvNotas] = useState("");
+  const [envUnidades, setEnvUnidades] = useState("");
+  const [envPrioridad, setEnvPrioridad] = useState("");
+  const [envPalets, setEnvPalets] = useState("");
+  const [envObservaciones, setEnvObservaciones] = useState("");
 
   const [importPreviewRows, setImportPreviewRows] = useState<ImportPreviewRow[]>(
     []
@@ -470,6 +561,7 @@ export function GestionExternosPage() {
   const [editSegAcabadoId, setEditSegAcabadoId] = useState("");
   const [editSegFecha, setEditSegFecha] = useState("");
   const [editSegNotas, setEditSegNotas] = useState("");
+  const [editSegObservaciones, setEditSegObservaciones] = useState("");
 
   const [analistaOpen, setAnalistaOpen] = useState(false);
   const [analistaLoading, setAnalistaLoading] = useState(false);
@@ -561,8 +653,8 @@ export function GestionExternosPage() {
     return m;
   }, [acabadosCatalogo]);
 
-  const otEnSeguimiento = useMemo(
-    () => new Set(seguimientos.map((s) => s.id_pedido)),
+  const seguimientosOrdenados = useMemo(
+    () => [...seguimientos].sort(compareSeguimientoRows),
     [seguimientos]
   );
 
@@ -593,7 +685,7 @@ export function GestionExternosPage() {
   }, [editSegProveedorId, proveedores, acabadosCatalogo]);
 
   const importSelectionStats = useMemo(() => {
-    const selectable = importPreviewRows.filter((r) => !r.duplicate);
+    const selectable = importPreviewRows;
     const n = selectable.length;
     const selectedCount = selectable.filter((r) => r.selected).length;
     const allSelectableSelected = n > 0 && selectedCount === n;
@@ -626,7 +718,7 @@ export function GestionExternosPage() {
   );
 
   const seguimientosFiltrados = useMemo(() => {
-    let list = seguimientos;
+    let list = seguimientosOrdenados;
     if (!verHistorial) {
       list = list.filter((r) => r.estado !== "Recibido");
     }
@@ -639,12 +731,12 @@ export function GestionExternosPage() {
     const q = busquedaSeguimiento.trim().toLowerCase();
     if (q) {
       list = list.filter((r) => {
-        const ot = String(r.id_pedido);
+        const ot = `${getOtDisplay(r)} ${r.id_pedido}`;
         const cli = (r.cliente_nombre ?? "").toLowerCase();
         const ped = (r.pedido_cliente ?? "").toLowerCase();
         const trab = (r.trabajo_titulo ?? "").toLowerCase();
         return (
-          ot.includes(q) ||
+          ot.toLowerCase().includes(q) ||
           cli.includes(q) ||
           ped.includes(q) ||
           trab.includes(q)
@@ -653,7 +745,7 @@ export function GestionExternosPage() {
     }
     return list;
   }, [
-    seguimientos,
+    seguimientosOrdenados,
     verHistorial,
     filtroEstado,
     filtroProveedorId,
@@ -677,9 +769,7 @@ export function GestionExternosPage() {
     if (!prepararEnvioEnabled || seleccionSeguimientoRows.length === 0) {
       return null;
     }
-    const rows = [...seleccionSeguimientoRows].sort(
-      (a, b) => a.id_pedido - b.id_pedido
-    );
+    const rows = [...seleccionSeguimientoRows].sort(compareSeguimientoRows);
     const prov = proveedores.find((p) => p.id === rows[0].proveedor_id);
     const body = buildComunicacionEmailBody(
       rows,
@@ -719,7 +809,11 @@ export function GestionExternosPage() {
     setAnalistaLoading(true);
     setAnalistaError(null);
     const rows = seguimientosFiltrados.map((r) => ({
-      ot: r.id_pedido,
+      ot: getOtDisplay(r),
+      op: r.num_operacion ?? null,
+      unidades: r.unidades ?? null,
+      prioridad: r.prioridad ?? null,
+      palets: r.palets ?? null,
       cliente: r.cliente_nombre,
       trabajo: r.trabajo_titulo,
       proveedor: proveedorNombreById.get(r.proveedor_id) ?? "—",
@@ -727,6 +821,7 @@ export function GestionExternosPage() {
       estado: r.estado,
       fechaPrevista: formatFechaEsCorta(r.fecha_prevista),
       fechaEnvio: formatFechaEsCorta(r.fecha_envio),
+      diasEnExterno: computeDiasEnExternoUi(r.fecha_envio, r.fecha_prevista),
       semaforo: computeSemaforo(r).excelLabel,
     }));
     try {
@@ -768,10 +863,7 @@ export function GestionExternosPage() {
           .from("prod_cat_acabados")
           .select("id, tipo_proveedor_id, nombre, created_at")
           .order("nombre"),
-        supabase
-          .from("prod_seguimiento_externos")
-          .select("*")
-          .order("created_at", { ascending: false }),
+        supabase.from("prod_seguimiento_externos").select("*"),
       ]);
 
       if (tiposRes.error) {
@@ -1008,11 +1100,8 @@ export function GestionExternosPage() {
       setTab("proveedores");
       return;
     }
-    const ot = Number(envIdPedido);
-    if (!Number.isFinite(ot) || ot <= 0) {
-      toast.error("Número de OT no válido.");
-      return;
-    }
+    const otRaw = normalizeOtRawToString(envIdPedido);
+    const id_pedido = otRawToIdPedido(otRaw);
     if (
       !envCliente.trim() ||
       !envTrabajo.trim() ||
@@ -1025,8 +1114,25 @@ export function GestionExternosPage() {
       return;
     }
     setSaving(true);
+    const { data: opRows, error: opErr } = await supabase
+      .from("prod_seguimiento_externos")
+      .select("num_operacion")
+      .eq("OT", otRaw);
+    if (opErr) {
+      setSaving(false);
+      toast.error(opErr.message);
+      return;
+    }
+    const nextOp =
+      Math.max(0, ...(opRows?.map((x) => x.num_operacion ?? 0) ?? [])) + 1;
+    const uRaw = envUnidades.trim().replace(",", ".");
+    const pRaw = envPalets.trim().replace(",", ".");
+    const unidadesParsed = uRaw ? Number(uRaw) : NaN;
+    const paletsParsed = pRaw ? Number(pRaw) : NaN;
     const { error } = await supabase.from("prod_seguimiento_externos").insert({
-      id_pedido: ot,
+      id_pedido,
+      OT: otRaw,
+      num_operacion: nextOp,
       cliente_nombre: envCliente.trim(),
       trabajo_titulo: envTrabajo.trim(),
       pedido_cliente: envPedidoCliente.trim(),
@@ -1035,6 +1141,11 @@ export function GestionExternosPage() {
       estado: "Pendiente",
       fecha_prevista: dateInputToTimestamptz(envFecha),
       notas_logistica: envNotas.trim() || null,
+      unidades:
+        Number.isFinite(unidadesParsed) ? Math.trunc(unidadesParsed) : null,
+      prioridad: envPrioridad.trim() || null,
+      palets: Number.isFinite(paletsParsed) ? Math.trunc(paletsParsed) : null,
+      observaciones: envObservaciones.trim() || null,
     });
     setSaving(false);
     if (error) {
@@ -1050,6 +1161,10 @@ export function GestionExternosPage() {
     setEnvAcabadoId("");
     setEnvFecha("");
     setEnvNotas("");
+    setEnvUnidades("");
+    setEnvPrioridad("");
+    setEnvPalets("");
+    setEnvObservaciones("");
     setTab("seguimiento");
     void loadCore();
   }
@@ -1080,11 +1195,16 @@ export function GestionExternosPage() {
           parseWarnings,
           filasOmitidasPorEstado,
           filasLeidas,
+          format,
         } = await parseExternosImportFile(file);
         if (rows.length === 0) {
-          if (filasLeidas > 0 && filasOmitidasPorEstado === filasLeidas) {
+          if (
+            format === "optimus" &&
+            filasLeidas > 0 &&
+            filasOmitidasPorEstado === filasLeidas
+          ) {
             toast.error(
-              'No se han encontrado trabajos en estado "En producción" o "No empezado" o "Abierto" o "En Curso" en este archivo'
+              'Optimus: no hay filas en estados incluidos (p. ej. «En producción», «En cola», «Abierto»…).'
             );
           } else if (filasLeidas > 0) {
             toast.error(
@@ -1107,33 +1227,63 @@ export function GestionExternosPage() {
         if (parseWarnings.length > 0) {
           toast.info(parseWarnings.slice(0, 5).join(" · "));
         }
-        if (filasOmitidasPorEstado > 0) {
+        if (filasOmitidasPorEstado > 0 && format === "optimus") {
           toast.info(
             `Se han omitido ${filasOmitidasPorEstado} filas con estados no procesables (Cancelado, Terminado, etc.)`
           );
         }
         setImportPreviewRows(
           rows.map((c) => {
-            const dup = otEnSeguimiento.has(c.id_pedido);
+            let proveedor_id = "";
+            let acabado_id = "";
+            if (c.format === "hermano") {
+              const pExcel = c.proveedor_excel?.trim() ?? "";
+              const procExcel = c.proceso_excel?.trim() ?? "";
+              if (pExcel) {
+                proveedor_id = fuzzyMatchIdByIncludes(
+                  pExcel,
+                  proveedores.map((p) => ({ id: p.id, nombre: p.nombre }))
+                );
+              }
+              const prov = proveedores.find((p) => p.id === proveedor_id);
+              if (procExcel && prov) {
+                acabado_id = fuzzyMatchAcabadoIdByIncludes(
+                  procExcel,
+                  acabadosCatalogo,
+                  prov.tipo_proveedor_id
+                );
+              }
+            }
             return {
               key: crypto.randomUUID(),
+              ot_raw: c.ot_raw,
               id_pedido: c.id_pedido,
               cliente: c.cliente,
               ref_cliente: c.ref_cliente,
               titulo: c.titulo,
               fecha_entrega_excel: c.fecha_entrega_excel,
-              fecha_prevista: c.fecha_prevista_default || defaultYmdLocal(),
+              fecha_prevista: c.fecha_prevista_default || "",
+              fecha_envio_default: c.fecha_envio_default,
               notas: "",
-              proveedor_id: "",
-              acabado_id: "",
+              proveedor_id,
+              acabado_id,
               selected: false,
-              duplicate: dup,
+              estado_sugerido: c.estado_sugerido,
+              unidades: c.unidades,
+              prioridad: c.prioridad,
+              palets: c.palets,
+              observaciones: c.observaciones,
+              importFormat: c.format,
+              proveedor_excel: c.proveedor_excel,
+              proceso_excel: c.proceso_excel,
             };
           })
         );
         setBulkImportProv("");
         setBulkImportAcab("");
-        toast.success(`${rows.length} fila(s) en la sala de validación.`);
+        toast.success(
+          `${rows.length} fila(s) · formato ${format === "hermano" ? "Control Externos" : "Optimus"}.`
+        );
       } catch (err) {
         console.error(err);
         toast.error(
@@ -1141,7 +1291,7 @@ export function GestionExternosPage() {
         );
       }
     },
-    [otEnSeguimiento]
+    [proveedores, acabadosCatalogo]
   );
 
   function setImportRowProveedor(key: string, provId: string) {
@@ -1162,13 +1312,10 @@ export function GestionExternosPage() {
 
   function toggleImportSelectAllSelectable() {
     setImportPreviewRows((prev) => {
-      const selectable = prev.filter((r) => !r.duplicate);
-      if (selectable.length === 0) return prev;
-      const allSelected = selectable.every((r) => r.selected);
+      if (prev.length === 0) return prev;
+      const allSelected = prev.every((r) => r.selected);
       const nextSelect = !allSelected;
-      return prev.map((r) =>
-        r.duplicate ? r : { ...r, selected: nextSelect }
-      );
+      return prev.map((r) => ({ ...r, selected: nextSelect }));
     });
   }
 
@@ -1183,7 +1330,7 @@ export function GestionExternosPage() {
       toast.error("Elige un proveedor para la asignación masiva.");
       return;
     }
-    const hasTargets = importPreviewRows.some((r) => r.selected && !r.duplicate);
+    const hasTargets = importPreviewRows.some((r) => r.selected);
     if (!hasTargets) {
       toast.error(
         "Selecciona al menos una fila importable para aplicar la asignación."
@@ -1192,7 +1339,7 @@ export function GestionExternosPage() {
     }
     setImportPreviewRows((prev) =>
       prev.map((r) => {
-        if (!r.selected || r.duplicate) return r;
+        if (!r.selected) return r;
         const prov = proveedores.find((p) => p.id === bulkImportProv);
         if (!prov) return r;
         const opts = acabadosCatalogo.filter(
@@ -1211,9 +1358,7 @@ export function GestionExternosPage() {
   }
 
   async function confirmImportSelection() {
-    const seleccionadas = importPreviewRows.filter(
-      (r) => r.selected && !r.duplicate
-    );
+    const seleccionadas = importPreviewRows.filter((r) => r.selected);
     if (seleccionadas.length === 0) {
       toast.error(
         "Selecciona al menos una fila importable con la casilla junto a la OT."
@@ -1221,26 +1366,82 @@ export function GestionExternosPage() {
       return;
     }
     const toInsert = seleccionadas.filter(
-      (r) => r.proveedor_id && r.acabado_id && r.fecha_prevista
+      (r) => r.proveedor_id && r.acabado_id
     );
     if (toInsert.length === 0) {
       toast.error(
-        "En las filas seleccionadas, completa proveedor, acabado y fecha prevista."
+        "En las filas seleccionadas, elige proveedor y acabado en cada fila."
       );
       return;
     }
+    const sinFechaCuandoObligatoria = toInsert.filter(
+      (r) =>
+        ESTADOS_IMPORT_REQUIEREN_FECHA_PREVISTA.has(r.estado_sugerido) &&
+        !fechaPrevistaYmdValida(r.fecha_prevista)
+    );
+    if (sinFechaCuandoObligatoria.length > 0) {
+      toast.error(
+        `Las filas en estado «Recibido» o «Muelle Minerva» requieren fecha prevista (${sinFechaCuandoObligatoria.length} fila(s)).`
+      );
+      return;
+    }
+    const otKeys = [...new Set(toInsert.map((r) => String(r.ot_raw)))];
     setSaving(true);
-    const payload = toInsert.map((r) => ({
-      id_pedido: r.id_pedido,
-      cliente_nombre: r.cliente,
-      trabajo_titulo: r.titulo,
-      pedido_cliente: r.ref_cliente,
-      proveedor_id: r.proveedor_id,
-      acabado_id: r.acabado_id,
-      estado: "Pendiente",
-      fecha_prevista: dateInputToTimestamptz(r.fecha_prevista),
-      notas_logistica: r.notas.trim() || null,
-    }));
+    const { data: existingRows, error: exErr } = await supabase
+      .from("prod_seguimiento_externos")
+      .select("OT, num_operacion, id_pedido")
+      .in("OT", otKeys);
+    if (exErr) {
+      setSaving(false);
+      toast.error(exErr.message);
+      return;
+    }
+    const maxByOt = new Map<string, number>();
+    for (const er of existingRows ?? []) {
+      const row = er as {
+        OT?: string | null;
+        num_operacion?: number | null;
+        id_pedido?: number;
+      };
+      const k = String(row.OT ?? row.id_pedido ?? "");
+      if (!k) continue;
+      const n = row.num_operacion ?? 0;
+      maxByOt.set(k, Math.max(maxByOt.get(k) ?? 0, n));
+    }
+    const payload: Record<string, unknown>[] = [];
+    for (const r of importPreviewRows) {
+      if (!r.selected || !r.proveedor_id || !r.acabado_id) {
+        continue;
+      }
+      if (!toInsert.some((t) => t.key === r.key)) continue;
+      const otKey = String(r.ot_raw);
+      const nextOp = (maxByOt.get(otKey) ?? 0) + 1;
+      maxByOt.set(otKey, nextOp);
+      const ymdEnv = r.fecha_envio_default?.slice?.(0, 10) ?? "";
+      const fechaEnv =
+        ymdEnv.length === 10 ? dateInputToTimestamptz(ymdEnv) : null;
+      const fp = fechaPrevistaYmdValida(r.fecha_prevista)
+        ? dateInputToTimestamptz(r.fecha_prevista.trim())
+        : null;
+      payload.push({
+        id_pedido: r.id_pedido,
+        OT: otKey,
+        num_operacion: nextOp,
+        cliente_nombre: r.cliente,
+        trabajo_titulo: r.titulo,
+        pedido_cliente: r.ref_cliente,
+        proveedor_id: r.proveedor_id,
+        acabado_id: r.acabado_id,
+        estado: r.estado_sugerido,
+        fecha_prevista: fp,
+        fecha_envio: fechaEnv,
+        notas_logistica: r.notas.trim() || null,
+        unidades: r.unidades,
+        prioridad: r.prioridad,
+        palets: r.palets,
+        observaciones: r.observaciones?.trim() || null,
+      });
+    }
     const { error } = await supabase
       .from("prod_seguimiento_externos")
       .insert(payload);
@@ -1250,12 +1451,14 @@ export function GestionExternosPage() {
       return;
     }
     toast.success(
-      `Se han importado ${toInsert.length} trabajos correctamente a Seguimiento`
+      `Se han importado ${payload.length} trabajos correctamente a Seguimiento`
     );
     const importedKeys = new Set(toInsert.map((r) => r.key));
-    const remainingCount = importPreviewRows.length - toInsert.length;
+    const remainingAfter = importPreviewRows.filter(
+      (r) => !importedKeys.has(r.key)
+    ).length;
     setImportPreviewRows((prev) => prev.filter((r) => !importedKeys.has(r.key)));
-    if (remainingCount === 0) {
+    if (remainingAfter === 0) {
       setBulkImportProv("");
       setBulkImportAcab("");
       setTab("seguimiento");
@@ -1266,9 +1469,15 @@ export function GestionExternosPage() {
   const exportSeguimientoExcel = useCallback(() => {
     const rows = seguimientosFiltrados.map((r) => {
       const sem = computeSemaforo(r);
+      const dias = computeDiasEnExternoUi(r.fecha_envio, r.fecha_prevista);
       return {
         Semáforo: sem.excelLabel,
-        OT: r.id_pedido,
+        OT: getOtDisplay(r),
+        Op: r.num_operacion ?? "",
+        Unidades: r.unidades ?? "",
+        Prioridad: r.prioridad ?? "",
+        Palets: r.palets ?? "",
+        "Días externo": dias ?? "",
         Cliente: r.cliente_nombre,
         Trabajo: r.trabajo_titulo,
         "Pedido cliente": r.pedido_cliente,
@@ -1286,6 +1495,7 @@ export function GestionExternosPage() {
             : r.created_at
         ),
         Notas: r.notas_logistica ?? "",
+        Observaciones: r.observaciones ?? "",
       };
     });
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -1325,6 +1535,7 @@ export function GestionExternosPage() {
     setEditSegAcabadoId(row.acabado_id);
     setEditSegFecha(isoToDateInput(row.fecha_prevista));
     setEditSegNotas(row.notas_logistica ?? "");
+    setEditSegObservaciones(row.observaciones ?? "");
     setSeguimientoSheetOpen(true);
   }
 
@@ -1354,6 +1565,7 @@ export function GestionExternosPage() {
       acabado_id: editSegAcabadoId,
       fecha_prevista: dateInputToTimestamptz(editSegFecha),
       notas_logistica: editSegNotas.trim() || null,
+      observaciones: editSegObservaciones.trim() || null,
       updated_at: now,
     };
     setSaving(true);
@@ -1397,9 +1609,7 @@ export function GestionExternosPage() {
 
   async function handleComunicacionFinalizar() {
     if (!prepararEnvioEnabled || seleccionSeguimientoRows.length === 0) return;
-    const rows = [...seleccionSeguimientoRows].sort(
-      (a, b) => a.id_pedido - b.id_pedido
-    );
+    const rows = [...seleccionSeguimientoRows].sort(compareSeguimientoRows);
     const prov = proveedores.find((p) => p.id === rows[0].proveedor_id);
     const email = prov?.email?.trim() ?? "";
     const body = buildComunicacionEmailBody(
@@ -1626,14 +1836,14 @@ export function GestionExternosPage() {
                 </p>
               ) : (
                 <div className="max-h-[min(78vh,56rem)] w-full max-w-none overflow-auto rounded-lg border border-slate-200/80 sm:rounded-xl">
-                  <table className="w-full min-w-[107rem] caption-bottom border-collapse text-sm">
+                  <table className="w-full min-w-[120rem] caption-bottom border-collapse text-xs">
                     <thead>
                       <tr className="border-b border-slate-200">
-                        <th className="sticky top-0 z-30 w-10 bg-slate-50/95 px-1 py-2.5 text-center text-xs font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                        <th className="sticky top-0 z-30 w-8 bg-slate-50/95 px-0.5 py-1 text-center font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           <input
                             ref={seguimientoMasterCheckboxRef}
                             type="checkbox"
-                            className="size-4 rounded border"
+                            className="size-3.5 rounded border"
                             checked={seguimientoSelectionStats.allInViewSelected}
                             disabled={seguimientoSelectionStats.n === 0}
                             onChange={(e) =>
@@ -1645,44 +1855,59 @@ export function GestionExternosPage() {
                             aria-label="Seleccionar todas las OTs visibles en la tabla"
                           />
                         </th>
-                        <th className="sticky top-0 z-30 w-11 bg-slate-50/95 px-1 py-2.5 text-center text-xs font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
-                          Semáforo
+                        <th className="sticky top-0 z-30 w-9 bg-slate-50/95 px-0.5 py-1 text-center font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Sem.
                         </th>
-                        <th className="sticky top-0 z-30 w-14 bg-slate-50/95 px-2 py-2.5 text-left text-xs font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                        <th className="sticky top-0 z-30 w-12 bg-slate-50/95 px-1 py-1 text-left font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           OT
                         </th>
-                        <th className="sticky top-0 z-30 w-[8.5rem] min-w-[7rem] max-w-[9.5rem] bg-slate-50/95 px-1.5 py-2 text-left text-[13px] font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                        <th className="sticky top-0 z-30 w-8 bg-slate-50/95 px-0.5 py-1 text-center font-medium tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Op
+                        </th>
+                        <th className="sticky top-0 z-30 w-10 bg-slate-50/95 px-0.5 py-1 text-center font-medium tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Ud.
+                        </th>
+                        <th className="sticky top-0 z-30 w-16 bg-slate-50/95 px-0.5 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Prio.
+                        </th>
+                        <th className="sticky top-0 z-30 w-8 bg-slate-50/95 px-0.5 py-1 text-center font-medium tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Pal.
+                        </th>
+                        <th className="sticky top-0 z-30 w-8 bg-slate-50/95 px-0.5 py-1 text-center font-medium tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Días
+                        </th>
+                        <th className="sticky top-0 z-30 w-[7.5rem] min-w-[6rem] max-w-[8rem] bg-slate-50/95 px-1 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Cliente
                         </th>
-                        <th className="sticky top-0 z-30 w-[11.5rem] min-w-[9rem] max-w-[13rem] bg-slate-50/95 px-1.5 py-2 text-left text-[13px] font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                        <th className="sticky top-0 z-30 w-[10rem] min-w-[8rem] max-w-[11rem] bg-slate-50/95 px-1 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Trabajo
                         </th>
-                        <th className="sticky top-0 z-30 min-w-[8rem] bg-slate-50/95 px-3 py-2.5 text-left text-xs font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
-                          Proveedor
+                        <th className="sticky top-0 z-30 min-w-[6.5rem] bg-slate-50/95 px-1 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Prov.
                         </th>
-                        <th className="sticky top-0 z-30 min-w-[8rem] bg-slate-50/95 px-3 py-2.5 text-left text-xs font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
-                          Acabado
+                        <th className="sticky top-0 z-30 min-w-[6.5rem] bg-slate-50/95 px-1 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Acab.
                         </th>
-                        <th className="sticky top-0 z-30 w-28 min-w-28 max-w-28 bg-slate-50/95 px-1.5 py-2 text-left text-xs font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                        <th className="sticky top-0 z-30 w-24 min-w-24 max-w-24 bg-slate-50/95 px-0.5 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Estado
                         </th>
-                        <th className="sticky top-0 z-30 w-[5.25rem] min-w-[5.25rem] max-w-[5.5rem] bg-slate-50/95 px-1 py-2 text-center text-[13px] font-medium whitespace-nowrap tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
-                          Previsto
+                        <th className="sticky top-0 z-30 w-[4.5rem] min-w-[4.5rem] bg-slate-50/95 px-0.5 py-1 text-center font-medium whitespace-nowrap tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Prev.
                         </th>
-                        <th className="sticky top-0 z-30 w-[5.25rem] min-w-[5.25rem] max-w-[5.5rem] bg-slate-50/95 px-1 py-2 text-center text-[13px] font-medium whitespace-nowrap tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
-                          Envío
+                        <th className="sticky top-0 z-30 w-[4.5rem] min-w-[4.5rem] bg-slate-50/95 px-0.5 py-1 text-center font-medium whitespace-nowrap tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Env.
                         </th>
-                        <th className="sticky top-0 z-30 min-w-[22rem] max-w-[28rem] bg-slate-50/95 px-3 py-2.5 text-left text-xs font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                        <th className="sticky top-0 z-30 min-w-[14rem] max-w-[20rem] bg-slate-50/95 px-1 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Notas
                         </th>
-                        <th className="sticky top-0 z-30 w-[5.25rem] min-w-[5.25rem] max-w-[5.5rem] bg-slate-50/95 px-1 py-2 text-center text-[13px] font-medium whitespace-nowrap tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                        <th className="sticky top-0 z-30 w-[4.5rem] min-w-[4.5rem] bg-slate-50/95 px-0.5 py-1 text-center font-medium whitespace-nowrap tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Alta
                         </th>
-                        <th className="sticky top-0 z-30 w-[5.25rem] min-w-[5.25rem] max-w-[5.5rem] bg-slate-50/95 px-1 py-2 text-center text-[13px] font-medium whitespace-nowrap tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
-                          Modif.
+                        <th className="sticky top-0 z-30 w-[4.5rem] min-w-[4.5rem] bg-slate-50/95 px-0.5 py-1 text-center font-medium whitespace-nowrap tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Mod.
                         </th>
-                        <th className="sticky top-0 z-30 w-12 bg-slate-50/95 px-2 py-2.5 text-center text-xs font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
-                          Acciones
+                        <th className="sticky top-0 z-30 w-10 bg-slate-50/95 px-0.5 py-1 text-center font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          ···
                         </th>
                       </tr>
                     </thead>
@@ -1693,6 +1918,10 @@ export function GestionExternosPage() {
                           row.estado
                         );
                         const recibido = row.estado === "Recibido";
+                        const diasUi = computeDiasEnExternoUi(
+                          row.fecha_envio,
+                          row.fecha_prevista
+                        );
                         return (
                           <tr
                             key={row.id}
@@ -1705,10 +1934,10 @@ export function GestionExternosPage() {
                                 "bg-red-50/90 dark:bg-red-950/30"
                             )}
                           >
-                            <td className="w-10 px-1 py-1.5 text-center align-middle">
+                            <td className="w-8 px-0.5 py-0.5 text-center align-middle">
                               <input
                                 type="checkbox"
-                                className="size-4 rounded border"
+                                className="size-3.5 rounded border"
                                 checked={selectedSeguimientoIds.includes(row.id)}
                                 onChange={(e) =>
                                   toggleSeguimientoSelected(
@@ -1716,33 +1945,50 @@ export function GestionExternosPage() {
                                     e.target.checked
                                   )
                                 }
-                                aria-label={`Seleccionar OT ${row.id_pedido}`}
+                                aria-label={`Seleccionar OT ${getOtDisplay(row)}`}
                               />
                             </td>
-                            <td className="w-11 px-1 py-1.5 text-center align-middle">
+                            <td className="w-9 px-0.5 py-0.5 text-center align-middle">
                               <SemaforoCell row={row} />
                             </td>
-                            <td className="w-14 px-2 py-1.5 font-medium whitespace-nowrap">
-                              {row.id_pedido}
+                            <td className="w-12 px-1 py-0.5 font-medium whitespace-nowrap tabular-nums">
+                              {getOtDisplay(row)}
                             </td>
-                            <td className="w-[8.5rem] min-w-[7rem] max-w-[9.5rem] truncate px-1.5 py-1.5 text-[13px] leading-snug">
+                            <td className="w-8 px-0.5 py-0.5 text-center tabular-nums">
+                              {row.num_operacion ?? "—"}
+                            </td>
+                            <td className="w-10 px-0.5 py-0.5 text-center tabular-nums">
+                              {row.unidades != null ? row.unidades : "—"}
+                            </td>
+                            <td className="w-16 truncate px-0.5 py-0.5">
+                              {row.prioridad?.trim()
+                                ? row.prioridad
+                                : "—"}
+                            </td>
+                            <td className="w-8 px-0.5 py-0.5 text-center tabular-nums">
+                              {row.palets != null ? row.palets : "—"}
+                            </td>
+                            <td className="w-8 px-0.5 py-0.5 text-center tabular-nums">
+                              {diasUi != null ? diasUi : "—"}
+                            </td>
+                            <td className="w-[7.5rem] min-w-[6rem] max-w-[8rem] truncate px-1 py-0.5 leading-tight">
                               {row.cliente_nombre}
                             </td>
-                            <td className="w-[11.5rem] min-w-[9rem] max-w-[13rem] px-1.5 py-1.5 align-top leading-snug">
+                            <td className="w-[10rem] min-w-[8rem] max-w-[11rem] px-1 py-0.5 align-top leading-tight">
                               <span
-                                className="line-clamp-2 max-w-full break-words whitespace-normal text-[13px]"
+                                className="line-clamp-2 max-w-full break-words whitespace-normal"
                                 title={row.trabajo_titulo}
                               >
                                 {row.trabajo_titulo}
                               </span>
                             </td>
-                            <td className="max-w-[10rem] truncate py-1.5 text-sm">
+                            <td className="max-w-[7rem] truncate py-0.5">
                               {proveedorNombreById.get(row.proveedor_id) ?? "—"}
                             </td>
-                            <td className="max-w-[10rem] truncate py-1.5 text-sm">
+                            <td className="max-w-[7rem] truncate py-0.5">
                               {acabadoNombreById.get(row.acabado_id) ?? "—"}
                             </td>
-                            <td className="w-28 max-w-28 py-1.5 align-middle">
+                            <td className="w-24 max-w-24 py-0.5 align-middle">
                               <NativeSelect
                                 label=""
                                 options={estadoRapidoOptions}
@@ -1751,17 +1997,17 @@ export function GestionExternosPage() {
                                   void updateEstado(row, e.target.value)
                                 }
                                 disabled={saving}
-                                className="h-8 min-h-8 w-28 min-w-0 max-w-28 shrink-0 px-1 py-0 text-[11px] leading-tight"
-                                aria-label={`Estado OT ${row.id_pedido}`}
+                                className="h-7 min-h-7 w-24 min-w-0 max-w-24 shrink-0 px-0.5 py-0 text-[10px] leading-tight"
+                                aria-label={`Estado OT ${getOtDisplay(row)}`}
                               />
                             </td>
-                            <td className="w-[5.25rem] min-w-[5.25rem] max-w-[5.5rem] px-1 py-1.5 text-center align-middle text-[13px] tabular-nums leading-tight">
+                            <td className="w-[4.5rem] min-w-[4.5rem] px-0.5 py-0.5 text-center align-middle tabular-nums leading-tight">
                               {formatFechaEsCorta(row.fecha_prevista)}
                             </td>
-                            <td className="w-[5.25rem] min-w-[5.25rem] max-w-[5.5rem] px-1 py-1.5 text-center align-middle text-[13px] tabular-nums leading-tight">
+                            <td className="w-[4.5rem] min-w-[4.5rem] px-0.5 py-0.5 text-center align-middle tabular-nums leading-tight">
                               {formatFechaEsCorta(row.fecha_envio)}
                             </td>
-                            <td className="min-w-[22rem] max-w-[28rem] py-2 align-top text-xs text-muted-foreground">
+                            <td className="min-w-[14rem] max-w-[20rem] py-0.5 align-top text-[11px] text-muted-foreground leading-snug">
                               <span
                                 className="line-clamp-2 break-words whitespace-normal"
                                 title={
@@ -1775,26 +2021,26 @@ export function GestionExternosPage() {
                                   : "—"}
                               </span>
                             </td>
-                            <td className="w-[5.25rem] min-w-[5.25rem] max-w-[5.5rem] px-1 py-1.5 text-center align-middle text-[13px] tabular-nums leading-tight">
+                            <td className="w-[4.5rem] min-w-[4.5rem] px-0.5 py-0.5 text-center align-middle tabular-nums leading-tight">
                               {formatFechaEsCorta(row.created_at)}
                             </td>
-                            <td className="w-[5.25rem] min-w-[5.25rem] max-w-[5.5rem] px-1 py-1.5 text-center align-middle text-[13px] tabular-nums leading-tight">
+                            <td className="w-[4.5rem] min-w-[4.5rem] px-0.5 py-0.5 text-center align-middle tabular-nums leading-tight">
                               {formatFechaEsCorta(
                                 row.updated_at != null && row.updated_at !== ""
                                   ? row.updated_at
                                   : row.created_at
                               )}
                             </td>
-                            <td className="w-12 p-2 text-center">
+                            <td className="w-10 p-0.5 text-center">
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="icon-sm"
-                                className="size-8 shrink-0"
+                                className="size-7 shrink-0"
                                 onClick={() => openSeguimientoEdit(row)}
-                                aria-label={`Editar OT ${row.id_pedido}`}
+                                aria-label={`Editar OT ${getOtDisplay(row)}`}
                               >
-                                <Pencil className="size-4" />
+                                <Pencil className="size-3.5" />
                               </Button>
                             </td>
                           </tr>
@@ -1842,6 +2088,12 @@ export function GestionExternosPage() {
                     OT
                   </th>
                   <th className="border border-[#002147] px-1 py-1.5 text-left font-semibold">
+                    Op
+                  </th>
+                  <th className="border border-[#002147] px-1 py-1.5 text-left font-semibold">
+                    Ud.
+                  </th>
+                  <th className="border border-[#002147] px-1 py-1.5 text-left font-semibold">
                     Cliente
                   </th>
                   <th className="border border-[#002147] px-1 py-1.5 text-left font-semibold">
@@ -1885,7 +2137,13 @@ export function GestionExternosPage() {
                         {sem.excelLabel}
                       </td>
                       <td className="border border-slate-200 px-1 py-1 font-medium">
-                        {row.id_pedido}
+                        {getOtDisplay(row)}
+                      </td>
+                      <td className="border border-slate-200 px-1 py-1 tabular-nums">
+                        {row.num_operacion ?? "—"}
+                      </td>
+                      <td className="border border-slate-200 px-1 py-1 tabular-nums">
+                        {row.unidades ?? "—"}
                       </td>
                       <td className="border border-slate-200 px-1 py-1">
                         {row.cliente_nombre}
@@ -1962,15 +2220,17 @@ export function GestionExternosPage() {
           <Card className="border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
             <CardHeader>
               <CardTitle className="text-lg text-[#002147]">
-                Importación inteligente (Excel Optimus)
+                Importación inteligente (doble formato)
               </CardTitle>
               <CardDescription>
-                Archivo .xlsx o .csv con las mismas cabeceras que ventas
-                (normalizadas automáticamente). Solo se importan trabajos en
-                estado Optimus «En producción», «No empezado», «En Curso» o
-                «Abierto» (el resto se omite sin error). La fecha prevista
-                sugerida es un día antes de la entrega al cliente. Asigna
-                proveedor y acabado antes de confirmar.
+                <strong>Control Externos</strong> (hoja «Control Externos» o
+                cabeceras OT / CLIENTE / TRABAJO): mapea columnas de fábrica.
+                <strong className="mx-1">Optimus</strong>
+                (pedidos): «Nº Pedido» → OT, «Título» → trabajo, «Cantidad
+                pedida» → unidades; estados incluidos p. ej. «En producción»,
+                «En cola» (se registra como Pendiente). La misma OT puede
+                repetirse: se crean filas con <code className="text-xs">num_operacion</code>{" "}
+                1, 2, 3… Asigna proveedor y acabado antes de confirmar.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -2079,60 +2339,59 @@ export function GestionExternosPage() {
                   </div>
 
                   <div className="w-full max-w-none overflow-x-auto rounded-lg border border-slate-200">
-                    <Table className="w-full min-w-[88rem]">
+                    <Table className="w-full min-w-[96rem] text-xs">
                       <TableHeader>
                         <TableRow className="bg-slate-50/90">
-                          <TableHead className="w-10 px-2">
+                          <TableHead className="w-8 px-1">
                             <input
                               ref={importMasterCheckboxRef}
                               type="checkbox"
-                              className="size-4 rounded border"
+                              className="size-3.5 rounded border"
                               checked={importSelectionStats.allSelectableSelected}
                               disabled={
                                 importSelectionStats.selectableCount === 0
                               }
                               onChange={toggleImportSelectAllSelectable}
-                              title="Seleccionar o quitar todas las filas importables (no afecta a «Ya en seguimiento»)"
+                              title="Seleccionar o quitar todas las filas"
                               aria-label="Seleccionar todas las filas importables"
                             />
                           </TableHead>
-                          <TableHead className="whitespace-nowrap">OT</TableHead>
-                          <TableHead className="max-w-[8rem]">Cliente</TableHead>
-                          <TableHead className="min-w-[24rem] max-w-[36rem]">
+                          <TableHead className="whitespace-nowrap px-1">
+                            OT
+                          </TableHead>
+                          <TableHead className="px-1">Ud.</TableHead>
+                          <TableHead className="px-1">Prio.</TableHead>
+                          <TableHead className="px-1">Pal.</TableHead>
+                          <TableHead className="max-w-[6rem] px-1">Estado</TableHead>
+                          <TableHead className="max-w-[7rem] px-1">Cliente</TableHead>
+                          <TableHead className="min-w-[14rem] max-w-[24rem] px-1">
                             Trabajo
                           </TableHead>
-                          <TableHead className="max-w-[7rem]">
-                            Pedido cliente
+                          <TableHead className="max-w-[6rem] px-1">
+                            Ped. cli.
                           </TableHead>
-                          <TableHead className="whitespace-nowrap">
-                            Entrega (Excel)
+                          <TableHead className="whitespace-nowrap px-1">
+                            Entrega
                           </TableHead>
-                          <TableHead className="whitespace-nowrap">
-                            Fecha prevista
+                          <TableHead className="whitespace-nowrap px-1">
+                            Prevista
                           </TableHead>
-                          <TableHead className="min-w-[10rem]">Proveedor</TableHead>
-                          <TableHead className="min-w-[10rem]">Acabado</TableHead>
-                          <TableHead className="min-w-[18rem] max-w-[28rem]">
+                          <TableHead className="min-w-[9rem] px-1">Proveedor</TableHead>
+                          <TableHead className="min-w-[9rem] px-1">Acabado</TableHead>
+                          <TableHead className="min-w-[12rem] max-w-[18rem] px-1">
                             Notas
                           </TableHead>
-                          <TableHead className="min-w-[7rem]" />
+                          <TableHead className="min-w-[10rem] px-1">Observ.</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {importPreviewRows.map((row) => (
-                          <TableRow
-                            key={row.key}
-                            className={cn(
-                              row.duplicate &&
-                                "bg-orange-50/95 text-orange-950 dark:bg-orange-950/30 dark:text-orange-100"
-                            )}
-                          >
-                            <TableCell>
+                          <TableRow key={row.key}>
+                            <TableCell className="px-1 py-1">
                               <input
                                 type="checkbox"
-                                className="size-4 rounded border"
+                                className="size-3.5 rounded border"
                                 checked={row.selected}
-                                disabled={row.duplicate}
                                 onChange={(e) =>
                                   setImportPreviewRows((prev) =>
                                     prev.map((r) =>
@@ -2142,28 +2401,40 @@ export function GestionExternosPage() {
                                     )
                                   )
                                 }
-                                aria-label={`Incluir OT ${row.id_pedido}`}
+                                aria-label={`Incluir OT ${row.ot_raw}`}
                               />
                             </TableCell>
-                            <TableCell className="font-medium whitespace-nowrap">
-                              {row.id_pedido}
+                            <TableCell className="px-1 py-1 font-medium whitespace-nowrap tabular-nums">
+                              {row.ot_raw}
                             </TableCell>
-                            <TableCell className="truncate text-sm">
+                            <TableCell className="px-1 py-1 tabular-nums">
+                              {row.unidades ?? "—"}
+                            </TableCell>
+                            <TableCell className="max-w-[5rem] truncate px-1 py-1">
+                              {row.prioridad ?? "—"}
+                            </TableCell>
+                            <TableCell className="px-1 py-1 tabular-nums">
+                              {row.palets ?? "—"}
+                            </TableCell>
+                            <TableCell className="max-w-[6rem] truncate px-1 py-1">
+                              {row.estado_sugerido}
+                            </TableCell>
+                            <TableCell className="max-w-[7rem] truncate py-1">
                               {row.cliente || "—"}
                             </TableCell>
-                            <TableCell className="min-w-0 align-top whitespace-normal break-words py-2 text-sm leading-snug">
+                            <TableCell className="min-w-0 whitespace-normal break-words py-1 leading-snug">
                               {row.titulo || "—"}
                             </TableCell>
-                            <TableCell className="truncate text-xs">
+                            <TableCell className="max-w-[6rem] truncate py-1">
                               {row.ref_cliente || "—"}
                             </TableCell>
-                            <TableCell className="max-w-[100px] truncate text-xs text-muted-foreground">
+                            <TableCell className="max-w-[90px] truncate py-1 text-muted-foreground">
                               {fechaExcelRowToCorta(row.fecha_entrega_excel)}
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="px-1 py-1">
                               <Input
                                 type="date"
-                                className="h-8 min-w-[9.5rem] text-xs"
+                                className="h-7 min-w-[8.5rem] text-[11px]"
                                 value={row.fecha_prevista}
                                 onChange={(e) =>
                                   setImportPreviewRows((prev) =>
@@ -2177,17 +2448,16 @@ export function GestionExternosPage() {
                                     )
                                   )
                                 }
-                                disabled={row.duplicate}
                               />
                             </TableCell>
-                            <TableCell className="min-w-[10rem]">
+                            <TableCell className="min-w-[9rem] px-1 py-1">
                               <select
-                                className="border-input bg-background h-8 w-full max-w-[11rem] rounded-md border px-2 text-xs"
+                                className="border-input bg-background h-7 w-full max-w-[10rem] rounded-md border px-1.5 text-[11px]"
                                 value={row.proveedor_id}
                                 onChange={(e) =>
                                   setImportRowProveedor(row.key, e.target.value)
                                 }
-                                disabled={row.duplicate || !proveedores.length}
+                                disabled={!proveedores.length}
                               >
                                 <option value="">—</option>
                                 {proveedores.map((p) => (
@@ -2197,9 +2467,9 @@ export function GestionExternosPage() {
                                 ))}
                               </select>
                             </TableCell>
-                            <TableCell className="min-w-[10rem]">
+                            <TableCell className="min-w-[9rem] px-1 py-1">
                               <select
-                                className="border-input bg-background h-8 w-full max-w-[11rem] rounded-md border px-2 text-xs"
+                                className="border-input bg-background h-7 w-full max-w-[10rem] rounded-md border px-1.5 text-[11px]"
                                 value={row.acabado_id}
                                 onChange={(e) =>
                                   setImportPreviewRows((prev) =>
@@ -2213,7 +2483,7 @@ export function GestionExternosPage() {
                                     )
                                   )
                                 }
-                                disabled={row.duplicate || !row.proveedor_id}
+                                disabled={!row.proveedor_id}
                               >
                                 {acabadoOptionsForProveedorId(
                                   row.proveedor_id
@@ -2224,13 +2494,12 @@ export function GestionExternosPage() {
                                 ))}
                               </select>
                             </TableCell>
-                            <TableCell className="min-w-0 align-top p-2">
+                            <TableCell className="min-w-0 align-top p-1">
                               <Textarea
-                                className="min-h-[2.75rem] resize-y text-xs leading-snug"
+                                className="min-h-[2.25rem] resize-y text-[11px] leading-snug"
                                 rows={2}
                                 placeholder="Notas logística…"
                                 value={row.notas}
-                                disabled={row.duplicate}
                                 onChange={(e) =>
                                   setImportPreviewRows((prev) =>
                                     prev.map((r) =>
@@ -2240,17 +2509,28 @@ export function GestionExternosPage() {
                                     )
                                   )
                                 }
-                                aria-label={`Notas OT ${row.id_pedido}`}
+                                aria-label={`Notas OT ${row.ot_raw}`}
                               />
                             </TableCell>
-                            <TableCell className="text-xs">
-                              {row.duplicate ? (
-                                <span className="font-medium text-orange-700 dark:text-orange-300">
-                                  Ya en seguimiento
-                                </span>
-                              ) : (
-                                "—"
-                              )}
+                            <TableCell className="min-w-0 align-top p-1">
+                              <Textarea
+                                className="min-h-[2.25rem] resize-y text-[11px] leading-snug"
+                                rows={2}
+                                placeholder="—"
+                                value={row.observaciones ?? ""}
+                                onChange={(e) =>
+                                  setImportPreviewRows((prev) =>
+                                    prev.map((r) =>
+                                      r.key === row.key
+                                        ? {
+                                            ...r,
+                                            observaciones: e.target.value,
+                                          }
+                                        : r
+                                    )
+                                  )
+                                }
+                              />
                             </TableCell>
                           </TableRow>
                         ))}
@@ -2296,7 +2576,7 @@ export function GestionExternosPage() {
                 className="grid gap-4 sm:grid-cols-2"
               >
                 <div className="grid gap-1.5">
-                  <Label htmlFor="ot">Número de OT (id_pedido)</Label>
+                  <Label htmlFor="ot">OT (vacío → {OT_PLACEHOLDER_PEDIDO})</Label>
                   <Input
                     id="ot"
                     inputMode="numeric"
@@ -2358,6 +2638,46 @@ export function GestionExternosPage() {
                   onChange={(e) => setEnvAcabadoId(e.target.value)}
                   disabled={!envProveedorId}
                 />
+                <div className="grid gap-1.5">
+                  <Label htmlFor="env-u">Unidades</Label>
+                  <Input
+                    id="env-u"
+                    inputMode="numeric"
+                    placeholder="—"
+                    value={envUnidades}
+                    onChange={(e) => setEnvUnidades(e.target.value)}
+                    disabled={!proveedores.length}
+                  />
+                </div>
+                <NativeSelect
+                  label="Prioridad"
+                  options={PRIORIDAD_MANUAL_OPTIONS}
+                  value={envPrioridad}
+                  onChange={(e) => setEnvPrioridad(e.target.value)}
+                  disabled={!proveedores.length}
+                />
+                <div className="grid gap-1.5">
+                  <Label htmlFor="env-pal">Palets</Label>
+                  <Input
+                    id="env-pal"
+                    inputMode="numeric"
+                    placeholder="—"
+                    value={envPalets}
+                    onChange={(e) => setEnvPalets(e.target.value)}
+                    disabled={!proveedores.length}
+                  />
+                </div>
+                <div className="grid gap-1.5 sm:col-span-2">
+                  <Label htmlFor="env-obs">Observaciones</Label>
+                  <Textarea
+                    id="env-obs"
+                    rows={2}
+                    placeholder="Opcional"
+                    value={envObservaciones}
+                    onChange={(e) => setEnvObservaciones(e.target.value)}
+                    disabled={!proveedores.length}
+                  />
+                </div>
                 <div className="grid gap-1.5 sm:col-span-2">
                   <Label htmlFor="notas">Notas de logística (opcional)</Label>
                   <Textarea
@@ -2585,7 +2905,10 @@ export function GestionExternosPage() {
                 {seguimientoEditing ? (
                   <span className="text-muted-foreground font-normal">
                     {" "}
-                    · OT {seguimientoEditing.id_pedido}
+                    · OT {getOtDisplay(seguimientoEditing)}
+                    {seguimientoEditing.num_operacion != null
+                      ? ` · Op ${seguimientoEditing.num_operacion}`
+                      : ""}
                   </span>
                 ) : null}
               </SheetTitle>
@@ -2627,6 +2950,16 @@ export function GestionExternosPage() {
                   placeholder="Instrucciones, incidencias, referencias…"
                   value={editSegNotas}
                   onChange={(e) => setEditSegNotas(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="edit-seg-obs">Observaciones</Label>
+                <Textarea
+                  id="edit-seg-obs"
+                  className="min-h-[5rem] resize-y text-sm"
+                  placeholder="Observaciones de fábrica…"
+                  value={editSegObservaciones}
+                  onChange={(e) => setEditSegObservaciones(e.target.value)}
                 />
               </div>
             </div>
