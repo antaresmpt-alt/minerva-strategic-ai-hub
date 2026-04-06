@@ -415,6 +415,37 @@ export function FichasTecnicasPage() {
     void loadRows();
   }
 
+  async function handleDeleteFicha() {
+    if (!formEditingId) return;
+    const rowId = formEditingId;
+    if (
+      !confirm(
+        "¿Estás seguro de que quieres eliminar este registro?"
+      )
+    ) {
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase
+      .from("prod_fichas_tecnicas")
+      .delete()
+      .eq("id", rowId);
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Ficha eliminada.");
+    setFormOpen(false);
+    setFormEditingId(null);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(rowId);
+      return next;
+    });
+    void loadRows();
+  }
+
   const processImportFile = useCallback(
     async (file: File) => {
       const lower = file.name.toLowerCase();
@@ -961,18 +992,38 @@ export function FichasTecnicasPage() {
               </div>
             </div>
           </div>
-          <DialogFooter className="shrink-0 bg-white">
+          <DialogFooter className="shrink-0 flex-col-reverse gap-3 bg-white sm:flex-row sm:items-center sm:justify-between">
             <Button
               type="button"
-              disabled={saving}
-              className="w-full bg-[#002147] hover:bg-[#002147]/90"
-              onClick={() => void saveForm()}
+              variant="destructive"
+              className="w-full sm:w-auto"
+              disabled={saving || !formEditingId}
+              onClick={() => void handleDeleteFicha()}
             >
-              {saving ? (
-                <Loader2 className="mr-2 size-4 animate-spin" />
-              ) : null}
-              {formEditingId ? "Guardar cambios" : "Guardar ficha"}
+              Eliminar
             </Button>
+            <div className="flex w-full flex-col-reverse gap-3 sm:w-auto sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                className="min-w-[7rem]"
+                onClick={() => setFormOpen(false)}
+                disabled={saving}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                disabled={saving}
+                className="min-w-[10rem] bg-[#002147] hover:bg-[#002147]/90"
+                onClick={() => void saveForm()}
+              >
+                {saving ? (
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                ) : null}
+                {formEditingId ? "Guardar cambios" : "Guardar ficha"}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
