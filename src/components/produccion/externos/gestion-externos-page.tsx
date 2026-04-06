@@ -46,6 +46,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, type Option } from "@/components/ui/select-native";
 import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Sheet,
   SheetContent,
   SheetFooter,
@@ -191,7 +198,10 @@ function buildComunicacionEmailBody(
       const tipo = acabadoNombreById.get(row.acabado_id) ?? "—";
       const notas = (row.notas_logistica ?? "").trim() || "—";
       const fp = formatFechaEsCorta(row.fecha_prevista);
-      return `OT: ${getOtDisplay(row)}\nTrabajo: ${row.trabajo_titulo} | Tipo: ${tipo}\nNotas: ${notas}\nEntrega prevista: ${fp}`;
+      const ud = row.unidades != null ? String(row.unidades) : "—";
+      const pr = (row.prioridad ?? "").trim() || "—";
+      const pl = row.palets != null ? String(row.palets) : "—";
+      return `OT: ${getOtDisplay(row)}\nTrabajo: ${row.trabajo_titulo}\nUnidades: ${ud} | Prioridad: ${pr} | Palets: ${pl}\nTipo: ${tipo}\nNotas: ${notas}\nEntrega prevista: ${fp}`;
     })
     .join("\n\n");
 
@@ -257,6 +267,27 @@ function isEnvioRetrasado(
   const fpDay = new Date(fp);
   fpDay.setHours(0, 0, 0, 0);
   return fpDay.getTime() < today.getTime();
+}
+
+function NotasTablaCelda({
+  texto,
+  vacio = "—",
+}: {
+  texto: string | null | undefined;
+  vacio?: string;
+}) {
+  const t = texto?.trim() ?? "";
+  if (!t) {
+    return <span className="text-muted-foreground">{vacio}</span>;
+  }
+  return (
+    <span
+      className="line-clamp-4 max-h-[5.5rem] cursor-default overflow-hidden break-words whitespace-pre-wrap text-[11px] leading-snug"
+      title={t}
+    >
+      {t}
+    </span>
+  );
 }
 
 /** Días naturales hasta fecha prevista (0 = hoy, 1 = mañana). null si sin fecha. */
@@ -562,11 +593,16 @@ export function GestionExternosPage() {
   const [editSegFecha, setEditSegFecha] = useState("");
   const [editSegNotas, setEditSegNotas] = useState("");
   const [editSegObservaciones, setEditSegObservaciones] = useState("");
+  const [editSegUnidades, setEditSegUnidades] = useState("");
+  const [editSegPrioridad, setEditSegPrioridad] = useState("");
+  const [editSegPalets, setEditSegPalets] = useState("");
+  const [editSegFechaEnvio, setEditSegFechaEnvio] = useState("");
 
   const [analistaOpen, setAnalistaOpen] = useState(false);
   const [analistaLoading, setAnalistaLoading] = useState(false);
   const [analistaText, setAnalistaText] = useState("");
   const [analistaError, setAnalistaError] = useState<string | null>(null);
+  const [analistaPregunta, setAnalistaPregunta] = useState("");
   const abortAnalistaRef = useRef<AbortController | null>(null);
   const globalModel = useHubStore((s) => s.globalModel);
   const analistaDialogTitleId = useId();
@@ -802,13 +838,8 @@ export function GestionExternosPage() {
     el.indeterminate = seguimientoSelectionStats.masterIndeterminate;
   }, [seguimientoSelectionStats.masterIndeterminate]);
 
-  const runAnalistaProduccion = useCallback(async () => {
-    abortAnalistaRef.current?.abort();
-    const ac = new AbortController();
-    abortAnalistaRef.current = ac;
-    setAnalistaLoading(true);
-    setAnalistaError(null);
-    const rows = seguimientosFiltrados.map((r) => ({
+  const buildAnalistaRowsPayload = useCallback(() => {
+    return seguimientosFiltrados.map((r) => ({
       ot: getOtDisplay(r),
       op: r.num_operacion ?? null,
       unidades: r.unidades ?? null,
@@ -823,12 +854,27 @@ export function GestionExternosPage() {
       fechaEnvio: formatFechaEsCorta(r.fecha_envio),
       diasEnExterno: computeDiasEnExternoUi(r.fecha_envio, r.fecha_prevista),
       semaforo: computeSemaforo(r).excelLabel,
+      observacionesTaller:
+        (r.observaciones ?? "").trim() || null,
     }));
+  }, [seguimientosFiltrados, proveedorNombreById, acabadoNombreById]);
+
+  const runAnalistaProduccion = useCallback(async () => {
+    abortAnalistaRef.current?.abort();
+    const ac = new AbortController();
+    abortAnalistaRef.current = ac;
+    setAnalistaLoading(true);
+    setAnalistaError(null);
+    const rows = buildAnalistaRowsPayload();
     try {
       const res = await fetch("/api/gemini/produccion-externos-analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: globalModel, rows }),
+        body: JSON.stringify({
+          model: globalModel,
+          rows,
+          mode: "analyze",
+        }),
         signal: ac.signal,
       });
       const data = (await res.json()) as { error?: string; text?: string };
@@ -843,12 +889,45 @@ export function GestionExternosPage() {
     } finally {
       setAnalistaLoading(false);
     }
-  }, [
-    seguimientosFiltrados,
-    globalModel,
-    proveedorNombreById,
-    acabadoNombreById,
-  ]);
+  }, [buildAnalistaRowsPayload, globalModel]);
+
+  const runAnalistaPregunta = useCallback(async () => {
+    const q = analistaPregunta.trim();
+    if (!q) {
+      toast.error("Escribe una pregunta.");
+      return;
+    }
+    abortAnalistaRef.current?.abort();
+    const ac = new AbortController();
+    abortAnalistaRef.current = ac;
+    setAnalistaLoading(true);
+    setAnalistaError(null);
+    const rows = buildAnalistaRowsPayload();
+    try {
+      const res = await fetch("/api/gemini/produccion-externos-analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: globalModel,
+          rows,
+          mode: "ask",
+          question: q,
+        }),
+        signal: ac.signal,
+      });
+      const data = (await res.json()) as { error?: string; text?: string };
+      if (!res.ok) throw new Error(data.error ?? "Error al responder");
+      setAnalistaText(data.text ?? "");
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") return;
+      setAnalistaError(
+        e instanceof Error ? e.message : "Error desconocido"
+      );
+      setAnalistaText("");
+    } finally {
+      setAnalistaLoading(false);
+    }
+  }, [analistaPregunta, buildAnalistaRowsPayload, globalModel]);
 
   const loadCore = useCallback(async () => {
     setLoading(true);
@@ -1536,6 +1615,16 @@ export function GestionExternosPage() {
     setEditSegFecha(isoToDateInput(row.fecha_prevista));
     setEditSegNotas(row.notas_logistica ?? "");
     setEditSegObservaciones(row.observaciones ?? "");
+    setEditSegUnidades(
+      row.unidades != null && row.unidades !== undefined
+        ? String(row.unidades)
+        : ""
+    );
+    setEditSegPrioridad(row.prioridad ?? "");
+    setEditSegPalets(
+      row.palets != null && row.palets !== undefined ? String(row.palets) : ""
+    );
+    setEditSegFechaEnvio(isoToDateInput(row.fecha_envio));
     setSeguimientoSheetOpen(true);
   }
 
@@ -1560,12 +1649,23 @@ export function GestionExternosPage() {
       return;
     }
     const now = new Date().toISOString();
-    const patch: Record<string, string | null> = {
+    const uStr = editSegUnidades.trim().replace(",", ".");
+    const palStr = editSegPalets.trim().replace(",", ".");
+    const unidadesNum = uStr ? Number(uStr) : NaN;
+    const paletsNum = palStr ? Number(palStr) : NaN;
+    const patch: Record<string, string | number | null> = {
       proveedor_id: editSegProveedorId,
       acabado_id: editSegAcabadoId,
       fecha_prevista: dateInputToTimestamptz(editSegFecha),
+      fecha_envio:
+        editSegFechaEnvio.length === 10
+          ? dateInputToTimestamptz(editSegFechaEnvio)
+          : null,
       notas_logistica: editSegNotas.trim() || null,
       observaciones: editSegObservaciones.trim() || null,
+      prioridad: editSegPrioridad.trim() || null,
+      unidades: Number.isFinite(unidadesNum) ? Math.trunc(unidadesNum) : null,
+      palets: Number.isFinite(paletsNum) ? Math.trunc(paletsNum) : null,
       updated_at: now,
     };
     setSaving(true);
@@ -1581,6 +1681,33 @@ export function GestionExternosPage() {
     toast.success("Envío actualizado correctamente.");
     setSeguimientoSheetOpen(false);
     setSeguimientoEditing(null);
+    void loadCore();
+  }
+
+  async function handleDeleteSeguimiento() {
+    if (!seguimientoEditing) return;
+    const rowId = seguimientoEditing.id;
+    if (
+      !confirm(
+        "¿Estás seguro de que quieres eliminar este registro?"
+      )
+    ) {
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase
+      .from("prod_seguimiento_externos")
+      .delete()
+      .eq("id", rowId);
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Registro eliminado.");
+    setSeguimientoSheetOpen(false);
+    setSeguimientoEditing(null);
+    setSelectedSeguimientoIds((prev) => prev.filter((id) => id !== rowId));
     void loadCore();
   }
 
@@ -1768,7 +1895,8 @@ export function GestionExternosPage() {
                     onClick={() => {
                       setAnalistaOpen(true);
                       setAnalistaError(null);
-                      void runAnalistaProduccion();
+                      setAnalistaText("");
+                      setAnalistaPregunta("");
                     }}
                   >
                     <Sparkles className="size-4 text-[#002147]/80" aria-hidden />
@@ -1836,7 +1964,7 @@ export function GestionExternosPage() {
                 </p>
               ) : (
                 <div className="max-h-[min(78vh,56rem)] w-full max-w-none overflow-auto rounded-lg border border-slate-200/80 sm:rounded-xl">
-                  <table className="w-full min-w-[120rem] caption-bottom border-collapse text-xs">
+                  <table className="w-full min-w-[132rem] caption-bottom border-collapse text-xs">
                     <thead>
                       <tr className="border-b border-slate-200">
                         <th className="sticky top-0 z-30 w-8 bg-slate-50/95 px-0.5 py-1 text-center font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
@@ -1897,8 +2025,11 @@ export function GestionExternosPage() {
                         <th className="sticky top-0 z-30 w-[4.5rem] min-w-[4.5rem] bg-slate-50/95 px-0.5 py-1 text-center font-medium whitespace-nowrap tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Env.
                         </th>
-                        <th className="sticky top-0 z-30 min-w-[14rem] max-w-[20rem] bg-slate-50/95 px-1 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
-                          Notas
+                        <th className="sticky top-0 z-30 min-w-[12rem] max-w-[16rem] bg-slate-50/95 px-1 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Notas log.
+                        </th>
+                        <th className="sticky top-0 z-30 min-w-[12rem] max-w-[16rem] bg-slate-50/95 px-1 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Obs. taller
                         </th>
                         <th className="sticky top-0 z-30 w-[4.5rem] min-w-[4.5rem] bg-slate-50/95 px-0.5 py-1 text-center font-medium whitespace-nowrap tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Alta
@@ -2007,19 +2138,11 @@ export function GestionExternosPage() {
                             <td className="w-[4.5rem] min-w-[4.5rem] px-0.5 py-0.5 text-center align-middle tabular-nums leading-tight">
                               {formatFechaEsCorta(row.fecha_envio)}
                             </td>
-                            <td className="min-w-[14rem] max-w-[20rem] py-0.5 align-top text-[11px] text-muted-foreground leading-snug">
-                              <span
-                                className="line-clamp-2 break-words whitespace-normal"
-                                title={
-                                  row.notas_logistica?.trim()
-                                    ? row.notas_logistica
-                                    : undefined
-                                }
-                              >
-                                {row.notas_logistica?.trim()
-                                  ? row.notas_logistica
-                                  : "—"}
-                              </span>
+                            <td className="min-w-[12rem] max-w-[16rem] py-0.5 align-top text-muted-foreground">
+                              <NotasTablaCelda texto={row.notas_logistica} />
+                            </td>
+                            <td className="min-w-[12rem] max-w-[16rem] py-0.5 align-top text-muted-foreground">
+                              <NotasTablaCelda texto={row.observaciones} />
                             </td>
                             <td className="w-[4.5rem] min-w-[4.5rem] px-0.5 py-0.5 text-center align-middle tabular-nums leading-tight">
                               {formatFechaEsCorta(row.created_at)}
@@ -2115,7 +2238,10 @@ export function GestionExternosPage() {
                     Envío
                   </th>
                   <th className="border border-[#002147] px-1 py-1.5 text-left font-semibold">
-                    Notas
+                    Notas log.
+                  </th>
+                  <th className="border border-[#002147] px-1 py-1.5 text-left font-semibold">
+                    Obs. taller
                   </th>
                   <th className="border border-[#002147] px-1 py-1.5 text-left font-semibold">
                     Alta
@@ -2170,6 +2296,9 @@ export function GestionExternosPage() {
                         {row.notas_logistica?.trim()
                           ? row.notas_logistica
                           : "—"}
+                      </td>
+                      <td className="border border-slate-200 px-1 py-1 align-top text-[7.5pt]">
+                        {row.observaciones?.trim() ? row.observaciones : "—"}
                       </td>
                       <td className="border border-slate-200 px-1 py-1 whitespace-nowrap">
                         {formatFechaEsCorta(row.created_at)}
@@ -2887,21 +3016,24 @@ export function GestionExternosPage() {
         </TabsContent>
       </Tabs>
 
-      <Sheet
+      <Dialog
         open={seguimientoSheetOpen}
         onOpenChange={(o) => {
           setSeguimientoSheetOpen(o);
           if (!o) setSeguimientoEditing(null);
         }}
       >
-        <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-lg">
+        <DialogContent
+          showCloseButton
+          className="flex max-h-[min(92vh,880px)] w-[calc(100%-1.5rem)] max-w-2xl flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
+        >
           <form
             onSubmit={handleUpdateSeguimiento}
-            className="flex flex-1 flex-col"
+            className="flex max-h-[inherit] flex-col"
           >
-            <SheetHeader>
-              <SheetTitle className="text-[#002147]">
-                Editar envío
+            <DialogHeader className="shrink-0 pr-10">
+              <DialogTitle>
+                Modificar envío
                 {seguimientoEditing ? (
                   <span className="text-muted-foreground font-normal">
                     {" "}
@@ -2911,9 +3043,9 @@ export function GestionExternosPage() {
                       : ""}
                   </span>
                 ) : null}
-              </SheetTitle>
-            </SheetHeader>
-            <div className="flex flex-1 flex-col gap-4 px-4 pb-2">
+              </DialogTitle>
+            </DialogHeader>
+            <div className="grid max-h-[min(52vh,420px)] flex-1 gap-4 overflow-y-auto px-6 py-2">
               <NativeSelect
                 label="Proveedor"
                 options={proveedorOptions}
@@ -2942,6 +3074,43 @@ export function GestionExternosPage() {
                   className="w-full max-w-full"
                 />
               </div>
+              <div className="grid gap-2 sm:grid-cols-4 sm:items-end">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="edit-seg-ud">Unidades</Label>
+                  <Input
+                    id="edit-seg-ud"
+                    inputMode="numeric"
+                    value={editSegUnidades}
+                    onChange={(e) => setEditSegUnidades(e.target.value)}
+                    placeholder="—"
+                  />
+                </div>
+                <NativeSelect
+                  label="Prioridad"
+                  options={PRIORIDAD_MANUAL_OPTIONS}
+                  value={editSegPrioridad}
+                  onChange={(e) => setEditSegPrioridad(e.target.value)}
+                />
+                <div className="grid gap-1.5">
+                  <Label htmlFor="edit-seg-pal">Palets</Label>
+                  <Input
+                    id="edit-seg-pal"
+                    inputMode="numeric"
+                    value={editSegPalets}
+                    onChange={(e) => setEditSegPalets(e.target.value)}
+                    placeholder="—"
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="edit-seg-fe">Fecha de envío</Label>
+                  <Input
+                    id="edit-seg-fe"
+                    type="date"
+                    value={editSegFechaEnvio}
+                    onChange={(e) => setEditSegFechaEnvio(e.target.value)}
+                  />
+                </div>
+              </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="edit-seg-notas">Notas de logística</Label>
                 <Textarea
@@ -2953,17 +3122,19 @@ export function GestionExternosPage() {
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="edit-seg-obs">Observaciones</Label>
+                <Label htmlFor="edit-seg-obs">
+                  Observaciones (taller / interno)
+                </Label>
                 <Textarea
                   id="edit-seg-obs"
-                  className="min-h-[5rem] resize-y text-sm"
-                  placeholder="Observaciones de fábrica…"
+                  className="min-h-[8rem] resize-y text-sm"
+                  placeholder="Notas internas de taller…"
                   value={editSegObservaciones}
                   onChange={(e) => setEditSegObservaciones(e.target.value)}
                 />
               </div>
             </div>
-            <div className="px-4 pb-2">
+            <div className="border-t px-6 pb-2">
               <Separator className="mb-4" />
               <h3 className="text-sm font-semibold text-[#002147]">
                 Historial de comunicación
@@ -3003,26 +3174,38 @@ export function GestionExternosPage() {
                 </ul>
               )}
             </div>
-            <SheetFooter className="gap-3 border-t sm:flex-row sm:justify-end">
+            <DialogFooter className="flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
               <Button
                 type="button"
-                variant="outline"
-                className="min-w-[7rem]"
-                onClick={() => setSeguimientoSheetOpen(false)}
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
+                variant="destructive"
+                className="w-full sm:w-auto"
                 disabled={saving || !seguimientoEditing}
-                className="min-w-[10rem] bg-[#C69C2B] font-semibold text-[#002147] shadow-sm hover:bg-[#b58d26] hover:text-[#002147]"
+                onClick={() => void handleDeleteSeguimiento()}
               >
-                Guardar cambios
+                Eliminar
               </Button>
-            </SheetFooter>
+              <div className="flex w-full flex-col-reverse gap-3 sm:w-auto sm:flex-row sm:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-w-[7rem]"
+                  onClick={() => setSeguimientoSheetOpen(false)}
+                  disabled={saving}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={saving || !seguimientoEditing}
+                  className="min-w-[10rem] bg-[#C69C2B] font-semibold text-[#002147] shadow-sm hover:bg-[#b58d26] hover:text-[#002147]"
+                >
+                  Guardar cambios
+                </Button>
+              </div>
+            </DialogFooter>
           </form>
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
 
       <Sheet
         open={editOpen}
@@ -3176,6 +3359,7 @@ export function GestionExternosPage() {
             onClick={() => {
               abortAnalistaRef.current?.abort();
               setAnalistaOpen(false);
+              setAnalistaPregunta("");
             }}
           />
           <Card
@@ -3183,9 +3367,9 @@ export function GestionExternosPage() {
             aria-modal="true"
             aria-labelledby={analistaDialogTitleId}
             aria-describedby={analistaDialogDescId}
-            className="relative z-10 flex max-h-[min(90vh,720px)] w-full max-w-2xl flex-col overflow-hidden border-slate-200/90 bg-white shadow-xl"
+            className="relative z-10 flex max-h-[min(90vh,760px)] w-full max-w-2xl flex-col overflow-hidden border-slate-200/90 bg-white shadow-xl"
           >
-            <CardHeader className="shrink-0 space-y-4 border-b border-slate-200/80 bg-slate-50/90 pb-4">
+            <CardHeader className="shrink-0 space-y-3 border-b border-slate-200/80 bg-slate-50/90 pb-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 space-y-1">
                   <CardTitle
@@ -3195,8 +3379,10 @@ export function GestionExternosPage() {
                     Analista de Producción Minerva
                   </CardTitle>
                   <CardDescription id={analistaDialogDescId}>
-                    Informe según la vista actual de la tabla (OT, estados,
-                    proveedores y fechas DD/MM/AA).
+                    Usa la vista filtrada actual como contexto.{" "}
+                    <strong>Analizar</strong> genera un informe;{" "}
+                    <strong>Preguntar</strong> responde solo con los datos del
+                    listado.
                   </CardDescription>
                 </div>
                 <Button
@@ -3207,20 +3393,80 @@ export function GestionExternosPage() {
                   onClick={() => {
                     abortAnalistaRef.current?.abort();
                     setAnalistaOpen(false);
+                    setAnalistaPregunta("");
                   }}
                   aria-label="Cerrar"
                 >
                   <X className="size-4" aria-hidden />
                 </Button>
               </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <span className="text-xs font-medium text-slate-600">
-                  Modelo de IA
-                </span>
-                <GlobalModelSelector layout="row" className="w-full sm:w-auto sm:shrink-0" />
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                  <span className="text-xs font-medium text-slate-600 sm:mr-1">
+                    Modelo
+                  </span>
+                  <GlobalModelSelector
+                    layout="row"
+                    className="w-full min-w-0 sm:w-auto sm:max-w-[min(100%,14rem)] sm:shrink-0"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="shrink-0 bg-[#C69C2B] font-semibold text-[#002147] hover:bg-[#b58d26] hover:text-[#002147] sm:ml-1"
+                    disabled={
+                      analistaLoading || seguimientosFiltrados.length === 0
+                    }
+                    onClick={() => void runAnalistaProduccion()}
+                  >
+                    {analistaLoading ? (
+                      <>
+                        <Loader2
+                          className="mr-2 size-4 animate-spin"
+                          aria-hidden
+                        />
+                        Analizando…
+                      </>
+                    ) : (
+                      "Analizar"
+                    )}
+                  </Button>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <div className="grid min-w-0 flex-1 gap-1.5">
+                    <Label htmlFor="analista-pregunta" className="text-xs">
+                      Pregunta sobre el listado
+                    </Label>
+                    <Input
+                      id="analista-pregunta"
+                      placeholder="Ej. ¿Qué trabajos hay para Llobregat con prioridad Urgente?"
+                      value={analistaPregunta}
+                      onChange={(e) => setAnalistaPregunta(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          void runAnalistaPregunta();
+                        }
+                      }}
+                      disabled={analistaLoading || seguimientosFiltrados.length === 0}
+                      className="h-9 text-sm"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="shrink-0 sm:mb-0.5"
+                    disabled={
+                      analistaLoading || seguimientosFiltrados.length === 0
+                    }
+                    onClick={() => void runAnalistaPregunta()}
+                  >
+                    Preguntar
+                  </Button>
+                </div>
               </div>
             </CardHeader>
-            <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
+            <CardContent className="flex min-h-[12rem] flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
               {analistaLoading ? (
                 <div
                   className="flex items-center gap-2 text-sm text-muted-foreground"
@@ -3228,13 +3474,13 @@ export function GestionExternosPage() {
                   aria-live="polite"
                 >
                   <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
-                  Generando análisis…
+                  Generando respuesta…
                 </div>
               ) : null}
               {analistaError ? (
                 <Alert className="border-red-200 bg-red-50/95 text-red-950">
                   <AlertTitle className="text-red-900">
-                    No se pudo completar el análisis
+                    No se pudo completar la operación
                   </AlertTitle>
                   <AlertDescription className="text-red-800">
                     {analistaError}
@@ -3251,7 +3497,16 @@ export function GestionExternosPage() {
               !analistaText.trim() &&
               seguimientosFiltrados.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No hay filas en la vista actual para analizar.
+                  No hay filas en la vista actual para usar como contexto.
+                </p>
+              ) : null}
+              {!analistaLoading &&
+              !analistaError &&
+              !analistaText.trim() &&
+              seguimientosFiltrados.length > 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Pulsa <strong>Analizar</strong> para un informe o escribe una
+                  pregunta y <strong>Preguntar</strong>.
                 </p>
               ) : null}
             </CardContent>
@@ -3262,25 +3517,10 @@ export function GestionExternosPage() {
                 onClick={() => {
                   abortAnalistaRef.current?.abort();
                   setAnalistaOpen(false);
+                  setAnalistaPregunta("");
                 }}
               >
                 Cerrar
-              </Button>
-              <Button
-                type="button"
-                disabled={
-                  analistaLoading || seguimientosFiltrados.length === 0
-                }
-                onClick={() => void runAnalistaProduccion()}
-              >
-                {analistaLoading ? (
-                  <>
-                    <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
-                    Analizando…
-                  </>
-                ) : (
-                  "Actualizar análisis"
-                )}
               </Button>
             </CardFooter>
           </Card>

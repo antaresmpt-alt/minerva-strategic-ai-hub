@@ -9,7 +9,7 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 90;
 
-const SYSTEM = `Eres el **Analista de Producción Minerva** para la gestión de trabajos externos (subcontratación).
+const SYSTEM_ANALYZE = `Eres el **Analista de Producción Minerva** para la gestión de trabajos externos (subcontratación).
 
 Recibirás un JSON con filas de la tabla actual: OT, cliente, trabajo, proveedor, acabado, estado, fechas en formato **DD/MM/AA** (año de 2 dígitos), etiqueta de semáforo (urgencia/retraso/…).
 
@@ -28,6 +28,16 @@ Debes responder SIEMPRE en español, en Markdown claro, con estas secciones en e
 
 Sé conciso y accionable. No inventes OTs ni fechas que no estén en el JSON. Si la lista está vacía, indica que no hay datos para analizar.`;
 
+const SYSTEM_ASK = `Eres el **Analista de Producción Minerva** para trabajos externos (subcontratación).
+
+Recibirás un JSON con la **vista actual** del listado (OT, cliente, trabajo, proveedor, acabado, unidades, prioridad, palets, estados, fechas DD/MM/AA, semáforo, etc.).
+
+**Instrucciones:**
+- Responde **solo en español**, en Markdown claro y breve.
+- Basa la respuesta **exclusivamente** en los datos del JSON. Si algo no figura en los datos, dilo explícitamente.
+- Responde a la **pregunta del usuario** de forma directa (listados, comparativas, filtros conceptuales, etc.).
+- No inventes OTs, fechas ni proveedores que no aparezcan en el contexto.`;
+
 export async function POST(req: NextRequest) {
   const signal = req.signal;
 
@@ -35,6 +45,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const modelId = parseModelFromBody((body as { model?: unknown }).model);
     const rows = (body as { rows?: unknown }).rows;
+    const mode = (body as { mode?: string }).mode ?? "analyze";
+    const question = (body as { question?: unknown }).question;
 
     if (!Array.isArray(rows)) {
       return NextResponse.json(
@@ -43,11 +55,35 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (mode === "ask") {
+      const q =
+        typeof question === "string" ? question.trim() : String(question ?? "").trim();
+      if (!q) {
+        return NextResponse.json(
+          { error: "Escribe una pregunta para el modo «Preguntar»." },
+          { status: 400 }
+        );
+      }
+      const user = `Datos del listado actual (fechas en DD/MM/AA cuando apliquen):\n\n\`\`\`json\n${JSON.stringify(rows, null, 0)}\n\`\`\`\n\n**Pregunta:**\n${q}`;
+      const result = await generateLlmText({
+        modelId,
+        system: SYSTEM_ASK,
+        user,
+        maxOutputTokens: 4096,
+        temperature: 0.35,
+        signal,
+      });
+      return NextResponse.json({
+        text: result.text,
+        ...llmFieldsForApiResponse(result),
+      });
+    }
+
     const user = `Datos de la vista actual (tabla de seguimiento; fechas estrictamente DD/MM/AA, año 2 dígitos):\n\n\`\`\`json\n${JSON.stringify(rows, null, 0)}\n\`\`\``;
 
     const result = await generateLlmText({
       modelId,
-      system: SYSTEM,
+      system: SYSTEM_ANALYZE,
       user,
       maxOutputTokens: 4096,
       temperature: 0.35,
