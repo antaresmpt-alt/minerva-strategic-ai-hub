@@ -107,6 +107,33 @@ type ProveedorRow = {
   created_at: string;
 };
 
+/**
+ * PostgREST devuelve los nombres de columna tal como están en el catálogo.
+ * Si en Postgres se crearon como "Telf_Movil" (entre comillas), la clave JSON
+ * no será `telf_movil`. Normalizamos aquí para no romper el listado.
+ */
+function mapProveedorFromApi(raw: unknown): ProveedorRow {
+  const r = raw as Record<string, unknown>;
+  const pick = (...keys: string[]): string | null => {
+    for (const k of keys) {
+      const v = r[k];
+      if (v != null && String(v).trim() !== "") return String(v).trim();
+    }
+    return null;
+  };
+  return {
+    id: String(r.id ?? ""),
+    nombre: String(r.nombre ?? ""),
+    tipo_proveedor_id: String(r.tipo_proveedor_id ?? ""),
+    email: pick("email"),
+    telefono: pick("telefono"),
+    telf_movil: pick("telf_movil", "Telf_Movil"),
+    direccion: pick("direccion", "Direccion"),
+    notas: pick("notas", "Notas"),
+    created_at: String(r.created_at ?? ""),
+  };
+}
+
 type AcabadoRow = {
   id: string;
   tipo_proveedor_id: string;
@@ -966,12 +993,7 @@ export function GestionExternosPage() {
     try {
       const [tiposRes, provRes, acabRes, segRes] = await Promise.all([
         supabase.from("prod_cat_tipos_proveedor").select("*").order("nombre"),
-        supabase
-          .from("prod_proveedores")
-          .select(
-            "id, nombre, tipo_proveedor_id, email, telefono, telf_movil, direccion, notas, created_at"
-          )
-          .order("nombre"),
+        supabase.from("prod_proveedores").select("*").order("nombre"),
         supabase
           .from("prod_cat_acabados")
           .select("id, tipo_proveedor_id, nombre, created_at")
@@ -1008,7 +1030,7 @@ export function GestionExternosPage() {
       setTipos(tiposNorm);
       setProveedores(
         Array.isArray(provRes.data)
-          ? (provRes.data as ProveedorRow[])
+          ? provRes.data.map(mapProveedorFromApi)
           : []
       );
       setAcabadosCatalogo(
@@ -1023,9 +1045,7 @@ export function GestionExternosPage() {
       );
     } catch (e) {
       console.error(e);
-      toast.error(
-        e instanceof Error ? e.message : "No se pudieron cargar los datos."
-      );
+      toast.error(formatPostgrestError(e) || "No se pudieron cargar los datos.");
     } finally {
       setLoading(false);
     }
