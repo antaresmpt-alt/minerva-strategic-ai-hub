@@ -1250,7 +1250,7 @@ export function GestionExternosPage() {
     if (
       !envCliente.trim() ||
       !envTrabajo.trim() ||
-      !envPedidoCliente.trim() ||
+    /*!envPedidoCliente.trim() ||  lo quito por que no es obligatorio */
       !envProveedorId ||
       !envAcabadoId ||
       !envFecha
@@ -2849,34 +2849,38 @@ export function GestionExternosPage() {
                   onChange={(e) => setEnvAcabadoId(e.target.value)}
                   disabled={!envProveedorId}
                 />
-                <div className="grid gap-1.5">
-                  <Label htmlFor="env-u">Unidades</Label>
-                  <Input
-                    id="env-u"
-                    inputMode="numeric"
-                    placeholder="—"
-                    value={envUnidades}
-                    onChange={(e) => setEnvUnidades(e.target.value)}
+                <div className="grid gap-4 sm:col-span-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,8.5rem)_minmax(0,5rem)] sm:items-end">
+                  <div className="grid min-w-0 gap-1.5">
+                    <Label htmlFor="env-u">Unidades</Label>
+                    <Input
+                      id="env-u"
+                      inputMode="numeric"
+                      placeholder="—"
+                      value={envUnidades}
+                      onChange={(e) => setEnvUnidades(e.target.value)}
+                      disabled={!proveedores.length}
+                    />
+                  </div>
+                  <NativeSelect
+                    label="Prioridad"
+                    options={PRIORIDAD_MANUAL_OPTIONS}
+                    value={envPrioridad}
+                    onChange={(e) => setEnvPrioridad(e.target.value)}
                     disabled={!proveedores.length}
+                    className="min-w-0 w-full max-w-[8.5rem]"
                   />
-                </div>
-                <NativeSelect
-                  label="Prioridad"
-                  options={PRIORIDAD_MANUAL_OPTIONS}
-                  value={envPrioridad}
-                  onChange={(e) => setEnvPrioridad(e.target.value)}
-                  disabled={!proveedores.length}
-                />
-                <div className="grid gap-1.5">
-                  <Label htmlFor="env-pal">Palets</Label>
-                  <Input
-                    id="env-pal"
-                    inputMode="numeric"
-                    placeholder="—"
-                    value={envPalets}
-                    onChange={(e) => setEnvPalets(e.target.value)}
-                    disabled={!proveedores.length}
-                  />
+                  <div className="grid min-w-0 gap-1.5">
+                    <Label htmlFor="env-pal">Palets</Label>
+                    <Input
+                      id="env-pal"
+                      inputMode="numeric"
+                      placeholder="—"
+                      value={envPalets}
+                      onChange={(e) => setEnvPalets(e.target.value)}
+                      disabled={!proveedores.length}
+                      className="max-w-[5rem]"
+                    />
+                  </div>
                 </div>
                 <div className="grid gap-1.5 sm:col-span-2">
                   <Label htmlFor="env-obs">Observaciones</Label>
@@ -3249,8 +3253,8 @@ export function GestionExternosPage() {
                   className="w-full max-w-full"
                 />
               </div>
-              <div className="grid gap-2 sm:grid-cols-4 sm:items-end">
-                <div className="grid gap-1.5">
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,8.5rem)_minmax(0,5rem)_minmax(0,1fr)] sm:items-end">
+                <div className="grid min-w-0 gap-1.5">
                   <Label htmlFor="edit-seg-ud">Unidades</Label>
                   <Input
                     id="edit-seg-ud"
@@ -3265,8 +3269,9 @@ export function GestionExternosPage() {
                   options={PRIORIDAD_MANUAL_OPTIONS}
                   value={editSegPrioridad}
                   onChange={(e) => setEditSegPrioridad(e.target.value)}
+                  className="min-w-0 w-full max-w-[8.5rem]"
                 />
-                <div className="grid gap-1.5">
+                <div className="grid min-w-0 gap-1.5">
                   <Label htmlFor="edit-seg-pal">Palets</Label>
                   <Input
                     id="edit-seg-pal"
@@ -3274,9 +3279,10 @@ export function GestionExternosPage() {
                     value={editSegPalets}
                     onChange={(e) => setEditSegPalets(e.target.value)}
                     placeholder="—"
+                    className="max-w-[5rem]"
                   />
                 </div>
-                <div className="grid gap-1.5">
+                <div className="grid min-w-0 gap-1.5">
                   <Label htmlFor="edit-seg-fe">Fecha de envío</Label>
                   <Input
                     id="edit-seg-fe"
