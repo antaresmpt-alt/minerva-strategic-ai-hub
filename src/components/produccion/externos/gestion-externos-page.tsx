@@ -53,13 +53,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Sheet,
-  SheetContent,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import {
   Table,
   TableBody,
   TableCell,
@@ -107,6 +100,10 @@ type ProveedorRow = {
   tipo_proveedor_id: string;
   email: string | null;
   telefono: string | null;
+  /** Columnas en `prod_proveedores` (snake_case en PostgREST). */
+  telf_movil: string | null;
+  direccion: string | null;
+  notas: string | null;
   created_at: string;
 };
 
@@ -574,6 +571,9 @@ export function GestionExternosPage() {
   const [provTipoId, setProvTipoId] = useState("");
   const [provEmail, setProvEmail] = useState("");
   const [provTelefono, setProvTelefono] = useState("");
+  const [provTelfMovil, setProvTelfMovil] = useState("");
+  const [provDireccion, setProvDireccion] = useState("");
+  const [provNotas, setProvNotas] = useState("");
 
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<ProveedorRow | null>(null);
@@ -581,6 +581,13 @@ export function GestionExternosPage() {
   const [editTipoId, setEditTipoId] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editTelefono, setEditTelefono] = useState("");
+  const [editTelfMovil, setEditTelfMovil] = useState("");
+  const [editDireccion, setEditDireccion] = useState("");
+  const [editNotas, setEditNotas] = useState("");
+  /** Vista completa de notas de proveedor (listado). */
+  const [proveedorNotasCompleto, setProveedorNotasCompleto] = useState<
+    string | null
+  >(null);
 
   const [envIdPedido, setEnvIdPedido] = useState("");
   const [envCliente, setEnvCliente] = useState("");
@@ -961,7 +968,9 @@ export function GestionExternosPage() {
         supabase.from("prod_cat_tipos_proveedor").select("*").order("nombre"),
         supabase
           .from("prod_proveedores")
-          .select("id, nombre, tipo_proveedor_id, email, telefono, created_at")
+          .select(
+            "id, nombre, tipo_proveedor_id, email, telefono, telf_movil, direccion, notas, created_at"
+          )
           .order("nombre"),
         supabase
           .from("prod_cat_acabados")
@@ -1129,6 +1138,9 @@ export function GestionExternosPage() {
       tipo_proveedor_id: provTipoId,
       email: provEmail.trim() || null,
       telefono: provTelefono.trim() || null,
+      telf_movil: provTelfMovil.trim() || null,
+      direccion: provDireccion.trim() || null,
+      notas: provNotas.trim() || null,
     });
     setSaving(false);
     if (error) {
@@ -1140,6 +1152,9 @@ export function GestionExternosPage() {
     setProvTipoId("");
     setProvEmail("");
     setProvTelefono("");
+    setProvTelfMovil("");
+    setProvDireccion("");
+    setProvNotas("");
     void loadCore();
   }
 
@@ -1149,6 +1164,9 @@ export function GestionExternosPage() {
     setEditTipoId(p.tipo_proveedor_id);
     setEditEmail(p.email ?? "");
     setEditTelefono(p.telefono ?? "");
+    setEditTelfMovil(p.telf_movil ?? "");
+    setEditDireccion(p.direccion ?? "");
+    setEditNotas(p.notas ?? "");
     setEditOpen(true);
   }
 
@@ -1167,6 +1185,9 @@ export function GestionExternosPage() {
         tipo_proveedor_id: editTipoId,
         email: editEmail.trim() || null,
         telefono: editTelefono.trim() || null,
+        telf_movil: editTelfMovil.trim() || null,
+        direccion: editDireccion.trim() || null,
+        notas: editNotas.trim() || null,
       })
       .eq("id", editing.id);
     setSaving(false);
@@ -2933,6 +2954,38 @@ export function GestionExternosPage() {
                     onChange={(e) => setProvTelefono(e.target.value)}
                   />
                 </div>
+                <div className="grid gap-4 sm:col-span-2 sm:grid-cols-2">
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="ptm">Teléfono móvil</Label>
+                    <Input
+                      id="ptm"
+                      type="tel"
+                      value={provTelfMovil}
+                      onChange={(e) => setProvTelfMovil(e.target.value)}
+                      placeholder="Opcional"
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="pdir">Dirección</Label>
+                    <Input
+                      id="pdir"
+                      value={provDireccion}
+                      onChange={(e) => setProvDireccion(e.target.value)}
+                      placeholder="Opcional"
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-1.5 sm:col-span-2">
+                  <Label htmlFor="pnot">Notas</Label>
+                  <Textarea
+                    id="pnot"
+                    rows={6}
+                    className="min-h-[8rem] resize-y text-sm"
+                    placeholder="Horarios, correos, instrucciones de entrega…"
+                    value={provNotas}
+                    onChange={(e) => setProvNotas(e.target.value)}
+                  />
+                </div>
                 <div className="sm:col-span-2">
                   <Button type="submit" disabled={saving || loading}>
                     Añadir proveedor
@@ -2966,6 +3019,9 @@ export function GestionExternosPage() {
                       <TableHead>Tipo</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Teléfono</TableHead>
+                      <TableHead>Tel. móvil</TableHead>
+                      <TableHead>Dirección</TableHead>
+                      <TableHead className="min-w-[10rem]">Notas</TableHead>
                       <TableHead className="w-[100px]" />
                     </TableRow>
                   </TableHeader>
@@ -2979,8 +3035,60 @@ export function GestionExternosPage() {
                         <TableCell className="max-w-[180px] truncate text-sm">
                           {p.email ?? "—"}
                         </TableCell>
-                        <TableCell className="text-sm">
-                          {p.telefono ?? "—"}
+                        <TableCell className="max-w-[7rem] truncate text-sm">
+                          {p.telefono?.trim() ? p.telefono : "—"}
+                        </TableCell>
+                        <TableCell className="max-w-[7rem] truncate text-sm">
+                          {p.telf_movil?.trim() ? p.telf_movil : "—"}
+                        </TableCell>
+                        <TableCell className="max-w-[10rem]">
+                          {p.direccion?.trim() ? (
+                            <span
+                              className="line-clamp-2 break-words text-sm leading-snug"
+                              title={p.direccion}
+                            >
+                              {p.direccion}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="max-w-[14rem] align-top">
+                          {(() => {
+                            const n = p.notas?.trim() ?? "";
+                            if (!n) {
+                              return (
+                                <span className="text-muted-foreground">—</span>
+                              );
+                            }
+                            const largo = n.length > 96;
+                            return (
+                              <div className="flex items-start gap-1.5">
+                                <span
+                                  className={cn(
+                                    "min-w-0 flex-1 text-left text-sm leading-snug",
+                                    largo ? "line-clamp-2 break-words" : "break-words"
+                                  )}
+                                  title={n}
+                                >
+                                  {n}
+                                </span>
+                                {largo ? (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 shrink-0 px-2 text-xs"
+                                    onClick={() =>
+                                      setProveedorNotasCompleto(n)
+                                    }
+                                  >
+                                    Ver
+                                  </Button>
+                                ) : null}
+                              </div>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
@@ -3254,19 +3362,22 @@ export function GestionExternosPage() {
         </DialogContent>
       </Dialog>
 
-      <Sheet
+      <Dialog
         open={editOpen}
         onOpenChange={(o) => {
           setEditOpen(o);
           if (!o) setEditing(null);
         }}
       >
-        <SheetContent className="sm:max-w-md">
-          <form onSubmit={handleSaveEdit}>
-            <SheetHeader>
-              <SheetTitle>Editar proveedor</SheetTitle>
-            </SheetHeader>
-            <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4">
+        <DialogContent className="flex max-h-[min(92vh,880px)] w-[calc(100%-1.5rem)] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+          <form
+            onSubmit={handleSaveEdit}
+            className="flex max-h-[inherit] flex-col"
+          >
+            <DialogHeader>
+              <DialogTitle>Editar proveedor</DialogTitle>
+            </DialogHeader>
+            <div className="grid max-h-[min(70vh,560px)] flex-1 gap-4 overflow-y-auto px-6 py-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="en">Nombre</Label>
                 <Input
@@ -3302,8 +3413,40 @@ export function GestionExternosPage() {
                   onChange={(e) => setEditTelefono(e.target.value)}
                 />
               </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="etm">Teléfono móvil</Label>
+                  <Input
+                    id="etm"
+                    type="tel"
+                    value={editTelfMovil}
+                    onChange={(e) => setEditTelfMovil(e.target.value)}
+                    placeholder="Opcional"
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="edir">Dirección</Label>
+                  <Input
+                    id="edir"
+                    value={editDireccion}
+                    onChange={(e) => setEditDireccion(e.target.value)}
+                    placeholder="Opcional"
+                  />
+                </div>
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="enot">Notas</Label>
+                <Textarea
+                  id="enot"
+                  rows={8}
+                  className="min-h-[10rem] resize-y text-sm"
+                  placeholder="Horarios, correos, instrucciones de entrega…"
+                  value={editNotas}
+                  onChange={(e) => setEditNotas(e.target.value)}
+                />
+              </div>
             </div>
-            <SheetFooter className="border-t px-4 pt-4 sm:flex-row sm:justify-end">
+            <DialogFooter className="flex-col-reverse gap-2 border-t border-slate-100 sm:flex-row sm:justify-end">
               <Button
                 type="button"
                 variant="outline"
@@ -3314,10 +3457,37 @@ export function GestionExternosPage() {
               <Button type="submit" disabled={saving}>
                 Guardar
               </Button>
-            </SheetFooter>
+            </DialogFooter>
           </form>
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={proveedorNotasCompleto != null}
+        onOpenChange={(o) => {
+          if (!o) setProveedorNotasCompleto(null);
+        }}
+      >
+        <DialogContent className="max-h-[min(90vh,640px)] w-[calc(100%-1.5rem)] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Notas del proveedor</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[min(60vh,28rem)] overflow-y-auto px-6 pb-2">
+            <pre className="font-sans whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-800">
+              {proveedorNotasCompleto ?? ""}
+            </pre>
+          </div>
+          <DialogFooter className="border-t border-slate-100">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setProveedorNotasCompleto(null)}
+            >
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {comunicacionModalOpen && comunicacionPreview ? (
         <div
