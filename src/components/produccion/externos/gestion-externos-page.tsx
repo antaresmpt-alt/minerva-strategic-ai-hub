@@ -304,7 +304,13 @@ function diasHastaFechaPrevista(fechaPrevista: string | null): number | null {
 }
 
 type SemaforoInfo = {
-  kind: "recibido" | "retraso" | "urgente" | "transito" | "pendiente";
+  kind:
+    | "recibido"
+    | "retraso"
+    | "urgente"
+    | "transito"
+    | "pendiente"
+    | "listo_recogida";
   tooltip: string;
   excelLabel: string;
 };
@@ -337,6 +343,13 @@ function computeSemaforo(row: SeguimientoRow): SemaforoInfo {
       kind: "urgente",
       tooltip: "Urgente: falta 1 día o menos para la fecha prevista",
       excelLabel: "🟡 Urgente",
+    };
+  }
+  if (row.estado === "Acabado en Proveedor") {
+    return {
+      kind: "listo_recogida",
+      tooltip: "Listo para recoger en proveedor",
+      excelLabel: "🔷 Acabado en Proveedor",
     };
   }
   if (
@@ -397,6 +410,17 @@ function SemaforoCell({ row }: { row: SeguimientoRow }) {
       <span className="inline-flex justify-center" title={s.tooltip}>
         <span
           className="inline-block size-5 shrink-0 rounded-full bg-[#eab308]"
+          aria-hidden
+        />
+        <span className="sr-only">{s.tooltip}</span>
+      </span>
+    );
+  }
+  if (s.kind === "listo_recogida") {
+    return (
+      <span className="inline-flex justify-center" title={s.tooltip}>
+        <span
+          className="inline-block size-5 shrink-0 rounded-full bg-sky-300 ring-2 ring-sky-200/90 dark:bg-sky-400 dark:ring-sky-500/50"
           aria-hidden
         />
         <span className="sr-only">{s.tooltip}</span>
@@ -597,6 +621,7 @@ export function GestionExternosPage() {
   const [editSegPrioridad, setEditSegPrioridad] = useState("");
   const [editSegPalets, setEditSegPalets] = useState("");
   const [editSegFechaEnvio, setEditSegFechaEnvio] = useState("");
+  const [editSegEstado, setEditSegEstado] = useState("");
 
   const [analistaOpen, setAnalistaOpen] = useState(false);
   const [analistaLoading, setAnalistaLoading] = useState(false);
@@ -1625,6 +1650,7 @@ export function GestionExternosPage() {
       row.palets != null && row.palets !== undefined ? String(row.palets) : ""
     );
     setEditSegFechaEnvio(isoToDateInput(row.fecha_envio));
+    setEditSegEstado(row.estado ?? "");
     setSeguimientoSheetOpen(true);
   }
 
@@ -1648,19 +1674,34 @@ export function GestionExternosPage() {
       toast.error("El acabado no corresponde al tipo del proveedor.");
       return;
     }
+    if (
+      !editSegEstado ||
+      !(ESTADOS_SEGUIMIENTO as readonly string[]).includes(editSegEstado)
+    ) {
+      toast.error("Elige un estado válido.");
+      return;
+    }
     const now = new Date().toISOString();
     const uStr = editSegUnidades.trim().replace(",", ".");
     const palStr = editSegPalets.trim().replace(",", ".");
     const unidadesNum = uStr ? Number(uStr) : NaN;
     const paletsNum = palStr ? Number(palStr) : NaN;
+    let fechaEnvioPatch: string | null =
+      editSegFechaEnvio.length === 10
+        ? dateInputToTimestamptz(editSegFechaEnvio)
+        : null;
+    if (
+      editSegEstado === "Enviado" &&
+      seguimientoEditing.estado !== "Enviado"
+    ) {
+      fechaEnvioPatch = now;
+    }
     const patch: Record<string, string | number | null> = {
       proveedor_id: editSegProveedorId,
       acabado_id: editSegAcabadoId,
       fecha_prevista: dateInputToTimestamptz(editSegFecha),
-      fecha_envio:
-        editSegFechaEnvio.length === 10
-          ? dateInputToTimestamptz(editSegFechaEnvio)
-          : null,
+      fecha_envio: fechaEnvioPatch,
+      estado: editSegEstado,
       notas_logistica: editSegNotas.trim() || null,
       observaciones: editSegObservaciones.trim() || null,
       prioridad: editSegPrioridad.trim() || null,
@@ -3062,6 +3103,12 @@ export function GestionExternosPage() {
                 value={editSegAcabadoId}
                 onChange={(e) => setEditSegAcabadoId(e.target.value)}
                 disabled={!editSegProveedorId}
+              />
+              <NativeSelect
+                label="Estado"
+                options={estadoRapidoOptions}
+                value={editSegEstado}
+                onChange={(e) => setEditSegEstado(e.target.value)}
               />
               <div className="grid gap-1.5">
                 <Label htmlFor="edit-seg-fp">Fecha prevista</Label>
