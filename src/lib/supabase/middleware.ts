@@ -13,6 +13,15 @@ function isLoginPath(pathname: string) {
   return pathname === "/login" || pathname.startsWith("/login/");
 }
 
+/** Evita redirecciones abiertas: solo rutas relativas internas. */
+function safeNextPathnameFromSearch(next: string | null): string {
+  if (!next || next === "") return "/";
+  const path = next.split("?")[0].split("#")[0];
+  if (!path.startsWith("/") || path.startsWith("//")) return "/";
+  if (path.includes("://")) return "/";
+  return path || "/";
+}
+
 export async function updateSession(request: NextRequest) {
   const response = NextResponse.next({
     request: {
@@ -48,6 +57,15 @@ export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   if (isLoginPath(pathname)) {
+    if (!userError && user) {
+      const nextPath = safeNextPathnameFromSearch(
+        request.nextUrl.searchParams.get("next")
+      );
+      const url = new URL(nextPath, request.url);
+      const redirect = NextResponse.redirect(url);
+      copyAuthCookies(response, redirect);
+      return redirect;
+    }
     return response;
   }
 

@@ -6,6 +6,7 @@ import {
   FileOutput,
   FileSpreadsheet,
   History,
+  ListFilter,
   Loader2,
   Mail,
   PackageSearch,
@@ -67,6 +68,12 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { Toggle } from "@/components/ui/toggle";
 import {
@@ -260,12 +267,17 @@ function InlineFechaSeguimientoCell({
   disabled,
   ariaLabel,
   onCommit,
+  inputClassName,
+  id,
 }: {
   rowId: string;
   isoValue: string | null | undefined;
   disabled?: boolean;
   ariaLabel: string;
   onCommit: (ymd: string) => void | Promise<void>;
+  /** p. ej. controles táctiles en vista móvil (tarjetas). */
+  inputClassName?: string;
+  id?: string;
 }) {
   const serverYmd = isoToDateInput(isoValue);
   const [local, setLocal] = useState(serverYmd);
@@ -274,6 +286,7 @@ function InlineFechaSeguimientoCell({
   }, [rowId, serverYmd]);
   return (
     <Input
+      id={id}
       type="date"
       disabled={disabled}
       value={local}
@@ -282,7 +295,11 @@ function InlineFechaSeguimientoCell({
         if (local === serverYmd) return;
         void onCommit(local);
       }}
-      className="h-7 w-full min-w-[6.25rem] max-w-[7rem] border-slate-200 px-1 py-0 text-[10px] leading-tight shadow-xs sm:text-xs"
+      className={cn(
+        "touch-manipulation border-slate-200 shadow-xs",
+        "h-7 w-full min-w-[6.25rem] max-w-[7rem] px-1 py-0 text-[10px] leading-tight sm:text-xs",
+        inputClassName
+      )}
       aria-label={ariaLabel}
     />
   );
@@ -677,6 +694,7 @@ export function GestionExternosPage() {
   const [filtroEstado, setFiltroEstado] = useState("");
   const [filtroProveedorId, setFiltroProveedorId] = useState("");
   const [busquedaSeguimiento, setBusquedaSeguimiento] = useState("");
+  const [filtrosMobileOpen, setFiltrosMobileOpen] = useState(false);
 
   const [seguimientoSheetOpen, setSeguimientoSheetOpen] = useState(false);
   const [seguimientoEditing, setSeguimientoEditing] =
@@ -2063,7 +2081,7 @@ export function GestionExternosPage() {
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              <div className="hidden gap-3 md:grid md:grid-cols-2 xl:grid-cols-5">
                 <NativeSelect
                   label="Estado"
                   options={estadoFiltroOptions}
@@ -2076,7 +2094,7 @@ export function GestionExternosPage() {
                   value={filtroProveedorId}
                   onChange={(e) => setFiltroProveedorId(e.target.value)}
                 />
-                <div className="grid gap-1.5 sm:col-span-2">
+                <div className="grid gap-1.5 md:col-span-2">
                   <Label htmlFor="busq-seg">Buscar (OT, cliente, pedido, trabajo)</Label>
                   <Input
                     id="busq-seg"
@@ -2103,6 +2121,23 @@ export function GestionExternosPage() {
                   </Toggle>
                 </div>
               </div>
+              <div className="md:hidden">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 w-full touch-manipulation justify-center gap-2 border-[#002147]/20 text-[#002147]"
+                  onClick={() => setFiltrosMobileOpen(true)}
+                  aria-expanded={filtrosMobileOpen}
+                >
+                  <ListFilter className="size-4 shrink-0" aria-hidden />
+                  Filtros
+                  {filtroEstado || filtroProveedorId || busquedaSeguimiento.trim() ? (
+                    <span className="rounded-full bg-[#C69C2B]/25 px-2 py-0.5 text-xs font-medium text-[#002147]">
+                      Activos
+                    </span>
+                  ) : null}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="p-0 sm:p-6">
               {loading ? (
@@ -2112,7 +2147,8 @@ export function GestionExternosPage() {
                   No hay registros que coincidan con los filtros.
                 </p>
               ) : (
-                <div className="max-h-[min(78vh,56rem)] w-full max-w-none overflow-auto rounded-lg border border-slate-200/80 sm:rounded-xl">
+                <>
+                <div className="hidden max-h-[min(78vh,56rem)] w-full max-w-none overflow-auto rounded-lg border border-slate-200/80 sm:rounded-xl md:block">
                   <table className="w-full min-w-[136rem] caption-bottom border-collapse text-xs">
                     <thead>
                       <tr className="border-b border-slate-200">
@@ -2345,9 +2381,241 @@ export function GestionExternosPage() {
                     </tbody>
                   </table>
                 </div>
+                <div className="space-y-3 px-4 pb-6 pt-2 md:hidden">
+                  {seguimientosFiltrados.map((row) => {
+                    const retraso = isEnvioRetrasado(
+                      row.fecha_prevista,
+                      row.estado
+                    );
+                    const recibido = row.estado === "Recibido";
+                    const diasUi = computeDiasEnExternoUi(
+                      row.fecha_envio,
+                      row.fecha_prevista
+                    );
+                    return (
+                      <Card
+                        key={row.id}
+                        className={cn(
+                          "overflow-hidden border-slate-200/90 shadow-sm",
+                          recibido &&
+                            "bg-slate-100/90 text-slate-800 dark:bg-slate-800/50 dark:text-slate-200",
+                          !recibido &&
+                            retraso &&
+                            "border-red-200/80 bg-red-50/90 dark:bg-red-950/30"
+                        )}
+                      >
+                        <CardHeader className="space-y-3 pb-2">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <p className="text-base font-semibold tabular-nums text-[#002147]">
+                                OT {getOtDisplay(row)}
+                                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                                  Op {row.num_operacion ?? "—"}
+                                </span>
+                              </p>
+                              <p className="text-sm font-medium leading-snug text-foreground">
+                                {row.cliente_nombre?.trim() || "—"}
+                              </p>
+                              <p className="text-sm leading-snug text-muted-foreground">
+                                {row.trabajo_titulo?.trim() || "—"}
+                              </p>
+                            </div>
+                            <div className="flex shrink-0 items-start gap-2 pt-0.5">
+                              <input
+                                type="checkbox"
+                                className="size-5 touch-manipulation rounded border"
+                                checked={selectedSeguimientoIds.includes(row.id)}
+                                onChange={(e) =>
+                                  toggleSeguimientoSelected(
+                                    row.id,
+                                    e.target.checked
+                                  )
+                                }
+                                aria-label={`Seleccionar OT ${getOtDisplay(row)}`}
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="size-11 shrink-0 touch-manipulation"
+                                onClick={() => openSeguimientoEdit(row)}
+                                aria-label={`Editar OT ${getOtDisplay(row)}`}
+                              >
+                                <Pencil className="size-5" />
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 pt-3">
+                            <SemaforoCell row={row} />
+                            <span className="text-xs text-muted-foreground">
+                              Ud. {row.unidades != null ? row.unidades : "—"} · Pal.{" "}
+                              {row.palets != null ? row.palets : "—"}
+                              {diasUi != null ? ` · ${diasUi} días` : ""}
+                            </span>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-4 pt-0">
+                          <p className="text-xs leading-relaxed text-muted-foreground">
+                            <span className="font-medium text-foreground/80">
+                              {proveedorNombreById.get(row.proveedor_id) ?? "—"}
+                            </span>
+                            {" · "}
+                            {acabadoNombreById.get(row.acabado_id) ?? "—"}
+                          </p>
+                          <div className="space-y-2">
+                            <Label className="text-xs font-medium text-[#002147]">
+                              Estado
+                            </Label>
+                            <NativeSelect
+                              label=""
+                              options={estadoRapidoOptions}
+                              value={row.estado}
+                              onChange={(e) =>
+                                void updateEstado(row, e.target.value)
+                              }
+                              disabled={saving}
+                              className="min-h-11 min-w-0 w-full max-w-none text-base"
+                              aria-label={`Estado OT ${getOtDisplay(row)}`}
+                            />
+                          </div>
+                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label
+                                htmlFor={`fe-env-${row.id}`}
+                                className="text-xs font-medium text-[#002147]"
+                              >
+                                Fecha envío
+                              </Label>
+                              <InlineFechaSeguimientoCell
+                                id={`fe-env-${row.id}`}
+                                rowId={row.id}
+                                isoValue={row.fecha_envio}
+                                disabled={saving}
+                                ariaLabel={`Fecha envío OT ${getOtDisplay(row)}`}
+                                onCommit={(ymd) =>
+                                  void updateSeguimientoFecha(
+                                    row,
+                                    "fecha_envio",
+                                    ymd
+                                  )
+                                }
+                                inputClassName="min-h-11 w-full max-w-none text-base"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label
+                                htmlFor={`fe-prev-${row.id}`}
+                                className="text-xs font-medium text-[#002147]"
+                              >
+                                Fecha prevista
+                              </Label>
+                              <InlineFechaSeguimientoCell
+                                id={`fe-prev-${row.id}`}
+                                rowId={row.id}
+                                isoValue={row.fecha_prevista}
+                                disabled={saving}
+                                ariaLabel={`Fecha prevista OT ${getOtDisplay(row)}`}
+                                onCommit={(ymd) =>
+                                  void updateSeguimientoFecha(
+                                    row,
+                                    "fecha_prevista",
+                                    ymd
+                                  )
+                                }
+                                inputClassName="min-h-11 w-full max-w-none text-base"
+                              />
+                            </div>
+                          </div>
+                          <div className="grid gap-3 border-t border-slate-200/80 pt-3 text-xs sm:grid-cols-2">
+                            <div>
+                              <p className="mb-1 font-medium text-[#002147]">
+                                Notas log.
+                              </p>
+                              <NotasTablaCelda texto={row.notas_logistica} />
+                            </div>
+                            <div>
+                              <p className="mb-1 font-medium text-[#002147]">
+                                Obs. taller
+                              </p>
+                              <NotasTablaCelda texto={row.observaciones} />
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+                </>
               )}
             </CardContent>
           </Card>
+
+          <Sheet open={filtrosMobileOpen} onOpenChange={setFiltrosMobileOpen}>
+            <SheetContent
+              side="bottom"
+              showCloseButton
+              className="max-h-[min(92dvh,640px)] gap-0 overflow-y-auto rounded-t-xl p-0"
+            >
+              <SheetHeader className="border-b border-border/80 px-4 pb-3 pt-2">
+                <SheetTitle className="text-left text-[#002147]">
+                  Filtros del listado
+                </SheetTitle>
+              </SheetHeader>
+              <div className="grid gap-4 px-4 py-4">
+                <NativeSelect
+                  label="Estado"
+                  options={estadoFiltroOptions}
+                  value={filtroEstado}
+                  onChange={(e) => setFiltroEstado(e.target.value)}
+                  className="min-h-11 text-base"
+                />
+                <NativeSelect
+                  label="Proveedor"
+                  options={proveedorFiltroOptions}
+                  value={filtroProveedorId}
+                  onChange={(e) => setFiltroProveedorId(e.target.value)}
+                  className="min-h-11 text-base"
+                />
+                <div className="grid gap-1.5">
+                  <Label htmlFor="busq-seg-mobile">
+                    Buscar (OT, cliente, pedido, trabajo)
+                  </Label>
+                  <Input
+                    id="busq-seg-mobile"
+                    placeholder="Ej. 24001 o nombre"
+                    value={busquedaSeguimiento}
+                    onChange={(e) => setBusquedaSeguimiento(e.target.value)}
+                    className="min-h-11 touch-manipulation text-base"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Histórico
+                  </span>
+                  <Toggle
+                    variant="outline"
+                    size="default"
+                    pressed={verHistorial}
+                    onPressedChange={setVerHistorial}
+                    className="min-h-11 w-full touch-manipulation justify-start gap-2 px-3"
+                    aria-label="Ver histórico incluyendo trabajos recibidos"
+                  >
+                    <History className="size-4 shrink-0 opacity-80" aria-hidden />
+                    Ver Histórico
+                  </Toggle>
+                </div>
+              </div>
+              <div className="border-t border-border/80 p-4">
+                <Button
+                  type="button"
+                  className="h-11 w-full touch-manipulation bg-[#002147] text-white hover:bg-[#002147]/90"
+                  onClick={() => setFiltrosMobileOpen(false)}
+                >
+                  Listo
+                </Button>
+              </div>
+            </SheetContent>
+          </Sheet>
 
           <div
             ref={printListadoRef}

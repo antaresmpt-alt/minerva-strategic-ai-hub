@@ -23,6 +23,14 @@ const BRAND_WORDMARK_H = 68;
 const BRAND_FULL_W = 268;
 const BRAND_FULL_H = 106;
 
+function safeClientNextPath(next: string | null): string {
+  if (!next || next === "") return "/";
+  const path = next.split("?")[0].split("#")[0];
+  if (!path.startsWith("/") || path.startsWith("//")) return "/";
+  if (path.includes("://")) return "/";
+  return path || "/";
+}
+
 const REASON_COPY: Record<string, { title: string; body: string }> = {
   auth: {
     title: "Sesión requerida",
@@ -38,6 +46,7 @@ export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const reason = searchParams.get("reason");
+  const nextParam = searchParams.get("next");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -64,10 +73,10 @@ export function LoginForm() {
         return;
       }
 
-      router.push("/");
-      router.refresh();
+      const dest = safeClientNextPath(nextParam);
+      window.location.assign(dest);
     },
-    [email, password, router]
+    [email, password, nextParam]
   );
 
   async function handleSignOut() {
