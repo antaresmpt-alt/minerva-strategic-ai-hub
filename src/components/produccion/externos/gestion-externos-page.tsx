@@ -6,7 +6,6 @@ import {
   FileOutput,
   FileSpreadsheet,
   History,
-  ListFilter,
   Loader2,
   Mail,
   PackageSearch,
@@ -68,12 +67,6 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { Toggle } from "@/components/ui/toggle";
 import {
@@ -694,8 +687,6 @@ export function GestionExternosPage() {
   const [filtroEstado, setFiltroEstado] = useState("");
   const [filtroProveedorId, setFiltroProveedorId] = useState("");
   const [busquedaSeguimiento, setBusquedaSeguimiento] = useState("");
-  const [filtrosMobileOpen, setFiltrosMobileOpen] = useState(false);
-
   const [seguimientoSheetOpen, setSeguimientoSheetOpen] = useState(false);
   const [seguimientoEditing, setSeguimientoEditing] =
     useState<SeguimientoRow | null>(null);
@@ -1953,7 +1944,7 @@ export function GestionExternosPage() {
     "flex h-full min-h-8 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs data-active:bg-[#C69C2B]/20 data-active:font-semibold data-active:text-[#002147] data-active:shadow-sm data-active:ring-2 data-active:ring-[#C69C2B]/45 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm";
 
   return (
-    <div className="w-full max-w-none space-y-6">
+    <div className="w-full min-w-0 max-w-[100vw] space-y-6 overflow-x-hidden">
       <header>
         <h1 className="font-heading text-2xl font-bold text-[#002147] md:text-3xl">
           Gestión de Externos
@@ -1965,7 +1956,11 @@ export function GestionExternosPage() {
         </p>
       </header>
 
-      <Tabs value={tab} onValueChange={setTab} className="w-full max-w-none">
+      <Tabs
+        value={tab}
+        onValueChange={setTab}
+        className="w-full min-w-0 max-w-full overflow-x-hidden"
+      >
         <div className="mb-5 flex w-full justify-start sm:mb-6">
           <TabsList className="box-border inline-flex h-auto min-h-9 w-fit max-w-full flex-wrap items-stretch gap-0 rounded-lg border border-slate-200/90 bg-slate-50/90 p-1 shadow-sm">
             <TabsTrigger value="seguimiento" className={tabTriggerClass}>
@@ -2008,9 +2003,9 @@ export function GestionExternosPage() {
             </Alert>
           ) : null}
 
-          <Card className="border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
-            <CardHeader className="space-y-4">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <Card className="max-w-full min-w-0 overflow-x-hidden border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
+            <CardHeader className="min-w-0 space-y-4">
+              <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="space-y-1.5">
                   <CardTitle className="text-lg text-[#002147]">
                     Trabajos fuera (seguimiento)
@@ -2121,22 +2116,46 @@ export function GestionExternosPage() {
                   </Toggle>
                 </div>
               </div>
-              <div className="md:hidden">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-11 w-full touch-manipulation justify-center gap-2 border-[#002147]/20 text-[#002147]"
-                  onClick={() => setFiltrosMobileOpen(true)}
-                  aria-expanded={filtrosMobileOpen}
-                >
-                  <ListFilter className="size-4 shrink-0" aria-hidden />
-                  Filtros
-                  {filtroEstado || filtroProveedorId || busquedaSeguimiento.trim() ? (
-                    <span className="rounded-full bg-[#C69C2B]/25 px-2 py-0.5 text-xs font-medium text-[#002147]">
-                      Activos
-                    </span>
-                  ) : null}
-                </Button>
+              <div className="flex min-w-0 flex-col gap-3 md:hidden">
+                <NativeSelect
+                  label="Estado"
+                  options={estadoFiltroOptions}
+                  value={filtroEstado}
+                  onChange={(e) => setFiltroEstado(e.target.value)}
+                  className="min-h-11 text-base"
+                />
+                <NativeSelect
+                  label="Proveedor"
+                  options={proveedorFiltroOptions}
+                  value={filtroProveedorId}
+                  onChange={(e) => setFiltroProveedorId(e.target.value)}
+                  className="min-h-11 text-base"
+                />
+                <div className="grid min-w-0 gap-1.5">
+                  <Label htmlFor="busq-seg-m">Buscar (OT, cliente, pedido, trabajo)</Label>
+                  <Input
+                    id="busq-seg-m"
+                    placeholder="Ej. 24001 o nombre"
+                    value={busquedaSeguimiento}
+                    onChange={(e) => setBusquedaSeguimiento(e.target.value)}
+                    className="min-h-11 touch-manipulation text-base"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Histórico
+                  </span>
+                  <Toggle
+                    variant="outline"
+                    pressed={verHistorial}
+                    onPressedChange={setVerHistorial}
+                    className="min-h-11 w-full touch-manipulation justify-start gap-2 px-3"
+                    aria-label="Ver histórico incluyendo trabajos recibidos"
+                  >
+                    <History className="size-4 shrink-0 opacity-80" aria-hidden />
+                    Ver Histórico
+                  </Toggle>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-0 sm:p-6">
@@ -2148,8 +2167,8 @@ export function GestionExternosPage() {
                 </p>
               ) : (
                 <>
-                <div className="hidden max-h-[min(78vh,56rem)] w-full max-w-none overflow-auto rounded-lg border border-slate-200/80 sm:rounded-xl md:block">
-                  <table className="w-full min-w-[136rem] caption-bottom border-collapse text-xs">
+                <div className="hidden max-h-[min(78vh,56rem)] w-full min-w-0 max-w-full overflow-x-auto rounded-lg border border-slate-200/80 sm:rounded-xl md:block">
+                  <table className="hidden w-full min-w-[136rem] caption-bottom border-collapse text-xs md:table">
                     <thead>
                       <tr className="border-b border-slate-200">
                         <th className="sticky top-0 z-30 w-8 bg-slate-50/95 px-0.5 py-1 text-center font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
@@ -2381,7 +2400,7 @@ export function GestionExternosPage() {
                     </tbody>
                   </table>
                 </div>
-                <div className="space-y-3 px-4 pb-6 pt-2 md:hidden">
+                <div className="grid min-w-0 grid-cols-1 gap-3 px-3 pb-6 pt-2 min-[520px]:grid-cols-2 md:hidden">
                   {seguimientosFiltrados.map((row) => {
                     const retraso = isEnvioRetrasado(
                       row.fecha_prevista,
@@ -2396,7 +2415,7 @@ export function GestionExternosPage() {
                       <Card
                         key={row.id}
                         className={cn(
-                          "overflow-hidden border-slate-200/90 shadow-sm",
+                          "min-w-0 overflow-hidden border-slate-200/90 bg-white shadow-sm ring-1 ring-slate-200/60",
                           recibido &&
                             "bg-slate-100/90 text-slate-800 dark:bg-slate-800/50 dark:text-slate-200",
                           !recibido &&
@@ -2406,18 +2425,15 @@ export function GestionExternosPage() {
                       >
                         <CardHeader className="space-y-3 pb-2">
                           <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0 flex-1 space-y-1">
-                              <p className="text-base font-semibold tabular-nums text-[#002147]">
+                            <div className="min-w-0 flex-1 space-y-2">
+                              <p className="text-lg font-bold tabular-nums text-[#002147]">
                                 OT {getOtDisplay(row)}
-                                <span className="ml-2 text-sm font-normal text-muted-foreground">
-                                  Op {row.num_operacion ?? "—"}
+                                <span className="ml-2 text-sm font-semibold text-muted-foreground">
+                                  · Op {row.num_operacion ?? "—"}
                                 </span>
                               </p>
-                              <p className="text-sm font-medium leading-snug text-foreground">
+                              <p className="text-base font-bold leading-snug text-[#002147]">
                                 {row.cliente_nombre?.trim() || "—"}
-                              </p>
-                              <p className="text-sm leading-snug text-muted-foreground">
-                                {row.trabajo_titulo?.trim() || "—"}
                               </p>
                             </div>
                             <div className="flex shrink-0 items-start gap-2 pt-0.5">
@@ -2454,14 +2470,32 @@ export function GestionExternosPage() {
                             </span>
                           </div>
                         </CardHeader>
-                        <CardContent className="space-y-4 pt-0">
-                          <p className="text-xs leading-relaxed text-muted-foreground">
-                            <span className="font-medium text-foreground/80">
+                        <CardContent className="min-w-0 space-y-4 pt-0">
+                          <div className="space-y-1.5 text-sm leading-relaxed text-muted-foreground">
+                            <p>
+                              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                                Trabajo
+                              </span>
+                              <br />
+                              <span className="text-foreground/90">
+                                {row.trabajo_titulo?.trim() || "—"}
+                              </span>
+                            </p>
+                            <p>
+                              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                                Proveedor
+                              </span>
+                              <br />
                               {proveedorNombreById.get(row.proveedor_id) ?? "—"}
-                            </span>
-                            {" · "}
-                            {acabadoNombreById.get(row.acabado_id) ?? "—"}
-                          </p>
+                            </p>
+                            <p>
+                              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                                Acabado
+                              </span>
+                              <br />
+                              {acabadoNombreById.get(row.acabado_id) ?? "—"}
+                            </p>
+                          </div>
                           <div className="space-y-2">
                             <Label className="text-xs font-medium text-[#002147]">
                               Estado
@@ -2474,11 +2508,11 @@ export function GestionExternosPage() {
                                 void updateEstado(row, e.target.value)
                               }
                               disabled={saving}
-                              className="min-h-11 min-w-0 w-full max-w-none text-base"
+                              className="min-h-12 min-w-0 w-full max-w-none text-base"
                               aria-label={`Estado OT ${getOtDisplay(row)}`}
                             />
                           </div>
-                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          <div className="grid min-w-0 grid-cols-1 gap-4 min-[480px]:grid-cols-2">
                             <div className="space-y-2">
                               <Label
                                 htmlFor={`fe-env-${row.id}`}
@@ -2499,7 +2533,7 @@ export function GestionExternosPage() {
                                     ymd
                                   )
                                 }
-                                inputClassName="min-h-11 w-full max-w-none text-base"
+                                inputClassName="min-h-12 w-full max-w-none text-base"
                               />
                             </div>
                             <div className="space-y-2">
@@ -2522,7 +2556,7 @@ export function GestionExternosPage() {
                                     ymd
                                   )
                                 }
-                                inputClassName="min-h-11 w-full max-w-none text-base"
+                                inputClassName="min-h-12 w-full max-w-none text-base"
                               />
                             </div>
                           </div>
@@ -2550,76 +2584,9 @@ export function GestionExternosPage() {
             </CardContent>
           </Card>
 
-          <Sheet open={filtrosMobileOpen} onOpenChange={setFiltrosMobileOpen}>
-            <SheetContent
-              side="bottom"
-              showCloseButton
-              className="max-h-[min(92dvh,640px)] gap-0 overflow-y-auto rounded-t-xl p-0"
-            >
-              <SheetHeader className="border-b border-border/80 px-4 pb-3 pt-2">
-                <SheetTitle className="text-left text-[#002147]">
-                  Filtros del listado
-                </SheetTitle>
-              </SheetHeader>
-              <div className="grid gap-4 px-4 py-4">
-                <NativeSelect
-                  label="Estado"
-                  options={estadoFiltroOptions}
-                  value={filtroEstado}
-                  onChange={(e) => setFiltroEstado(e.target.value)}
-                  className="min-h-11 text-base"
-                />
-                <NativeSelect
-                  label="Proveedor"
-                  options={proveedorFiltroOptions}
-                  value={filtroProveedorId}
-                  onChange={(e) => setFiltroProveedorId(e.target.value)}
-                  className="min-h-11 text-base"
-                />
-                <div className="grid gap-1.5">
-                  <Label htmlFor="busq-seg-mobile">
-                    Buscar (OT, cliente, pedido, trabajo)
-                  </Label>
-                  <Input
-                    id="busq-seg-mobile"
-                    placeholder="Ej. 24001 o nombre"
-                    value={busquedaSeguimiento}
-                    onChange={(e) => setBusquedaSeguimiento(e.target.value)}
-                    className="min-h-11 touch-manipulation text-base"
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    Histórico
-                  </span>
-                  <Toggle
-                    variant="outline"
-                    size="default"
-                    pressed={verHistorial}
-                    onPressedChange={setVerHistorial}
-                    className="min-h-11 w-full touch-manipulation justify-start gap-2 px-3"
-                    aria-label="Ver histórico incluyendo trabajos recibidos"
-                  >
-                    <History className="size-4 shrink-0 opacity-80" aria-hidden />
-                    Ver Histórico
-                  </Toggle>
-                </div>
-              </div>
-              <div className="border-t border-border/80 p-4">
-                <Button
-                  type="button"
-                  className="h-11 w-full touch-manipulation bg-[#002147] text-white hover:bg-[#002147]/90"
-                  onClick={() => setFiltrosMobileOpen(false)}
-                >
-                  Listo
-                </Button>
-              </div>
-            </SheetContent>
-          </Sheet>
-
           <div
             ref={printListadoRef}
-            className="externos-print-parte fixed top-0 left-[-120vw] z-0 w-[297mm] bg-white p-10 text-[11pt] leading-snug text-black print:static print:left-0"
+            className="externos-print-parte pointer-events-none fixed top-0 -left-[9999px] z-[-5] w-[297mm] max-w-[100vw] bg-white p-10 text-[11pt] leading-snug text-black opacity-0 print:pointer-events-auto print:static print:left-0 print:z-0 print:max-w-none print:opacity-100"
             aria-hidden
           >
             <header className="mb-6 border-b-2 border-[#002147] pb-4">
@@ -2914,7 +2881,7 @@ export function GestionExternosPage() {
                     </div>
                   </div>
 
-                  <div className="w-full max-w-none overflow-x-auto rounded-lg border border-slate-200">
+                  <div className="w-full min-w-0 max-w-full overflow-x-auto rounded-lg border border-slate-200 [-webkit-overflow-scrolling:touch]">
                     <Table className="w-full min-w-[96rem] text-xs">
                       <TableHeader>
                         <TableRow className="bg-slate-50/90">

@@ -70,8 +70,8 @@ export function ProduccionShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-40 border-b border-slate-200/90 bg-white/95 backdrop-blur-md">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 md:px-6">
+      <header className="sticky top-0 z-40 max-w-[100vw] overflow-x-hidden border-b border-slate-200/90 bg-white/95 backdrop-blur-md">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 md:px-6">
           <Link
             href="/"
             className="text-sm font-semibold text-[#002147] transition hover:text-[#002147]/80"
@@ -83,7 +83,7 @@ export function ProduccionShell({ children }: { children: React.ReactNode }) {
             className="hidden h-6 sm:block"
           />
           <nav
-            className="flex flex-1 flex-wrap items-center gap-1"
+            className="flex min-w-0 flex-1 flex-wrap items-center gap-1"
             aria-label="Módulo Producción"
           >
             {navLinks.map((item) => {
@@ -120,7 +120,7 @@ export function ProduccionShell({ children }: { children: React.ReactNode }) {
           <div className="sem-workspace-marble" />
           <div className="sem-workspace-overlay" />
         </div>
-        <main className="relative z-10 w-full min-w-0 max-w-none flex-1 px-4 py-6">
+        <main className="relative z-10 w-full min-w-0 max-w-[100vw] flex-1 overflow-x-hidden px-4 py-6">
           {children}
         </main>
         <SemContactFooter />
