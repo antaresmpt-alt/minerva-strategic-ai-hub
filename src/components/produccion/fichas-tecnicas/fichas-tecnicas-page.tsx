@@ -8,6 +8,7 @@ import {
   Pencil,
   Printer,
   Search,
+  Sparkles,
   Upload,
   X,
 } from "lucide-react";
@@ -18,6 +19,7 @@ import {
   useRef,
   useState,
 } from "react";
+import ReactMarkdown from "react-markdown";
 import { useReactToPrint } from "react-to-print";
 import { toast } from "sonner";
 
@@ -26,6 +28,8 @@ import {
   FICHA_PRINT_PAGE_STYLE,
   type FichaTecnicaPrintHandle,
 } from "@/components/produccion/fichas-tecnicas/FichaTecnicaPrint";
+import { GlobalModelSelector } from "@/components/layout/header";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -66,6 +70,7 @@ import {
 import type { FichaTecnicaImportPayload } from "@/lib/fichas-tecnicas-import";
 import { parseFichasTecnicasImportFile } from "@/lib/fichas-tecnicas-import";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
+import { useHubStore } from "@/lib/store";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
 
@@ -242,8 +247,34 @@ async function copyPath(path: string) {
   }
 }
 
+/** Payload JSON para el asistente IA (listado filtrado visible). */
+function buildFichasAsistenteRowsPayload(rows: FichaTecnicaRow[]) {
+  return rows.map((r) => ({
+    ot: r.ot,
+    cliente: r.cliente,
+    trabajo: r.trabajo,
+    gramaje: r.gramaje,
+    tipo_material: r.tipo_material,
+    formato: r.formato,
+    pasadas: r.pasadas,
+    tipo_impresion: r.tipo_impresion,
+    densidad_1: r.densidad_1,
+    densidad_2: r.densidad_2,
+    densidad_3: r.densidad_3,
+    densidad_4: r.densidad_4,
+    densidad_5: r.densidad_5,
+    densidad_6: r.densidad_6,
+    densidad_7: r.densidad_7,
+    densidad_8: r.densidad_8,
+    notas: r.notas,
+    maquinista: r.maquinista,
+    fecha: r.fecha,
+  }));
+}
+
 export function FichasTecnicasPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const globalModel = useHubStore((s) => s.globalModel);
   const [rows, setRows] = useState<FichaTecnicaRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -262,6 +293,12 @@ export function FichasTecnicasPage() {
   const batchPrintRef = useRef<HTMLDivElement>(null);
   const masterCheckboxRef = useRef<HTMLInputElement>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+
+  const [asistentePregunta, setAsistentePregunta] = useState("");
+  const [asistenteLoading, setAsistenteLoading] = useState(false);
+  const [asistenteError, setAsistenteError] = useState<string | null>(null);
+  const [asistenteText, setAsistenteText] = useState("");
+  const abortAsistenteRef = useRef<AbortController | null>(null);
 
   const handleBatchPrint = useReactToPrint({
     contentRef: batchPrintRef,
@@ -335,6 +372,47 @@ export function FichasTecnicasPage() {
     }
     return list;
   }, [searchFiltered, filterCliente, filterMaquinista]);
+
+  const asistenteRowsPayload = useMemo(
+    () => buildFichasAsistenteRowsPayload(filtered),
+    [filtered]
+  );
+
+  const runAsistenteFichas = useCallback(async () => {
+    const q = asistentePregunta.trim();
+    if (!q) {
+      toast.error("Escribe una pregunta.");
+      return;
+    }
+    abortAsistenteRef.current?.abort();
+    const ac = new AbortController();
+    abortAsistenteRef.current = ac;
+    setAsistenteLoading(true);
+    setAsistenteError(null);
+    try {
+      const res = await fetch("/api/gemini/fichas-tecnicas-analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: globalModel,
+          rows: asistenteRowsPayload,
+          question: q,
+        }),
+        signal: ac.signal,
+      });
+      const data = (await res.json()) as { error?: string; text?: string };
+      if (!res.ok) throw new Error(data.error ?? "Error al responder");
+      setAsistenteText(data.text ?? "");
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") return;
+      setAsistenteError(
+        e instanceof Error ? e.message : "Error desconocido"
+      );
+      setAsistenteText("");
+    } finally {
+      setAsistenteLoading(false);
+    }
+  }, [asistentePregunta, asistenteRowsPayload, globalModel]);
 
   const selectedRowsForPrint = useMemo(
     () => filtered.filter((r) => selectedIds.has(r.id)),
@@ -522,8 +600,56 @@ export function FichasTecnicasPage() {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
+  const asistenteCuerpo = (
+    <div className="space-y-2 pt-0.5">
+      <p className="text-[11px] leading-snug text-muted-foreground">
+        Contexto: <strong>{filtered.length}</strong> ficha(s) en el listado
+        filtrado (máx. 200 cargadas).
+      </p>
+      <GlobalModelSelector
+        layout="stack"
+        className="[&_span]:text-[10px] [&_select]:h-8 [&_select]:text-xs"
+      />
+      <Textarea
+        value={asistentePregunta}
+        onChange={(e) => setAsistentePregunta(e.target.value)}
+        rows={3}
+        placeholder='Ej. «¿Qué trabajos usan el Pantone 286?» · «¿Cuántos usan el 871?»'
+        className="min-h-[4.25rem] resize-y text-xs"
+        disabled={asistenteLoading}
+      />
+      <Button
+        type="button"
+        size="sm"
+        className="h-8 w-full gap-1.5 bg-[#002147] text-xs text-white hover:bg-[#002147]/90"
+        disabled={asistenteLoading || loading}
+        onClick={() => void runAsistenteFichas()}
+      >
+        {asistenteLoading ? (
+          <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden />
+        ) : (
+          <Sparkles className="size-3.5 shrink-0" aria-hidden />
+        )}
+        Preguntar
+      </Button>
+      {asistenteError ? (
+        <Alert className="border-red-200 bg-red-50/95 py-2 text-red-950">
+          <AlertTitle className="text-xs">No se pudo responder</AlertTitle>
+          <AlertDescription className="text-xs">{asistenteError}</AlertDescription>
+        </Alert>
+      ) : null}
+      {asistenteText.trim() ? (
+        <div className="max-h-48 overflow-y-auto rounded-md border border-slate-200 bg-slate-50/90 px-2 py-2">
+          <div className="prose prose-sm prose-slate max-w-none dark:prose-invert [&_p]:my-1.5 [&_ul]:my-1 [&_li]:text-xs [&_p]:text-xs">
+            <ReactMarkdown>{asistenteText}</ReactMarkdown>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6">
+    <div className="mx-auto w-full max-w-7xl space-y-5 px-4 pb-10 sm:px-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="font-heading text-2xl font-bold text-[#002147] md:text-3xl">
@@ -577,6 +703,21 @@ export function FichasTecnicasPage() {
           </Button>
         </div>
       </header>
+
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-5">
+        <div className="min-w-0 flex-1 space-y-4">
+          <details className="group rounded-xl border border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm lg:hidden">
+            <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-sm font-semibold text-[#002147] [&::-webkit-details-marker]:hidden">
+              <Sparkles className="size-4 shrink-0 text-[#C69C2B]" aria-hidden />
+              Asistente de Fichas Técnicas
+              <span className="ml-auto text-xs font-normal text-muted-foreground">
+                Toca para expandir
+              </span>
+            </summary>
+            <div className="border-t border-slate-100 px-3 pb-3 pt-2">
+              {asistenteCuerpo}
+            </div>
+          </details>
 
       <Card className="border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
         <CardHeader className="space-y-4 pb-4">
@@ -855,6 +996,26 @@ export function FichasTecnicasPage() {
           )}
         </CardContent>
       </Card>
+        </div>
+
+        <aside className="hidden w-full shrink-0 lg:block lg:w-72 lg:max-w-[18rem] lg:sticky lg:top-20 lg:self-start">
+          <Card className="border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
+            <CardHeader className="space-y-1 pb-2 pt-4">
+              <CardTitle className="flex items-center gap-2 text-base text-[#002147]">
+                <Sparkles
+                  className="size-4 shrink-0 text-[#C69C2B]"
+                  aria-hidden
+                />
+                Asistente de Fichas Técnicas
+              </CardTitle>
+              <CardDescription className="text-xs leading-snug">
+                Preguntas sobre el listado filtrado (tintas, densidades, notas).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">{asistenteCuerpo}</CardContent>
+          </Card>
+        </aside>
+      </div>
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent

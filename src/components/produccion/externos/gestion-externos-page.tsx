@@ -253,6 +253,41 @@ function isoToDateInput(iso: string | null | undefined): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/** Fecha en celda de tabla: edición compacta; persiste en `onBlur` si cambió. */
+function InlineFechaSeguimientoCell({
+  rowId,
+  isoValue,
+  disabled,
+  ariaLabel,
+  onCommit,
+}: {
+  rowId: string;
+  isoValue: string | null | undefined;
+  disabled?: boolean;
+  ariaLabel: string;
+  onCommit: (ymd: string) => void | Promise<void>;
+}) {
+  const serverYmd = isoToDateInput(isoValue);
+  const [local, setLocal] = useState(serverYmd);
+  useEffect(() => {
+    setLocal(serverYmd);
+  }, [rowId, serverYmd]);
+  return (
+    <Input
+      type="date"
+      disabled={disabled}
+      value={local}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={() => {
+        if (local === serverYmd) return;
+        void onCommit(local);
+      }}
+      className="h-7 w-full min-w-[6.25rem] max-w-[7rem] border-slate-200 px-1 py-0 text-[10px] leading-tight shadow-xs sm:text-xs"
+      aria-label={ariaLabel}
+    />
+  );
+}
+
 type ImportPreviewRow = {
   key: string;
   ot_raw: string;
@@ -1621,7 +1656,6 @@ export function GestionExternosPage() {
         Op: r.num_operacion ?? "",
         Unidades: r.unidades ?? "",
         Prioridad: r.prioridad ?? "",
-        Palets: r.palets ?? "",
         "Días externo": dias ?? "",
         Cliente: r.cliente_nombre,
         Trabajo: r.trabajo_titulo,
@@ -1629,10 +1663,11 @@ export function GestionExternosPage() {
         Proveedor: proveedorNombreById.get(r.proveedor_id) ?? "",
         Acabado: acabadoNombreById.get(r.acabado_id) ?? "",
         Estado: r.estado,
+        "Fecha envío": r.fecha_envio ? formatFechaEsCorta(r.fecha_envio) : "",
         "Fecha prevista": r.fecha_prevista
           ? formatFechaEsCorta(r.fecha_prevista)
           : "",
-        "Fecha envío": r.fecha_envio ? formatFechaEsCorta(r.fecha_envio) : "",
+        Palets: r.palets ?? "",
         Alta: formatFechaEsCorta(r.created_at),
         Modif: formatFechaEsCorta(
           r.updated_at != null && r.updated_at !== ""
@@ -1671,6 +1706,38 @@ export function GestionExternosPage() {
       return;
     }
     toast.success("Estado actualizado.");
+    void loadCore();
+  }
+
+  async function updateSeguimientoFecha(
+    row: SeguimientoRow,
+    field: "fecha_envio" | "fecha_prevista",
+    ymd: string
+  ) {
+    const currentIso =
+      field === "fecha_envio" ? row.fecha_envio : row.fecha_prevista;
+    const prevYmd = isoToDateInput(currentIso);
+    if (ymd === prevYmd) return;
+
+    const now = new Date().toISOString();
+    const patch: Record<string, string | null> = { updated_at: now };
+    if (ymd.trim().length === 10) {
+      patch[field] = dateInputToTimestamptz(ymd.trim());
+    } else {
+      patch[field] = null;
+    }
+
+    setSaving(true);
+    const { error } = await supabase
+      .from("prod_seguimiento_externos")
+      .update(patch)
+      .eq("id", row.id);
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      void loadCore();
+      return;
+    }
     void loadCore();
   }
 
@@ -2046,7 +2113,7 @@ export function GestionExternosPage() {
                 </p>
               ) : (
                 <div className="max-h-[min(78vh,56rem)] w-full max-w-none overflow-auto rounded-lg border border-slate-200/80 sm:rounded-xl">
-                  <table className="w-full min-w-[132rem] caption-bottom border-collapse text-xs">
+                  <table className="w-full min-w-[136rem] caption-bottom border-collapse text-xs">
                     <thead>
                       <tr className="border-b border-slate-200">
                         <th className="sticky top-0 z-30 w-8 bg-slate-50/95 px-0.5 py-1 text-center font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
@@ -2065,6 +2132,9 @@ export function GestionExternosPage() {
                             aria-label="Seleccionar todas las OTs visibles en la tabla"
                           />
                         </th>
+                        <th className="sticky top-0 z-30 w-10 bg-slate-50/95 px-0.5 py-1 text-center font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Ed.
+                        </th>
                         <th className="sticky top-0 z-30 w-9 bg-slate-50/95 px-0.5 py-1 text-center font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Sem.
                         </th>
@@ -2079,9 +2149,6 @@ export function GestionExternosPage() {
                         </th>
                         <th className="sticky top-0 z-30 w-16 bg-slate-50/95 px-0.5 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Prio.
-                        </th>
-                        <th className="sticky top-0 z-30 w-8 bg-slate-50/95 px-0.5 py-1 text-center font-medium tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
-                          Pal.
                         </th>
                         <th className="sticky top-0 z-30 w-8 bg-slate-50/95 px-0.5 py-1 text-center font-medium tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Días
@@ -2101,11 +2168,14 @@ export function GestionExternosPage() {
                         <th className="sticky top-0 z-30 w-24 min-w-24 max-w-24 bg-slate-50/95 px-0.5 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Estado
                         </th>
-                        <th className="sticky top-0 z-30 w-[4.5rem] min-w-[4.5rem] bg-slate-50/95 px-0.5 py-1 text-center font-medium whitespace-nowrap tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                        <th className="sticky top-0 z-30 w-[7rem] min-w-[6.5rem] max-w-[7.5rem] bg-slate-50/95 px-0.5 py-1 text-center font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Env.
+                        </th>
+                        <th className="sticky top-0 z-30 w-[7rem] min-w-[6.5rem] max-w-[7.5rem] bg-slate-50/95 px-0.5 py-1 text-center font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Prev.
                         </th>
-                        <th className="sticky top-0 z-30 w-[4.5rem] min-w-[4.5rem] bg-slate-50/95 px-0.5 py-1 text-center font-medium whitespace-nowrap tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
-                          Env.
+                        <th className="sticky top-0 z-30 w-8 bg-slate-50/95 px-0.5 py-1 text-center font-medium tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Pal.
                         </th>
                         <th className="sticky top-0 z-30 min-w-[12rem] max-w-[16rem] bg-slate-50/95 px-1 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Notas log.
@@ -2118,9 +2188,6 @@ export function GestionExternosPage() {
                         </th>
                         <th className="sticky top-0 z-30 w-[4.5rem] min-w-[4.5rem] bg-slate-50/95 px-0.5 py-1 text-center font-medium whitespace-nowrap tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Mod.
-                        </th>
-                        <th className="sticky top-0 z-30 w-10 bg-slate-50/95 px-0.5 py-1 text-center font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
-                          ···
                         </th>
                       </tr>
                     </thead>
@@ -2161,6 +2228,18 @@ export function GestionExternosPage() {
                                 aria-label={`Seleccionar OT ${getOtDisplay(row)}`}
                               />
                             </td>
+                            <td className="w-10 p-0.5 text-center align-middle">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                className="size-7 shrink-0"
+                                onClick={() => openSeguimientoEdit(row)}
+                                aria-label={`Editar OT ${getOtDisplay(row)}`}
+                              >
+                                <Pencil className="size-3.5" />
+                              </Button>
+                            </td>
                             <td className="w-9 px-0.5 py-0.5 text-center align-middle">
                               <SemaforoCell row={row} />
                             </td>
@@ -2177,9 +2256,6 @@ export function GestionExternosPage() {
                               {row.prioridad?.trim()
                                 ? row.prioridad
                                 : "—"}
-                            </td>
-                            <td className="w-8 px-0.5 py-0.5 text-center tabular-nums">
-                              {row.palets != null ? row.palets : "—"}
                             </td>
                             <td className="w-8 px-0.5 py-0.5 text-center tabular-nums">
                               {diasUi != null ? diasUi : "—"}
@@ -2214,11 +2290,38 @@ export function GestionExternosPage() {
                                 aria-label={`Estado OT ${getOtDisplay(row)}`}
                               />
                             </td>
-                            <td className="w-[4.5rem] min-w-[4.5rem] px-0.5 py-0.5 text-center align-middle tabular-nums leading-tight">
-                              {formatFechaEsCorta(row.fecha_prevista)}
+                            <td className="w-[7rem] min-w-[6.5rem] max-w-[7.5rem] px-0.5 py-0.5 align-middle">
+                              <InlineFechaSeguimientoCell
+                                rowId={row.id}
+                                isoValue={row.fecha_envio}
+                                disabled={saving}
+                                ariaLabel={`Fecha envío OT ${getOtDisplay(row)}`}
+                                onCommit={(ymd) =>
+                                  void updateSeguimientoFecha(
+                                    row,
+                                    "fecha_envio",
+                                    ymd
+                                  )
+                                }
+                              />
                             </td>
-                            <td className="w-[4.5rem] min-w-[4.5rem] px-0.5 py-0.5 text-center align-middle tabular-nums leading-tight">
-                              {formatFechaEsCorta(row.fecha_envio)}
+                            <td className="w-[7rem] min-w-[6.5rem] max-w-[7.5rem] px-0.5 py-0.5 align-middle">
+                              <InlineFechaSeguimientoCell
+                                rowId={row.id}
+                                isoValue={row.fecha_prevista}
+                                disabled={saving}
+                                ariaLabel={`Fecha prevista OT ${getOtDisplay(row)}`}
+                                onCommit={(ymd) =>
+                                  void updateSeguimientoFecha(
+                                    row,
+                                    "fecha_prevista",
+                                    ymd
+                                  )
+                                }
+                              />
+                            </td>
+                            <td className="w-8 px-0.5 py-0.5 text-center tabular-nums">
+                              {row.palets != null ? row.palets : "—"}
                             </td>
                             <td className="min-w-[12rem] max-w-[16rem] py-0.5 align-top text-muted-foreground">
                               <NotasTablaCelda texto={row.notas_logistica} />
@@ -2235,18 +2338,6 @@ export function GestionExternosPage() {
                                   ? row.updated_at
                                   : row.created_at
                               )}
-                            </td>
-                            <td className="w-10 p-0.5 text-center">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon-sm"
-                                className="size-7 shrink-0"
-                                onClick={() => openSeguimientoEdit(row)}
-                                aria-label={`Editar OT ${getOtDisplay(row)}`}
-                              >
-                                <Pencil className="size-3.5" />
-                              </Button>
                             </td>
                           </tr>
                         );
@@ -2314,10 +2405,13 @@ export function GestionExternosPage() {
                     Est.
                   </th>
                   <th className="border border-[#002147] px-1 py-1.5 text-left font-semibold">
+                    Envío
+                  </th>
+                  <th className="border border-[#002147] px-1 py-1.5 text-left font-semibold">
                     Prev.
                   </th>
                   <th className="border border-[#002147] px-1 py-1.5 text-left font-semibold">
-                    Envío
+                    Pal.
                   </th>
                   <th className="border border-[#002147] px-1 py-1.5 text-left font-semibold">
                     Notas log.
@@ -2369,10 +2463,13 @@ export function GestionExternosPage() {
                         {row.estado}
                       </td>
                       <td className="border border-slate-200 px-1 py-1 whitespace-nowrap">
-                        {formatFechaEsCorta(row.fecha_prevista)}
+                        {formatFechaEsCorta(row.fecha_envio)}
                       </td>
                       <td className="border border-slate-200 px-1 py-1 whitespace-nowrap">
-                        {formatFechaEsCorta(row.fecha_envio)}
+                        {formatFechaEsCorta(row.fecha_prevista)}
+                      </td>
+                      <td className="border border-slate-200 px-1 py-1 tabular-nums">
+                        {row.palets ?? "—"}
                       </td>
                       <td className="border border-slate-200 px-1 py-1 align-top text-[7.5pt]">
                         {row.notas_logistica?.trim()
