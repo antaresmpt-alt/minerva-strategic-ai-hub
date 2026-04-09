@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  AlertTriangle,
   Copy,
+  Droplet,
   Eye,
   FileSpreadsheet,
   FileText,
@@ -267,6 +269,45 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
+/** Muestra el icono del visor de cauchos si el valor indica caucho (p. ej. «SI»). */
+function cauchoAcrilicoShowsViewer(v: string | null): boolean {
+  const t = (v ?? "").trim();
+  if (!t) return false;
+  return t.toUpperCase().includes("SI");
+}
+
+/** Evita `Error: [object Object]` si `error` en JSON no es string. */
+function readErrorFromJsonBody(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const err = (body as { error?: unknown }).error;
+  if (typeof err === "string" && err.trim()) return err.trim();
+  return null;
+}
+
+function readAttemptedPathFromJson(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const p = (body as { attemptedPath?: unknown }).attemptedPath;
+  return typeof p === "string" && p.trim() ? p.trim() : null;
+}
+
+/** La API debe devolver `files: string[]`; tolera objetos `{ name }` por si acaso. */
+function normalizeCauchoFileList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item === "string") {
+      const s = item.trim();
+      if (s) out.push(s);
+      continue;
+    }
+    if (item && typeof item === "object" && "name" in item) {
+      const n = (item as { name: unknown }).name;
+      if (typeof n === "string" && n.trim()) out.push(n.trim());
+    }
+  }
+  return out;
+}
+
 function useDebouncedValue<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
@@ -297,8 +338,10 @@ export function TroquelesPage() {
   const [configRow, setConfigRow] = useState<{
     id: string;
     pdf_path: string | null;
+    caucho_path: string | null;
   } | null>(null);
   const [configPathDraft, setConfigPathDraft] = useState("");
+  const [configCauchoPathDraft, setConfigCauchoPathDraft] = useState("");
   const [savingConfig, setSavingConfig] = useState(false);
 
   const [formOpen, setFormOpen] = useState(false);
@@ -319,6 +362,22 @@ export function TroquelesPage() {
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const pdfIframeRef = useRef<HTMLIFrameElement>(null);
 
+  const [cauchoModalOpen, setCauchoModalOpen] = useState(false);
+  const [cauchoModalNum, setCauchoModalNum] = useState<string | null>(null);
+  const [cauchoFiles, setCauchoFiles] = useState<string[]>([]);
+  const [cauchoSelected, setCauchoSelected] = useState<string | null>(null);
+  const [cauchoListLoading, setCauchoListLoading] = useState(false);
+  const [cauchoPreviewLoading, setCauchoPreviewLoading] = useState(false);
+  const [cauchoError, setCauchoError] = useState<string | null>(null);
+  /** Listado vacío por 404 (sin archivos / ruta inválida), para UI centrada. */
+  const [cauchoListNotFound, setCauchoListNotFound] = useState(false);
+  /** Ruta absoluta que intentó usar la API (depuración en modal). */
+  const [cauchoErrorAttemptedPath, setCauchoErrorAttemptedPath] = useState<
+    string | null
+  >(null);
+  const [cauchoBlobUrl, setCauchoBlobUrl] = useState<string | null>(null);
+  const cauchoIframeRef = useRef<HTMLIFrameElement>(null);
+
   const [asistentePregunta, setAsistentePregunta] = useState("");
   const [asistenteLoading, setAsistenteLoading] = useState(false);
   const [asistenteError, setAsistenteError] = useState<string | null>(null);
@@ -329,7 +388,7 @@ export function TroquelesPage() {
   const loadConfig = useCallback(async () => {
     const { data, error } = await supabase
       .from("prod_troqueles_config")
-      .select("id, pdf_path")
+      .select("id, pdf_path, caucho_path")
       .limit(1)
       .maybeSingle();
     if (error) {
@@ -337,11 +396,20 @@ export function TroquelesPage() {
       return;
     }
     if (data) {
-      setConfigRow({ id: data.id as string, pdf_path: data.pdf_path as string | null });
+      setConfigRow({
+        id: data.id as string,
+        pdf_path: data.pdf_path as string | null,
+        caucho_path: (data as { caucho_path?: string | null }).caucho_path ?? null,
+      });
       setConfigPathDraft((data.pdf_path as string | null)?.trim() ?? "");
+      setConfigCauchoPathDraft(
+        ((data as { caucho_path?: string | null }).caucho_path ?? null)?.trim() ??
+          ""
+      );
     } else {
       setConfigRow(null);
       setConfigPathDraft("");
+      setConfigCauchoPathDraft("");
     }
   }, [supabase]);
 
@@ -577,11 +645,12 @@ export function TroquelesPage() {
 
   async function savePdfConfig() {
     const path = configPathDraft.trim();
+    const cauchoPath = configCauchoPathDraft.trim();
     setSavingConfig(true);
     if (configRow?.id) {
       const { error } = await supabase
         .from("prod_troqueles_config")
-        .update({ pdf_path: path || null })
+        .update({ pdf_path: path || null, caucho_path: cauchoPath || null })
         .eq("id", configRow.id);
       setSavingConfig(false);
       if (error) {
@@ -591,8 +660,8 @@ export function TroquelesPage() {
     } else {
       const { data, error } = await supabase
         .from("prod_troqueles_config")
-        .insert({ pdf_path: path || null })
-        .select("id, pdf_path")
+        .insert({ pdf_path: path || null, caucho_path: cauchoPath || null })
+        .select("id, pdf_path, caucho_path")
         .single();
       setSavingConfig(false);
       if (error) {
@@ -603,6 +672,7 @@ export function TroquelesPage() {
         setConfigRow({
           id: data.id as string,
           pdf_path: data.pdf_path as string | null,
+          caucho_path: (data as { caucho_path?: string | null }).caucho_path ?? null,
         });
       }
     }
@@ -689,6 +759,126 @@ export function TroquelesPage() {
     const w = pdfIframeRef.current?.contentWindow;
     if (w) w.print();
     else toast.info("Espera a que cargue el PDF.");
+  }
+
+  const revokeCauchoBlob = useCallback(() => {
+    setCauchoBlobUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+  }, []);
+
+  const loadCauchoPreview = useCallback(
+    async (num: string, fileName: string) => {
+      revokeCauchoBlob();
+      setCauchoPreviewLoading(true);
+      setCauchoError(null);
+      setCauchoErrorAttemptedPath(null);
+      setCauchoSelected(fileName);
+      try {
+        const res = await fetch(
+          `/api/produccion/caucho-list?num=${encodeURIComponent(num)}&file=${encodeURIComponent(fileName)}`
+        );
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          const msg =
+            readErrorFromJsonBody(body) ??
+            `No se pudo cargar el archivo (${res.status}).`;
+          setCauchoError(msg);
+          setCauchoErrorAttemptedPath(readAttemptedPathFromJson(body));
+          setCauchoBlobUrl(null);
+          return;
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        setCauchoBlobUrl(url);
+        setCauchoErrorAttemptedPath(null);
+      } catch (e) {
+        setCauchoError(
+          e instanceof Error ? e.message : "No se pudo cargar el PDF de caucho."
+        );
+        setCauchoBlobUrl(null);
+        setCauchoErrorAttemptedPath(null);
+      } finally {
+        setCauchoPreviewLoading(false);
+      }
+    },
+    [revokeCauchoBlob]
+  );
+
+  const openCauchoViewer = useCallback(
+    async (row: TroquelRow) => {
+      const num = row.num_troquel?.trim();
+      if (!num) {
+        toast.error("Este registro no tiene número de troquel.");
+        return;
+      }
+      setCauchoModalNum(num);
+      setCauchoModalOpen(true);
+      setCauchoFiles([]);
+      setCauchoSelected(null);
+      setCauchoError(null);
+      setCauchoListNotFound(false);
+      setCauchoErrorAttemptedPath(null);
+      revokeCauchoBlob();
+      setCauchoListLoading(true);
+      let list: string[] = [];
+      try {
+        const res = await fetch(
+          `/api/produccion/caucho-list?num=${encodeURIComponent(num)}`
+        );
+        const body = await res.json().catch(() => null);
+        if (!res.ok) {
+          const msg =
+            readErrorFromJsonBody(body) ??
+            `No se pudo obtener la lista de cauchos (${res.status}).`;
+          setCauchoError(msg);
+          setCauchoErrorAttemptedPath(readAttemptedPathFromJson(body));
+          setCauchoListNotFound(res.status === 404);
+          setCauchoFiles([]);
+          return;
+        }
+        list = normalizeCauchoFileList(
+          body && typeof body === "object"
+            ? (body as { files?: unknown }).files
+            : undefined
+        );
+        setCauchoFiles(list);
+        setCauchoListNotFound(false);
+        setCauchoErrorAttemptedPath(null);
+        if (list.length === 1) {
+          await loadCauchoPreview(num, list[0]);
+        }
+      } catch (e) {
+        setCauchoError(
+          e instanceof Error ? e.message : "No se pudo listar los cauchos."
+        );
+        setCauchoListNotFound(false);
+        setCauchoErrorAttemptedPath(null);
+      } finally {
+        setCauchoListLoading(false);
+      }
+    },
+    [revokeCauchoBlob, loadCauchoPreview]
+  );
+
+  function closeCauchoModal(open: boolean) {
+    if (!open) {
+      revokeCauchoBlob();
+      setCauchoModalNum(null);
+      setCauchoFiles([]);
+      setCauchoSelected(null);
+      setCauchoError(null);
+      setCauchoListNotFound(false);
+      setCauchoErrorAttemptedPath(null);
+    }
+    setCauchoModalOpen(open);
+  }
+
+  function printCauchoInModal() {
+    const w = cauchoIframeRef.current?.contentWindow;
+    if (w) w.print();
+    else toast.info("Selecciona un PDF o espera a que cargue.");
   }
 
   const processImportFile = useCallback(
@@ -1267,10 +1457,26 @@ export function TroquelesPage() {
                             {row.relieve_seco || "—"}
                           </TableCell>
                           <TableCell
-                            className="w-20 truncate whitespace-nowrap"
+                            className="w-24 max-w-[9rem] whitespace-nowrap"
                             title={row.caucho_acrilico ?? ""}
                           >
-                            {row.caucho_acrilico || "—"}
+                            <div className="flex min-w-0 items-center gap-0.5">
+                              <span className="min-w-0 truncate">
+                                {row.caucho_acrilico || "—"}
+                              </span>
+                              {cauchoAcrilicoShowsViewer(row.caucho_acrilico) ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-6 shrink-0 text-[#002147]/85 hover:bg-[#002147]/10 hover:text-[#002147]"
+                                  title="Visor de cauchos"
+                                  onClick={() => void openCauchoViewer(row)}
+                                >
+                                  <Droplet className="size-3.5" aria-hidden />
+                                </Button>
+                              ) : null}
+                            </div>
                           </TableCell>
                           <TableCell
                             className="w-24 truncate whitespace-nowrap"
@@ -1336,19 +1542,22 @@ export function TroquelesPage() {
           <Card className="border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
             <CardHeader className="pb-2 pt-4">
               <CardTitle className="text-base text-[#002147]">
-                Configuración de ubicación (PDF)
+                Configuración de ubicación (PDF y cauchos)
               </CardTitle>
               <CardDescription className="text-xs">
-                Carpeta en el servidor donde están los ficheros{" "}
-                <code className="rounded bg-slate-100 px-1">[num_troquel].pdf</code>{" "}
-                (accesible por Node en el despliegue). Se guarda en{" "}
-                <code className="rounded bg-slate-100 px-1">prod_troqueles_config.pdf_path</code>.
+                Carpeta de dibujos troquel y carpeta de PDFs de cauchos (patrón{" "}
+                <code className="rounded bg-slate-100 px-1">[num_troquel]_*.pdf</code>
+                ). Accesible por Node en el despliegue. Columnas{" "}
+                <code className="rounded bg-slate-100 px-1">pdf_path</code> y{" "}
+                <code className="rounded bg-slate-100 px-1">caucho_path</code> en{" "}
+                <code className="rounded bg-slate-100 px-1">prod_troqueles_config</code>
+                .
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 pb-4">
-              <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
+              <div className="grid gap-3">
                 <div className="grid gap-1.5">
-                  <Label htmlFor="pdf-path">Ruta carpeta PDFs</Label>
+                  <Label htmlFor="pdf-path">Ruta carpeta PDFs (troquel)</Label>
                   <Input
                     id="pdf-path"
                     value={configPathDraft}
@@ -1358,6 +1567,19 @@ export function TroquelesPage() {
                     autoComplete="off"
                   />
                 </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="caucho-path">Ruta carpeta cauchos</Label>
+                  <Input
+                    id="caucho-path"
+                    value={configCauchoPathDraft}
+                    onChange={(e) => setConfigCauchoPathDraft(e.target.value)}
+                    placeholder="Ej. D:\emepe\Cauchos\PDFs (mismo servidor que la app)"
+                    className="font-mono text-xs"
+                    autoComplete="off"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-wrap justify-end gap-2">
                 <Button
                   type="button"
                   className="bg-[#002147] hover:bg-[#002147]/90"
@@ -1656,6 +1878,159 @@ export function TroquelesPage() {
                 ) : null}
               </div>
             ) : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={cauchoModalOpen} onOpenChange={closeCauchoModal}>
+        <DialogContent
+          showCloseButton
+          className="flex max-h-[min(92vh,920px)] w-[calc(100%-1.5rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
+        >
+          <DialogHeader className="shrink-0 border-b border-slate-200 px-6 py-4 pr-14">
+            <DialogTitle className="text-left text-[#002147]">
+              Visor de cauchos{cauchoModalNum ? ` · ${cauchoModalNum}` : ""}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto bg-slate-100 px-3 py-3 sm:px-4">
+            {cauchoListLoading ? (
+              <div className="flex min-h-[50vh] items-center justify-center">
+                <Loader2 className="size-10 animate-spin text-[#002147]/50" />
+              </div>
+            ) : cauchoError && cauchoFiles.length === 0 && cauchoListNotFound ? (
+              <div
+                className="flex min-h-[50vh] flex-col items-center justify-center gap-5 px-6 py-10 text-center"
+                role="alert"
+              >
+                <AlertTriangle
+                  className="size-14 shrink-0 text-amber-500"
+                  strokeWidth={1.75}
+                  aria-hidden
+                />
+                <p className="max-w-lg text-sm leading-relaxed text-slate-700">
+                  {cauchoError}
+                </p>
+                {cauchoErrorAttemptedPath ? (
+                  <p className="max-w-xl font-mono text-[10px] leading-snug text-slate-400 break-all">
+                    Ruta intentada en el servidor: {cauchoErrorAttemptedPath}
+                  </p>
+                ) : null}
+              </div>
+            ) : cauchoError && cauchoFiles.length === 0 ? (
+              <Alert className="border-amber-200 bg-amber-50/95">
+                <AlertTitle className="text-sm">No se pudo cargar la lista</AlertTitle>
+                <AlertDescription className="text-xs">
+                  {cauchoError}
+                  {cauchoErrorAttemptedPath ? (
+                    <span className="mt-2 block font-mono text-[10px] leading-snug text-slate-400 break-all">
+                      Ruta intentada en el servidor: {cauchoErrorAttemptedPath}
+                    </span>
+                  ) : null}
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <div className="grid min-h-[min(62vh,680px)] gap-3 md:grid-cols-[minmax(0,15rem)_1fr]">
+                <div className="flex max-h-[min(62vh,680px)] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                  <p className="shrink-0 border-b border-slate-100 px-2 py-1.5 text-[11px] font-semibold text-[#002147]">
+                    Archivos ({cauchoFiles.length})
+                  </p>
+                  <ul className="min-h-0 flex-1 overflow-y-auto p-1.5 [scrollbar-width:thin]">
+                    {cauchoFiles.map((name) => (
+                      <li key={name}>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            cauchoModalNum
+                              ? void loadCauchoPreview(cauchoModalNum, name)
+                              : undefined
+                          }
+                          className={cn(
+                            "w-full rounded px-2 py-1.5 text-left font-mono text-[11px] break-all transition-colors",
+                            cauchoSelected === name
+                              ? "bg-[#002147]/12 text-[#002147]"
+                              : "hover:bg-slate-50"
+                          )}
+                        >
+                          {name}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  {cauchoFiles.length === 0 ? (
+                    <p className="shrink-0 border-t border-slate-100 px-2 py-2 text-xs text-muted-foreground">
+                      Ningún archivo coincide con{" "}
+                      <code className="rounded bg-slate-100 px-0.5">
+                        {cauchoModalNum ?? ""}_*.pdf
+                      </code>{" "}
+                      o{" "}
+                      <code className="rounded bg-slate-100 px-0.5">
+                        {cauchoModalNum ?? ""}_*.ai
+                      </code>{" "}
+                      en la carpeta configurada.
+                    </p>
+                  ) : null}
+                </div>
+                <div className="relative flex min-h-[min(58vh,620px)] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                  {cauchoPreviewLoading ? (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/85">
+                      <Loader2 className="size-9 animate-spin text-[#002147]/50" />
+                    </div>
+                  ) : null}
+                  {cauchoError && cauchoFiles.length > 0 ? (
+                    <Alert className="m-3 shrink-0 border-amber-200 bg-amber-50/95">
+                      <AlertTitle className="text-sm">Previsualización</AlertTitle>
+                      <AlertDescription className="text-xs">
+                        {cauchoError}
+                        {cauchoErrorAttemptedPath ? (
+                          <span className="mt-2 block font-mono text-[10px] leading-snug text-slate-400 break-all">
+                            Ruta intentada en el servidor:{" "}
+                            {cauchoErrorAttemptedPath}
+                          </span>
+                        ) : null}
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
+                  {cauchoBlobUrl ? (
+                    <iframe
+                      ref={cauchoIframeRef}
+                      title={`Caucho ${cauchoModalNum ?? ""}`}
+                      src={cauchoBlobUrl}
+                      className="min-h-[min(54vh,580px)] w-full flex-1 border-0 bg-white"
+                    />
+                  ) : !cauchoPreviewLoading &&
+                    cauchoFiles.length > 1 &&
+                    !cauchoBlobUrl ? (
+                    <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-muted-foreground">
+                      Selecciona un archivo en la lista para previsualizarlo.
+                    </div>
+                  ) : !cauchoPreviewLoading &&
+                    cauchoFiles.length === 0 &&
+                    !cauchoError ? (
+                    <div className="flex flex-1 items-center justify-center p-6 text-sm text-muted-foreground">
+                      Sin archivos para este troquel.
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="shrink-0 flex flex-row flex-wrap justify-end gap-2 border-t border-slate-200 bg-slate-50/90 px-4 py-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => closeCauchoModal(false)}
+            >
+              Cerrar
+            </Button>
+            <Button
+              type="button"
+              className="gap-2 bg-[#C69C2B] font-semibold text-[#002147] hover:bg-[#C69C2B]/90"
+              disabled={!cauchoBlobUrl}
+              onClick={() => printCauchoInModal()}
+            >
+              <Printer className="size-4" aria-hidden />
+              Imprimir
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
