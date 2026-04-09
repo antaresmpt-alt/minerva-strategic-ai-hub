@@ -310,6 +310,10 @@ export function TroquelesPage() {
   const [pdfAssetKind, setPdfAssetKind] = useState<"pdf" | "illustrator" | null>(
     null
   );
+  /** Ruta absoluta del archivo encontrado en el servidor (cabecera X-Resolved-Path). */
+  const [pdfResolvedPath, setPdfResolvedPath] = useState<string | null>(null);
+  /** Si no hay archivo (404): carpeta Nivel 2 para búsqueda manual. */
+  const [pdfLocalizarHint, setPdfLocalizarHint] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
@@ -623,6 +627,8 @@ export function TroquelesPage() {
       setPdfModalNum(num);
       setPdfModalOpen(true);
       setPdfAssetKind(null);
+      setPdfResolvedPath(null);
+      setPdfLocalizarHint(null);
       setPdfLoading(true);
       setPdfError(null);
       revokePdfBlob();
@@ -631,9 +637,22 @@ export function TroquelesPage() {
           `/api/produccion/troquel-pdf?num=${encodeURIComponent(num)}`
         );
         if (!res.ok) {
-          const j = (await res.json().catch(() => ({}))) as { error?: string };
+          const j = (await res.json().catch(() => ({}))) as {
+            error?: string;
+            localizarHint?: string;
+          };
+          setPdfResolvedPath(null);
+          setPdfLocalizarHint(
+            typeof j.localizarHint === "string" ? j.localizarHint : null
+          );
           throw new Error(j.error ?? `Error ${res.status}`);
         }
+        const resolvedEnc = res.headers.get("X-Resolved-Path");
+        const resolved = resolvedEnc
+          ? decodeURIComponent(resolvedEnc)
+          : null;
+        setPdfResolvedPath(resolved);
+        setPdfLocalizarHint(null);
         const kind = res.headers.get("X-Asset-Kind");
         if (kind === "illustrator") {
           await res.blob();
@@ -659,6 +678,8 @@ export function TroquelesPage() {
       revokePdfBlob();
       setPdfModalNum(null);
       setPdfAssetKind(null);
+      setPdfResolvedPath(null);
+      setPdfLocalizarHint(null);
       setPdfError(null);
     }
     setPdfModalOpen(open);
@@ -831,6 +852,31 @@ export function TroquelesPage() {
         : "",
     [pdfModalNum, configPathDraft]
   );
+
+  /** Localizar en Red: archivo encontrado → ruta completa; si no → carpeta Nivel 2 (404); si no → patrón comodín. */
+  const pdfLocalizarCopyTarget = useMemo(() => {
+    if (pdfResolvedPath?.trim()) return pdfResolvedPath.trim();
+    if (pdfLocalizarHint?.trim()) return pdfLocalizarHint.trim();
+    if (pdfAssetKind === "illustrator" && pdfAiFuzzyPattern)
+      return pdfAiFuzzyPattern;
+    return pdfFuzzyPattern;
+  }, [
+    pdfResolvedPath,
+    pdfLocalizarHint,
+    pdfAssetKind,
+    pdfAiFuzzyPattern,
+    pdfFuzzyPattern,
+  ]);
+
+  const pdfPlanaCopyTarget = useMemo(() => {
+    if (pdfResolvedPath?.trim()) return pdfResolvedPath.trim();
+    if (pdfModalNum && configPathDraft.trim()) {
+      return pdfAssetKind === "illustrator"
+        ? troquelAiFullPath(configPathDraft, pdfModalNum)
+        : troquelPdfFullPath(configPathDraft, pdfModalNum);
+    }
+    return "";
+  }, [pdfResolvedPath, pdfModalNum, configPathDraft, pdfAssetKind]);
 
   const asistenteCuerpo = (
     <div className="space-y-2 pt-0.5">
@@ -1463,8 +1509,9 @@ export function TroquelesPage() {
                 </AlertTitle>
                 <AlertDescription className="text-xs leading-relaxed">
                   Archivo Adobe Illustrator detectado. Si no se previsualiza aquí,
-                  use <strong>Localizar en Red</strong> (patrón .ai) y ábralo en
-                  Illustrator o con Adobe Acrobat.
+                  utiliza <strong>Localizar en Red</strong> (copia la ruta del
+                  .ai encontrada en el servidor) y ábrelo en Illustrator o con
+                  Adobe Acrobat.
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -1501,17 +1548,10 @@ export function TroquelesPage() {
                   type="button"
                   variant="outline"
                   className="gap-2 border-[#002147]/25"
-                  disabled={!pdfModalNum || !configPathDraft.trim()}
+                  disabled={!pdfPlanaCopyTarget}
                   onClick={() => {
-                    if (pdfModalNum && configPathDraft.trim()) {
-                      void copyToClipboard(
-                        pdfAssetKind === "illustrator"
-                          ? troquelAiFullPath(configPathDraft, pdfModalNum)
-                          : troquelPdfFullPath(configPathDraft, pdfModalNum)
-                      );
-                    } else {
-                      toast.info("Configura primero la carpeta de PDFs abajo.");
-                    }
+                    if (pdfPlanaCopyTarget) void copyToClipboard(pdfPlanaCopyTarget);
+                    else toast.info("Configura primero la carpeta de PDFs abajo.");
                   }}
                 >
                   <Copy className="size-4" aria-hidden />
@@ -1521,17 +1561,11 @@ export function TroquelesPage() {
                   type="button"
                   variant="secondary"
                   className="gap-2 border-[#002147]/20"
-                  disabled={
-                    pdfAssetKind === "illustrator"
-                      ? !pdfAiFuzzyPattern
-                      : !pdfFuzzyPattern
-                  }
+                  disabled={!pdfLocalizarCopyTarget}
                   onClick={() =>
-                    void copyToClipboard(
-                      pdfAssetKind === "illustrator"
-                        ? pdfAiFuzzyPattern
-                        : pdfFuzzyPattern
-                    )
+                    pdfLocalizarCopyTarget
+                      ? void copyToClipboard(pdfLocalizarCopyTarget)
+                      : undefined
                   }
                 >
                   <FolderSearch className="size-4" aria-hidden />
@@ -1584,27 +1618,39 @@ export function TroquelesPage() {
             ) : null}
             {pdfModalNum && configPathDraft.trim() ? (
               <div className="space-y-1 border-t border-slate-100 pt-2 font-mono text-[10px] text-muted-foreground break-all">
+                {pdfResolvedPath ? (
+                  <p>
+                    <span className="text-slate-500">Archivo resuelto (servidor):</span>{" "}
+                    {pdfResolvedPath}
+                  </p>
+                ) : null}
+                {pdfLocalizarHint && !pdfResolvedPath ? (
+                  <p>
+                    <span className="text-slate-500">Carpeta sugerida (Nivel 2):</span>{" "}
+                    {pdfLocalizarHint}
+                  </p>
+                ) : null}
                 <p>
-                  <span className="text-slate-500">Plana:</span>{" "}
+                  <span className="text-slate-500">Plana (referencia):</span>{" "}
                   {pdfAssetKind === "illustrator"
                     ? troquelAiFullPath(configPathDraft, pdfModalNum)
                     : troquelPdfFullPath(configPathDraft, pdfModalNum)}
                 </p>
                 <p>
-                  <span className="text-slate-500">Anidada:</span>{" "}
+                  <span className="text-slate-500">Anidada (referencia):</span>{" "}
                   {pdfAssetKind === "illustrator"
                     ? troquelAiNestedPath(configPathDraft, pdfModalNum)
                     : troquelPdfNestedPath(configPathDraft, pdfModalNum)}
                 </p>
                 {pdfFuzzyPattern ? (
                   <p>
-                    <span className="text-slate-500">Patrón PDF:</span>{" "}
+                    <span className="text-slate-500">Patrón PDF (comodín):</span>{" "}
                     {pdfFuzzyPattern}
                   </p>
                 ) : null}
                 {pdfAiFuzzyPattern ? (
                   <p>
-                    <span className="text-slate-500">Patrón .ai:</span>{" "}
+                    <span className="text-slate-500">Patrón .ai (comodín):</span>{" "}
                     {pdfAiFuzzyPattern}
                   </p>
                 ) : null}
