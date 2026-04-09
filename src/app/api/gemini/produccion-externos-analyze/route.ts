@@ -16,7 +16,7 @@ Recibirás un JSON con filas de la tabla actual: OT, cliente, trabajo, proveedor
 Debes responder SIEMPRE en español, en Markdown claro, con estas secciones en este orden (usa ## con emoji en el título):
 
 ## 🚩 Alertas
-- Proveedores saturados (demasiados trabajos activos: Pendiente, Enviado, En Proveedor) frente al resto, con números.
+- Proveedores saturados (demasiados trabajos activos: Pendiente, Muelle Minerva, Enviado, En Proveedor) frente al resto, con números.
 - Retrasos críticos (semáforo de retraso o fecha prevista vencida) y su impacto breve.
 - Si no hay alertas relevantes, dilo en una frase.
 

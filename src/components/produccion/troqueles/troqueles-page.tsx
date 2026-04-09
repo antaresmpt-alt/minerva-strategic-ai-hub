@@ -69,6 +69,9 @@ import {
   resolveSinRefCollisionsWithDb,
 } from "@/lib/troqueles-import";
 import {
+  troquelAiFuzzySearchPattern,
+  troquelAiFullPath,
+  troquelAiNestedPath,
   troquelPdfFileUrlFromWindowsPath,
   troquelPdfFullPath,
   troquelPdfFuzzySearchPattern,
@@ -304,6 +307,9 @@ export function TroquelesPage() {
 
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [pdfModalNum, setPdfModalNum] = useState<string | null>(null);
+  const [pdfAssetKind, setPdfAssetKind] = useState<"pdf" | "illustrator" | null>(
+    null
+  );
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
@@ -616,6 +622,7 @@ export function TroquelesPage() {
       }
       setPdfModalNum(num);
       setPdfModalOpen(true);
+      setPdfAssetKind(null);
       setPdfLoading(true);
       setPdfError(null);
       revokePdfBlob();
@@ -627,8 +634,16 @@ export function TroquelesPage() {
           const j = (await res.json().catch(() => ({}))) as { error?: string };
           throw new Error(j.error ?? `Error ${res.status}`);
         }
+        const kind = res.headers.get("X-Asset-Kind");
+        if (kind === "illustrator") {
+          await res.blob();
+          setPdfAssetKind("illustrator");
+          setPdfBlobUrl(null);
+          return;
+        }
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
+        setPdfAssetKind("pdf");
         setPdfBlobUrl(url);
       } catch (e) {
         setPdfError(e instanceof Error ? e.message : "No se pudo cargar el PDF.");
@@ -643,6 +658,7 @@ export function TroquelesPage() {
     if (!open) {
       revokePdfBlob();
       setPdfModalNum(null);
+      setPdfAssetKind(null);
       setPdfError(null);
     }
     setPdfModalOpen(open);
@@ -788,11 +804,29 @@ export function TroquelesPage() {
     [pdfModalNum, configPathDraft]
   );
 
+  const pdfAiFuzzyPattern = useMemo(
+    () =>
+      pdfModalNum && configPathDraft.trim()
+        ? troquelAiFuzzySearchPattern(configPathDraft, pdfModalNum)
+        : "",
+    [pdfModalNum, configPathDraft]
+  );
+
   const pdfNestedLocalUrl = useMemo(
     () =>
       pdfModalNum && configPathDraft.trim()
         ? troquelPdfFileUrlFromWindowsPath(
             troquelPdfNestedPath(configPathDraft, pdfModalNum)
+          )
+        : "",
+    [pdfModalNum, configPathDraft]
+  );
+
+  const aiNestedLocalUrl = useMemo(
+    () =>
+      pdfModalNum && configPathDraft.trim()
+        ? troquelPdfFileUrlFromWindowsPath(
+            troquelAiNestedPath(configPathDraft, pdfModalNum)
           )
         : "",
     [pdfModalNum, configPathDraft]
@@ -1400,7 +1434,10 @@ export function TroquelesPage() {
         >
           <DialogHeader className="shrink-0 border-b border-slate-200 px-6 py-4 pr-14">
             <DialogTitle className="text-left text-[#002147]">
-              PDF troquel {pdfModalNum ? `· ${pdfModalNum}` : ""}
+              {pdfAssetKind === "illustrator"
+                ? "Archivo troquel"
+                : "PDF troquel"}{" "}
+              {pdfModalNum ? `· ${pdfModalNum}` : ""}
             </DialogTitle>
           </DialogHeader>
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-slate-100 px-3 py-3 sm:px-4">
@@ -1419,6 +1456,18 @@ export function TroquelesPage() {
                 empresas lo bloquean por seguridad).
               </AlertDescription>
             </Alert>
+            {pdfAssetKind === "illustrator" && !pdfLoading ? (
+              <Alert className="border-[#002147]/25 bg-[#C69C2B]/10 text-slate-900">
+                <AlertTitle className="text-sm text-[#002147]">
+                  Adobe Illustrator (.ai)
+                </AlertTitle>
+                <AlertDescription className="text-xs leading-relaxed">
+                  Archivo Adobe Illustrator detectado. Si no se previsualiza aquí,
+                  use <strong>Localizar en Red</strong> (patrón .ai) y ábralo en
+                  Illustrator o con Adobe Acrobat.
+                </AlertDescription>
+              </Alert>
+            ) : null}
             {pdfLoading ? (
               <div className="flex min-h-[40vh] items-center justify-center">
                 <Loader2 className="size-10 animate-spin text-[#002147]/50" />
@@ -1456,7 +1505,9 @@ export function TroquelesPage() {
                   onClick={() => {
                     if (pdfModalNum && configPathDraft.trim()) {
                       void copyToClipboard(
-                        troquelPdfFullPath(configPathDraft, pdfModalNum)
+                        pdfAssetKind === "illustrator"
+                          ? troquelAiFullPath(configPathDraft, pdfModalNum)
+                          : troquelPdfFullPath(configPathDraft, pdfModalNum)
                       );
                     } else {
                       toast.info("Configura primero la carpeta de PDFs abajo.");
@@ -1470,8 +1521,18 @@ export function TroquelesPage() {
                   type="button"
                   variant="secondary"
                   className="gap-2 border-[#002147]/20"
-                  disabled={!pdfFuzzyPattern}
-                  onClick={() => void copyToClipboard(pdfFuzzyPattern)}
+                  disabled={
+                    pdfAssetKind === "illustrator"
+                      ? !pdfAiFuzzyPattern
+                      : !pdfFuzzyPattern
+                  }
+                  onClick={() =>
+                    void copyToClipboard(
+                      pdfAssetKind === "illustrator"
+                        ? pdfAiFuzzyPattern
+                        : pdfFuzzyPattern
+                    )
+                  }
                 >
                   <FolderSearch className="size-4" aria-hidden />
                   Localizar en Red
@@ -1488,7 +1549,7 @@ export function TroquelesPage() {
                 <Button
                   type="button"
                   className="gap-2 bg-[#C69C2B] font-semibold text-[#002147] hover:bg-[#C69C2B]/90"
-                  disabled={!pdfBlobUrl}
+                  disabled={!pdfBlobUrl || pdfAssetKind === "illustrator"}
                   onClick={() => printPdfInModal()}
                 >
                   <Printer className="size-4" aria-hidden />
@@ -1496,7 +1557,19 @@ export function TroquelesPage() {
                 </Button>
               </div>
             </div>
-            {pdfNestedLocalUrl ? (
+            {pdfAssetKind === "illustrator" && aiNestedLocalUrl ? (
+              <p className="text-[11px] leading-snug text-muted-foreground">
+                Enlace local .ai (experimental):{" "}
+                <a
+                  href={aiNestedLocalUrl}
+                  className="break-all font-mono text-[#002147] underline"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {aiNestedLocalUrl}
+                </a>
+              </p>
+            ) : pdfNestedLocalUrl ? (
               <p className="text-[11px] leading-snug text-muted-foreground">
                 Enlace local (experimental):{" "}
                 <a
@@ -1513,16 +1586,26 @@ export function TroquelesPage() {
               <div className="space-y-1 border-t border-slate-100 pt-2 font-mono text-[10px] text-muted-foreground break-all">
                 <p>
                   <span className="text-slate-500">Plana:</span>{" "}
-                  {troquelPdfFullPath(configPathDraft, pdfModalNum)}
+                  {pdfAssetKind === "illustrator"
+                    ? troquelAiFullPath(configPathDraft, pdfModalNum)
+                    : troquelPdfFullPath(configPathDraft, pdfModalNum)}
                 </p>
                 <p>
                   <span className="text-slate-500">Anidada:</span>{" "}
-                  {troquelPdfNestedPath(configPathDraft, pdfModalNum)}
+                  {pdfAssetKind === "illustrator"
+                    ? troquelAiNestedPath(configPathDraft, pdfModalNum)
+                    : troquelPdfNestedPath(configPathDraft, pdfModalNum)}
                 </p>
                 {pdfFuzzyPattern ? (
                   <p>
-                    <span className="text-slate-500">Patrón búsqueda:</span>{" "}
+                    <span className="text-slate-500">Patrón PDF:</span>{" "}
                     {pdfFuzzyPattern}
+                  </p>
+                ) : null}
+                {pdfAiFuzzyPattern ? (
+                  <p>
+                    <span className="text-slate-500">Patrón .ai:</span>{" "}
+                    {pdfAiFuzzyPattern}
                   </p>
                 ) : null}
               </div>

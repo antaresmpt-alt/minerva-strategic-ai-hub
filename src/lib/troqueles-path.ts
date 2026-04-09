@@ -53,6 +53,36 @@ export function troquelPdfFuzzySearchPattern(
 }
 
 /**
+ * Misma lógica que el PDF pero para Adobe Illustrator (`.ai`).
+ * Ej. `TAG00025*.ai` en carpeta del número o raíz.
+ */
+export function troquelAiFuzzySearchPattern(
+  pdfPath: string,
+  numTroquel: string
+): string {
+  const base = pdfPath.trim().replace(/[/\\]+$/, "");
+  const n = String(numTroquel).trim();
+  if (!base) return `${n}*\\${n}*.ai`;
+  if (base.startsWith("\\\\")) {
+    return `${base}\\${n}*\\${n}*.ai`;
+  }
+  if (base.includes("/") && !/^[A-Za-z]:/.test(base)) {
+    return `${base.replace(/\/+$/, "")}/${n}*/${n}*.ai`;
+  }
+  return `${base}\\${n}*\\${n}*.ai`;
+}
+
+/** Ruta plana `[base]\\[num].ai` */
+export function troquelAiFullPath(basePath: string, numTroquel: string): string {
+  return troquelPdfFullPath(basePath, numTroquel).replace(/\.pdf$/i, ".ai");
+}
+
+/** Ruta anidada `[base]\\[num]\\[num].ai` */
+export function troquelAiNestedPath(basePath: string, numTroquel: string): string {
+  return troquelPdfNestedPath(basePath, numTroquel).replace(/\.pdf$/i, ".ai");
+}
+
+/**
  * URL file:// para intentar abrir desde el navegador (puede estar bloqueada).
  * Convierte ruta Windows (G:\a\b) a file:///G:/a/b
  */

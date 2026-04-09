@@ -173,6 +173,14 @@ function getOtDisplay(row: SeguimientoRow): string {
   return String(row.id_pedido);
 }
 
+/** Compatibilidad: filas antiguas en BD con el nombre sustituido por «Muelle Minerva». */
+function normalizeSeguimientoRowEstado(row: SeguimientoRow): SeguimientoRow {
+  if (row.estado === "En Minerva para salir") {
+    return { ...row, estado: "Muelle Minerva" };
+  }
+  return row;
+}
+
 /** Orden: OT numérica si aplica, luego num_operacion. */
 function compareSeguimientoRows(a: SeguimientoRow, b: SeguimientoRow): number {
   const na = Number(String(getOtDisplay(a)).replace(/\D/g, ""));
@@ -424,7 +432,6 @@ function computeSemaforo(row: SeguimientoRow): SemaforoInfo {
   if (
     row.estado === "Enviado" ||
     row.estado === "En Proveedor" ||
-    row.estado === "En Minerva para salir" ||
     row.estado === "Parcial" ||
     row.estado === "Muelle Minerva"
   ) {
@@ -673,6 +680,7 @@ export function GestionExternosPage() {
   const [envPrioridad, setEnvPrioridad] = useState("");
   const [envPalets, setEnvPalets] = useState("");
   const [envObservaciones, setEnvObservaciones] = useState("");
+  const [envEntradaMultiple, setEnvEntradaMultiple] = useState(false);
 
   const [importPreviewRows, setImportPreviewRows] = useState<ImportPreviewRow[]>(
     []
@@ -1084,7 +1092,7 @@ export function GestionExternosPage() {
       );
       setSeguimientos(
         Array.isArray(segRes.data)
-          ? (segRes.data as SeguimientoRow[])
+          ? (segRes.data as SeguimientoRow[]).map(normalizeSeguimientoRowEstado)
           : []
       );
     } catch (e) {
@@ -1342,6 +1350,11 @@ export function GestionExternosPage() {
       return;
     }
     toast.success("Envío registrado.");
+    if (envEntradaMultiple) {
+      setEnvIdPedido("");
+      void loadCore();
+      return;
+    }
     setEnvIdPedido("");
     setEnvCliente("");
     setEnvTrabajo("");
@@ -1910,7 +1923,7 @@ export function GestionExternosPage() {
     const { error: upErr } = await supabase
       .from("prod_seguimiento_externos")
       .update({
-        estado: "Enviado",
+        estado: "Muelle Minerva",
         fecha_envio: now,
         updated_at: now,
       })
@@ -2015,7 +2028,8 @@ export function GestionExternosPage() {
                     Histórico» para incluirlos. Cambia el estado desde la tabla
                     al instante; el lápiz abre el panel para proveedor, acabado,
                     fecha prevista y notas. Al pasar a «Enviado» se registra la
-                    fecha de envío.
+                    fecha de envío. Tras «Preparar Envío» (correo), las OT pasan a
+                    «Muelle Minerva».
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -3234,6 +3248,28 @@ export function GestionExternosPage() {
                     onChange={(e) => setEnvNotas(e.target.value)}
                     disabled={!proveedores.length}
                   />
+                </div>
+                <div className="flex items-start gap-3 rounded-lg border border-slate-200/80 bg-slate-50/80 px-3 py-2.5 sm:col-span-2">
+                  <input
+                    id="env-entrada-multiple"
+                    type="checkbox"
+                    className="mt-1 size-4 shrink-0 rounded border-input"
+                    checked={envEntradaMultiple}
+                    onChange={(e) => setEnvEntradaMultiple(e.target.checked)}
+                    disabled={!proveedores.length}
+                  />
+                  <Label
+                    htmlFor="env-entrada-multiple"
+                    className="cursor-pointer text-sm leading-snug font-normal"
+                  >
+                    <span className="font-medium text-[#002147]">
+                      Entrada múltiple
+                    </span>
+                    <span className="mt-0.5 block text-muted-foreground">
+                      Tras guardar, el formulario permanece abierto y solo se limpia
+                      el campo OT para registrar otra OT seguida.
+                    </span>
+                  </Label>
                 </div>
                 <div className="sm:col-span-2">
                   <Button

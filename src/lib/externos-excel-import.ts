@@ -16,16 +16,15 @@ function normalizeEstadoClave(s: string): string {
     .trim();
 }
 
-/** Estados válidos en `prod_seguimiento_externos.estado` (operativa fábrica). */
+/** Estados válidos en `prod_seguimiento_externos.estado` (operativa fábrica). Orden UI: filtros y selectores. */
 export const ESTADOS_SEGUIMIENTO_EXTERNOS = [
   "Pendiente",
+  "Muelle Minerva",
   "Enviado",
-  "En Minerva para salir",
   "En Proveedor",
-  "Acabado en Proveedor",
   "Retrasado",
   "Parcial",
-  "Muelle Minerva",
+  "Acabado en Proveedor",
   "Recibido",
 ] as const;
 
@@ -282,7 +281,7 @@ function mapHermanoEstado(raw: string): string {
   const table: Record<string, string> = {
     pendiente: "Pendiente",
     enviado: "Enviado",
-    "en minerva para salir": "En Minerva para salir",
+    "en minerva para salir": "Muelle Minerva",
     "en proveedor": "En Proveedor",
     "acabado en proveedor": "Acabado en Proveedor",
     retrasado: "Retrasado",
