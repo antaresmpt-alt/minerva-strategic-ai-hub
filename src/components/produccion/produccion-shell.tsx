@@ -7,6 +7,7 @@ import {
   FileCog,
   Home,
   Package,
+  Stamp,
   Truck,
 } from "lucide-react";
 
@@ -46,6 +47,14 @@ const NAV: NavItem[] = [
       p.startsWith("/produccion/fichas-tecnicas/") ||
       p === "/produccion/fichas" ||
       p.startsWith("/produccion/fichas/"),
+  },
+  {
+    href: "/produccion/troqueles",
+    label: "Troqueles",
+    icon: Stamp,
+    match: (p) =>
+      p === "/produccion/troqueles" ||
+      p.startsWith("/produccion/troqueles/"),
   },
   {
     href: "/produccion/almacen",

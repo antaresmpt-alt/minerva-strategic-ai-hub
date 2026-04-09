@@ -165,6 +165,15 @@ export function canAccessApiRoute(
     if (pathname.startsWith("/api/gemini/produccion-externos-analyze")) {
       return canAccessHubModule(role, "produccion", dynamic);
     }
+    if (
+      pathname.startsWith("/api/gemini/fichas-tecnicas-analyze") ||
+      pathname.startsWith("/api/gemini/troqueles-analyze")
+    ) {
+      return canAccessHubModule(role, "produccion", dynamic);
+    }
+    if (pathname.startsWith("/api/produccion")) {
+      return canAccessHubModule(role, "produccion", dynamic);
+    }
     if (pathname.startsWith("/api/gemini")) {
       return canAccessHubModule(role, "sem", dynamic);
     }
@@ -196,6 +205,17 @@ export function canAccessApiRoute(
   }
 
   if (pathname.startsWith("/api/gemini/produccion-externos-analyze")) {
+    return canAccessHubModule(role, "produccion");
+  }
+
+  if (
+    pathname.startsWith("/api/gemini/fichas-tecnicas-analyze") ||
+    pathname.startsWith("/api/gemini/troqueles-analyze")
+  ) {
+    return canAccessHubModule(role, "produccion");
+  }
+
+  if (pathname.startsWith("/api/produccion")) {
     return canAccessHubModule(role, "produccion");
   }
 
