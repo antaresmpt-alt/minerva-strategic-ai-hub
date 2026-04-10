@@ -12,6 +12,12 @@ export type AlmacenControlInteligenteRow = {
   disponible_proyectado: number | string | null;
 };
 
+/** Relación embebida PostgREST `almacen_materiales(...)` en reservas / tránsito. */
+export type AlmacenMaterialNombreRef = {
+  id?: string;
+  nombre: string | null;
+};
+
 export type AlmacenReservaRow = {
   id: string;
   ot_num: string | null;
@@ -19,6 +25,10 @@ export type AlmacenReservaRow = {
   cantidad_bruta: number | string | null;
   estado: string | null;
   fecha_prevista: string | null;
+  almacen_materiales?:
+    | AlmacenMaterialNombreRef
+    | AlmacenMaterialNombreRef[]
+    | null;
 };
 
 export type AlmacenPedidoTransitoRow = {
@@ -28,4 +38,8 @@ export type AlmacenPedidoTransitoRow = {
   cantidad_pedida: number | string | null;
   estado: string | null;
   fecha_llegada: string | null;
+  almacen_materiales?:
+    | AlmacenMaterialNombreRef
+    | AlmacenMaterialNombreRef[]
+    | null;
 };

@@ -1,8 +1,10 @@
 "use client";
 
-import { Loader2, Package, Plus, SlidersHorizontal } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Loader2, Package, Plus, SlidersHorizontal, Upload } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+
+import { syncAlmacenFromExcelBuffer } from "@/lib/almacen-import";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +28,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type {
   AlmacenControlInteligenteRow,
+  AlmacenMaterialNombreRef,
   AlmacenPedidoTransitoRow,
   AlmacenReservaRow,
 } from "@/types/almacen-mrp";
@@ -63,6 +66,19 @@ function cellRealTextClass(dr: number): string {
   return "tabular-nums text-slate-800";
 }
 
+function materialNombreFromJoin(
+  joined:
+    | AlmacenMaterialNombreRef
+    | AlmacenMaterialNombreRef[]
+    | null
+    | undefined
+): string {
+  if (joined == null) return "";
+  const ref = Array.isArray(joined) ? joined[0] : joined;
+  const n = ref?.nombre;
+  return typeof n === "string" ? n.trim() : "";
+}
+
 export function AlmacenMrpPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
 
@@ -96,6 +112,9 @@ export function AlmacenMrpPage() {
   const [ajusteStock, setAjusteStock] = useState("");
   const [ajusteSaving, setAjusteSaving] = useState(false);
 
+  const excelInputRef = useRef<HTMLInputElement>(null);
+  const [syncingExcel, setSyncingExcel] = useState(false);
+
   const loadControl = useCallback(async () => {
     setLoadingControl(true);
     try {
@@ -121,7 +140,7 @@ export function AlmacenMrpPage() {
     try {
       const { data, error } = await supabase
         .from(TBL_RESERVAS)
-        .select("*")
+        .select("*, almacen_materiales ( id, nombre )")
         .order("fecha_prevista", { ascending: true, nullsFirst: false });
       if (error) throw error;
       setReservasRows((data ?? []) as AlmacenReservaRow[]);
@@ -141,7 +160,7 @@ export function AlmacenMrpPage() {
     try {
       const { data, error } = await supabase
         .from(TBL_TRANSITO)
-        .select("*")
+        .select("*, almacen_materiales ( id, nombre )")
         .order("fecha_llegada", { ascending: true, nullsFirst: false });
       if (error) throw error;
       setTransitoRows((data ?? []) as AlmacenPedidoTransitoRow[]);
@@ -256,6 +275,55 @@ export function AlmacenMrpPage() {
     }
   }
 
+  async function onExcelFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const name = file.name.toLowerCase();
+    if (!name.endsWith(".xlsx")) {
+      toast.error("El archivo debe ser .xlsx.");
+      return;
+    }
+    setSyncingExcel(true);
+    const toastId = toast.loading(
+      "Sincronizando catálogo, reservas y tránsitos…"
+    );
+    try {
+      const buffer = await file.arrayBuffer();
+      const outcome = await syncAlmacenFromExcelBuffer(supabase, buffer);
+      if (!outcome.ok) {
+        toast.error(outcome.message, { id: toastId });
+        return;
+      }
+      toast.success(
+        `Sincronizado: ${outcome.materialesUpserted} materiales, ${outcome.reservasInserted} reservas, ${outcome.transitoInserted} en tránsito.`,
+        { id: toastId, duration: 6000 }
+      );
+      if (
+        outcome.reservasSkippedNoMaterial > 0 ||
+        outcome.transitoSkippedNoMaterial > 0
+      ) {
+        toast.message(
+          `Filas omitidas (material no encontrado): reservas ${outcome.reservasSkippedNoMaterial}, tránsito ${outcome.transitoSkippedNoMaterial}.`,
+          { duration: 8000 }
+        );
+      }
+      for (const w of outcome.warnings.slice(0, 6)) {
+        toast.message(w, { duration: 7000 });
+      }
+      await loadControl();
+      if (reservasLoadedOnce) await loadReservas();
+      if (transitoLoadedOnce) await loadTransito();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Error al leer el Excel.",
+        { id: toastId }
+      );
+    } finally {
+      setSyncingExcel(false);
+    }
+  }
+
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-4">
       <header className="border-b border-slate-200/80 pb-3">
@@ -270,9 +338,32 @@ export function AlmacenMrpPage() {
               ), reservas por OT y pedidos en tránsito.
             </p>
           </div>
-          <div className="flex items-center gap-2 rounded-lg border border-slate-200/80 bg-white/90 px-3 py-2 text-xs text-slate-600">
-            <Package className="size-4 shrink-0 text-[#002147]" aria-hidden />
-            MRP
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={excelInputRef}
+              type="file"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              className="sr-only"
+              aria-hidden
+              onChange={(ev) => void onExcelFileSelected(ev)}
+            />
+            <Button
+              type="button"
+              className="h-9 gap-1.5 bg-[#002147] px-3 text-xs font-semibold text-white shadow-sm hover:bg-[#001a38] sm:text-sm"
+              disabled={syncingExcel}
+              onClick={() => excelInputRef.current?.click()}
+            >
+              {syncingExcel ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden />
+              ) : (
+                <Upload className="size-4 shrink-0" aria-hidden />
+              )}
+              Sincronizar Excel Almacén
+            </Button>
+            <div className="flex items-center gap-2 rounded-lg border border-slate-200/80 bg-white/90 px-3 py-2 text-xs text-slate-600">
+              <Package className="size-4 shrink-0 text-[#002147]" aria-hidden />
+              MRP
+            </div>
           </div>
         </div>
       </header>
@@ -429,7 +520,7 @@ export function AlmacenMrpPage() {
                       OT
                     </TableHead>
                     <TableHead className="px-2 py-1.5 text-[10px] font-semibold uppercase">
-                      Material id
+                      Material
                     </TableHead>
                     <TableHead className="text-right text-[10px] font-semibold uppercase">
                       Cant.
@@ -464,8 +555,13 @@ export function AlmacenMrpPage() {
                         <TableCell className="px-2 py-1 font-mono text-[11px]">
                           {r.ot_num ?? "—"}
                         </TableCell>
-                        <TableCell className="max-w-[200px] truncate px-2 py-1 font-mono text-[10px]">
-                          {r.material_id ?? "—"}
+                        <TableCell
+                          className="max-w-[min(280px,40vw)] truncate px-2 py-1 text-[11px] font-medium text-[#002147]"
+                          title={r.material_id ?? undefined}
+                        >
+                          {materialNombreFromJoin(r.almacen_materiales) ||
+                            r.material_id ||
+                            "—"}
                         </TableCell>
                         <TableCell className="py-1 text-right tabular-nums">
                           {toNum(r.cantidad_bruta)}
@@ -495,7 +591,7 @@ export function AlmacenMrpPage() {
                       Nº pedido
                     </TableHead>
                     <TableHead className="px-2 py-1.5 text-[10px] font-semibold uppercase">
-                      Material id
+                      Material
                     </TableHead>
                     <TableHead className="text-right text-[10px] font-semibold uppercase">
                       Cant. pedida
@@ -530,8 +626,13 @@ export function AlmacenMrpPage() {
                         <TableCell className="px-2 py-1 font-mono text-[11px]">
                           {r.num_pedido ?? "—"}
                         </TableCell>
-                        <TableCell className="max-w-[200px] truncate px-2 py-1 font-mono text-[10px]">
-                          {r.material_id ?? "—"}
+                        <TableCell
+                          className="max-w-[min(280px,40vw)] truncate px-2 py-1 text-[11px] font-medium text-[#002147]"
+                          title={r.material_id ?? undefined}
+                        >
+                          {materialNombreFromJoin(r.almacen_materiales) ||
+                            r.material_id ||
+                            "—"}
                         </TableCell>
                         <TableCell className="py-1 text-right tabular-nums">
                           {toNum(r.cantidad_pedida)}
