@@ -29,13 +29,13 @@ export default function ProduccionHomePage() {
       </p>
       <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
         <Link
-          href="/produccion/ordenes"
+          href="/produccion/ots"
           className={cn(
             buttonVariants({ size: "default" }),
             "rounded-xl bg-[#C69C2B] px-6 font-semibold text-[#002147] hover:bg-[#b38a26]"
           )}
         >
-          Ir a Órdenes
+          Ir a OTs (maestro)
         </Link>
         <Link
           href="/"

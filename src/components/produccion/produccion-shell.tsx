@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  ClipboardList,
   FileCog,
   Home,
   LayoutList,
@@ -31,20 +30,13 @@ const NAV: NavItem[] = [
     match: (p) => p === "/",
   },
   {
-    href: "/produccion/ordenes",
-    label: "Órdenes",
-    icon: ClipboardList,
-    match: (p) =>
-      p === "/produccion" ||
-      p === "/produccion/ordenes" ||
-      p.startsWith("/produccion/ordenes/"),
-  },
-  {
     href: "/produccion/ots",
     label: "OTs (maestro)",
     icon: LayoutList,
     match: (p) =>
-      p === "/produccion/ots" || p.startsWith("/produccion/ots/"),
+      p === "/produccion" ||
+      p === "/produccion/ots" ||
+      p.startsWith("/produccion/ots/"),
   },
   {
     href: "/produccion/fichas-tecnicas",
