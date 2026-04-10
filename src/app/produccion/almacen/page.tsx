@@ -1,57 +1,5 @@
-"use client";
-
-import { Package } from "lucide-react";
-
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { formatFechaEsCorta } from "@/lib/produccion-date-format";
+import { AlmacenMrpPage } from "@/components/produccion/almacen/almacen-mrp-page";
 
 export default function ProduccionAlmacenPage() {
-  return (
-    <div className="w-full max-w-none space-y-6">
-      <header>
-        <h1 className="font-heading text-2xl font-bold text-[#002147] md:text-3xl">
-          Almacén
-        </h1>
-        <p className="mt-1 text-sm text-slate-600">
-          Inventario y movimientos (próximamente).
-        </p>
-        <p className="mt-2 text-xs tabular-nums text-slate-500">
-          Referencia de fecha (DD/MM/AA):{" "}
-          <span className="font-medium text-slate-700">
-            {formatFechaEsCorta(new Date().toISOString())}
-          </span>
-        </p>
-      </header>
-
-      <Card className="border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
-        <CardHeader className="flex flex-row items-start gap-3 space-y-0">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[#002147]/10 text-[#002147]">
-            <Package className="size-5" aria-hidden />
-          </div>
-          <div>
-            <CardTitle className="text-lg text-[#002147]">
-              Módulo en preparación
-            </CardTitle>
-            <CardDescription>
-              Aquí integraremos stock, ubicaciones y trazabilidad con el resto
-              del hub.
-            </CardDescription>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-slate-600">
-            Usa la barra superior para ir a <strong>Órdenes</strong>,{" "}
-            <strong>Fichas Técnicas</strong> o <strong>Gestión de Externos</strong>{" "}
-            mientras completamos esta sección.
-          </p>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  return <AlmacenMrpPage />;
 }

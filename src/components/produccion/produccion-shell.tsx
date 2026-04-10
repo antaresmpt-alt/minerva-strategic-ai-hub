@@ -58,7 +58,7 @@ const NAV: NavItem[] = [
   },
   {
     href: "/produccion/almacen",
-    label: "Almacén",
+    label: "Almacén MRP",
     icon: Package,
     match: (p) =>
       p === "/produccion/almacen" || p.startsWith("/produccion/almacen/"),
