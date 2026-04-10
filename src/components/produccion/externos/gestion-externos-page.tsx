@@ -708,6 +708,8 @@ export function GestionExternosPage() {
   const [editSegPalets, setEditSegPalets] = useState("");
   const [editSegFechaEnvio, setEditSegFechaEnvio] = useState("");
   const [editSegEstado, setEditSegEstado] = useState("");
+  const [editSegCliente, setEditSegCliente] = useState("");
+  const [editSegTrabajo, setEditSegTrabajo] = useState("");
 
   const [analistaOpen, setAnalistaOpen] = useState(false);
   const [analistaLoading, setAnalistaLoading] = useState(false);
@@ -1765,6 +1767,8 @@ export function GestionExternosPage() {
 
   function openSeguimientoEdit(row: SeguimientoRow) {
     setSeguimientoEditing(row);
+    setEditSegCliente(row.cliente_nombre ?? "");
+    setEditSegTrabajo(row.trabajo_titulo ?? "");
     setEditSegProveedorId(row.proveedor_id);
     setEditSegAcabadoId(row.acabado_id);
     setEditSegFecha(isoToDateInput(row.fecha_prevista));
@@ -1787,6 +1791,10 @@ export function GestionExternosPage() {
   async function handleUpdateSeguimiento(e: React.FormEvent) {
     e.preventDefault();
     if (!seguimientoEditing) return;
+    if (!editSegCliente.trim() || !editSegTrabajo.trim()) {
+      toast.error("Cliente y trabajo son obligatorios.");
+      return;
+    }
     if (!editSegProveedorId || !editSegAcabadoId || !editSegFecha) {
       toast.error("Proveedor, acabado y fecha prevista son obligatorios.");
       return;
@@ -1827,6 +1835,8 @@ export function GestionExternosPage() {
       fechaEnvioPatch = now;
     }
     const patch: Record<string, string | number | null> = {
+      cliente_nombre: editSegCliente.trim(),
+      trabajo_titulo: editSegTrabajo.trim(),
       proveedor_id: editSegProveedorId,
       acabado_id: editSegAcabadoId,
       fecha_prevista: dateInputToTimestamptz(editSegFecha),
@@ -3566,14 +3576,14 @@ export function GestionExternosPage() {
       >
         <DialogContent
           showCloseButton
-          className="flex max-h-[min(92vh,880px)] w-[calc(100%-1.5rem)] max-w-2xl flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
+          className="flex max-h-[min(92vh,880px)] w-[calc(100%-1.5rem)] max-w-xl flex-col gap-0 overflow-hidden p-0 sm:max-w-xl"
         >
           <form
             onSubmit={handleUpdateSeguimiento}
             className="flex max-h-[inherit] flex-col"
           >
-            <DialogHeader className="shrink-0 pr-10">
-              <DialogTitle>
+            <DialogHeader className="shrink-0 space-y-1 pr-10">
+              <DialogTitle className="text-base leading-snug">
                 Modificar envío
                 {seguimientoEditing ? (
                   <span className="text-muted-foreground font-normal">
@@ -3586,50 +3596,104 @@ export function GestionExternosPage() {
                 ) : null}
               </DialogTitle>
             </DialogHeader>
-            <div className="grid max-h-[min(52vh,420px)] flex-1 gap-4 overflow-y-auto px-6 py-2">
-              <NativeSelect
-                label="Proveedor"
-                options={proveedorOptions}
-                value={editSegProveedorId}
-                onChange={(e) => {
-                  setEditSegProveedorId(e.target.value);
-                  setEditSegAcabadoId("");
-                }}
-                disabled={!proveedores.length}
-              />
-              <NativeSelect
-                label="Acabado"
-                options={editSeguimientoAcabadoOptions}
-                value={editSegAcabadoId}
-                onChange={(e) => setEditSegAcabadoId(e.target.value)}
-                disabled={!editSegProveedorId}
-              />
-              <NativeSelect
-                label="Estado"
-                options={estadoRapidoOptions}
-                value={editSegEstado}
-                onChange={(e) => setEditSegEstado(e.target.value)}
-              />
+            <div className="grid max-h-[min(52vh,420px)] flex-1 gap-3 overflow-y-auto px-6 py-3">
               <div className="grid gap-1.5">
-                <Label htmlFor="edit-seg-fp">Fecha prevista</Label>
+                <Label
+                  htmlFor="edit-seg-cli"
+                  className="text-xs font-medium text-slate-700"
+                >
+                  Cliente
+                </Label>
                 <Input
-                  id="edit-seg-fp"
-                  type="date"
-                  value={editSegFecha}
-                  onChange={(e) => setEditSegFecha(e.target.value)}
+                  id="edit-seg-cli"
                   required
-                  className="w-full max-w-full"
+                  value={editSegCliente}
+                  onChange={(e) => setEditSegCliente(e.target.value)}
+                  className="h-8 min-h-8 w-full text-sm px-2 py-1"
+                  autoComplete="off"
                 />
+              </div>
+              <div className="grid gap-1.5">
+                <Label
+                  htmlFor="edit-seg-trab"
+                  className="text-xs font-medium text-slate-700"
+                >
+                  Trabajo
+                </Label>
+                <Input
+                  id="edit-seg-trab"
+                  required
+                  value={editSegTrabajo}
+                  onChange={(e) => setEditSegTrabajo(e.target.value)}
+                  className="h-8 min-h-8 w-full text-sm px-2 py-1"
+                  autoComplete="off"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="min-w-0">
+                  <NativeSelect
+                    label="Proveedor"
+                    options={proveedorOptions}
+                    value={editSegProveedorId}
+                    onChange={(e) => {
+                      setEditSegProveedorId(e.target.value);
+                      setEditSegAcabadoId("");
+                    }}
+                    disabled={!proveedores.length}
+                    className="h-8 min-h-8 min-w-0 w-full rounded-md px-2 py-1.5 text-sm"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <NativeSelect
+                    label="Acabado"
+                    options={editSeguimientoAcabadoOptions}
+                    value={editSegAcabadoId}
+                    onChange={(e) => setEditSegAcabadoId(e.target.value)}
+                    disabled={!editSegProveedorId}
+                    className="h-8 min-h-8 min-w-0 w-full rounded-md px-2 py-1.5 text-sm"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <NativeSelect
+                    label="Estado"
+                    options={estadoRapidoOptions}
+                    value={editSegEstado}
+                    onChange={(e) => setEditSegEstado(e.target.value)}
+                    className="h-8 min-h-8 min-w-0 w-full rounded-md px-2 py-1.5 text-sm"
+                  />
+                </div>
+                <div className="grid min-w-0 gap-1.5">
+                  <Label
+                    htmlFor="edit-seg-fp"
+                    className="text-xs font-medium text-slate-700"
+                  >
+                    Fecha prevista
+                  </Label>
+                  <Input
+                    id="edit-seg-fp"
+                    type="date"
+                    value={editSegFecha}
+                    onChange={(e) => setEditSegFecha(e.target.value)}
+                    required
+                    className="h-8 min-h-8 w-full max-w-full text-sm px-2 py-1"
+                  />
+                </div>
               </div>
               <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,8.5rem)_minmax(0,5rem)_minmax(0,1fr)] sm:items-end">
                 <div className="grid min-w-0 gap-1.5">
-                  <Label htmlFor="edit-seg-ud">Unidades</Label>
+                  <Label
+                    htmlFor="edit-seg-ud"
+                    className="text-xs font-medium text-slate-700"
+                  >
+                    Unidades
+                  </Label>
                   <Input
                     id="edit-seg-ud"
                     inputMode="numeric"
                     value={editSegUnidades}
                     onChange={(e) => setEditSegUnidades(e.target.value)}
                     placeholder="—"
+                    className="h-8 min-h-8 text-sm px-2 py-1"
                   />
                 </div>
                 <NativeSelect
@@ -3637,54 +3701,73 @@ export function GestionExternosPage() {
                   options={PRIORIDAD_MANUAL_OPTIONS}
                   value={editSegPrioridad}
                   onChange={(e) => setEditSegPrioridad(e.target.value)}
-                  className="min-w-0 w-full max-w-[8.5rem]"
+                  className="h-8 min-h-8 min-w-0 w-full max-w-[8.5rem] px-2 py-1.5 text-sm"
                 />
                 <div className="grid min-w-0 gap-1.5">
-                  <Label htmlFor="edit-seg-pal">Palets</Label>
+                  <Label
+                    htmlFor="edit-seg-pal"
+                    className="text-xs font-medium text-slate-700"
+                  >
+                    Palets
+                  </Label>
                   <Input
                     id="edit-seg-pal"
                     inputMode="numeric"
                     value={editSegPalets}
                     onChange={(e) => setEditSegPalets(e.target.value)}
                     placeholder="—"
-                    className="max-w-[5rem]"
+                    className="h-8 min-h-8 max-w-[5rem] text-sm px-2 py-1"
                   />
                 </div>
                 <div className="grid min-w-0 gap-1.5">
-                  <Label htmlFor="edit-seg-fe">Fecha de envío</Label>
+                  <Label
+                    htmlFor="edit-seg-fe"
+                    className="text-xs font-medium text-slate-700"
+                  >
+                    Fecha de envío
+                  </Label>
                   <Input
                     id="edit-seg-fe"
                     type="date"
                     value={editSegFechaEnvio}
                     onChange={(e) => setEditSegFechaEnvio(e.target.value)}
+                    className="h-8 min-h-8 w-full text-sm px-2 py-1"
                   />
                 </div>
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="edit-seg-notas">Notas de logística</Label>
+                <Label
+                  htmlFor="edit-seg-notas"
+                  className="text-xs font-medium text-slate-700"
+                >
+                  Notas de logística
+                </Label>
                 <Textarea
                   id="edit-seg-notas"
-                  className="min-h-[8rem] resize-y text-sm"
+                  className="min-h-[6.5rem] resize-y p-2 text-sm leading-snug"
                   placeholder="Instrucciones, incidencias, referencias…"
                   value={editSegNotas}
                   onChange={(e) => setEditSegNotas(e.target.value)}
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="edit-seg-obs">
+                <Label
+                  htmlFor="edit-seg-obs"
+                  className="text-xs font-medium text-slate-700"
+                >
                   Observaciones (taller / interno)
                 </Label>
                 <Textarea
                   id="edit-seg-obs"
-                  className="min-h-[8rem] resize-y text-sm"
+                  className="min-h-[6.5rem] resize-y p-2 text-sm leading-snug"
                   placeholder="Notas internas de taller…"
                   value={editSegObservaciones}
                   onChange={(e) => setEditSegObservaciones(e.target.value)}
                 />
               </div>
             </div>
-            <div className="border-t px-6 pb-2">
-              <Separator className="mb-4" />
+            <div className="border-t px-6 py-3">
+              <Separator className="mb-3" />
               <h3 className="text-sm font-semibold text-[#002147]">
                 Historial de comunicación
               </h3>
