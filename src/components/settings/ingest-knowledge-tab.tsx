@@ -1,11 +1,30 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import {
+  Database,
+  FileText,
+  Loader2,
+  Trash2,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type IngestPdfStreamMsg =
   | { type: "progress"; percent: number; step: string }
   | { type: "complete"; chunksProcessed: number; source: string }
   | { type: "error"; message: string };
+
+type RagDocumentSummary = { nombre: string; chunks: number };
 
 export function IngestKnowledgeTab() {
   const [source, setSource] = useState("");
@@ -24,6 +43,65 @@ export function IngestKnowledgeTab() {
   const [pdfStep, setPdfStep] = useState("");
   const [pdfMessage, setPdfMessage] = useState<string | null>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
+
+  const [docsSheetOpen, setDocsSheetOpen] = useState(false);
+  const [ragDocuments, setRagDocuments] = useState<RagDocumentSummary[]>([]);
+  const [ragDocsLoading, setRagDocsLoading] = useState(false);
+  const [ragDocsError, setRagDocsError] = useState<string | null>(null);
+  const [deletingSource, setDeletingSource] = useState<string | null>(null);
+
+  const fetchRagDocuments = useCallback(async () => {
+    setRagDocsLoading(true);
+    setRagDocsError(null);
+    try {
+      const res = await fetch("/api/rag-documents");
+      const data = (await res.json()) as {
+        documents?: RagDocumentSummary[];
+        error?: string;
+      };
+      if (!res.ok) {
+        setRagDocsError(data.error ?? `Error ${res.status}`);
+        setRagDocuments([]);
+        return;
+      }
+      setRagDocuments(Array.isArray(data.documents) ? data.documents : []);
+    } catch {
+      setRagDocsError("No se pudo cargar la lista.");
+      setRagDocuments([]);
+    } finally {
+      setRagDocsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!docsSheetOpen) return;
+    void fetchRagDocuments();
+  }, [docsSheetOpen, fetchRagDocuments]);
+
+  async function handleDeleteRagDocument(nombre: string) {
+    const ok = window.confirm(
+      `¿Eliminar todos los fragmentos vectoriales de «${nombre}»? Esta acción no se puede deshacer.`
+    );
+    if (!ok) return;
+    setDeletingSource(nombre);
+    setRagDocsError(null);
+    try {
+      const res = await fetch(
+        `/api/rag-documents?source=${encodeURIComponent(nombre)}`,
+        { method: "DELETE" }
+      );
+      const data = (await res.json()) as { error?: string; deleted?: number };
+      if (!res.ok) {
+        setRagDocsError(data.error ?? `Error ${res.status}`);
+        return;
+      }
+      await fetchRagDocuments();
+    } catch {
+      setRagDocsError("No se pudo eliminar el documento.");
+    } finally {
+      setDeletingSource(null);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -105,7 +183,7 @@ export function IngestKnowledgeTab() {
           setPdfProgress(100);
           setPdfStep("Completado");
           setPdfMessage(
-            `Ingesta permanente: ${msg.chunksProcessed} chunk(s) guardados en \`documents\` (origen: ${msg.source}).`
+            `Ingesta permanente: ${msg.chunksProcessed} chunk(s) guardados en \`minerva_documents\` (origen: ${msg.source}).`
           );
           setPdfStatus("success");
         } else if (msg.type === "error") {
@@ -146,12 +224,105 @@ export function IngestKnowledgeTab() {
 
   return (
     <div className="space-y-10">
-      <div className="mb-2 inline-flex items-center rounded-md border border-amber-600/40 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
-        Uso interno — ingesta RAG (Supabase)
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <div className="inline-flex items-center rounded-md border border-amber-600/40 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+            Uso interno — ingesta RAG (Supabase)
+          </div>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            Ingesta de texto manual o PDF permanente en Supabase (vectorización).
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="shrink-0 gap-2"
+          onClick={() => setDocsSheetOpen(true)}
+        >
+          <Database className="size-4 opacity-80" aria-hidden />
+          Ver documentos subidos
+        </Button>
       </div>
-      <p className="text-sm text-muted-foreground">
-        Ingesta de texto manual o PDF permanente en Supabase (vectorización).
-      </p>
+
+      <Sheet open={docsSheetOpen} onOpenChange={setDocsSheetOpen}>
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col sm:max-w-xl"
+          showCloseButton
+        >
+          <SheetHeader className="border-b border-border pb-4 text-left">
+            <SheetTitle>Documentos en Base de Datos</SheetTitle>
+            <SheetDescription>
+              Chunks agrupados por origen en{" "}
+              <code className="rounded bg-muted px-1 text-xs">minerva_documents</code>{" "}
+              (PDF y texto manual).
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
+            {ragDocsLoading ? (
+              <div className="space-y-3" aria-busy="true">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <Skeleton className="size-9 shrink-0 rounded-md" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-[min(100%,14rem)]" />
+                      <Skeleton className="h-3 w-24" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : ragDocsError ? (
+              <p className="text-sm text-destructive" role="alert">
+                {ragDocsError}
+              </p>
+            ) : ragDocuments.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No hay documentos con origen en metadata, o la tabla está vacía.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {ragDocuments.map((doc) => (
+                  <li
+                    key={doc.nombre}
+                    className="flex items-end gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2.5"
+                  >
+                    <FileText
+                      className="size-5 shrink-0 text-muted-foreground"
+                      aria-hidden
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {doc.nombre}
+                      </p>
+                      <Badge variant="outline" className="mt-1 font-normal text-muted-foreground">
+                        ({doc.chunks} fragmento
+                        {doc.chunks === 1 ? "" : "s"})
+                      </Badge>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="shrink-0 text-[#b91c1c] hover:bg-[#b91c1c]/10 hover:text-[#991b1b] dark:text-red-400 dark:hover:bg-red-950/50"
+                      title={`Eliminar todos los fragmentos de ${doc.nombre}`}
+                      disabled={deletingSource === doc.nombre}
+                      onClick={() => void handleDeleteRagDocument(doc.nombre)}
+                      aria-label={`Eliminar ${doc.nombre}`}
+                    >
+                      {deletingSource === doc.nombre ? (
+                        <Loader2 className="size-4 animate-spin" aria-hidden />
+                      ) : (
+                        <Trash2 className="size-4" aria-hidden />
+                      )}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-foreground">
@@ -159,8 +330,8 @@ export function IngestKnowledgeTab() {
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
           El PDF se procesa en el servidor (pdf-parse), se estructura en Markdown
-          con Gemini y se vectoriza en la tabla{" "}
-          <code className="rounded bg-muted px-1 text-xs">documents</code>.
+          con Gemini           y se vectoriza en la tabla{" "}
+          <code className="rounded bg-muted px-1 text-xs">minerva_documents</code>.
         </p>
 
         <form onSubmit={handlePdfSubmit} className="mt-6 space-y-4">

@@ -144,7 +144,10 @@ export function canAccessApiRoute(
     if (pathname.startsWith("/api/admin")) {
       return canAccessSettings(role, dynamic);
     }
-    if (pathname.startsWith("/api/ingest")) {
+    if (
+      pathname.startsWith("/api/ingest") ||
+      pathname.startsWith("/api/rag-documents")
+    ) {
       return canAccessSettings(role, dynamic);
     }
     if (pathname.startsWith("/api/chat")) {
@@ -186,7 +189,12 @@ export function canAccessApiRoute(
     return canAccessSettings(role);
   }
 
-  if (pathname.startsWith("/api/ingest")) return false;
+  if (
+    pathname.startsWith("/api/ingest") ||
+    pathname.startsWith("/api/rag-documents")
+  ) {
+    return false;
+  }
 
   if (pathname.startsWith("/api/chat")) return canAccessHubModule(role, "chat");
 
