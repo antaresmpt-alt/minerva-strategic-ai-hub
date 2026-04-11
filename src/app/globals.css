@@ -211,6 +211,22 @@
     print-color-adjust: exact;
   }
 
+  body.print-externos-planificacion .externos-daily-print-root {
+    width: 100% !important;
+    max-width: none !important;
+  }
+
+  body.print-externos-planificacion .externos-daily-print-grid {
+    min-width: 0 !important;
+    width: 100% !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+
+  body.print-externos-planificacion .externos-daily-print-card {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
   /** No mezclar con el «Imprimir parte» de la vista lista */
   body.print-externos-planificacion .externos-print-parte {
     display: none !important;

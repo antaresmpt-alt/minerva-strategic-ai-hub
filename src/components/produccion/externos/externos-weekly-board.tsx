@@ -15,24 +15,16 @@ import {
 } from "@dnd-kit/core";
 import {
   addDays,
-  addWeeks,
   format,
   isSameWeek,
   isToday,
   startOfWeek,
 } from "date-fns";
 import { es } from "date-fns/locale";
-import {
-  CalendarDays,
-  ChevronLeft,
-  ChevronRight,
-  Printer,
-  Truck,
-} from "lucide-react";
+import { CalendarDays, Truck } from "lucide-react";
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef } from "react";
 
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /** Fila mínima para el tablero (compatible con `SeguimientoRow` del padre). */
@@ -125,6 +117,8 @@ const collisionDetection: CollisionDetection = (args) => {
 };
 
 type ExternosWeeklyBoardProps = {
+  /** Lunes de la semana mostrada (normalizado). */
+  weekMonday: Date;
   rows: ExternosWeeklyBoardRow[];
   proveedorNombreById: Map<string, string>;
   acabadoNombreById: Map<string, string>;
@@ -135,6 +129,7 @@ type ExternosWeeklyBoardProps = {
     row: ExternosWeeklyBoardRow,
     ymd: string | null
   ) => void | Promise<void>;
+  renderMrp?: (row: ExternosWeeklyBoardRow) => ReactNode;
 };
 
 function DroppableColumn({
@@ -180,12 +175,14 @@ function DraggableCard({
   proveedorLabel,
   acabadoLabel,
   onCardClick,
+  mrpSlot,
 }: {
   row: ExternosWeeklyBoardRow;
   disabled?: boolean;
   proveedorLabel: string;
   acabadoLabel: string;
   onCardClick: (row: ExternosWeeklyBoardRow) => void;
+  mrpSlot?: ReactNode;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
@@ -233,9 +230,12 @@ function DraggableCard({
           <Truck className="size-3.5 shrink-0 text-slate-500" aria-hidden />
           <span className="truncate">OT {getOtDisplay(row)}</span>
         </span>
-        <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
-          {estadoAbrev(row.estado)}
-        </span>
+        <div className="flex shrink-0 items-center gap-1">
+          {mrpSlot != null ? mrpSlot : null}
+          <span className="text-[10px] font-medium text-muted-foreground">
+            {estadoAbrev(row.estado)}
+          </span>
+        </div>
       </div>
       <p className="mt-1 line-clamp-2 text-xs leading-snug text-slate-800">
         {row.trabajo_titulo?.trim() || "—"}
@@ -248,21 +248,15 @@ function DraggableCard({
 }
 
 export function ExternosWeeklyBoard({
+  weekMonday,
   rows,
   proveedorNombreById,
   acabadoNombreById,
   saving,
   onCardClick,
   onMoveToDate,
+  renderMrp,
 }: ExternosWeeklyBoardProps) {
-  const [weekAnchor, setWeekAnchor] = useState(() =>
-    startOfWeek(new Date(), { weekStartsOn: 1 })
-  );
-
-  const weekMonday = useMemo(
-    () => startOfWeek(weekAnchor, { weekStartsOn: 1 }),
-    [weekAnchor]
-  );
 
   const weekDays = useMemo(
     () => Array.from({ length: 5 }, (_, i) => addDays(weekMonday, i)),
@@ -328,8 +322,6 @@ export function ExternosWeeklyBoard({
     [boardRows, weekMonday, onMoveToDate]
   );
 
-  const mesAnio = format(weekMonday, "MMMM yyyy", { locale: es });
-
   const weekFriday = useMemo(() => addDays(weekMonday, 4), [weekMonday]);
 
   const printTitle = useMemo(
@@ -338,82 +330,11 @@ export function ExternosWeeklyBoard({
     [weekMonday, weekFriday]
   );
 
-  useEffect(() => {
-    const clear = () => {
-      document.body.classList.remove("print-externos-planificacion");
-    };
-    window.addEventListener("afterprint", clear);
-    return () => {
-      window.removeEventListener("afterprint", clear);
-      clear();
-    };
-  }, []);
-
-  const handlePrintPlanificacion = useCallback(() => {
-    document.body.classList.add("print-externos-planificacion");
-    window.print();
-  }, []);
-
   return (
     <div className="externos-weekly-print-root w-full min-w-0 space-y-3">
       <h2 className="hidden print:mb-4 print:block print:text-center font-heading text-base font-bold leading-snug text-[#002147] print:text-lg">
         {printTitle}
       </h2>
-
-      <div className="externos-plan-print-hide flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p
-          className="text-sm font-medium capitalize text-[#002147]"
-          aria-live="polite"
-        >
-          {mesAnio}
-        </p>
-        <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 gap-0.5 px-2"
-            onClick={() => setWeekAnchor((w) => addWeeks(w, -1))}
-            aria-label="Semana anterior"
-          >
-            <ChevronLeft className="size-4" />
-            Semana anterior
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8"
-            onClick={() =>
-              setWeekAnchor(startOfWeek(new Date(), { weekStartsOn: 1 }))
-            }
-          >
-            Hoy
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 gap-0.5 px-2"
-            onClick={() => setWeekAnchor((w) => addWeeks(w, 1))}
-            aria-label="Semana siguiente"
-          >
-            Semana siguiente
-            <ChevronRight className="size-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 px-2.5"
-            onClick={handlePrintPlanificacion}
-            aria-label="Imprimir planificación"
-          >
-            <Printer className="size-3.5" aria-hidden />
-            Imprimir planificación
-          </Button>
-        </div>
-      </div>
 
       {boardRows.length === 0 ? (
         <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-4 py-8 text-center text-sm text-muted-foreground">
@@ -450,6 +371,7 @@ export function ExternosWeeklyBoard({
                   }
                   acabadoLabel={acabadoNombreById.get(row.acabado_id) ?? "—"}
                   onCardClick={onCardClick}
+                  mrpSlot={renderMrp?.(row)}
                 />
               ))}
             </DroppableColumn>
@@ -487,6 +409,7 @@ export function ExternosWeeklyBoard({
                       }
                       acabadoLabel={acabadoNombreById.get(row.acabado_id) ?? "—"}
                       onCardClick={onCardClick}
+                      mrpSlot={renderMrp?.(row)}
                     />
                   ))}
                 </DroppableColumn>

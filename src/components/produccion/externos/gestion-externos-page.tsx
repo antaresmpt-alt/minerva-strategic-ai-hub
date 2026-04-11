@@ -3,10 +3,13 @@
 import {
   CalendarDays,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Factory,
   FileOutput,
   FileSpreadsheet,
   History,
+  LayoutGrid,
   List,
   Loader2,
   Mail,
@@ -29,10 +32,16 @@ import {
 } from "react";
 import { useReactToPrint } from "react-to-print";
 import ReactMarkdown from "react-markdown";
+import { addDays, addWeeks, format, startOfDay, startOfWeek } from "date-fns";
+import { es as esLocale } from "date-fns/locale";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
 import { GlobalModelSelector } from "@/components/layout/header";
+import {
+  ExternosDailyGrid,
+  type ExternosDailyGridRow,
+} from "@/components/produccion/externos/externos-daily-grid";
 import {
   ExternosWeeklyBoard,
   type ExternosWeeklyBoardRow,
@@ -184,6 +193,8 @@ type SeguimientoRow = {
   /** Opcional en BD; en UI se prefiere cálculo entre fechas */
   dias_en_externo?: number | null;
   observaciones?: string | null;
+  /** Orden manual en vista cuadrícula diaria (misma fecha prevista). */
+  orden_diario?: number | null;
 };
 
 function getOtDisplay(row: SeguimientoRow): string {
@@ -198,6 +209,22 @@ function normalizeSeguimientoRowEstado(row: SeguimientoRow): SeguimientoRow {
     return { ...row, estado: "Muelle Minerva" };
   }
   return row;
+}
+
+function isEstadoTerminalExternos(estado: string): boolean {
+  return estado === "Recibido" || estado === "Terminado";
+}
+
+/** Trabajos con `fecha_prevista` en el día local (excluye terminal). */
+function rowMatchesPlanDay(row: SeguimientoRow, day: Date): boolean {
+  if (isEstadoTerminalExternos(row.estado)) return false;
+  if (!row.fecha_prevista) return false;
+  const d = new Date(row.fecha_prevista);
+  if (Number.isNaN(d.getTime())) return false;
+  const local = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return (
+    format(local, "yyyy-MM-dd") === format(startOfDay(day), "yyyy-MM-dd")
+  );
 }
 
 /** Orden: OT numérica si aplica, luego num_operacion. */
@@ -547,7 +574,7 @@ function SemaforoCell({ row }: { row: SeguimientoRow }) {
   );
 }
 
-function MaterialMrpColumnCell({
+export function MaterialMrpColumnCell({
   info,
   loading,
 }: {
@@ -755,9 +782,10 @@ export function GestionExternosPage() {
   const [filtroEstado, setFiltroEstado] = useState("");
   const [filtroProveedorId, setFiltroProveedorId] = useState("");
   const [busquedaSeguimiento, setBusquedaSeguimiento] = useState("");
-  const [seguimientoVista, setSeguimientoVista] = useState<"lista" | "tablero">(
-    "lista"
-  );
+  const [seguimientoVista, setSeguimientoVista] = useState<
+    "lista" | "semanal" | "diaria"
+  >("lista");
+  const [planCursor, setPlanCursor] = useState(() => startOfDay(new Date()));
   const [seguimientoSheetOpen, setSeguimientoSheetOpen] = useState(false);
   const [seguimientoEditing, setSeguimientoEditing] =
     useState<SeguimientoRow | null>(null);
@@ -828,6 +856,21 @@ export function GestionExternosPage() {
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     `,
   });
+
+  const handlePrintPlanificacion = useCallback(() => {
+    document.body.classList.add("print-externos-planificacion");
+    window.print();
+  }, []);
+
+  useEffect(() => {
+    const clear = () =>
+      document.body.classList.remove("print-externos-planificacion");
+    window.addEventListener("afterprint", clear);
+    return () => {
+      window.removeEventListener("afterprint", clear);
+      clear();
+    };
+  }, []);
 
   const proveedorOptions: Option[] = useMemo(() => {
     return [
@@ -967,6 +1010,17 @@ export function GestionExternosPage() {
     filtroProveedorId,
     busquedaSeguimiento,
   ]);
+
+  const weekMondayForBoard = useMemo(
+    () => startOfWeek(planCursor, { weekStartsOn: 1 }),
+    [planCursor]
+  );
+
+  const dailyGridRows = useMemo((): SeguimientoRow[] => {
+    if (seguimientoVista !== "diaria") return [];
+    const day = startOfDay(planCursor);
+    return seguimientosFiltrados.filter((r) => rowMatchesPlanDay(r, day));
+  }, [seguimientoVista, planCursor, seguimientosFiltrados]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1187,6 +1241,32 @@ export function GestionExternosPage() {
       setLoading(false);
     }
   }, [supabase]);
+
+  const handleDailyReorder = useCallback(
+    async (orderedIds: string[]) => {
+      setSeguimientos((prev) =>
+        prev.map((r) => {
+          const pos = orderedIds.indexOf(r.id);
+          if (pos === -1) return r;
+          return { ...r, orden_diario: pos };
+        })
+      );
+      const results = await Promise.all(
+        orderedIds.map((id, i) =>
+          supabase
+            .from("prod_seguimiento_externos")
+            .update({ orden_diario: i })
+            .eq("id", id)
+        )
+      );
+      const firstErr = results.find((r) => r.error);
+      if (firstErr?.error) {
+        toast.error(firstErr.error.message);
+        void loadCore();
+      }
+    },
+    [supabase, loadCore]
+  );
 
   const handleInsertTiposBase = useCallback(async () => {
     setSaving(true);
@@ -2188,13 +2268,32 @@ export function GestionExternosPage() {
                     spacing={0}
                     className="ml-auto shrink-0"
                     value={
-                      seguimientoVista === "lista" ? ["lista"] : ["tablero"]
+                      seguimientoVista === "lista"
+                        ? ["lista"]
+                        : seguimientoVista === "semanal"
+                          ? ["semanal"]
+                          : ["diaria"]
                     }
                     onValueChange={(v) => {
                       const next = v[0];
-                      if (next === "lista" || next === "tablero") {
-                        setSeguimientoVista(next);
+                      if (
+                        next == null ||
+                        (next !== "lista" &&
+                          next !== "semanal" &&
+                          next !== "diaria")
+                      ) {
+                        return;
                       }
+                      setSeguimientoVista((prev) => {
+                        if (next === "diaria" && prev !== "diaria") {
+                          setPlanCursor(startOfDay(new Date()));
+                        } else if (next === "semanal" && prev !== "semanal") {
+                          setPlanCursor(
+                            startOfWeek(new Date(), { weekStartsOn: 1 })
+                          );
+                        }
+                        return next;
+                      });
                     }}
                     aria-label="Vista de seguimiento"
                   >
@@ -2202,9 +2301,13 @@ export function GestionExternosPage() {
                       <List className="size-3.5 opacity-80" aria-hidden />
                       Lista
                     </ToggleGroupItem>
-                    <ToggleGroupItem value="tablero" className="gap-1 px-2.5">
+                    <ToggleGroupItem value="semanal" className="gap-1 px-2.5">
                       <CalendarDays className="size-3.5 opacity-80" aria-hidden />
                       Tablero semanal
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="diaria" className="gap-1 px-2.5">
+                      <LayoutGrid className="size-3.5 opacity-80" aria-hidden />
+                      Cuadrícula diaria
                     </ToggleGroupItem>
                   </ToggleGroup>
                 </div>
@@ -2740,27 +2843,188 @@ export function GestionExternosPage() {
                 </div>
                 </>
                 ) : (
-                  <div className="px-4 pb-6 pt-2 print:px-3 print:pb-4 print:pt-1 sm:px-0">
-                    <ExternosWeeklyBoard
-                      rows={seguimientosFiltrados as ExternosWeeklyBoardRow[]}
-                      proveedorNombreById={proveedorNombreById}
-                      acabadoNombreById={acabadoNombreById}
-                      saving={saving}
-                      onCardClick={(r) => {
-                        const full = seguimientos.find((x) => x.id === r.id);
-                        if (full) openSeguimientoEdit(full);
-                      }}
-                      onMoveToDate={async (r, ymd) => {
-                        const full = seguimientos.find((x) => x.id === r.id);
-                        if (!full) return;
-                        await updateSeguimientoFecha(
-                          full,
-                          "fecha_prevista",
-                          ymd ?? ""
-                        );
-                      }}
-                    />
-                  </div>
+                  <>
+                    <div className="externos-plan-print-hide mb-3 flex flex-col gap-2 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-0">
+                      <p
+                        className="text-sm font-medium capitalize text-[#002147]"
+                        aria-live="polite"
+                      >
+                        {seguimientoVista === "semanal"
+                          ? format(weekMondayForBoard, "MMMM yyyy", {
+                              locale: esLocale,
+                            })
+                          : format(planCursor, "MMMM yyyy", {
+                              locale: esLocale,
+                            })}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
+                        {seguimientoVista === "semanal" ? (
+                          <>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-0.5 px-2"
+                              onClick={() =>
+                                setPlanCursor((c) => addWeeks(c, -1))
+                              }
+                              aria-label="Semana anterior"
+                            >
+                              <ChevronLeft className="size-4" aria-hidden />
+                              Semana anterior
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8"
+                              onClick={() =>
+                                setPlanCursor(
+                                  startOfWeek(new Date(), { weekStartsOn: 1 })
+                                )
+                              }
+                            >
+                              Hoy
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-0.5 px-2"
+                              onClick={() =>
+                                setPlanCursor((c) => addWeeks(c, 1))
+                              }
+                              aria-label="Semana siguiente"
+                            >
+                              Semana siguiente
+                              <ChevronRight className="size-4" aria-hidden />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-0.5 px-2"
+                              onClick={() =>
+                                setPlanCursor((c) =>
+                                  addDays(startOfDay(c), -1)
+                                )
+                              }
+                              aria-label="Día anterior"
+                            >
+                              <ChevronLeft className="size-4" aria-hidden />
+                              Día anterior
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8"
+                              onClick={() =>
+                                setPlanCursor(startOfDay(new Date()))
+                              }
+                            >
+                              Hoy
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-0.5 px-2"
+                              onClick={() =>
+                                setPlanCursor((c) =>
+                                  addDays(startOfDay(c), 1)
+                                )
+                              }
+                              aria-label="Día siguiente"
+                            >
+                              Día siguiente
+                              <ChevronRight className="size-4" aria-hidden />
+                            </Button>
+                          </>
+                        )}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 gap-1.5 px-2.5"
+                          onClick={handlePrintPlanificacion}
+                          aria-label="Imprimir planificación"
+                        >
+                          <Printer className="size-3.5" aria-hidden />
+                          Imprimir planificación
+                        </Button>
+                      </div>
+                    </div>
+
+                    {seguimientoVista === "semanal" ? (
+                      <div className="px-4 pb-6 pt-2 print:px-3 print:pb-4 print:pt-1 sm:px-0">
+                        <ExternosWeeklyBoard
+                          weekMonday={weekMondayForBoard}
+                          rows={
+                            seguimientosFiltrados as ExternosWeeklyBoardRow[]
+                          }
+                          proveedorNombreById={proveedorNombreById}
+                          acabadoNombreById={acabadoNombreById}
+                          saving={saving}
+                          renderMrp={(r) => (
+                            <MaterialMrpColumnCell
+                              info={lookupMrpStatus(
+                                mrpByOt,
+                                getOtDisplay(r as SeguimientoRow)
+                              )}
+                              loading={mrpLoading}
+                            />
+                          )}
+                          onCardClick={(r) => {
+                            const full = seguimientos.find(
+                              (x) => x.id === r.id
+                            );
+                            if (full) openSeguimientoEdit(full);
+                          }}
+                          onMoveToDate={async (r, ymd) => {
+                            const full = seguimientos.find(
+                              (x) => x.id === r.id
+                            );
+                            if (!full) return;
+                            await updateSeguimientoFecha(
+                              full,
+                              "fecha_prevista",
+                              ymd ?? ""
+                            );
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="px-4 pb-6 pt-2 print:px-3 print:pb-4 print:pt-1 sm:px-0">
+                        <ExternosDailyGrid
+                          day={startOfDay(planCursor)}
+                          rows={dailyGridRows as ExternosDailyGridRow[]}
+                          proveedorNombreById={proveedorNombreById}
+                          acabadoNombreById={acabadoNombreById}
+                          saving={saving}
+                          onCardClick={(r) => {
+                            const full = seguimientos.find(
+                              (x) => x.id === r.id
+                            );
+                            if (full) openSeguimientoEdit(full);
+                          }}
+                          onReorder={handleDailyReorder}
+                          renderMrp={(r) => (
+                            <MaterialMrpColumnCell
+                              info={lookupMrpStatus(
+                                mrpByOt,
+                                getOtDisplay(r as SeguimientoRow)
+                              )}
+                              loading={mrpLoading}
+                            />
+                          )}
+                        />
+                      </div>
+                    )}
+                  </>
                 )}
                 </>
               )}
