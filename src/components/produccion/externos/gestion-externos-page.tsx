@@ -74,6 +74,12 @@ import {
 } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Toggle } from "@/components/ui/toggle";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
@@ -84,6 +90,12 @@ import {
   OT_PLACEHOLDER_PEDIDO,
   parseExternosImportFile,
 } from "@/lib/externos-excel-import";
+import {
+  fetchMrpMaterialStatusByOt,
+  lookupMrpStatus,
+  MATERIAL_MRP_TOOLTIP_MESSAGES,
+  type OtMaterialMrpInfo,
+} from "@/lib/externos-mrp-material-status";
 import {
   fuzzyMatchAcabadoIdByIncludes,
   fuzzyMatchIdByIncludes,
@@ -535,6 +547,47 @@ function SemaforoCell({ row }: { row: SeguimientoRow }) {
   );
 }
 
+function MaterialMrpColumnCell({
+  info,
+  loading,
+}: {
+  info: OtMaterialMrpInfo | undefined;
+  loading: boolean;
+}) {
+  const sem = loading ? "gris" : (info?.semaforo ?? "gris");
+  const tooltip = loading
+    ? "Cargando estado MRP…"
+    : (info?.tooltip ?? MATERIAL_MRP_TOOLTIP_MESSAGES.gris);
+  const color =
+    sem === "verde"
+      ? "bg-green-500"
+      : sem === "amarillo"
+        ? "bg-yellow-500"
+        : "bg-slate-200";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className="inline-flex cursor-default items-center justify-center p-0.5"
+          tabIndex={0}
+          aria-label={tooltip}
+        >
+          <span
+            className={cn(
+              "inline-block h-3 w-3 shrink-0 rounded-sm",
+              color,
+              loading && "animate-pulse opacity-80"
+            )}
+          />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top">
+        <p>{tooltip}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 const emptySelect: Option[] = [{ value: "", label: "— Seleccionar —" }];
 
 const PRIORIDAD_MANUAL_OPTIONS: Option[] = [
@@ -736,6 +789,10 @@ export function GestionExternosPage() {
   const [selectedSeguimientoIds, setSelectedSeguimientoIds] = useState<string[]>(
     []
   );
+  const [mrpByOt, setMrpByOt] = useState<Map<string, OtMaterialMrpInfo>>(
+    () => new Map()
+  );
+  const [mrpLoading, setMrpLoading] = useState(false);
   const [comunicacionModalOpen, setComunicacionModalOpen] = useState(false);
   const [segComunicacionLogs, setSegComunicacionLogs] = useState<
     ComunicacionLogRow[]
@@ -910,6 +967,22 @@ export function GestionExternosPage() {
     filtroProveedorId,
     busquedaSeguimiento,
   ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setMrpLoading(true);
+    const ots = [
+      ...new Set(seguimientosFiltrados.map((r) => getOtDisplay(r))),
+    ];
+    void fetchMrpMaterialStatusByOt(supabase, ots).then((m) => {
+      if (!cancelled) setMrpByOt(m);
+    }).finally(() => {
+      if (!cancelled) setMrpLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, seguimientosFiltrados, seguimientos]);
 
   const seleccionSeguimientoRows = useMemo(() => {
     if (selectedSeguimientoIds.length === 0) return [];
@@ -1363,7 +1436,8 @@ export function GestionExternosPage() {
     }
     toast.success("Envío registrado.");
     if (envEntradaMultiple) {
-      setEnvIdPedido("");
+      setEnvProveedorId("");
+      setEnvAcabadoId("");
       void loadCore();
       return;
     }
@@ -1977,6 +2051,7 @@ export function GestionExternosPage() {
     "flex h-full min-h-8 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs data-active:bg-[#C69C2B]/20 data-active:font-semibold data-active:text-[#002147] data-active:shadow-sm data-active:ring-2 data-active:ring-[#C69C2B]/45 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm";
 
   return (
+    <TooltipProvider>
     <div className="w-full min-w-0 max-w-[100vw] space-y-6 overflow-x-hidden">
       <header className="externos-plan-print-hide">
         <h1 className="font-heading text-2xl font-bold text-[#002147] md:text-3xl">
@@ -2290,6 +2365,12 @@ export function GestionExternosPage() {
                         <th className="sticky top-0 z-30 w-[7rem] min-w-[6.5rem] max-w-[7.5rem] bg-slate-50/95 px-0.5 py-1 text-center font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Prev.
                         </th>
+                        <th
+                          className="sticky top-0 z-30 w-7 bg-slate-50/95 px-0.5 py-1 text-center font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95"
+                          title="Material (MRP)"
+                        >
+                          M
+                        </th>
                         <th className="sticky top-0 z-30 w-8 bg-slate-50/95 px-0.5 py-1 text-center font-medium tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Pal.
                         </th>
@@ -2436,6 +2517,12 @@ export function GestionExternosPage() {
                                 }
                               />
                             </td>
+                            <td className="w-7 px-0.5 py-0.5 text-center align-middle">
+                              <MaterialMrpColumnCell
+                                info={lookupMrpStatus(mrpByOt, getOtDisplay(row))}
+                                loading={mrpLoading}
+                              />
+                            </td>
                             <td className="w-8 px-0.5 py-0.5 text-center tabular-nums">
                               {row.palets != null ? row.palets : "—"}
                             </td>
@@ -2523,7 +2610,18 @@ export function GestionExternosPage() {
                             </div>
                           </div>
                           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 pt-3">
-                            <SemaforoCell row={row} />
+                            <div className="flex flex-wrap items-center gap-3">
+                              <SemaforoCell row={row} />
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                                  M
+                                </span>
+                                <MaterialMrpColumnCell
+                                  info={lookupMrpStatus(mrpByOt, getOtDisplay(row))}
+                                  loading={mrpLoading}
+                                />
+                              </div>
+                            </div>
                             <span className="text-xs text-muted-foreground">
                               Ud. {row.unidades != null ? row.unidades : "—"} · Pal.{" "}
                               {row.palets != null ? row.palets : "—"}
@@ -2730,6 +2828,9 @@ export function GestionExternosPage() {
                   <th className="border border-[#002147] px-1 py-1.5 text-left font-semibold">
                     Prev.
                   </th>
+                  <th className="border border-[#002147] px-1 py-1.5 text-center font-semibold">
+                    M
+                  </th>
                   <th className="border border-[#002147] px-1 py-1.5 text-left font-semibold">
                     Pal.
                   </th>
@@ -2750,6 +2851,16 @@ export function GestionExternosPage() {
               <tbody>
                 {seguimientosFiltrados.map((row) => {
                   const sem = computeSemaforo(row);
+                  const mrpSem = lookupMrpStatus(
+                    mrpByOt,
+                    getOtDisplay(row)
+                  )?.semaforo;
+                  const mrpDotClass =
+                    mrpSem === "verde"
+                      ? "bg-green-500"
+                      : mrpSem === "amarillo"
+                        ? "bg-yellow-500"
+                        : "bg-slate-200";
                   return (
                     <tr
                       key={row.id}
@@ -2787,6 +2898,23 @@ export function GestionExternosPage() {
                       </td>
                       <td className="border border-slate-200 px-1 py-1 whitespace-nowrap">
                         {formatFechaEsCorta(row.fecha_prevista)}
+                      </td>
+                      <td className="border border-slate-200 px-1 py-1 text-center align-middle">
+                        <span
+                          className={cn(
+                            "inline-block h-3 w-3 rounded-sm",
+                            mrpDotClass
+                          )}
+                          style={{
+                            WebkitPrintColorAdjust: "exact",
+                            printColorAdjust: "exact",
+                          }}
+                          title={
+                            lookupMrpStatus(mrpByOt, getOtDisplay(row))
+                              ?.tooltip
+                          }
+                          aria-hidden
+                        />
                       </td>
                       <td className="border border-slate-200 px-1 py-1 tabular-nums">
                         {row.palets ?? "—"}
@@ -4282,5 +4410,6 @@ export function GestionExternosPage() {
         </div>
       ) : null}
     </div>
+    </TooltipProvider>
   );
 }
