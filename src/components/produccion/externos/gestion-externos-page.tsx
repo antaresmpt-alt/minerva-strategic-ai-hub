@@ -772,7 +772,6 @@ export function GestionExternosPage() {
   const [importPreviewRows, setImportPreviewRows] = useState<ImportPreviewRow[]>(
     []
   );
-  const [importDragOver, setImportDragOver] = useState(false);
   const [bulkImportProv, setBulkImportProv] = useState("");
   const [bulkImportAcab, setBulkImportAcab] = useState("");
   const importFileInputRef = useRef<HTMLInputElement>(null);
@@ -3311,11 +3310,11 @@ export function GestionExternosPage() {
           ) : null}
 
           <Card className="border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
-            <CardHeader>
+            <CardHeader className="space-y-2 pb-3">
               <CardTitle className="text-lg text-[#002147]">
                 Importación inteligente (doble formato)
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-xs leading-relaxed text-muted-foreground">
                 <strong>Control Externos</strong> (hoja «Control Externos» o
                 cabeceras OT / CLIENTE / TRABAJO): mapea columnas de fábrica.
                 <strong className="mx-1">Optimus</strong>
@@ -3326,53 +3325,27 @@ export function GestionExternosPage() {
                 1, 2, 3… Asigna proveedor y acabado antes de confirmar.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3 pt-0">
               <input
                 ref={importFileInputRef}
                 type="file"
                 accept=".xlsx,.csv,text/csv"
-                className="sr-only"
+                className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
                   if (f) void processImportFile(f);
                   e.target.value = "";
                 }}
               />
-              <button
+              <Button
                 type="button"
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setImportDragOver(true);
-                }}
-                onDragLeave={() => setImportDragOver(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setImportDragOver(false);
-                  const f = e.dataTransfer.files?.[0];
-                  if (f) void processImportFile(f);
-                }}
+                variant="outline"
+                className="shrink-0"
                 onClick={() => importFileInputRef.current?.click()}
-                className={cn(
-                  "flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-10 text-center transition",
-                  importDragOver
-                    ? "border-[#C69C2B] bg-[#C69C2B]/10"
-                    : "border-slate-300 bg-slate-50/80 hover:border-[#002147]/40 hover:bg-slate-100/80"
-                )}
               >
-                <Upload
-                  className="size-10 text-[#002147]/70"
-                  strokeWidth={1.5}
-                  aria-hidden
-                />
-                <span className="text-sm font-medium text-[#002147]">
-                  Arrastra aquí tu Excel o haz clic para elegir archivo
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  .xlsx o .csv · primera hoja (Excel)
-                </span>
-              </button>
+                <Upload className="mr-2 size-4" aria-hidden />
+                Importar Excel
+              </Button>
 
               {importPreviewRows.length > 0 ? (
                 <div className="space-y-4">
