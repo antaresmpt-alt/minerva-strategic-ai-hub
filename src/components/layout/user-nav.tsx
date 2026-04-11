@@ -50,7 +50,7 @@ export function UserNav({
   const roleLabel = useMemo(() => formatRoleLabel(role), [role]);
 
   return (
-    <div className="pointer-events-none fixed top-3 right-3 z-[100] flex items-center gap-2 sm:top-4 sm:right-4">
+    <div className="externos-plan-print-hide pointer-events-none fixed top-3 right-3 z-[100] flex items-center gap-2 sm:top-4 sm:right-4">
       {showSettingsLink && (
         <div className="pointer-events-auto">
           <Link

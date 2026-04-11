@@ -1978,7 +1978,7 @@ export function GestionExternosPage() {
 
   return (
     <div className="w-full min-w-0 max-w-[100vw] space-y-6 overflow-x-hidden">
-      <header>
+      <header className="externos-plan-print-hide">
         <h1 className="font-heading text-2xl font-bold text-[#002147] md:text-3xl">
           Gestión de Externos
         </h1>
@@ -1994,7 +1994,7 @@ export function GestionExternosPage() {
         onValueChange={setTab}
         className="w-full min-w-0 max-w-full overflow-x-hidden"
       >
-        <div className="mb-5 flex w-full justify-start sm:mb-6">
+        <div className="externos-plan-print-hide mb-5 flex w-full justify-start sm:mb-6">
           <TabsList className="box-border inline-flex h-auto min-h-9 w-fit max-w-full flex-wrap items-stretch gap-0 rounded-lg border border-slate-200/90 bg-slate-50/90 p-1 shadow-sm">
             <TabsTrigger value="seguimiento" className={tabTriggerClass}>
               <PackageSearch className="size-4 shrink-0 opacity-90" aria-hidden />
@@ -2036,8 +2036,8 @@ export function GestionExternosPage() {
             </Alert>
           ) : null}
 
-          <Card className="max-w-full min-w-0 overflow-x-hidden border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
-            <CardHeader className="min-w-0 space-y-4">
+          <Card className="max-w-full min-w-0 overflow-x-hidden border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm print:border-0 print:shadow-none">
+            <CardHeader className="externos-plan-print-hide min-w-0 space-y-4">
               <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="space-y-1.5">
                   <CardTitle className="text-lg text-[#002147]">
@@ -2642,7 +2642,7 @@ export function GestionExternosPage() {
                 </div>
                 </>
                 ) : (
-                  <div className="px-4 pb-6 pt-2 sm:px-0">
+                  <div className="px-4 pb-6 pt-2 print:px-3 print:pb-4 print:pt-1 sm:px-0">
                     <ExternosWeeklyBoard
                       rows={seguimientosFiltrados as ExternosWeeklyBoardRow[]}
                       proveedorNombreById={proveedorNombreById}

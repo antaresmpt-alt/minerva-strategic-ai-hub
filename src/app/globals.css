@@ -177,4 +177,42 @@
     size: a4 landscape;
     margin: 12mm;
   }
+
+  /** Planificación semanal externos (window.print desde el tablero) */
+  body.print-externos-planificacion .externos-plan-print-hide {
+    display: none !important;
+  }
+
+  body.print-externos-planificacion .sem-workspace-marble,
+  body.print-externos-planificacion .sem-workspace-overlay {
+    display: none !important;
+  }
+
+  body.print-externos-planificacion main {
+    padding: 0 !important;
+    max-width: none !important;
+  }
+
+  body.print-externos-planificacion .externos-weekly-print-root {
+    width: 100% !important;
+    max-width: none !important;
+  }
+
+  body.print-externos-planificacion .externos-weekly-print-root .externos-weekly-print-grid {
+    min-width: 0 !important;
+    width: 100% !important;
+    overflow: visible !important;
+  }
+
+  body.print-externos-planificacion
+    .externos-weekly-print-root
+    .externos-weekly-print-card-border {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /** No mezclar con el «Imprimir parte» de la vista lista */
+  body.print-externos-planificacion .externos-print-parte {
+    display: none !important;
+  }
 }

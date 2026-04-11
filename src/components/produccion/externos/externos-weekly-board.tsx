@@ -22,9 +22,15 @@ import {
   startOfWeek,
 } from "date-fns";
 import { es } from "date-fns/locale";
-import { CalendarDays, ChevronLeft, ChevronRight, Truck } from "lucide-react";
+import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Printer,
+  Truck,
+} from "lucide-react";
 import type { ReactNode } from "react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -215,7 +221,7 @@ function DraggableCard({
         onCardClick(row);
       }}
       className={cn(
-        "w-full cursor-grab rounded-md border border-slate-200/90 bg-white p-2 text-left shadow-xs transition-[opacity,box-shadow] active:cursor-grabbing",
+        "externos-weekly-print-card-border w-full cursor-grab rounded-md border border-slate-200/90 bg-white p-2 text-left shadow-xs transition-[opacity,box-shadow] active:cursor-grabbing",
         "border-l-4",
         estadoBorderClass(row.estado),
         isDragging && "z-20 cursor-grabbing opacity-60 shadow-md",
@@ -324,16 +330,44 @@ export function ExternosWeeklyBoard({
 
   const mesAnio = format(weekMonday, "MMMM yyyy", { locale: es });
 
+  const weekFriday = useMemo(() => addDays(weekMonday, 4), [weekMonday]);
+
+  const printTitle = useMemo(
+    () =>
+      `Planificación de Externos - Semana del ${format(weekMonday, "d 'de' MMMM 'de' yyyy", { locale: es })} al ${format(weekFriday, "d 'de' MMMM 'de' yyyy", { locale: es })}`,
+    [weekMonday, weekFriday]
+  );
+
+  useEffect(() => {
+    const clear = () => {
+      document.body.classList.remove("print-externos-planificacion");
+    };
+    window.addEventListener("afterprint", clear);
+    return () => {
+      window.removeEventListener("afterprint", clear);
+      clear();
+    };
+  }, []);
+
+  const handlePrintPlanificacion = useCallback(() => {
+    document.body.classList.add("print-externos-planificacion");
+    window.print();
+  }, []);
+
   return (
-    <div className="w-full min-w-0 space-y-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <div className="externos-weekly-print-root w-full min-w-0 space-y-3">
+      <h2 className="hidden print:mb-4 print:block print:text-center font-heading text-base font-bold leading-snug text-[#002147] print:text-lg">
+        {printTitle}
+      </h2>
+
+      <div className="externos-plan-print-hide flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p
           className="text-sm font-medium capitalize text-[#002147]"
           aria-live="polite"
         >
           {mesAnio}
         </p>
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
           <Button
             type="button"
             variant="outline"
@@ -367,6 +401,17 @@ export function ExternosWeeklyBoard({
             Semana siguiente
             <ChevronRight className="size-4" />
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 px-2.5"
+            onClick={handlePrintPlanificacion}
+            aria-label="Imprimir planificación"
+          >
+            <Printer className="size-3.5" aria-hidden />
+            Imprimir planificación
+          </Button>
         </div>
       </div>
 
@@ -382,13 +427,16 @@ export function ExternosWeeklyBoard({
           collisionDetection={collisionDetection}
           onDragEnd={(e) => void handleDragEnd(e)}
         >
-          <div className="w-full min-w-0 overflow-x-auto pb-1">
-            <div className="grid min-w-[72rem] grid-cols-6 gap-2">
+          <div className="w-full min-w-0 overflow-x-auto pb-1 print:overflow-visible">
+            <div className="externos-weekly-print-grid grid min-w-[72rem] grid-cols-6 gap-2 print:min-w-0">
             <DroppableColumn
               id={COL_BACKLOG}
               header={
                 <span className="text-xs font-semibold leading-tight">
                   Atrasados / Sin fecha
+                  <span className="ml-1 font-medium text-slate-500 tabular-nums">
+                    ({(columns.get(COL_BACKLOG) ?? []).length})
+                  </span>
                 </span>
               }
             >
@@ -409,6 +457,7 @@ export function ExternosWeeklyBoard({
             {weekDays.map((d) => {
               const id = format(d, "yyyy-MM-dd");
               const today = isToday(d);
+              const dayCount = (columns.get(id) ?? []).length;
               return (
                 <DroppableColumn
                   key={id}
@@ -417,7 +466,10 @@ export function ExternosWeeklyBoard({
                   header={
                     <span className="text-xs leading-tight">
                       <span className="block font-medium capitalize">
-                        {format(d, "EEE", { locale: es })}
+                        {format(d, "EEEE", { locale: es })}
+                        <span className="ml-1 font-medium text-slate-500 tabular-nums">
+                          ({dayCount})
+                        </span>
                       </span>
                       <span className="tabular-nums text-muted-foreground">
                         {format(d, "d MMM", { locale: es })}
@@ -445,7 +497,7 @@ export function ExternosWeeklyBoard({
         </DndContext>
       )}
 
-      <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+      <p className="externos-plan-print-hide flex items-center gap-1.5 text-[11px] text-muted-foreground">
         <CalendarDays className="size-3.5 shrink-0" aria-hidden />
         Arrastra una tarjeta a un día para fijar la fecha prevista; suelta en
         «Atrasados / Sin fecha» para quitar la fecha.

@@ -4,7 +4,7 @@ import Image from "next/image";
 
 export function SemContactFooter() {
   return (
-    <footer className="relative z-10 mt-auto border-t border-[#002147]/15 bg-[#002147]/[0.03] px-4 py-8 md:px-10">
+    <footer className="externos-plan-print-hide relative z-10 mt-auto border-t border-[#002147]/15 bg-[#002147]/[0.03] px-4 py-8 md:px-10">
       <div className="mx-auto flex max-w-4xl flex-col gap-3 text-xs text-slate-600 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
           <div className="relative h-8 w-24 shrink-0">
