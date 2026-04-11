@@ -2132,12 +2132,15 @@ export function GestionExternosPage() {
 
   return (
     <TooltipProvider>
-    <div className="w-full min-w-0 max-w-[100vw] space-y-6 overflow-x-hidden">
-      <header className="externos-plan-print-hide">
-        <h1 className="font-heading text-2xl font-bold text-[#002147] md:text-3xl">
+    <div className="w-full min-w-0 max-w-[100vw] space-y-3 overflow-x-hidden">
+      <header className="externos-plan-print-hide mb-0">
+        <h1 className="font-heading text-xl font-bold leading-tight text-[#002147] md:text-2xl">
           Gestión de Externos
         </h1>
-        <p className="mt-1 max-w-2xl text-sm text-slate-600">
+        <p
+          className="mt-0.5 max-w-full truncate text-xs text-slate-600 sm:max-w-3xl"
+          title="Seguimiento de trabajos fuera, directorio de colaboradores y catálogo de acabados · www.minervaglobal.es"
+        >
           Seguimiento de trabajos fuera, directorio de colaboradores y catálogo
           de acabados ·{" "}
           <span className="font-medium text-[#002147]">www.minervaglobal.es</span>
@@ -2149,7 +2152,7 @@ export function GestionExternosPage() {
         onValueChange={setTab}
         className="w-full min-w-0 max-w-full overflow-x-hidden"
       >
-        <div className="externos-plan-print-hide mb-5 flex w-full justify-start sm:mb-6">
+        <div className="externos-plan-print-hide mb-2 flex w-full justify-start sm:mb-3">
           <TabsList className="box-border inline-flex h-auto min-h-9 w-fit max-w-full flex-wrap items-stretch gap-0 rounded-lg border border-slate-200/90 bg-slate-50/90 p-1 shadow-sm">
             <TabsTrigger value="seguimiento" className={tabTriggerClass}>
               <PackageSearch className="size-4 shrink-0 opacity-90" aria-hidden />
@@ -2170,7 +2173,7 @@ export function GestionExternosPage() {
           </TabsList>
         </div>
 
-        <TabsContent value="seguimiento" className="mt-0 space-y-6 outline-none">
+        <TabsContent value="seguimiento" className="mt-0 space-y-3 outline-none">
           {!proveedores.length && !loading ? (
             <Alert className="border-amber-200 bg-amber-50/90 text-amber-950">
               <AlertTitle>Sin colaboradores</AlertTitle>
@@ -2191,14 +2194,20 @@ export function GestionExternosPage() {
             </Alert>
           ) : null}
 
-          <Card className="max-w-full min-w-0 overflow-x-hidden border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm print:border-0 print:shadow-none">
-            <CardHeader className="externos-plan-print-hide min-w-0 space-y-4">
-              <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div className="space-y-1.5">
-                  <CardTitle className="text-lg text-[#002147]">
+          <Card
+            size="sm"
+            className="max-w-full min-w-0 overflow-x-hidden border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm print:border-0 print:shadow-none"
+          >
+            <CardHeader className="externos-plan-print-hide min-w-0 space-y-2 pb-2 pt-0">
+              <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                <div className="min-w-0 flex-1 space-y-0.5">
+                  <CardTitle className="text-base leading-tight text-[#002147]">
                     Trabajos fuera (seguimiento)
                   </CardTitle>
-                  <CardDescription>
+                  <CardDescription
+                    className="line-clamp-1 text-xs leading-snug"
+                    title="Por defecto no se listan trabajos «Recibido». Usa «Ver Histórico» para incluirlos. Cambia el estado desde la tabla al instante; el lápiz abre el panel para proveedor, acabado, fecha prevista y notas. Al pasar a «Enviado» se registra la fecha de envío. Tras «Preparar Envío» (correo), las OT pasan a «Muelle Minerva»."
+                  >
                     Por defecto no se listan trabajos «Recibido». Usa «Ver
                     Histórico» para incluirlos. Cambia el estado desde la tabla
                     al instante; el lápiz abre el panel para proveedor, acabado,
@@ -2207,7 +2216,100 @@ export function GestionExternosPage() {
                     «Muelle Minerva».
                   </CardDescription>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <ToggleGroup
+                  variant="outline"
+                  size="sm"
+                  spacing={0}
+                  className="w-full shrink-0 justify-end sm:w-auto"
+                  value={
+                    seguimientoVista === "lista"
+                      ? ["lista"]
+                      : seguimientoVista === "semanal"
+                        ? ["semanal"]
+                        : ["diaria"]
+                  }
+                  onValueChange={(v) => {
+                    const next = v[0];
+                    if (
+                      next == null ||
+                      (next !== "lista" &&
+                        next !== "semanal" &&
+                        next !== "diaria")
+                    ) {
+                      return;
+                    }
+                    setSeguimientoVista((prev) => {
+                      if (next === "diaria" && prev !== "diaria") {
+                        setPlanCursor(startOfDay(new Date()));
+                      } else if (next === "semanal" && prev !== "semanal") {
+                        setPlanCursor(
+                          startOfWeek(new Date(), { weekStartsOn: 1 })
+                        );
+                      }
+                      return next;
+                    });
+                  }}
+                  aria-label="Vista de seguimiento"
+                >
+                  <ToggleGroupItem value="lista" className="gap-1 px-2.5">
+                    <List className="size-3.5 opacity-80" aria-hidden />
+                    Lista
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="semanal" className="gap-1 px-2.5">
+                    <CalendarDays className="size-3.5 opacity-80" aria-hidden />
+                    Tablero semanal
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="diaria" className="gap-1 px-2.5">
+                    <LayoutGrid className="size-3.5 opacity-80" aria-hidden />
+                    Cuadrícula diaria
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              </div>
+
+              <div className="hidden flex-wrap items-end gap-x-4 gap-y-2.5 md:flex">
+                <div className="w-[12rem] min-w-[11rem] shrink-0">
+                  <NativeSelect
+                    label="Estado"
+                    options={estadoFiltroOptions}
+                    value={filtroEstado}
+                    onChange={(e) => setFiltroEstado(e.target.value)}
+                  />
+                </div>
+                <div className="w-[13rem] min-w-[12rem] shrink-0">
+                  <NativeSelect
+                    label="Proveedor"
+                    options={proveedorFiltroOptions}
+                    value={filtroProveedorId}
+                    onChange={(e) => setFiltroProveedorId(e.target.value)}
+                  />
+                </div>
+                <div className="grid w-full max-w-sm min-w-0 shrink gap-1.5">
+                  <Label htmlFor="busq-seg">Buscar (OT, cliente, pedido, trabajo)</Label>
+                  <Input
+                    id="busq-seg"
+                    placeholder="Ej. 24001 o nombre"
+                    value={busquedaSeguimiento}
+                    onChange={(e) => setBusquedaSeguimiento(e.target.value)}
+                    className="h-9 w-full max-w-sm"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Histórico
+                  </span>
+                  <Toggle
+                    variant="outline"
+                    size="sm"
+                    pressed={verHistorial}
+                    onPressedChange={setVerHistorial}
+                    className="h-9 w-auto shrink-0 justify-start gap-2 px-3"
+                    aria-label="Ver histórico incluyendo trabajos recibidos"
+                  >
+                    <History className="size-4 shrink-0 opacity-80" aria-hidden />
+                    Ver Histórico
+                  </Toggle>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 pb-0.5">
                   <Button
                     type="button"
                     variant="outline"
@@ -2233,7 +2335,18 @@ export function GestionExternosPage() {
                     onClick={exportSeguimientoExcel}
                   >
                     <FileSpreadsheet className="mr-1.5 size-4" aria-hidden />
-                    Exportar Excel
+                    Excel
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={loading || seguimientosFiltrados.length === 0}
+                    title="Imprimir listado (PDF)"
+                    onClick={() => void handlePrintListado()}
+                  >
+                    <Printer className="mr-1.5 size-4" aria-hidden />
+                    PDF
                   </Button>
                   <Button
                     type="button"
@@ -2252,108 +2365,9 @@ export function GestionExternosPage() {
                   >
                     <Sparkles className="size-4 text-[#002147]/80" aria-hidden />
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={loading || seguimientosFiltrados.length === 0}
-                    onClick={() => void handlePrintListado()}
-                  >
-                    <Printer className="mr-1.5 size-4" aria-hidden />
-                    Imprimir parte (PDF)
-                  </Button>
-                  <ToggleGroup
-                    variant="outline"
-                    size="sm"
-                    spacing={0}
-                    className="ml-auto shrink-0"
-                    value={
-                      seguimientoVista === "lista"
-                        ? ["lista"]
-                        : seguimientoVista === "semanal"
-                          ? ["semanal"]
-                          : ["diaria"]
-                    }
-                    onValueChange={(v) => {
-                      const next = v[0];
-                      if (
-                        next == null ||
-                        (next !== "lista" &&
-                          next !== "semanal" &&
-                          next !== "diaria")
-                      ) {
-                        return;
-                      }
-                      setSeguimientoVista((prev) => {
-                        if (next === "diaria" && prev !== "diaria") {
-                          setPlanCursor(startOfDay(new Date()));
-                        } else if (next === "semanal" && prev !== "semanal") {
-                          setPlanCursor(
-                            startOfWeek(new Date(), { weekStartsOn: 1 })
-                          );
-                        }
-                        return next;
-                      });
-                    }}
-                    aria-label="Vista de seguimiento"
-                  >
-                    <ToggleGroupItem value="lista" className="gap-1 px-2.5">
-                      <List className="size-3.5 opacity-80" aria-hidden />
-                      Lista
-                    </ToggleGroupItem>
-                    <ToggleGroupItem value="semanal" className="gap-1 px-2.5">
-                      <CalendarDays className="size-3.5 opacity-80" aria-hidden />
-                      Tablero semanal
-                    </ToggleGroupItem>
-                    <ToggleGroupItem value="diaria" className="gap-1 px-2.5">
-                      <LayoutGrid className="size-3.5 opacity-80" aria-hidden />
-                      Cuadrícula diaria
-                    </ToggleGroupItem>
-                  </ToggleGroup>
                 </div>
               </div>
-
-              <div className="hidden gap-3 md:grid md:grid-cols-2 xl:grid-cols-5">
-                <NativeSelect
-                  label="Estado"
-                  options={estadoFiltroOptions}
-                  value={filtroEstado}
-                  onChange={(e) => setFiltroEstado(e.target.value)}
-                />
-                <NativeSelect
-                  label="Proveedor"
-                  options={proveedorFiltroOptions}
-                  value={filtroProveedorId}
-                  onChange={(e) => setFiltroProveedorId(e.target.value)}
-                />
-                <div className="grid gap-1.5 md:col-span-2">
-                  <Label htmlFor="busq-seg">Buscar (OT, cliente, pedido, trabajo)</Label>
-                  <Input
-                    id="busq-seg"
-                    placeholder="Ej. 24001 o nombre"
-                    value={busquedaSeguimiento}
-                    onChange={(e) => setBusquedaSeguimiento(e.target.value)}
-                    className="h-9"
-                  />
-                </div>
-                <div className="flex flex-col justify-end gap-1.5">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    Histórico
-                  </span>
-                  <Toggle
-                    variant="outline"
-                    size="sm"
-                    pressed={verHistorial}
-                    onPressedChange={setVerHistorial}
-                    className="h-9 w-full justify-start gap-2 px-3 sm:w-auto"
-                    aria-label="Ver histórico incluyendo trabajos recibidos"
-                  >
-                    <History className="size-4 shrink-0 opacity-80" aria-hidden />
-                    Ver Histórico
-                  </Toggle>
-                </div>
-              </div>
-              <div className="flex min-w-0 flex-col gap-3 md:hidden">
+              <div className="flex min-w-0 flex-col gap-2 md:hidden">
                 <NativeSelect
                   label="Estado"
                   options={estadoFiltroOptions}
@@ -2368,14 +2382,14 @@ export function GestionExternosPage() {
                   onChange={(e) => setFiltroProveedorId(e.target.value)}
                   className="min-h-11 text-base"
                 />
-                <div className="grid min-w-0 gap-1.5">
+                <div className="grid min-w-0 max-w-sm gap-1.5">
                   <Label htmlFor="busq-seg-m">Buscar (OT, cliente, pedido, trabajo)</Label>
                   <Input
                     id="busq-seg-m"
                     placeholder="Ej. 24001 o nombre"
                     value={busquedaSeguimiento}
                     onChange={(e) => setBusquedaSeguimiento(e.target.value)}
-                    className="min-h-11 touch-manipulation text-base"
+                    className="min-h-11 w-full max-w-sm touch-manipulation text-base"
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
@@ -2386,20 +2400,79 @@ export function GestionExternosPage() {
                     variant="outline"
                     pressed={verHistorial}
                     onPressedChange={setVerHistorial}
-                    className="min-h-11 w-full touch-manipulation justify-start gap-2 px-3"
+                    className="h-9 w-auto min-w-0 self-start touch-manipulation justify-start gap-2 px-3"
                     aria-label="Ver histórico incluyendo trabajos recibidos"
                   >
                     <History className="size-4 shrink-0 opacity-80" aria-hidden />
                     Ver Histórico
                   </Toggle>
                 </div>
+                <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={loading || !prepararEnvioEnabled}
+                    title={
+                      !prepararEnvioEnabled
+                        ? seleccionSeguimientoRows.length === 0
+                          ? "Selecciona una o más OTs en la tabla"
+                          : "Las OTs seleccionadas deben tener el mismo proveedor"
+                        : "Preparar borrador de correo y registrar envío"
+                    }
+                    onClick={() => setComunicacionModalOpen(true)}
+                  >
+                    <Mail className="mr-1.5 size-4" aria-hidden />
+                    Preparar Envío
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={loading || seguimientosFiltrados.length === 0}
+                    onClick={exportSeguimientoExcel}
+                  >
+                    <FileSpreadsheet className="mr-1.5 size-4" aria-hidden />
+                    Excel
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={loading || seguimientosFiltrados.length === 0}
+                    title="Imprimir listado (PDF)"
+                    onClick={() => void handlePrintListado()}
+                  >
+                    <Printer className="mr-1.5 size-4" aria-hidden />
+                    PDF
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-sm"
+                    className="shrink-0 border-[#002147]/15"
+                    disabled={loading || seguimientosFiltrados.length === 0}
+                    title="Analista de Producción Minerva"
+                    aria-label="Abrir Analista de Producción Minerva"
+                    onClick={() => {
+                      setAnalistaOpen(true);
+                      setAnalistaError(null);
+                      setAnalistaText("");
+                      setAnalistaPregunta("");
+                    }}
+                  >
+                    <Sparkles className="size-4 text-[#002147]/80" aria-hidden />
+                  </Button>
+                </div>
               </div>
             </CardHeader>
-            <CardContent className="p-0 sm:p-6">
+            <CardContent className="mt-0 p-0 sm:px-4 sm:pb-4 sm:pt-2">
               {loading ? (
-                <p className="p-6 text-sm text-muted-foreground">Cargando…</p>
+                <p className="px-4 py-3 text-sm text-muted-foreground sm:px-4">
+                  Cargando…
+                </p>
               ) : seguimientosFiltrados.length === 0 ? (
-                <p className="p-6 text-sm text-muted-foreground">
+                <p className="px-4 py-3 text-sm text-muted-foreground sm:px-4">
                   No hay registros que coincidan con los filtros.
                 </p>
               ) : (
@@ -2844,7 +2917,7 @@ export function GestionExternosPage() {
                 </>
                 ) : (
                   <>
-                    <div className="externos-plan-print-hide mb-3 flex flex-col gap-2 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-0">
+                    <div className="externos-plan-print-hide mb-2 flex flex-col gap-2 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-0">
                       <p
                         className="text-sm font-medium capitalize text-[#002147]"
                         aria-live="polite"
@@ -3215,7 +3288,7 @@ export function GestionExternosPage() {
 
         <TabsContent
           value="generar-envio"
-          className="mt-0 space-y-6 outline-none"
+          className="mt-0 space-y-3 outline-none"
         >
           {!proveedores.length && !loading ? (
             <Alert className="border-amber-200 bg-amber-50/90 text-amber-950">
@@ -3747,7 +3820,7 @@ export function GestionExternosPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="proveedores" className="mt-0 space-y-6 outline-none">
+        <TabsContent value="proveedores" className="mt-0 space-y-3 outline-none">
           <Card className="border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
             <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="space-y-1.5">
