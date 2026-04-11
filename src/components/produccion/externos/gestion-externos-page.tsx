@@ -1,11 +1,13 @@
 "use client";
 
 import {
+  CalendarDays,
   CheckCircle2,
   Factory,
   FileOutput,
   FileSpreadsheet,
   History,
+  List,
   Loader2,
   Mail,
   PackageSearch,
@@ -31,6 +33,10 @@ import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
 import { GlobalModelSelector } from "@/components/layout/header";
+import {
+  ExternosWeeklyBoard,
+  type ExternosWeeklyBoardRow,
+} from "@/components/produccion/externos/externos-weekly-board";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -69,6 +75,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Toggle } from "@/components/ui/toggle";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   ESTADOS_SEGUIMIENTO_EXTERNOS,
   type ExternosImportFormat,
@@ -695,6 +702,9 @@ export function GestionExternosPage() {
   const [filtroEstado, setFiltroEstado] = useState("");
   const [filtroProveedorId, setFiltroProveedorId] = useState("");
   const [busquedaSeguimiento, setBusquedaSeguimiento] = useState("");
+  const [seguimientoVista, setSeguimientoVista] = useState<"lista" | "tablero">(
+    "lista"
+  );
   const [seguimientoSheetOpen, setSeguimientoSheetOpen] = useState(false);
   const [seguimientoEditing, setSeguimientoEditing] =
     useState<SeguimientoRow | null>(null);
@@ -2097,6 +2107,31 @@ export function GestionExternosPage() {
                     <Printer className="mr-1.5 size-4" aria-hidden />
                     Imprimir parte (PDF)
                   </Button>
+                  <ToggleGroup
+                    variant="outline"
+                    size="sm"
+                    spacing={0}
+                    className="ml-auto shrink-0"
+                    value={
+                      seguimientoVista === "lista" ? ["lista"] : ["tablero"]
+                    }
+                    onValueChange={(v) => {
+                      const next = v[0];
+                      if (next === "lista" || next === "tablero") {
+                        setSeguimientoVista(next);
+                      }
+                    }}
+                    aria-label="Vista de seguimiento"
+                  >
+                    <ToggleGroupItem value="lista" className="gap-1 px-2.5">
+                      <List className="size-3.5 opacity-80" aria-hidden />
+                      Lista
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="tablero" className="gap-1 px-2.5">
+                      <CalendarDays className="size-3.5 opacity-80" aria-hidden />
+                      Tablero semanal
+                    </ToggleGroupItem>
+                  </ToggleGroup>
                 </div>
               </div>
 
@@ -2190,6 +2225,8 @@ export function GestionExternosPage() {
                   No hay registros que coincidan con los filtros.
                 </p>
               ) : (
+                <>
+                {seguimientoVista === "lista" ? (
                 <>
                 <div className="hidden max-h-[min(78vh,56rem)] w-full min-w-0 max-w-full overflow-x-auto rounded-lg border border-slate-200/80 sm:rounded-xl md:block">
                   <table className="hidden w-full min-w-[136rem] caption-bottom border-collapse text-xs md:table">
@@ -2603,6 +2640,30 @@ export function GestionExternosPage() {
                     );
                   })}
                 </div>
+                </>
+                ) : (
+                  <div className="px-4 pb-6 pt-2 sm:px-0">
+                    <ExternosWeeklyBoard
+                      rows={seguimientosFiltrados as ExternosWeeklyBoardRow[]}
+                      proveedorNombreById={proveedorNombreById}
+                      acabadoNombreById={acabadoNombreById}
+                      saving={saving}
+                      onCardClick={(r) => {
+                        const full = seguimientos.find((x) => x.id === r.id);
+                        if (full) openSeguimientoEdit(full);
+                      }}
+                      onMoveToDate={async (r, ymd) => {
+                        const full = seguimientos.find((x) => x.id === r.id);
+                        if (!full) return;
+                        await updateSeguimientoFecha(
+                          full,
+                          "fecha_prevista",
+                          ymd ?? ""
+                        );
+                      }}
+                    />
+                  </div>
+                )}
                 </>
               )}
             </CardContent>
