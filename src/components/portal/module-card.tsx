@@ -20,6 +20,8 @@ type ModuleCardProps = {
   icon: ReactNode;
   /** `module`: marca PNG grande (misma caja para todos los módulos del hub). */
   iconFrame?: "glyph" | "module";
+  /** Por defecto: textura de mármol (`/images/marmol-tarjetas.png`) con velo claro para legibilidad. */
+  surface?: "default" | "marble";
   actionLabel: string;
   href?: string;
   disabled?: boolean;
@@ -33,6 +35,7 @@ export function ModuleCard({
   description,
   icon,
   iconFrame = "glyph",
+  surface = "marble",
   actionLabel,
   href,
   disabled,
@@ -41,11 +44,15 @@ export function ModuleCard({
 }: ModuleCardProps) {
   const locked = accessAllowed === false;
   const isDisabled = (!locked && (disabled || !href)) || (locked && !onAccessDenied);
+  const marble = surface === "marble";
 
   return (
     <Card
       className={cn(
-        "flex h-full flex-col border-border/80 bg-card/95 shadow-md ring-1 ring-foreground/[0.06] backdrop-blur-sm transition-shadow hover:shadow-lg",
+        "flex h-full flex-col border-border/80 shadow-md ring-1 ring-foreground/[0.06] transition-shadow hover:shadow-lg",
+        marble
+          ? "module-card-marble"
+          : "bg-card/95 backdrop-blur-sm",
         locked && "opacity-[0.88] grayscale",
         isDisabled && !locked && "opacity-90"
       )}
@@ -57,7 +64,7 @@ export function ModuleCard({
             iconFrame === "glyph" &&
               "mx-auto size-12 bg-primary/[0.07] text-primary ring-1 ring-primary/10",
             iconFrame === "module" &&
-              "mx-auto min-h-[6.25rem] w-full max-w-[9.5rem] bg-transparent p-0 ring-0"
+              "mx-auto min-h-[8rem] w-full max-w-[12rem] bg-transparent p-0 ring-0"
           )}
         >
           {icon}
@@ -68,7 +75,14 @@ export function ModuleCard({
         </CardDescription>
       </CardHeader>
       <div className="min-h-0 flex-1" aria-hidden />
-      <CardFooter className="mt-auto border-t border-border/60 bg-muted/30">
+      <CardFooter
+        className={cn(
+          "mt-auto border-t border-border/60",
+          marble
+            ? "border-border/50 bg-card/[0.5] backdrop-blur-[2px]"
+            : "bg-muted/30",
+        )}
+      >
         {locked ? (
           <Button
             type="button"

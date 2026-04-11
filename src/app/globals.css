@@ -150,6 +150,33 @@
   pointer-events: none;
 }
 
+/* Tarjeta de módulo (p. ej. SALEs): textura dedicada `marmol-tarjetas.png`, con velo para texto legible. */
+.module-card-marble {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background-color: oklch(0.98 0.01 264);
+  background-image: url("/images/marmol-tarjetas.png");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.module-card-marble::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: oklch(1 0 0 / 0.78);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.module-card-marble > * {
+  position: relative;
+  z-index: 1;
+}
+
 /* Mármol detrás del área de trabajo SEM (columna derecha); sidebar y pie sin cambios. */
 .sem-workspace-marble {
   position: absolute;

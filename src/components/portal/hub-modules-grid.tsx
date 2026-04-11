@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useCallback, useState } from "react";
 
 import {
@@ -28,16 +27,28 @@ const MODULE_IMG = {
     src: "/images/module-produccion.png",
     alt: "Producción — icono del módulo",
   },
+  chat: {
+    src: "/images/module-chatbot.png",
+    alt: "Minerva AI Assistant — icono del módulo",
+  },
 } as const;
 
+/**
+ * Logos del hub: `<img>` en lugar de `next/image` para que el navegador pida el mismo
+ * recurso que `/images/...` (sin `/_next/image`), evitando cachés u optimizaciones que
+ * mostraban versiones antiguas mientras la URL directa ya estaba actualizada.
+ */
 function ModuleMark({ src, alt }: { src: string; alt: string }) {
   return (
-    <Image
+    // eslint-disable-next-line @next/next/no-img-element -- assets estáticos en `public`; debe coincidir con GET directo
+    <img
       src={src}
       alt={alt}
-      width={152}
-      height={176}
-      className="h-auto max-h-[7.25rem] w-full object-contain"
+      width={200}
+      height={220}
+      decoding="async"
+      loading="eager"
+      className="h-auto max-h-[8.75rem] w-full object-contain object-center"
     />
   );
 }
@@ -140,13 +151,9 @@ export function HubModulesGrid({
           description="Tu asistente corporativo inteligente. Consultas generales, redacción y soporte."
           iconFrame="module"
           icon={
-            <Image
-              src="/images/module-chatbot.png"
-              alt="Minerva AI Assistant"
-              width={152}
-              height={176}
-              className="h-auto max-h-[7.25rem] w-full object-contain object-center"
-              unoptimized
+            <ModuleMark
+              src={MODULE_IMG.chat.src}
+              alt={MODULE_IMG.chat.alt}
             />
           }
           actionLabel="Abrir Chat"

@@ -18,7 +18,10 @@ export function MinervaThinkingLogo({
 }: MinervaThinkingLogoProps) {
   return (
     <span
-      className={cn("inline-flex shrink-0 animate-spin", className)}
+      className={cn(
+        "inline-flex shrink-0 animate-spin overflow-hidden rounded-full",
+        className,
+      )}
       style={{ width: size, height: size }}
       aria-hidden={decorative ? true : undefined}
     >
