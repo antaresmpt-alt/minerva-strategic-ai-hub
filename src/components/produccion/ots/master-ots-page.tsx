@@ -16,9 +16,11 @@ import { toast } from "sonner";
 
 import { GlobalModelSelector } from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -43,6 +45,9 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  OPTIMUS_IMPORT_FILTER_LABELS,
+  buildOptimusImportAllowedKeysFromChecks,
+  createDefaultOptimusImportEstadoChecks,
   inferEstadoCodFromDesc,
   parseOptimusOtsMasterFile,
 } from "@/lib/prod-ots-optimus-import";
@@ -234,6 +239,10 @@ export function MasterOtsPage() {
   const [editing, setEditing] = useState<ProdOtsGeneralRow | null>(null);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [optimusImportOpen, setOptimusImportOpen] = useState(false);
+  const [optimusImportEstadoChecks, setOptimusImportEstadoChecks] = useState(
+    () => createDefaultOptimusImportEstadoChecks()
+  );
 
   const estadoEditSelectOptions = useMemo((): Option[] => {
     const merged = new Set<string>([...ESTADO_PRESETS_LIST, ...estadoOptions]);
@@ -458,14 +467,23 @@ export function MasterOtsPage() {
   async function onImportFile(f: File) {
     setImporting(true);
     try {
-      const { rows, warnings, filasLeidas } = await parseOptimusOtsMasterFile(
-        f
+      const allowed = buildOptimusImportAllowedKeysFromChecks(
+        optimusImportEstadoChecks
       );
+      const { rows, warnings, omitidasPorFiltroEstado } =
+        await parseOptimusOtsMasterFile(f, {
+          allowedEstadoNormalizedKeys: allowed,
+        });
       if (warnings.length > 0) {
         warnings.slice(0, 5).forEach((w) => toast.message(w));
       }
       if (!rows.length) {
-        toast.error("No se importó ninguna fila válida.");
+        toast.error(
+          omitidasPorFiltroEstado > 0
+            ? `No se importó ninguna OT (${omitidasPorFiltroEstado} omitidas por filtro de estado).`
+            : "No se importó ninguna fila válida."
+        );
+        setOptimusImportOpen(false);
         return;
       }
       const chunk = 120;
@@ -477,8 +495,11 @@ export function MasterOtsPage() {
         if (error) throw error;
       }
       toast.success(
-        `Importación Optimus: ${rows.length} filas (${filasLeidas} leídas).`
+        omitidasPorFiltroEstado > 0
+          ? `Importadas ${rows.length} OTs. ${omitidasPorFiltroEstado} omitidas por filtro de estado.`
+          : `Importadas ${rows.length} OTs.`
       );
+      setOptimusImportOpen(false);
       setPage(0);
       void loadPage();
       void loadFilterOptions();
@@ -567,6 +588,58 @@ ${otsContextJson}
         }}
       />
 
+      <Dialog open={optimusImportOpen} onOpenChange={setOptimusImportOpen}>
+        <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md">
+          <DialogHeader className="border-b border-slate-100">
+            <DialogTitle>Filtro de Importación</DialogTitle>
+            <DialogDescription>
+              Selecciona qué estados de Optimus deseas importar a Minerva.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 px-6 py-4">
+            {OPTIMUS_IMPORT_FILTER_LABELS.map((label, idx) => {
+              const id = `optimus-import-estado-${idx}`;
+              return (
+                <div key={label} className="flex items-center gap-3">
+                  <Checkbox
+                    id={id}
+                    checked={Boolean(optimusImportEstadoChecks[label])}
+                    onCheckedChange={(checked) => {
+                      setOptimusImportEstadoChecks((prev) => ({
+                        ...prev,
+                        [label]: Boolean(checked),
+                      }));
+                    }}
+                  />
+                  <Label
+                    htmlFor={id}
+                    className="cursor-pointer text-sm font-normal leading-snug text-slate-800"
+                  >
+                    {label}
+                  </Label>
+                </div>
+              );
+            })}
+          </div>
+          <DialogFooter className="border-t border-slate-100 sm:justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOptimusImportOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={importing}
+              onClick={() => fileRef.current?.click()}
+            >
+              Seleccionar Archivo
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex flex-col gap-3 border-b border-slate-200/80 pb-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="font-heading text-xl font-semibold text-[#002147] sm:text-2xl">
@@ -595,7 +668,7 @@ ${otsContextJson}
             size="sm"
             className="gap-1.5"
             disabled={importing}
-            onClick={() => fileRef.current?.click()}
+            onClick={() => setOptimusImportOpen(true)}
           >
             {importing ? (
               <Loader2 className="size-4 animate-spin" aria-hidden />

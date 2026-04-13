@@ -51,6 +51,61 @@ function normalizeKey(s: string): string {
     .replace(/\s+/g, " ");
 }
 
+/** Normaliza etiquetas de estado Optimus para comparar con el filtro de importación. */
+export function normalizeOptimusEstadoLabelKey(label: string): string {
+  return normalizeKey(label);
+}
+
+/** Estados Optimus disponibles en el filtro previo a importar (listado maestro OTs). */
+export const OPTIMUS_IMPORT_FILTER_LABELS = [
+  "En producción",
+  "No empezado",
+  "Actualmente activo",
+  "Terminado",
+  "Suspendido",
+  "Cancelado",
+] as const;
+
+export function createDefaultOptimusImportEstadoChecks(): Record<string, boolean> {
+  return {
+    "En producción": true,
+    "No empezado": true,
+    "Actualmente activo": true,
+    Terminado: false,
+    Suspendido: false,
+    Cancelado: false,
+  };
+}
+
+export type OptimusOtsImportOptions = {
+  /**
+   * Claves normalizadas (`normalizeOptimusEstadoLabelKey`) de estados a incluir.
+   * Si no se pasa, no se filtra por estado. Un `Set` vacío excluye todas las filas con estado.
+   */
+  allowedEstadoNormalizedKeys?: Set<string>;
+};
+
+export function buildOptimusImportAllowedKeysFromChecks(
+  checks: Record<string, boolean>
+): Set<string> {
+  const s = new Set<string>();
+  for (const label of OPTIMUS_IMPORT_FILTER_LABELS) {
+    if (checks[label]) {
+      s.add(normalizeOptimusEstadoLabelKey(label));
+    }
+  }
+  return s;
+}
+
+function rowPassesEstadoFilter(
+  estadoDesc: string,
+  allowed: Set<string> | undefined
+): boolean {
+  if (allowed === undefined) return true;
+  if (allowed.size === 0) return false;
+  return allowed.has(normalizeKey(estadoDesc.trim()));
+}
+
 /** Heurística para `estado_cod` cuando el Excel solo trae texto. */
 export function inferEstadoCodFromDesc(desc: string): number | null {
   const n = normalizeKey(desc);
@@ -91,7 +146,7 @@ export function parseSpanishDecimal(raw: unknown): number | null {
     return raw;
   }
 
-  let s = String(raw).trim().replace(/[\s\u00a0]/g, "");
+  const s = String(raw).trim().replace(/[\s\u00a0]/g, "");
   if (!s) return null;
 
   // `3.926,44` o `10,5`
@@ -572,6 +627,8 @@ export type OptimusOtsImportResult = {
   rows: OptimusOtsUpsertRow[];
   warnings: string[];
   filasLeidas: number;
+  /** Filas válidas (con Nº pedido) cuyo estado Optimus no estaba entre los seleccionados. */
+  omitidasPorFiltroEstado: number;
 };
 
 function sheetToJson(sheet: XLSX.WorkSheet): Record<string, unknown>[] {
@@ -583,20 +640,33 @@ function sheetToJson(sheet: XLSX.WorkSheet): Record<string, unknown>[] {
 }
 
 export function parseOptimusOtsMasterExcelBuffer(
-  buffer: ArrayBuffer
+  buffer: ArrayBuffer,
+  options?: OptimusOtsImportOptions
 ): OptimusOtsImportResult {
   const warnings: string[] = [];
   const wb = XLSX.read(buffer, { type: "array", cellDates: true });
   const sheetName = wb.SheetNames[0];
   if (!sheetName) {
-    return { rows: [], warnings: ["El archivo no contiene hojas."], filasLeidas: 0 };
+    return {
+      rows: [],
+      warnings: ["El archivo no contiene hojas."],
+      filasLeidas: 0,
+      omitidasPorFiltroEstado: 0,
+    };
   }
   const sheet = wb.Sheets[sheetName];
   if (!sheet) {
-    return { rows: [], warnings: ["No se pudo leer la hoja."], filasLeidas: 0 };
+    return {
+      rows: [],
+      warnings: ["No se pudo leer la hoja."],
+      filasLeidas: 0,
+      omitidasPorFiltroEstado: 0,
+    };
   }
   const json = sheetToJson(sheet);
   const rows: OptimusOtsUpsertRow[] = [];
+  let omitidasPorFiltroEstado = 0;
+  const allowed = options?.allowedEstadoNormalizedKeys;
   let i = 0;
   for (const raw of json) {
     i += 1;
@@ -605,48 +675,82 @@ export function parseOptimusOtsMasterExcelBuffer(
       warnings.push(parsed.skip);
       continue;
     }
-    if (parsed.row) rows.push(parsed.row);
+    if (parsed.row) {
+      if (!rowPassesEstadoFilter(parsed.row.estado_desc, allowed)) {
+        omitidasPorFiltroEstado += 1;
+        continue;
+      }
+      rows.push(parsed.row);
+    }
   }
-  return { rows, warnings, filasLeidas: json.length };
+  return {
+    rows,
+    warnings,
+    filasLeidas: json.length,
+    omitidasPorFiltroEstado,
+  };
 }
 
-export function parseOptimusOtsMasterCsvText(text: string): OptimusOtsImportResult {
+export function parseOptimusOtsMasterCsvText(
+  text: string,
+  options?: OptimusOtsImportOptions
+): OptimusOtsImportResult {
   const parsed = Papa.parse<Record<string, unknown>>(text, {
     header: true,
     skipEmptyLines: "greedy",
   });
   if (parsed.errors.length > 0) {
     const msg = parsed.errors.slice(0, 3).map((e) => e.message).join(" · ");
-    return { rows: [], warnings: [`CSV: ${msg}`], filasLeidas: 0 };
+    return {
+      rows: [],
+      warnings: [`CSV: ${msg}`],
+      filasLeidas: 0,
+      omitidasPorFiltroEstado: 0,
+    };
   }
   const data = Array.isArray(parsed.data) ? parsed.data : [];
   const rows: OptimusOtsUpsertRow[] = [];
   const warnings: string[] = [];
+  let omitidasPorFiltroEstado = 0;
+  const allowed = options?.allowedEstadoNormalizedKeys;
   let i = 0;
   for (const raw of data) {
     i += 1;
     const p = parseRow(raw, i);
     if (p.skip) warnings.push(p.skip);
-    else if (p.row) rows.push(p.row);
+    else if (p.row) {
+      if (!rowPassesEstadoFilter(p.row.estado_desc, allowed)) {
+        omitidasPorFiltroEstado += 1;
+        continue;
+      }
+      rows.push(p.row);
+    }
   }
-  return { rows, warnings, filasLeidas: data.length };
+  return {
+    rows,
+    warnings,
+    filasLeidas: data.length,
+    omitidasPorFiltroEstado,
+  };
 }
 
 export async function parseOptimusOtsMasterFile(
-  file: File
+  file: File,
+  options?: OptimusOtsImportOptions
 ): Promise<OptimusOtsImportResult> {
   const name = file.name.toLowerCase();
   if (name.endsWith(".csv")) {
     const text = await file.text();
-    return parseOptimusOtsMasterCsvText(text);
+    return parseOptimusOtsMasterCsvText(text, options);
   }
   if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
     const buf = await file.arrayBuffer();
-    return parseOptimusOtsMasterExcelBuffer(buf);
+    return parseOptimusOtsMasterExcelBuffer(buf, options);
   }
   return {
     rows: [],
     warnings: ["Formato no admitido. Usa .xlsx o .csv."],
     filasLeidas: 0,
+    omitidasPorFiltroEstado: 0,
   };
 }

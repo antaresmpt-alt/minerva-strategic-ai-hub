@@ -2,9 +2,11 @@
 
 import {
   CalendarDays,
+  Check,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Copy,
   Factory,
   FileOutput,
   FileSpreadsheet,
@@ -821,6 +823,10 @@ export function GestionExternosPage() {
   );
   const [mrpLoading, setMrpLoading] = useState(false);
   const [comunicacionModalOpen, setComunicacionModalOpen] = useState(false);
+  const [comunicacionBodyCopied, setComunicacionBodyCopied] = useState(false);
+  const copyComunicacionBodyTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
   const [segComunicacionLogs, setSegComunicacionLogs] = useState<
     ComunicacionLogRow[]
   >([]);
@@ -845,6 +851,23 @@ export function GestionExternosPage() {
       document.body.style.overflow = prev;
     };
   }, [comunicacionModalOpen]);
+
+  useEffect(() => {
+    if (comunicacionModalOpen) return;
+    setComunicacionBodyCopied(false);
+    if (copyComunicacionBodyTimeoutRef.current) {
+      clearTimeout(copyComunicacionBodyTimeoutRef.current);
+      copyComunicacionBodyTimeoutRef.current = null;
+    }
+  }, [comunicacionModalOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (copyComunicacionBodyTimeoutRef.current) {
+        clearTimeout(copyComunicacionBodyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const printListadoRef = useRef<HTMLDivElement>(null);
   const handlePrintListado = useReactToPrint({
@@ -1070,6 +1093,23 @@ export function GestionExternosPage() {
     proveedores,
     acabadoNombreById,
   ]);
+
+  const handleCopyText = useCallback(async () => {
+    if (!comunicacionPreview) return;
+    try {
+      await navigator.clipboard.writeText(comunicacionPreview.body);
+      setComunicacionBodyCopied(true);
+      if (copyComunicacionBodyTimeoutRef.current) {
+        clearTimeout(copyComunicacionBodyTimeoutRef.current);
+      }
+      copyComunicacionBodyTimeoutRef.current = setTimeout(() => {
+        setComunicacionBodyCopied(false);
+        copyComunicacionBodyTimeoutRef.current = null;
+      }, 2000);
+    } catch {
+      toast.error("No se pudo copiar al portapapeles.");
+    }
+  }, [comunicacionPreview]);
 
   const seguimientoSelectionStats = useMemo(() => {
     const n = seguimientosFiltrados.length;
@@ -4511,9 +4551,35 @@ export function GestionExternosPage() {
                 </p>
               </div>
               <div className="grid min-h-0 flex-1 gap-1.5 text-sm">
-                <span className="font-medium text-[#002147]">
-                  Cuerpo (vista previa)
-                </span>
+                <div className="flex items-start justify-between gap-2">
+                  <span className="min-w-0 font-medium text-[#002147]">
+                    Cuerpo (vista previa)
+                  </span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 shrink-0 px-0 text-slate-600 hover:text-slate-800"
+                        aria-label="Copiar texto para albarán"
+                        onClick={() => void handleCopyText()}
+                      >
+                        {comunicacionBodyCopied ? (
+                          <Check
+                            className="size-3.5 text-emerald-600"
+                            aria-hidden
+                          />
+                        ) : (
+                          <Copy className="size-3.5" aria-hidden />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">
+                      Copiar texto para albarán
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
                 <pre className="max-h-[min(42vh,22rem)] overflow-auto whitespace-pre-wrap break-words rounded-md border border-slate-200 bg-slate-50/90 px-3 py-2 font-sans text-xs text-slate-800">
                   {comunicacionPreview.body}
                 </pre>
