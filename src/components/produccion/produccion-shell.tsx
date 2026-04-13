@@ -31,7 +31,7 @@ const NAV: NavItem[] = [
   },
   {
     href: "/produccion/ots",
-    label: "OTs (maestro)",
+    label: "OTs",
     icon: LayoutList,
     match: (p) =>
       p === "/produccion" ||

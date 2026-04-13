@@ -2,19 +2,28 @@
 
 import {
   Bot,
-  Check,
   ChevronLeft,
   ChevronRight,
+  ClipboardCheck,
   Loader2,
-  Pencil,
   Sparkles,
-  Truck,
   Upload,
 } from "lucide-react";
+import {
+  flexRender,
+  getCoreRowModel,
+  useReactTable,
+  type ColumnFiltersState,
+  type OnChangeFn,
+  type RowSelectionState,
+} from "@tanstack/react-table";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { GlobalModelSelector } from "@/components/layout/header";
+import { createMasterOtsColumns } from "@/components/produccion/ots/master-ots-columns";
+import { estadoDisplayForRow } from "@/components/produccion/ots/master-ots-table-helpers";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -28,6 +37,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, type Option } from "@/components/ui/select-native";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
@@ -60,8 +76,52 @@ import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
 const TABLE = "prod_ots_general";
+const TABLE_OT_DESPACHADAS = "produccion_ot_despachadas";
 /** Seguimiento externo: columna `OT` e `id_pedido` (equivalente a `num_pedido` / OT). */
 const SEGUIMIENTO_EXTERNOS = "prod_seguimiento_externos";
+
+type DespachoSeleccion = { id: string; num_pedido: string };
+
+type DespachoFormState = {
+  tintas: string;
+  material: string;
+  tamano_hoja: string;
+  gramaje: string;
+  num_hojas_brutas: string;
+  num_hojas_netas: string;
+  horas_entrada: string;
+  horas_tiraje: string;
+  notas: string;
+};
+
+function emptyDespachoForm(): DespachoFormState {
+  return {
+    tintas: "",
+    material: "",
+    tamano_hoja: "",
+    gramaje: "",
+    num_hojas_brutas: "",
+    num_hojas_netas: "",
+    horas_entrada: "",
+    horas_tiraje: "",
+    notas: "",
+  };
+}
+
+function parseOptionalIntInput(s: string): number | null {
+  const t = s.trim();
+  if (!t) return null;
+  const n = Number(t);
+  if (!Number.isFinite(n)) return null;
+  return Math.trunc(n);
+}
+
+function parseOptionalDecimalInput(s: string): number | null {
+  const t = s.trim();
+  if (!t) return null;
+  const n = Number(t.replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
 
 const ESTADO_PRESETS_LIST: readonly string[] = [
   "Terminado",
@@ -89,86 +149,11 @@ function otsSearchOrFilter(term: string): string | null {
     .join(",");
 }
 
-const ESTADO_COD_LABEL: Record<number, string> = {
-  4: "Terminado",
-  3: "En producción",
-  1: "Lanzado",
-  2: "Retrasado",
-};
-
-/** Nunca mostrar solo un número: prioriza `estado_desc` textual y cae a etiqueta por código. */
-function estadoDisplayForRow(row: ProdOtsGeneralRow): string {
-  const d = (row.estado_desc ?? "").trim();
-  if (d && !/^\d+$/.test(d)) return d;
-  if (/^\d+$/.test(d)) {
-    const n = Number(d);
-    return ESTADO_COD_LABEL[n] ?? "—";
-  }
-  const c = row.estado_cod;
-  if (c != null && ESTADO_COD_LABEL[c]) return ESTADO_COD_LABEL[c];
-  return "—";
-}
-
-function formatDateDDMMYY(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const yy = String(d.getFullYear()).slice(-2);
-  return `${dd}/${mm}/${yy}`;
-}
-
 function parseNumPedidoId(numPedido: string): number | null {
   const digits = String(numPedido ?? "").replace(/\D/g, "");
   if (!digits) return null;
   const n = Number(digits);
   return Number.isFinite(n) && n > 0 ? n : null;
-}
-
-function statusBadge(row: ProdOtsGeneralRow) {
-  const display = estadoDisplayForRow(row);
-  const desc = display.toLowerCase();
-  const cod = row.estado_cod;
-  const terminado = cod === 4 || desc.includes("termin");
-  const retrasado =
-    desc.includes("retras") ||
-    (row.prioridad != null && row.prioridad < 5 && !terminado);
-  const produccion =
-    desc.includes("lanz") ||
-    desc.includes("producci") ||
-    desc.includes("en curso") ||
-    desc.includes("en cola");
-
-  if (terminado) {
-    return {
-      label: display,
-      className:
-        "border-emerald-200 bg-emerald-50 text-emerald-900 gap-1 pr-2 pl-1.5",
-      icon: Check,
-    };
-  }
-  if (retrasado) {
-    return {
-      label: display || "Atención",
-      className:
-        "border-amber-300 bg-amber-50 text-amber-950 gap-1 pr-2 pl-1.5",
-      icon: null,
-    };
-  }
-  if (produccion) {
-    return {
-      label: display || "Producción",
-      className:
-        "border-blue-200 bg-blue-50 text-blue-950 gap-1 pr-2 pl-1.5",
-      icon: null,
-    };
-  }
-  return {
-    label: display || "—",
-    className: "border-slate-200 bg-slate-50 text-slate-800",
-    icon: null,
-  };
 }
 
 function emptySelectOption(label: string): Option[] {
@@ -214,6 +199,7 @@ async function collectDistinctTriples(
 }
 
 export function MasterOtsPage() {
+  const router = useRouter();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const globalModel = useHubStore((s) => s.globalModel);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -227,6 +213,9 @@ export function MasterOtsPage() {
   const [estadoFilter, setEstadoFilter] = useState("");
   const [vendedorFilter, setVendedorFilter] = useState("");
   const [familiaFilter, setFamiliaFilter] = useState("");
+  const [despachadoFilter, setDespachadoFilter] = useState<
+    "todos" | "si" | "no"
+  >("todos");
 
   const [estadoOptions, setEstadoOptions] = useState<string[]>([]);
   const [vendedorOptions, setVendedorOptions] = useState<string[]>([]);
@@ -243,6 +232,14 @@ export function MasterOtsPage() {
   const [optimusImportEstadoChecks, setOptimusImportEstadoChecks] = useState(
     () => createDefaultOptimusImportEstadoChecks()
   );
+
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const despachoSeleccionCacheRef = useRef<DespachoSeleccion | null>(null);
+  const [despachoOpen, setDespachoOpen] = useState(false);
+  const [despachoForm, setDespachoForm] = useState<DespachoFormState>(() =>
+    emptyDespachoForm()
+  );
+  const [despachoSaving, setDespachoSaving] = useState(false);
 
   const estadoEditSelectOptions = useMemo((): Option[] => {
     const merged = new Set<string>([...ESTADO_PRESETS_LIST, ...estadoOptions]);
@@ -272,7 +269,8 @@ export function MasterOtsPage() {
 
   useEffect(() => {
     setPage(0);
-  }, [debouncedSearch, estadoFilter, vendedorFilter, familiaFilter]);
+    setRowSelection({});
+  }, [debouncedSearch, estadoFilter, vendedorFilter, familiaFilter, despachadoFilter]);
 
   const applyFilters = useCallback(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -283,9 +281,14 @@ export function MasterOtsPage() {
       if (estadoFilter) query = query.eq("estado_desc", estadoFilter);
       if (vendedorFilter) query = query.eq("vendedor", vendedorFilter);
       if (familiaFilter) query = query.eq("familia", familiaFilter);
+      if (despachadoFilter === "si") {
+        query = query.eq("despachado", true);
+      } else if (despachadoFilter === "no") {
+        query = query.or("despachado.is.null,despachado.eq.false");
+      }
       return query;
     },
-    [debouncedSearch, estadoFilter, vendedorFilter, familiaFilter]
+    [debouncedSearch, estadoFilter, vendedorFilter, familiaFilter, despachadoFilter]
   );
 
   const loadFilterOptions = useCallback(async () => {
@@ -350,39 +353,44 @@ export function MasterOtsPage() {
     [supabase]
   );
 
-  const loadPage = useCallback(async () => {
-    setLoading(true);
-    const from = page * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
-    try {
-      let countQ = supabase
-        .from(TABLE)
-        .select("*", { count: "exact", head: true });
-      countQ = applyFilters(countQ);
-      const { count, error: cErr } = await countQ;
-      if (cErr) throw cErr;
-      setTotal(count ?? 0);
+  const loadPage = useCallback(
+    async (options?: { silent?: boolean }) => {
+      const silent = options?.silent === true;
+      if (!silent) setLoading(true);
+      const from = page * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+      try {
+        let countQ = supabase
+          .from(TABLE)
+          .select("*", { count: "exact", head: true });
+        countQ = applyFilters(countQ);
+        const { count, error: cErr } = await countQ;
+        if (cErr) throw cErr;
+        setTotal(count ?? 0);
 
-      let dataQ = supabase.from(TABLE).select("*");
-      dataQ = applyFilters(dataQ);
-      const { data, error } = await dataQ
-        .order("fecha_apertura", { ascending: false, nullsFirst: false })
-        .range(from, to);
-      if (error) throw error;
-      const list = (data ?? []) as ProdOtsGeneralRow[];
-      setRows(list);
-      void loadExternosForRows(list);
-    } catch (e) {
-      console.error(e);
-      toast.error(
-        e instanceof Error ? e.message : "Error al cargar las OTs."
-      );
-      setRows([]);
-      setTotal(0);
-    } finally {
-      setLoading(false);
-    }
-  }, [supabase, page, applyFilters, loadExternosForRows]);
+        let dataQ = supabase.from(TABLE).select("*");
+        dataQ = applyFilters(dataQ);
+        const { data, error } = await dataQ
+          .order("num_pedido", { ascending: false, nullsFirst: false })
+          .order("id", { ascending: false })
+          .range(from, to);
+        if (error) throw error;
+        const list = (data ?? []) as ProdOtsGeneralRow[];
+        setRows(list);
+        void loadExternosForRows(list);
+      } catch (e) {
+        console.error(e);
+        toast.error(
+          e instanceof Error ? e.message : "Error al cargar las OTs."
+        );
+        setRows([]);
+        setTotal(0);
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [supabase, page, applyFilters, loadExternosForRows]
+  );
 
   useEffect(() => {
     void loadPage();
@@ -415,17 +423,92 @@ export function MasterOtsPage() {
     [familiaOptions]
   );
 
-  function rowHasExterno(r: ProdOtsGeneralRow): boolean {
-    const s = String(r.num_pedido ?? "").trim();
-    if (s && externoOtSet.has(s)) return true;
-    const id = parseNumPedidoId(s);
-    return id != null && externoIdSet.has(id);
-  }
+  const rowHasExterno = useCallback(
+    (r: ProdOtsGeneralRow): boolean => {
+      const s = String(r.num_pedido ?? "").trim();
+      if (s && externoOtSet.has(s)) return true;
+      const id = parseNumPedidoId(s);
+      return id != null && externoIdSet.has(id);
+    },
+    [externoOtSet, externoIdSet]
+  );
 
-  function openEdit(r: ProdOtsGeneralRow) {
+  const openEdit = useCallback((r: ProdOtsGeneralRow) => {
     setEditing({ ...r });
     setEditOpen(true);
-  }
+  }, []);
+
+  const columns = useMemo(
+    () =>
+      createMasterOtsColumns({
+        rowHasExterno,
+        openEdit,
+      }),
+    [rowHasExterno, openEdit]
+  );
+
+  const despachoSeleccion = useMemo(() => {
+    const id = Object.keys(rowSelection).find((k) => rowSelection[k]);
+    if (!id) {
+      despachoSeleccionCacheRef.current = null;
+      return null;
+    }
+    const r = rows.find((x) => x.id === id);
+    if (r) {
+      const sel: DespachoSeleccion = {
+        id: r.id,
+        num_pedido: String(r.num_pedido ?? "").trim(),
+      };
+      despachoSeleccionCacheRef.current = sel;
+      return sel;
+    }
+    return despachoSeleccionCacheRef.current;
+  }, [rowSelection, rows]);
+
+  const despachadoColumnFilters = useMemo<ColumnFiltersState>(
+    () =>
+      despachadoFilter === "todos"
+        ? []
+        : [{ id: "despachado", value: despachadoFilter }],
+    [despachadoFilter]
+  );
+
+  const onDespachadoColumnFiltersChange: OnChangeFn<ColumnFiltersState> = (
+    updater
+  ) => {
+    const next =
+      typeof updater === "function"
+        ? updater(despachadoColumnFilters)
+        : updater;
+    const col = next.find((c) => c.id === "despachado");
+    if (!col) {
+      setDespachadoFilter("todos");
+      return;
+    }
+    const v = col.value;
+    if (v === "si" || v === "no" || v === "todos") {
+      setDespachadoFilter(v);
+    }
+  };
+
+  const table = useReactTable({
+    data: rows,
+    columns,
+    getRowId: (row) => row.id,
+    state: {
+      rowSelection,
+      columnFilters: despachadoColumnFilters,
+    },
+    onRowSelectionChange: setRowSelection,
+    onColumnFiltersChange: onDespachadoColumnFiltersChange,
+    manualFiltering: true,
+    manualSorting: true,
+    initialState: {
+      sorting: [{ id: "num_pedido", desc: true }],
+    },
+    enableMultiRowSelection: false,
+    getCoreRowModel: getCoreRowModel(),
+  });
 
   async function saveEdit() {
     if (!editing) return;
@@ -461,6 +544,68 @@ export function MasterOtsPage() {
       toast.error(e instanceof Error ? e.message : "Error al guardar.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function submitDespacho() {
+    if (!despachoSeleccion) return;
+    setDespachoSaving(true);
+    const selectedRowId = despachoSeleccion.id;
+    const selectedOt = despachoSeleccion.num_pedido.trim();
+    try {
+      if (!selectedOt) throw new Error("OT inválida.");
+
+      const rowPayload = {
+        ot_numero: selectedOt,
+        tintas: despachoForm.tintas.trim() || null,
+        material: despachoForm.material.trim() || null,
+        tamano_hoja: despachoForm.tamano_hoja.trim() || null,
+        gramaje: parseOptionalDecimalInput(despachoForm.gramaje),
+        num_hojas_brutas: parseOptionalIntInput(despachoForm.num_hojas_brutas),
+        num_hojas_netas: parseOptionalIntInput(despachoForm.num_hojas_netas),
+        horas_entrada: parseOptionalDecimalInput(despachoForm.horas_entrada),
+        horas_tiraje: parseOptionalDecimalInput(despachoForm.horas_tiraje),
+        notas: despachoForm.notas.trim() || null,
+        despachado_at: new Date().toISOString(),
+      };
+
+      const { error: errDespacho } = await supabase
+        .from(TABLE_OT_DESPACHADAS)
+        .upsert(rowPayload, { onConflict: "ot_numero" });
+      if (errDespacho) throw errDespacho;
+
+      const { error: errMaster } = await supabase
+        .from(TABLE)
+        .update({
+          despachado: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("num_pedido", selectedOt);
+      if (errMaster) throw errMaster;
+
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === selectedRowId ||
+          String(r.num_pedido ?? "").trim() === selectedOt
+            ? { ...r, despachado: true }
+            : r
+        )
+      );
+
+      toast.success("OT Despachada correctamente");
+
+      setDespachoForm(emptyDespachoForm());
+      setDespachoOpen(false);
+      setRowSelection({});
+      despachoSeleccionCacheRef.current = null;
+
+      await loadPage({ silent: true });
+      await loadFilterOptions();
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error al despachar.");
+    } finally {
+      setDespachoSaving(false);
     }
   }
 
@@ -640,6 +785,194 @@ ${otsContextJson}
         </DialogContent>
       </Dialog>
 
+      <Dialog open={despachoOpen} onOpenChange={setDespachoOpen}>
+        <DialogContent className="flex max-h-[min(92vh,720px)] max-w-[min(96vw,560px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+          <DialogHeader className="shrink-0 border-b border-slate-100 px-4 py-3 sm:px-5">
+            <DialogTitle className="text-base">
+              Despachar OT{" "}
+              <span className="font-mono text-sm font-semibold text-[#002147]">
+                {despachoSeleccion?.num_pedido ?? ""}
+              </span>
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Completa los datos de despacho. Se guardarán en producción y se
+              marcará la OT como despachada.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid max-h-[min(60vh,480px)] gap-3 overflow-y-auto px-4 py-3 sm:grid-cols-2 sm:px-5">
+            <div className="grid gap-1">
+              <Label htmlFor="despacho-tintas" className="text-xs">
+                Tintas
+              </Label>
+              <Input
+                id="despacho-tintas"
+                className="h-8 text-xs"
+                value={despachoForm.tintas}
+                onChange={(e) =>
+                  setDespachoForm((f) => ({ ...f, tintas: e.target.value }))
+                }
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="despacho-material" className="text-xs">
+                Material
+              </Label>
+              <Input
+                id="despacho-material"
+                className="h-8 text-xs"
+                value={despachoForm.material}
+                onChange={(e) =>
+                  setDespachoForm((f) => ({ ...f, material: e.target.value }))
+                }
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="despacho-tamano" className="text-xs">
+                Tamaño hoja
+              </Label>
+              <Input
+                id="despacho-tamano"
+                className="h-8 text-xs"
+                value={despachoForm.tamano_hoja}
+                onChange={(e) =>
+                  setDespachoForm((f) => ({
+                    ...f,
+                    tamano_hoja: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="despacho-gramaje" className="text-xs">
+                Gramaje
+              </Label>
+              <Input
+                id="despacho-gramaje"
+                className="h-8 text-xs"
+                type="number"
+                value={despachoForm.gramaje}
+                onChange={(e) =>
+                  setDespachoForm((f) => ({ ...f, gramaje: e.target.value }))
+                }
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="despacho-brutas" className="text-xs">
+                Hojas brutas
+              </Label>
+              <Input
+                id="despacho-brutas"
+                className="h-8 text-xs"
+                type="number"
+                inputMode="numeric"
+                value={despachoForm.num_hojas_brutas}
+                onChange={(e) =>
+                  setDespachoForm((f) => ({
+                    ...f,
+                    num_hojas_brutas: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="despacho-netas" className="text-xs">
+                Hojas netas
+              </Label>
+              <Input
+                id="despacho-netas"
+                className="h-8 text-xs"
+                type="number"
+                inputMode="numeric"
+                value={despachoForm.num_hojas_netas}
+                onChange={(e) =>
+                  setDespachoForm((f) => ({
+                    ...f,
+                    num_hojas_netas: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="despacho-horas-entrada" className="text-xs">
+                Horas entrada estimadas
+              </Label>
+              <Input
+                id="despacho-horas-entrada"
+                className="h-8 text-xs"
+                type="number"
+                step="0.1"
+                value={despachoForm.horas_entrada}
+                onChange={(e) =>
+                  setDespachoForm((f) => ({
+                    ...f,
+                    horas_entrada: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="despacho-horas-tiraje" className="text-xs">
+                Horas tiraje estimadas
+              </Label>
+              <Input
+                id="despacho-horas-tiraje"
+                className="h-8 text-xs"
+                type="number"
+                step="0.1"
+                value={despachoForm.horas_tiraje}
+                onChange={(e) =>
+                  setDespachoForm((f) => ({
+                    ...f,
+                    horas_tiraje: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-1 sm:col-span-2">
+              <Label htmlFor="despacho-notas" className="text-xs">
+                Notas
+              </Label>
+              <Textarea
+                id="despacho-notas"
+                className="min-h-[72px] resize-y text-xs"
+                rows={3}
+                value={despachoForm.notas}
+                onChange={(e) =>
+                  setDespachoForm((f) => ({ ...f, notas: e.target.value }))
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter className="shrink-0 gap-2 border-t border-slate-100 px-4 py-3 sm:flex-row sm:px-5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={despachoSaving}
+              onClick={() => setDespachoOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={despachoSaving || !despachoSeleccion}
+              className="gap-2 bg-[#002147] text-white hover:bg-[#001a38]"
+              onClick={() => void submitDespacho()}
+            >
+              {despachoSaving ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                  Guardando…
+                </>
+              ) : (
+                "Guardar despacho"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex flex-col gap-3 border-b border-slate-200/80 pb-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="font-heading text-xl font-semibold text-[#002147] sm:text-2xl">
@@ -677,11 +1010,25 @@ ${otsContextJson}
             )}
             Importar Optimus
           </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="gap-1.5"
+            disabled={!despachoSeleccion}
+            onClick={() => {
+              setDespachoForm(emptyDespachoForm());
+              setDespachoOpen(true);
+            }}
+          >
+            <ClipboardCheck className="size-4 text-emerald-700" aria-hidden />
+            Despachar OT
+          </Button>
         </div>
       </div>
 
-      <div className="grid gap-3 rounded-lg border border-slate-200/90 bg-white/80 p-3 shadow-sm backdrop-blur-sm sm:grid-cols-2 lg:grid-cols-4">
-        <div className="grid gap-1 sm:col-span-2 lg:col-span-1">
+      <div className="grid gap-3 rounded-lg border border-slate-200/90 bg-white/80 p-3 shadow-sm backdrop-blur-sm sm:grid-cols-2 lg:grid-cols-12">
+        <div className="grid min-w-0 gap-1 sm:col-span-2 lg:col-span-6">
           <Label className="text-xs font-medium">Buscar</Label>
           <Input
             placeholder="Nº pedido, cliente o título…"
@@ -690,178 +1037,126 @@ ${otsContextJson}
             className="h-8 text-xs"
           />
         </div>
-        <NativeSelect
-          label="Estado"
-          className="h-8 text-xs"
-          options={estadoSelectOptions}
-          value={estadoFilter}
-          onChange={(e) => setEstadoFilter(e.target.value)}
-        />
-        <NativeSelect
-          label="Vendedor"
-          className="h-8 text-xs"
-          options={vendedorSelectOptions}
-          value={vendedorFilter}
-          onChange={(e) => setVendedorFilter(e.target.value)}
-        />
-        <NativeSelect
-          label="Familia (análisis ventas)"
-          className="h-8 text-xs"
-          options={familiaSelectOptions}
-          value={familiaFilter}
-          onChange={(e) => setFamiliaFilter(e.target.value)}
-        />
+        <div className="grid min-w-0 gap-1 lg:col-span-2">
+          <NativeSelect
+            label="Estado"
+            className="h-8 min-w-0 text-xs"
+            options={estadoSelectOptions}
+            value={estadoFilter}
+            onChange={(e) => setEstadoFilter(e.target.value)}
+          />
+        </div>
+        <div className="grid min-w-0 gap-1 lg:col-span-1">
+          <NativeSelect
+            label="Vendedor"
+            className="h-8 w-full min-w-0 max-w-[10rem] text-xs [&_select]:min-w-0"
+            options={vendedorSelectOptions}
+            value={vendedorFilter}
+            onChange={(e) => setVendedorFilter(e.target.value)}
+          />
+        </div>
+        <div className="grid min-w-0 gap-1 lg:col-span-1">
+          <NativeSelect
+            label="Familia (análisis ventas)"
+            className="h-8 w-full min-w-0 max-w-[10rem] text-xs [&_select]:min-w-0"
+            options={familiaSelectOptions}
+            value={familiaFilter}
+            onChange={(e) => setFamiliaFilter(e.target.value)}
+          />
+        </div>
+        <div className="grid min-w-0 gap-1 sm:col-span-2 lg:col-span-2">
+          <Label htmlFor="filtro-despachado" className="text-xs font-medium">
+            Despachado
+          </Label>
+          <Select
+            value={despachadoFilter}
+            onValueChange={(v) => {
+              if (v === "todos" || v === "si" || v === "no") {
+                setDespachadoFilter(v);
+              }
+            }}
+          >
+            <SelectTrigger
+              id="filtro-despachado"
+              size="sm"
+              className="h-8 w-full min-w-0 border-input bg-background text-xs shadow-xs"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="start" className="min-w-[var(--anchor-width)]">
+              <SelectItem value="todos" className="text-xs">
+                Todos
+              </SelectItem>
+              <SelectItem value="si" className="text-xs">
+                Sí
+              </SelectItem>
+              <SelectItem value="no" className="text-xs">
+                No
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-lg border border-slate-200/90 bg-white shadow-sm">
         <div className="max-h-[min(70vh,720px)] overflow-auto">
-          <Table className="table-fixed min-w-[1280px] text-xs">
+          <Table className="table-fixed min-w-[1360px] text-xs">
             <TableHeader className="bg-slate-50/95 sticky top-0 z-20 shadow-[0_1px_0_0_rgb(226_232_240)]">
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="sticky top-0 z-20 w-9 bg-slate-50/95 px-0.5 py-1.5 text-center text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                  Ext.
-                </TableHead>
-                <TableHead className="sticky top-0 z-20 w-[4.5rem] bg-slate-50/95 px-1 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                  OT
-                </TableHead>
-                <TableHead className="sticky top-0 z-20 w-[6.5rem] bg-slate-50/95 px-1 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                  Estado
-                </TableHead>
-                <TableHead className="sticky top-0 z-20 w-[9.5rem] bg-slate-50/95 px-1 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                  Cliente
-                </TableHead>
-                <TableHead className="sticky top-0 z-20 w-[5.5rem] bg-slate-50/95 px-1 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                  Ped. cli.
-                </TableHead>
-                <TableHead className="sticky top-0 z-20 w-10 bg-slate-50/95 px-0.5 py-1.5 text-right text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                  Cant.
-                </TableHead>
-                <TableHead className="sticky top-0 z-20 min-w-[9rem] bg-slate-50/95 px-1 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                  Título
-                </TableHead>
-                <TableHead className="sticky top-0 z-20 w-[4.25rem] bg-slate-50/95 px-0.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                  Apert.
-                </TableHead>
-                <TableHead className="sticky top-0 z-20 w-[4.25rem] bg-slate-50/95 px-0.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                  Entr.
-                </TableHead>
-                <TableHead className="sticky top-0 z-20 w-[6.5rem] bg-slate-50/95 px-1 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                  Vendedor
-                </TableHead>
-                <TableHead className="sticky top-0 z-20 w-[4.5rem] bg-slate-50/95 px-0.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                  Prueba col.
-                </TableHead>
-                <TableHead className="sticky top-0 z-20 w-[3.75rem] bg-slate-50/95 px-0.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                  PDF ok
-                </TableHead>
-                <TableHead className="sticky top-0 z-20 w-[3.75rem] bg-slate-50/95 px-0.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                  Muestra
-                </TableHead>
-                <TableHead className="sticky top-0 z-20 w-8 bg-slate-50/95 px-0 py-1.5 text-center text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                  Ed.
-                </TableHead>
-              </TableRow>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id} className="hover:bg-transparent">
+                  {headerGroup.headers.map((header) => (
+                    <TableHead
+                      key={header.id}
+                      className="sticky top-0 z-20 bg-slate-50/95 px-0.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600"
+                      style={{ width: header.getSize() }}
+                    >
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              ))}
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={14} className="py-10 text-center">
+                  <TableCell
+                    colSpan={columns.length}
+                    className="py-10 text-center"
+                  >
                     <Loader2 className="mx-auto size-6 animate-spin text-slate-400" />
                   </TableCell>
                 </TableRow>
               ) : rows.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={14}
+                    colSpan={columns.length}
                     className="text-muted-foreground py-8 text-center text-sm"
                   >
                     Sin resultados.
                   </TableCell>
                 </TableRow>
               ) : (
-                rows.map((r) => {
-                  const st = statusBadge(r);
-                  const Icon = st.icon;
-                  return (
-                    <TableRow key={r.id} className="hover:bg-slate-50/80">
-                      <TableCell className="px-0.5 py-0.5 align-middle">
-                        {rowHasExterno(r) ? (
-                          <span
-                            title="OT en seguimiento externo"
-                            className="mx-auto flex size-7 items-center justify-center rounded-md border border-blue-100 bg-blue-50/90"
-                          >
-                            <Truck
-                              className="size-4 text-blue-600"
-                              aria-label="OT en seguimiento externo"
-                            />
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground flex h-7 items-center justify-center">
-                            —
-                          </span>
+                table.getRowModel().rows.map((row) => (
+                  <TableRow
+                    key={row.id}
+                    className="hover:bg-slate-50/80"
+                    data-state={row.getIsSelected() ? "selected" : undefined}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id} className="p-0 align-middle">
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext()
                         )}
                       </TableCell>
-                      <TableCell className="truncate px-1 py-0.5 font-mono text-[11px] font-medium text-[#002147]">
-                        {r.num_pedido}
-                      </TableCell>
-                      <TableCell className="px-0.5 py-0.5 align-middle">
-                        <span
-                          className={cn(
-                            "inline-flex max-w-full items-center rounded-md border px-1 py-0.5 text-[10px] font-medium leading-tight",
-                            st.className
-                          )}
-                        >
-                          {Icon ? (
-                            <Icon className="size-3 shrink-0 opacity-90" />
-                          ) : null}
-                          <span className="min-w-0 truncate">{st.label}</span>
-                        </span>
-                      </TableCell>
-                      <TableCell className="truncate px-1 py-0.5 text-[11px] leading-snug">
-                        {r.cliente ?? "—"}
-                      </TableCell>
-                      <TableCell className="truncate px-1 py-0.5 font-mono text-[10px] leading-snug">
-                        {r.pedido_cliente?.trim() ? r.pedido_cliente : "—"}
-                      </TableCell>
-                      <TableCell className="truncate px-0.5 py-0.5 text-right tabular-nums text-[11px]">
-                        {r.cantidad ?? "—"}
-                      </TableCell>
-                      <TableCell className="truncate px-1 py-0.5 text-[11px] leading-snug">
-                        {r.titulo ?? "—"}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap px-0.5 py-0.5 text-center text-[11px] tabular-nums text-slate-700">
-                        {formatDateDDMMYY(r.fecha_apertura)}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap px-0.5 py-0.5 text-center text-[11px] tabular-nums text-slate-700">
-                        {formatDateDDMMYY(r.fecha_entrega)}
-                      </TableCell>
-                      <TableCell className="truncate px-1 py-0.5 text-[11px] leading-snug">
-                        {r.vendedor?.trim() ? r.vendedor : "—"}
-                      </TableCell>
-                      <TableCell className="truncate px-0.5 py-0.5 text-center text-[10px]">
-                        {r.prueba_color?.trim() ? r.prueba_color : "—"}
-                      </TableCell>
-                      <TableCell className="truncate px-0.5 py-0.5 text-center text-[10px]">
-                        {r.pdf_ok?.trim() ? r.pdf_ok : "—"}
-                      </TableCell>
-                      <TableCell className="truncate px-0.5 py-0.5 text-center text-[10px]">
-                        {r.muestra_ok?.trim() ? r.muestra_ok : "—"}
-                      </TableCell>
-                      <TableCell className="px-0 py-0.5 text-center">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          className="size-7"
-                          aria-label="Editar OT"
-                          onClick={() => openEdit(r)}
-                        >
-                          <Pencil className="size-3.5" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
+                    ))}
+                  </TableRow>
+                ))
               )}
             </TableBody>
           </Table>

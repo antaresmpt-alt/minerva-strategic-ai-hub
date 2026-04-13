@@ -21,6 +21,7 @@ export type ProdOtsGeneralRow = {
   prueba_color: string | null;
   pdf_ok: string | null;
   muestra_ok: string | null;
+  despachado?: boolean | null;
   created_at: string | null;
   updated_at: string | null;
 };
