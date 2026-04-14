@@ -102,11 +102,12 @@ import {
   parseExternosImportFile,
 } from "@/lib/externos-excel-import";
 import {
-  fetchMrpMaterialStatusByOt,
-  lookupMrpStatus,
-  MATERIAL_MRP_TOOLTIP_MESSAGES,
-  type OtMaterialMrpInfo,
-} from "@/lib/externos-mrp-material-status";
+  compraSemaforoToBgClass,
+  fetchCompraMaterialStatusByOt,
+  lookupCompraMaterialStatus,
+  MATERIAL_COMPRA_TOOLTIP_FALLBACK,
+  type OtCompraMaterialInfo,
+} from "@/lib/externos-compra-material-status";
 import {
   fuzzyMatchAcabadoIdByIncludes,
   fuzzyMatchIdByIncludes,
@@ -576,23 +577,18 @@ function SemaforoCell({ row }: { row: SeguimientoRow }) {
   );
 }
 
-export function MaterialMrpColumnCell({
+export function MaterialCompraColumnCell({
   info,
   loading,
 }: {
-  info: OtMaterialMrpInfo | undefined;
+  info: OtCompraMaterialInfo | undefined;
   loading: boolean;
 }) {
   const sem = loading ? "gris" : (info?.semaforo ?? "gris");
   const tooltip = loading
-    ? "Cargando estado MRP…"
-    : (info?.tooltip ?? MATERIAL_MRP_TOOLTIP_MESSAGES.gris);
-  const color =
-    sem === "verde"
-      ? "bg-green-500"
-      : sem === "amarillo"
-        ? "bg-yellow-500"
-        : "bg-slate-200";
+    ? "Cargando estado de compra de material…"
+    : (info?.tooltip ?? MATERIAL_COMPRA_TOOLTIP_FALLBACK.gris);
+  const color = compraSemaforoToBgClass(sem);
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -603,7 +599,7 @@ export function MaterialMrpColumnCell({
         >
           <span
             className={cn(
-              "inline-block h-3 w-3 shrink-0 rounded-sm",
+              "inline-block h-3 w-3 shrink-0 rounded-full",
               color,
               loading && "animate-pulse opacity-80"
             )}
@@ -769,6 +765,7 @@ export function GestionExternosPage() {
   const [envPrioridad, setEnvPrioridad] = useState("");
   const [envPalets, setEnvPalets] = useState("");
   const [envObservaciones, setEnvObservaciones] = useState("");
+  const [envEstado, setEnvEstado] = useState("Pendiente");
   const [envEntradaMultiple, setEnvEntradaMultiple] = useState(false);
 
   const [importPreviewRows, setImportPreviewRows] = useState<ImportPreviewRow[]>(
@@ -818,10 +815,9 @@ export function GestionExternosPage() {
   const [selectedSeguimientoIds, setSelectedSeguimientoIds] = useState<string[]>(
     []
   );
-  const [mrpByOt, setMrpByOt] = useState<Map<string, OtMaterialMrpInfo>>(
-    () => new Map()
-  );
-  const [mrpLoading, setMrpLoading] = useState(false);
+  const [compraMaterialByOt, setCompraMaterialByOt] = useState<
+    Map<string, OtCompraMaterialInfo>
+  >(() => new Map());
   const [comunicacionModalOpen, setComunicacionModalOpen] = useState(false);
   const [comunicacionBodyCopied, setComunicacionBodyCopied] = useState(false);
   const copyComunicacionBodyTimeoutRef = useRef<ReturnType<
@@ -1044,22 +1040,6 @@ export function GestionExternosPage() {
     return seguimientosFiltrados.filter((r) => rowMatchesPlanDay(r, day));
   }, [seguimientoVista, planCursor, seguimientosFiltrados]);
 
-  useEffect(() => {
-    let cancelled = false;
-    setMrpLoading(true);
-    const ots = [
-      ...new Set(seguimientosFiltrados.map((r) => getOtDisplay(r))),
-    ];
-    void fetchMrpMaterialStatusByOt(supabase, ots).then((m) => {
-      if (!cancelled) setMrpByOt(m);
-    }).finally(() => {
-      if (!cancelled) setMrpLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [supabase, seguimientosFiltrados, seguimientos]);
-
   const seleccionSeguimientoRows = useMemo(() => {
     if (selectedSeguimientoIds.length === 0) return [];
     const idSet = new Set(selectedSeguimientoIds);
@@ -1258,21 +1238,32 @@ export function GestionExternosPage() {
         tiposNorm.length === 0 ? "(vacío → estado [])" : ""
       );
       setTipos(tiposNorm);
-      setProveedores(
-        Array.isArray(provRes.data)
-          ? provRes.data.map(mapProveedorFromApi)
-          : []
-      );
+      const proveedoresList = Array.isArray(provRes.data)
+        ? provRes.data.map(mapProveedorFromApi)
+        : [];
+      const proveedorNombreByIdForCompra = new Map<string, string>();
+      for (const p of proveedoresList) {
+        proveedorNombreByIdForCompra.set(p.id, p.nombre);
+      }
+      setProveedores(proveedoresList);
       setAcabadosCatalogo(
         Array.isArray(acabRes.data)
           ? (acabRes.data as AcabadoRow[])
           : []
       );
-      setSeguimientos(
-        Array.isArray(segRes.data)
-          ? (segRes.data as SeguimientoRow[]).map(normalizeSeguimientoRowEstado)
-          : []
+      const segRowsRaw = Array.isArray(segRes.data)
+        ? (segRes.data as SeguimientoRow[]).map(normalizeSeguimientoRowEstado)
+        : [];
+      const otDisplaysCompra = [
+        ...new Set(segRowsRaw.map((r) => getOtDisplay(r))),
+      ];
+      const compraMap = await fetchCompraMaterialStatusByOt(
+        supabase,
+        otDisplaysCompra,
+        proveedorNombreByIdForCompra
       );
+      setSeguimientos(segRowsRaw);
+      setCompraMaterialByOt(compraMap);
     } catch (e) {
       console.error(e);
       toast.error(formatPostgrestError(e) || "No se pudieron cargar los datos.");
@@ -1530,6 +1521,11 @@ export function GestionExternosPage() {
     const pRaw = envPalets.trim().replace(",", ".");
     const unidadesParsed = uRaw ? Number(uRaw) : NaN;
     const paletsParsed = pRaw ? Number(pRaw) : NaN;
+    const estadoInsert = (ESTADOS_SEGUIMIENTO as readonly string[]).includes(
+      envEstado
+    )
+      ? envEstado
+      : "Pendiente";
     const { error } = await supabase.from("prod_seguimiento_externos").insert({
       id_pedido,
       OT: otRaw,
@@ -1539,7 +1535,7 @@ export function GestionExternosPage() {
       pedido_cliente: envPedidoCliente.trim(),
       proveedor_id: envProveedorId,
       acabado_id: envAcabadoId,
-      estado: "Pendiente",
+      estado: estadoInsert,
       fecha_prevista: dateInputToTimestamptz(envFecha),
       notas_logistica: envNotas.trim() || null,
       unidades:
@@ -1557,6 +1553,7 @@ export function GestionExternosPage() {
     if (envEntradaMultiple) {
       setEnvProveedorId("");
       setEnvAcabadoId("");
+      setEnvEstado("Pendiente");
       void loadCore();
       return;
     }
@@ -1572,6 +1569,7 @@ export function GestionExternosPage() {
     setEnvPrioridad("");
     setEnvPalets("");
     setEnvObservaciones("");
+    setEnvEstado("Pendiente");
     setTab("seguimiento");
     void loadCore();
   }
@@ -2582,7 +2580,7 @@ export function GestionExternosPage() {
                         </th>
                         <th
                           className="sticky top-0 z-30 w-7 bg-slate-50/95 px-0.5 py-1 text-center font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95"
-                          title="Material (MRP)"
+                          title="Material (compra)"
                         >
                           M
                         </th>
@@ -2733,9 +2731,9 @@ export function GestionExternosPage() {
                               />
                             </td>
                             <td className="w-7 px-0.5 py-0.5 text-center align-middle">
-                              <MaterialMrpColumnCell
-                                info={lookupMrpStatus(mrpByOt, getOtDisplay(row))}
-                                loading={mrpLoading}
+                              <MaterialCompraColumnCell
+                                info={lookupCompraMaterialStatus(compraMaterialByOt, getOtDisplay(row))}
+                                loading={loading}
                               />
                             </td>
                             <td className="w-8 px-0.5 py-0.5 text-center tabular-nums">
@@ -2831,9 +2829,9 @@ export function GestionExternosPage() {
                                 <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
                                   M
                                 </span>
-                                <MaterialMrpColumnCell
-                                  info={lookupMrpStatus(mrpByOt, getOtDisplay(row))}
-                                  loading={mrpLoading}
+                                <MaterialCompraColumnCell
+                                  info={lookupCompraMaterialStatus(compraMaterialByOt, getOtDisplay(row))}
+                                  loading={loading}
                                 />
                               </div>
                             </div>
@@ -3082,12 +3080,12 @@ export function GestionExternosPage() {
                           acabadoNombreById={acabadoNombreById}
                           saving={saving}
                           renderMrp={(r) => (
-                            <MaterialMrpColumnCell
-                              info={lookupMrpStatus(
-                                mrpByOt,
+                            <MaterialCompraColumnCell
+                              info={lookupCompraMaterialStatus(
+                                compraMaterialByOt,
                                 getOtDisplay(r as SeguimientoRow)
                               )}
-                              loading={mrpLoading}
+                              loading={loading}
                             />
                           )}
                           onCardClick={(r) => {
@@ -3125,12 +3123,12 @@ export function GestionExternosPage() {
                           }}
                           onReorder={handleDailyReorder}
                           renderMrp={(r) => (
-                            <MaterialMrpColumnCell
-                              info={lookupMrpStatus(
-                                mrpByOt,
+                            <MaterialCompraColumnCell
+                              info={lookupCompraMaterialStatus(
+                                compraMaterialByOt,
                                 getOtDisplay(r as SeguimientoRow)
                               )}
-                              loading={mrpLoading}
+                              loading={loading}
                             />
                           )}
                         />
@@ -3227,16 +3225,11 @@ export function GestionExternosPage() {
               <tbody>
                 {seguimientosFiltrados.map((row) => {
                   const sem = computeSemaforo(row);
-                  const mrpSem = lookupMrpStatus(
-                    mrpByOt,
+                  const compraSem = lookupCompraMaterialStatus(
+                    compraMaterialByOt,
                     getOtDisplay(row)
                   )?.semaforo;
-                  const mrpDotClass =
-                    mrpSem === "verde"
-                      ? "bg-green-500"
-                      : mrpSem === "amarillo"
-                        ? "bg-yellow-500"
-                        : "bg-slate-200";
+                  const compraDotClass = compraSemaforoToBgClass(compraSem);
                   return (
                     <tr
                       key={row.id}
@@ -3278,16 +3271,18 @@ export function GestionExternosPage() {
                       <td className="border border-slate-200 px-1 py-1 text-center align-middle">
                         <span
                           className={cn(
-                            "inline-block h-3 w-3 rounded-sm",
-                            mrpDotClass
+                            "inline-block h-3 w-3 rounded-full",
+                            compraDotClass
                           )}
                           style={{
                             WebkitPrintColorAdjust: "exact",
                             printColorAdjust: "exact",
                           }}
                           title={
-                            lookupMrpStatus(mrpByOt, getOtDisplay(row))
-                              ?.tooltip
+                            lookupCompraMaterialStatus(
+                              compraMaterialByOt,
+                              getOtDisplay(row)
+                            )?.tooltip
                           }
                           aria-hidden
                         />
@@ -3671,49 +3666,65 @@ export function GestionExternosPage() {
                 Nuevo envío externo (OT) — manual
               </CardTitle>
               <CardDescription>
-                El acabado disponible depende del tipo del proveedor elegido.
-                Fecha prevista en formato calendario; se guarda con zona
-                horaria en Supabase.
+                El acabado depende del tipo del proveedor. Fecha prevista en
+                calendario (zona horaria en Supabase). El estado inicial suele ser
+                Pendiente.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form
                 onSubmit={handleCreateEnvio}
-                className="grid gap-4 sm:grid-cols-2"
+                className="grid gap-3"
               >
-                <div className="grid gap-1.5">
-                  <Label htmlFor="ot">OT (vacío → {OT_PLACEHOLDER_PEDIDO})</Label>
-                  <Input
-                    id="ot"
-                    inputMode="numeric"
-                    placeholder="Ej. 24001"
-                    value={envIdPedido}
-                    onChange={(e) => setEnvIdPedido(e.target.value)}
-                    disabled={!proveedores.length}
-                  />
+                {/* Fila 1: OT + Cliente + Pedido cliente */}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-12 sm:items-end">
+                  <div className="grid min-w-0 gap-1.5 sm:col-span-3">
+                    <Label htmlFor="ot" className="text-xs">
+                      OT{" "}
+                      <span className="text-muted-foreground font-normal">
+                        (vacío → {OT_PLACEHOLDER_PEDIDO})
+                      </span>
+                    </Label>
+                    <Input
+                      id="ot"
+                      inputMode="numeric"
+                      placeholder="Ej. 24001"
+                      value={envIdPedido}
+                      onChange={(e) => setEnvIdPedido(e.target.value)}
+                      disabled={!proveedores.length}
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                  <div className="grid min-w-0 gap-1.5 sm:col-span-5">
+                    <Label htmlFor="cli" className="text-xs">
+                      Cliente
+                    </Label>
+                    <Input
+                      id="cli"
+                      value={envCliente}
+                      onChange={(e) => setEnvCliente(e.target.value)}
+                      disabled={!proveedores.length}
+                    />
+                  </div>
+                  <div className="grid min-w-0 gap-1.5 sm:col-span-4">
+                    <Label htmlFor="pc" className="text-xs">
+                      Pedido cliente
+                    </Label>
+                    <Input
+                      id="pc"
+                      value={envPedidoCliente}
+                      onChange={(e) => setEnvPedidoCliente(e.target.value)}
+                      disabled={!proveedores.length}
+                      placeholder="Opcional"
+                    />
+                  </div>
                 </div>
-                <div className="grid gap-1.5">
-                  <Label htmlFor="fp">Fecha prevista</Label>
-                  <Input
-                    id="fp"
-                    type="date"
-                    value={envFecha}
-                    onChange={(e) => setEnvFecha(e.target.value)}
-                    disabled={!proveedores.length}
-                    className="w-full max-w-full"
-                  />
-                </div>
-                <div className="grid gap-1.5 sm:col-span-2">
-                  <Label htmlFor="cli">Cliente (nombre)</Label>
-                  <Input
-                    id="cli"
-                    value={envCliente}
-                    onChange={(e) => setEnvCliente(e.target.value)}
-                    disabled={!proveedores.length}
-                  />
-                </div>
-                <div className="grid gap-1.5 sm:col-span-2">
-                  <Label htmlFor="tit">Título del trabajo</Label>
+
+                {/* Fila 2: Título trabajo */}
+                <div className="grid min-w-0 gap-1.5">
+                  <Label htmlFor="tit" className="text-xs">
+                    Título del trabajo
+                  </Label>
                   <Input
                     id="tit"
                     value={envTrabajo}
@@ -3721,32 +3732,33 @@ export function GestionExternosPage() {
                     disabled={!proveedores.length}
                   />
                 </div>
-                <div className="grid gap-1.5 sm:col-span-2">
-                  <Label htmlFor="pc">Pedido cliente</Label>
-                  <Input
-                    id="pc"
-                    value={envPedidoCliente}
-                    onChange={(e) => setEnvPedidoCliente(e.target.value)}
+
+                {/* Fila 3: Proveedor + Acabado */}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-end">
+                  <NativeSelect
+                    label="Proveedor"
+                    options={proveedorOptions}
+                    value={envProveedorId}
+                    onChange={(e) => setEnvProveedorId(e.target.value)}
                     disabled={!proveedores.length}
+                    className="min-w-0 w-full"
+                  />
+                  <NativeSelect
+                    label="Acabado"
+                    options={acabadoFormOptions}
+                    value={envAcabadoId}
+                    onChange={(e) => setEnvAcabadoId(e.target.value)}
+                    disabled={!envProveedorId}
+                    className="min-w-0 w-full"
                   />
                 </div>
-                <NativeSelect
-                  label="Proveedor"
-                  options={proveedorOptions}
-                  value={envProveedorId}
-                  onChange={(e) => setEnvProveedorId(e.target.value)}
-                  disabled={!proveedores.length}
-                />
-                <NativeSelect
-                  label="Acabado"
-                  options={acabadoFormOptions}
-                  value={envAcabadoId}
-                  onChange={(e) => setEnvAcabadoId(e.target.value)}
-                  disabled={!envProveedorId}
-                />
-                <div className="grid gap-4 sm:col-span-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,8.5rem)_minmax(0,5rem)] sm:items-end">
-                  <div className="grid min-w-0 gap-1.5">
-                    <Label htmlFor="env-u">Unidades</Label>
+
+                {/* Fila 4: Logística — Unidades → Prioridad → Nº palets → Fecha prevista → Estado (defecto Pendiente) */}
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-12 sm:items-end sm:gap-3">
+                  <div className="grid min-w-0 content-start gap-1.5 sm:col-span-2">
+                    <Label htmlFor="env-u" className="text-xs leading-none">
+                      Unidades
+                    </Label>
                     <Input
                       id="env-u"
                       inputMode="numeric"
@@ -3754,18 +3766,38 @@ export function GestionExternosPage() {
                       value={envUnidades}
                       onChange={(e) => setEnvUnidades(e.target.value)}
                       disabled={!proveedores.length}
+                      className="h-9 max-w-full sm:max-w-[5.5rem]"
                     />
                   </div>
-                  <NativeSelect
-                    label="Prioridad"
-                    options={PRIORIDAD_MANUAL_OPTIONS}
-                    value={envPrioridad}
-                    onChange={(e) => setEnvPrioridad(e.target.value)}
-                    disabled={!proveedores.length}
-                    className="min-w-0 w-full max-w-[8.5rem]"
-                  />
-                  <div className="grid min-w-0 gap-1.5">
-                    <Label htmlFor="env-pal">Palets</Label>
+                  <div className="grid min-w-0 content-start gap-1.5 sm:col-span-2">
+                    <Label
+                      htmlFor="env-prio"
+                      className="text-xs leading-none"
+                    >
+                      Prioridad
+                    </Label>
+                    <select
+                      id="env-prio"
+                      value={envPrioridad}
+                      onChange={(e) => setEnvPrioridad(e.target.value)}
+                      disabled={!proveedores.length}
+                      className={cn(
+                        "border-input bg-background h-9 w-full min-w-0 rounded-lg border px-2 text-xs shadow-xs outline-none transition-[color,box-shadow] sm:px-3 sm:text-sm",
+                        "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
+                        "disabled:cursor-not-allowed disabled:opacity-50"
+                      )}
+                    >
+                      {PRIORIDAD_MANUAL_OPTIONS.map((o) => (
+                        <option key={o.value || "empty"} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="grid min-w-0 content-start gap-1.5 sm:col-span-2">
+                    <Label htmlFor="env-pal" className="text-xs leading-none">
+                      Nº palets
+                    </Label>
                     <Input
                       id="env-pal"
                       inputMode="numeric"
@@ -3773,32 +3805,78 @@ export function GestionExternosPage() {
                       value={envPalets}
                       onChange={(e) => setEnvPalets(e.target.value)}
                       disabled={!proveedores.length}
-                      className="max-w-[5rem]"
+                      className="h-9 max-w-full sm:max-w-[5.5rem]"
+                    />
+                  </div>
+                  <div className="grid min-w-0 content-start gap-1.5 sm:col-span-3">
+                    <Label htmlFor="fp" className="text-xs leading-none">
+                      Fecha prevista
+                    </Label>
+                    <Input
+                      id="fp"
+                      type="date"
+                      value={envFecha}
+                      onChange={(e) => setEnvFecha(e.target.value)}
+                      disabled={!proveedores.length}
+                      className="h-9 w-full min-w-0"
+                    />
+                  </div>
+                  <div className="grid min-w-0 content-start gap-1.5 sm:col-span-3">
+                    <Label htmlFor="env-estado" className="text-xs leading-none">
+                      Estado
+                    </Label>
+                    <select
+                      id="env-estado"
+                      value={envEstado}
+                      onChange={(e) => setEnvEstado(e.target.value)}
+                      disabled={!proveedores.length}
+                      className={cn(
+                        "border-input bg-background h-9 w-full min-w-0 rounded-lg border px-2 text-xs shadow-xs outline-none transition-[color,box-shadow] sm:px-3 sm:text-sm",
+                        "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
+                        "disabled:cursor-not-allowed disabled:opacity-50"
+                      )}
+                    >
+                      {estadoRapidoOptions.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Observaciones + Notas logística (misma línea) */}
+                <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="grid min-w-0 gap-1.5">
+                    <Label htmlFor="env-obs" className="text-xs leading-none">
+                      Observaciones
+                    </Label>
+                    <Textarea
+                      id="env-obs"
+                      rows={3}
+                      placeholder="Opcional"
+                      value={envObservaciones}
+                      onChange={(e) => setEnvObservaciones(e.target.value)}
+                      disabled={!proveedores.length}
+                      className="resize-none text-sm leading-snug"
+                    />
+                  </div>
+                  <div className="grid min-w-0 gap-1.5">
+                    <Label htmlFor="notas" className="text-xs leading-none">
+                      Notas de logística
+                    </Label>
+                    <Textarea
+                      id="notas"
+                      rows={3}
+                      placeholder="Opcional"
+                      value={envNotas}
+                      onChange={(e) => setEnvNotas(e.target.value)}
+                      disabled={!proveedores.length}
+                      className="resize-none text-sm leading-snug"
                     />
                   </div>
                 </div>
-                <div className="grid gap-1.5 sm:col-span-2">
-                  <Label htmlFor="env-obs">Observaciones</Label>
-                  <Textarea
-                    id="env-obs"
-                    rows={2}
-                    placeholder="Opcional"
-                    value={envObservaciones}
-                    onChange={(e) => setEnvObservaciones(e.target.value)}
-                    disabled={!proveedores.length}
-                  />
-                </div>
-                <div className="grid gap-1.5 sm:col-span-2">
-                  <Label htmlFor="notas">Notas de logística (opcional)</Label>
-                  <Textarea
-                    id="notas"
-                    rows={2}
-                    value={envNotas}
-                    onChange={(e) => setEnvNotas(e.target.value)}
-                    disabled={!proveedores.length}
-                  />
-                </div>
-                <div className="flex items-start gap-3 rounded-lg border border-slate-200/80 bg-slate-50/80 px-3 py-2.5 sm:col-span-2">
+                <div className="flex items-start gap-3 rounded-lg border border-slate-200/80 bg-slate-50/80 px-3 py-2.5">
                   <input
                     id="env-entrada-multiple"
                     type="checkbox"
@@ -3820,7 +3898,7 @@ export function GestionExternosPage() {
                     </span>
                   </Label>
                 </div>
-                <div className="sm:col-span-2">
+                <div className="pt-1">
                   <Button
                     type="submit"
                     disabled={saving || !proveedores.length || loading}

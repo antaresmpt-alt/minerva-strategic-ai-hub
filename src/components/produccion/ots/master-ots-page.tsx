@@ -23,6 +23,7 @@ import { toast } from "sonner";
 
 import { GlobalModelSelector } from "@/components/layout/header";
 import { createMasterOtsColumns } from "@/components/produccion/ots/master-ots-columns";
+import { TroquelPickerField } from "@/components/produccion/ots/troquel-picker-field";
 import { estadoDisplayForRow } from "@/components/produccion/ots/master-ots-table-helpers";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -91,6 +92,9 @@ type DespachoFormState = {
   num_hojas_netas: string;
   horas_entrada: string;
   horas_tiraje: string;
+  troquel: string;
+  poses: string;
+  acabado_pral: string;
   notas: string;
 };
 
@@ -104,6 +108,9 @@ function emptyDespachoForm(): DespachoFormState {
     num_hojas_netas: "",
     horas_entrada: "",
     horas_tiraje: "",
+    troquel: "",
+    poses: "",
+    acabado_pral: "",
     notas: "",
   };
 }
@@ -121,6 +128,17 @@ function parseOptionalDecimalInput(s: string): number | null {
   if (!t) return null;
   const n = Number(t.replace(",", "."));
   return Number.isFinite(n) ? n : null;
+}
+
+/** Valores numéricos obligatorios para columnas `numeric` en despacho (evita 400 por tipo). */
+function numberOrZeroForDespacho(s: string): number {
+  const n = Number(String(s).trim().replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** `integer` en BD: hojas, poses. */
+function integerOrZeroForDespacho(s: string): number {
+  return Math.trunc(numberOrZeroForDespacho(s));
 }
 
 const ESTADO_PRESETS_LIST: readonly string[] = [
@@ -223,6 +241,10 @@ export function MasterOtsPage() {
 
   const [externoOtSet, setExternoOtSet] = useState<Set<string>>(new Set());
   const [externoIdSet, setExternoIdSet] = useState<Set<number>>(new Set());
+  /** `num_pedido` / OT que ya tienen fila en `produccion_ot_despachadas` (página actual). */
+  const [despachoRegistradoOtSet, setDespachoRegistradoOtSet] = useState<
+    Set<string>
+  >(() => new Set());
 
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<ProdOtsGeneralRow | null>(null);
@@ -353,6 +375,51 @@ export function MasterOtsPage() {
     [supabase]
   );
 
+  const loadDespachadasForRows = useCallback(
+    async (list: ProdOtsGeneralRow[]) => {
+      const inValues: (string | number)[] = [];
+      const seen = new Set<string>();
+      const push = (v: string | number) => {
+        const key = typeof v === "number" ? `n:${v}` : `s:${v}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        inValues.push(v);
+      };
+      for (const r of list) {
+        const s = String(r.num_pedido ?? "").trim();
+        if (!s) continue;
+        push(s);
+        if (/^\d+$/.test(s)) {
+          const n = Number(s);
+          if (Number.isFinite(n)) push(n);
+        }
+      }
+      if (inValues.length === 0) {
+        setDespachoRegistradoOtSet(new Set());
+        return;
+      }
+      try {
+        const { data, error } = await supabase
+          .from(TABLE_OT_DESPACHADAS)
+          .select("ot_numero")
+          .in("ot_numero", inValues);
+        if (error) throw error;
+        const next = new Set<string>();
+        for (const x of data ?? []) {
+          const o = String(
+            (x as { ot_numero?: string | number }).ot_numero ?? ""
+          ).trim();
+          if (o) next.add(o);
+        }
+        setDespachoRegistradoOtSet(next);
+      } catch (e) {
+        console.error(e);
+        setDespachoRegistradoOtSet(new Set());
+      }
+    },
+    [supabase]
+  );
+
   const loadPage = useCallback(
     async (options?: { silent?: boolean }) => {
       const silent = options?.silent === true;
@@ -378,6 +445,7 @@ export function MasterOtsPage() {
         const list = (data ?? []) as ProdOtsGeneralRow[];
         setRows(list);
         void loadExternosForRows(list);
+        void loadDespachadasForRows(list);
       } catch (e) {
         console.error(e);
         toast.error(
@@ -385,11 +453,12 @@ export function MasterOtsPage() {
         );
         setRows([]);
         setTotal(0);
+        setDespachoRegistradoOtSet(new Set());
       } finally {
         if (!silent) setLoading(false);
       }
     },
-    [supabase, page, applyFilters, loadExternosForRows]
+    [supabase, page, applyFilters, loadExternosForRows, loadDespachadasForRows]
   );
 
   useEffect(() => {
@@ -464,6 +533,16 @@ export function MasterOtsPage() {
     }
     return despachoSeleccionCacheRef.current;
   }, [rowSelection, rows]);
+
+  /** No volver a despachar si ya existe fila en `produccion_ot_despachadas` o el maestro marca despachado. */
+  const despachoYaProcesado = useMemo(() => {
+    if (!despachoSeleccion) return false;
+    const ot = despachoSeleccion.num_pedido.trim();
+    if (!ot) return false;
+    const row = rows.find((x) => x.id === despachoSeleccion.id);
+    if (row?.despachado === true) return true;
+    return despachoRegistradoOtSet.has(ot);
+  }, [despachoSeleccion, rows, despachoRegistradoOtSet]);
 
   const despachadoColumnFilters = useMemo<ColumnFiltersState>(
     () =>
@@ -555,23 +634,26 @@ export function MasterOtsPage() {
     try {
       if (!selectedOt) throw new Error("OT inválida.");
 
-      const rowPayload = {
+      const dataToInsert = {
         ot_numero: selectedOt,
         tintas: despachoForm.tintas.trim() || null,
         material: despachoForm.material.trim() || null,
         tamano_hoja: despachoForm.tamano_hoja.trim() || null,
         gramaje: parseOptionalDecimalInput(despachoForm.gramaje),
-        num_hojas_brutas: parseOptionalIntInput(despachoForm.num_hojas_brutas),
-        num_hojas_netas: parseOptionalIntInput(despachoForm.num_hojas_netas),
-        horas_entrada: parseOptionalDecimalInput(despachoForm.horas_entrada),
-        horas_tiraje: parseOptionalDecimalInput(despachoForm.horas_tiraje),
+        num_hojas_brutas: integerOrZeroForDespacho(despachoForm.num_hojas_brutas),
+        num_hojas_netas: integerOrZeroForDespacho(despachoForm.num_hojas_netas),
+        horas_entrada: numberOrZeroForDespacho(despachoForm.horas_entrada),
+        horas_tiraje: numberOrZeroForDespacho(despachoForm.horas_tiraje),
+        troquel: despachoForm.troquel.trim() || null,
+        poses: integerOrZeroForDespacho(despachoForm.poses),
+        acabado_pral: despachoForm.acabado_pral.trim() || null,
         notas: despachoForm.notas.trim() || null,
         despachado_at: new Date().toISOString(),
       };
 
       const { error: errDespacho } = await supabase
         .from(TABLE_OT_DESPACHADAS)
-        .upsert(rowPayload, { onConflict: "ot_numero" });
+        .upsert(dataToInsert, { onConflict: "ot_numero" });
       if (errDespacho) throw errDespacho;
 
       const { error: errMaster } = await supabase
@@ -929,6 +1011,53 @@ ${otsContextJson}
               />
             </div>
             <div className="grid gap-1 sm:col-span-2">
+              <TroquelPickerField
+                id="despacho-troquel"
+                value={despachoForm.troquel}
+                onChange={(v) =>
+                  setDespachoForm((f) => ({ ...f, troquel: v }))
+                }
+                onTroquelPicked={(picked) =>
+                  setDespachoForm((f) => ({
+                    ...f,
+                    troquel: picked.num_troquel,
+                    poses: picked.num_figuras?.trim()
+                      ? picked.num_figuras.trim()
+                      : f.poses,
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="despacho-poses" className="text-xs">
+                Poses
+              </Label>
+              <Input
+                id="despacho-poses"
+                className="h-8 text-xs"
+                value={despachoForm.poses}
+                onChange={(e) =>
+                  setDespachoForm((f) => ({ ...f, poses: e.target.value }))
+                }
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="despacho-acabado" className="text-xs">
+                Acabado PRAL
+              </Label>
+              <Input
+                id="despacho-acabado"
+                className="h-8 text-xs"
+                value={despachoForm.acabado_pral}
+                onChange={(e) =>
+                  setDespachoForm((f) => ({
+                    ...f,
+                    acabado_pral: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-1 sm:col-span-2">
               <Label htmlFor="despacho-notas" className="text-xs">
                 Notas
               </Label>
@@ -1015,14 +1144,22 @@ ${otsContextJson}
             variant="secondary"
             size="sm"
             className="gap-1.5"
-            disabled={!despachoSeleccion}
+            disabled={!despachoSeleccion || despachoYaProcesado}
+            title={
+              despachoYaProcesado && despachoSeleccion
+                ? "Esta OT ya tiene despacho registrado (producción)."
+                : !despachoSeleccion
+                  ? "Selecciona una OT en la tabla"
+                  : undefined
+            }
             onClick={() => {
+              if (despachoYaProcesado) return;
               setDespachoForm(emptyDespachoForm());
               setDespachoOpen(true);
             }}
           >
             <ClipboardCheck className="size-4 text-emerald-700" aria-hidden />
-            Despachar OT
+            {despachoYaProcesado ? "Ya despachada" : "Despachar OT"}
           </Button>
         </div>
       </div>

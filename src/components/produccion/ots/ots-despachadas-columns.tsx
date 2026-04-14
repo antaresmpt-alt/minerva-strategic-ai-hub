@@ -1,62 +1,154 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
+import { Eye, Info, Pencil } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { OtsDespachadasTableRow } from "@/types/prod-ots-despachadas";
 import { cn } from "@/lib/utils";
 
 import { formatDateDDMMYY } from "@/components/produccion/ots/master-ots-table-helpers";
 
+/** Datos «Tipo Excel» desde `prod_troqueles` (clave = `num_troquel` en minúsculas). */
+export type TroquelExcelTooltip = {
+  mides: string | null;
+  num_figuras: string | null;
+  descripcion: string | null;
+};
+
+function troquelExcelTooltipText(meta: TroquelExcelTooltip): string {
+  const m = meta.mides?.trim() || "—";
+  const f = meta.num_figuras?.trim() || "—";
+  const d = meta.descripcion?.trim() || "—";
+  return `Mides: ${m} | Figuras: ${f} | Descripción: ${d}`;
+}
+
+/**
+ * Unifica textos de `estado_material` (despachadas / compras) para color y ojo.
+ */
+type BucketEstadoMaterial =
+  | "sin_orden"
+  | "naranja"
+  | "azul"
+  | "amarillo"
+  | "verde"
+  | "otro";
+
+function bucketEstadoMaterial(estado: string | null | undefined): BucketEstadoMaterial {
+  const n = (estado ?? "").trim().toLowerCase();
+  if (!n) return "otro";
+  if (n === "sin orden compra") return "sin_orden";
+  if (n === "pendiente de pedir" || n === "pendiente") return "naranja";
+  if (n === "orden compra generada" || n === "generada") return "azul";
+  if (n === "compra confirmada" || n === "confirmada") return "amarillo";
+  if (n === "material recibido" || n === "recepcionada") return "verde";
+  return "otro";
+}
+
+/** Misma cadena que en BD; colores según bucket + sinónimos. */
 function estadoMaterialBadge(estado: string | null | undefined): {
   label: string;
   className: string;
 } {
   const t = (estado ?? "").trim();
-  const n = t.toLowerCase();
   if (!t) {
     return {
       label: "—",
       className: "border-slate-200 bg-slate-50 text-slate-700",
     };
   }
-  /** Valores previstos: Material recibido, Material pedido, Orden compra generada, Sin orden compra */
-  if (n.includes("recibido")) {
-    return {
-      label: t,
-      className: "border-emerald-200 bg-emerald-50 text-emerald-900",
-    };
+  switch (bucketEstadoMaterial(estado)) {
+    case "sin_orden":
+      return {
+        label: t,
+        className: "border-slate-300 bg-slate-100 text-slate-800",
+      };
+    case "naranja":
+      return {
+        label: t,
+        className: "border-orange-200 bg-orange-50 text-orange-950",
+      };
+    case "azul":
+      return {
+        label: t,
+        className: "border-blue-200 bg-blue-50 text-blue-950",
+      };
+    case "amarillo":
+      return {
+        label: t,
+        className: "border-amber-200 bg-amber-50 text-amber-950",
+      };
+    case "verde":
+      return {
+        label: t,
+        className: "border-emerald-200 bg-emerald-50 text-emerald-900",
+      };
+    default:
+      return {
+        label: t,
+        className: "border-slate-200 bg-slate-50 text-slate-800",
+      };
   }
-  if (n.includes("material pedido") || (n.includes("pedido") && !n.includes("orden"))) {
-    return {
-      label: t,
-      className: "border-amber-200 bg-amber-50 text-amber-950",
-    };
-  }
-  if (n.includes("generada") || n.includes("orden compra")) {
-    return {
-      label: t,
-      className: "border-blue-200 bg-blue-50 text-blue-950",
-    };
-  }
-  if (n.includes("sin orden")) {
-    return {
-      label: t,
-      className: "border-slate-300 bg-slate-100 text-slate-700",
-    };
-  }
-  return {
-    label: t,
-    className: "border-slate-200 bg-slate-50 text-slate-800",
-  };
 }
 
-export function createOtsDespachadasColumns(): ColumnDef<OtsDespachadasTableRow>[] {
+/**
+ * Ojo solo cuando hay datos útiles en compra (proveedor, fechas): generada, confirmada o recibida (+ sinónimos).
+ * Oculto en «Sin orden compra», «Pendiente de pedir» / «Pendiente» y estados desconocidos.
+ */
+function mostrarBotonVerCompra(estado: string | null | undefined): boolean {
+  const t = (estado ?? "").trim();
+  if (!t) return false;
+  const b = bucketEstadoMaterial(estado);
+  return b === "azul" || b === "amarillo" || b === "verde";
+}
+
+function formatMaterialGramaje(
+  material: string | null,
+  gramaje: number | null
+): string {
+  const m = material?.trim();
+  const gOk = gramaje != null && Number.isFinite(Number(gramaje));
+  if (!m && !gOk) return "—";
+  const gStr = gOk
+    ? `${Number.isInteger(Number(gramaje)) ? String(Math.trunc(Number(gramaje))) : String(gramaje)}g`
+    : "";
+  if (!m) return gStr;
+  return gStr ? `${m} ${gStr}` : m;
+}
+
+function formatHorasEt(
+  entrada: number | null,
+  tiraje: number | null
+): string {
+  const fmt = (n: number | null) => {
+    if (n == null || !Number.isFinite(n)) return "—";
+    const v = Number(n);
+    const s = Number.isInteger(v) ? String(v) : String(v);
+    return `${s}h`;
+  };
+  return `${fmt(entrada)} / ${fmt(tiraje)}`;
+}
+
+export type OtsDespachadasColumnsContext = {
+  onVerCompra: (row: OtsDespachadasTableRow) => void;
+  onEditarDespacho: (row: OtsDespachadasTableRow) => void;
+  troquelExcelByCodigo: Map<string, TroquelExcelTooltip>;
+};
+
+export function createOtsDespachadasColumns(
+  ctx: OtsDespachadasColumnsContext
+): ColumnDef<OtsDespachadasTableRow>[] {
   return [
     {
       id: "select",
-      size: 32,
+      size: 36,
       enableSorting: false,
       header: () => null,
       cell: ({ row, table }) => (
@@ -77,72 +169,158 @@ export function createOtsDespachadasColumns(): ColumnDef<OtsDespachadasTableRow>
     },
     {
       accessorKey: "ot_numero",
+      size: 72,
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
           OT
         </span>
       ),
       cell: ({ row }) => (
-        <div className="truncate px-1 py-0.5 font-mono text-[11px] font-medium text-[#002147]">
+        <div className="w-fit min-w-0 max-w-[5rem] truncate px-1 py-0.5 font-mono text-[11px] font-medium text-[#002147]">
           {row.original.ot_numero}
         </div>
       ),
-      size: 80,
     },
     {
       accessorKey: "cliente",
+      size: 118,
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
           Cliente
         </span>
       ),
       cell: ({ row }) => (
-        <div className="truncate px-1 py-0.5 text-[11px] leading-snug">
+        <div className="max-w-[8rem] truncate px-1 py-0.5 text-[11px] leading-snug">
           {row.original.cliente ?? "—"}
         </div>
       ),
     },
     {
       accessorKey: "titulo",
+      size: 248,
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
           Título
         </span>
       ),
-      cell: ({ row }) => (
-        <div className="truncate px-1 py-0.5 text-[11px] leading-snug">
-          {row.original.titulo ?? "—"}
-        </div>
-      ),
+      cell: ({ row }) => {
+        const r = row.original;
+        const cod = r.troquel?.trim();
+        const key = cod ? cod.toLowerCase() : "";
+        const excel = key ? ctx.troquelExcelByCodigo.get(key) : undefined;
+        const posesStr =
+          r.poses != null && Number.isFinite(Number(r.poses))
+            ? String(r.poses)
+            : "";
+        const showTech = Boolean(
+          cod || posesStr || r.acabado_pral?.trim()
+        );
+        return (
+          <div className="min-w-0 px-1 py-0.5 text-[11px] leading-snug">
+            <div
+              className="line-clamp-2 break-words text-foreground"
+              title={r.titulo?.trim() ? r.titulo : undefined}
+            >
+              {r.titulo?.trim() ? r.titulo : "—"}
+            </div>
+            {showTech ? (
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-muted-foreground">
+                {cod ? (
+                  excel ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex max-w-[min(100%,11rem)] cursor-default items-center gap-0.5 rounded-sm px-0.5 hover:bg-slate-50">
+                          <span className="shrink-0 rounded bg-slate-100 px-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-600">
+                            Tr
+                          </span>
+                          <span className="truncate font-mono text-[10px] text-slate-700">
+                            {cod}
+                          </span>
+                          <Info
+                            className="h-3 w-3 shrink-0 text-slate-500"
+                            aria-hidden
+                          />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs text-xs">
+                        <p className="leading-snug">
+                          {troquelExcelTooltipText(excel)}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <span className="inline-flex max-w-[min(100%,11rem)] items-center gap-0.5">
+                      <span className="shrink-0 rounded bg-slate-100 px-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-600">
+                        Tr
+                      </span>
+                      <span className="truncate font-mono text-[10px] text-slate-700">
+                        {cod}
+                      </span>
+                    </span>
+                  )
+                ) : null}
+                {posesStr ? (
+                  <span className="shrink-0 tabular-nums">
+                    <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wide">
+                      Pos
+                    </span>
+                    {posesStr}
+                  </span>
+                ) : null}
+                {r.acabado_pral?.trim() ? (
+                  <span
+                    className="min-w-0 max-w-[6.5rem] truncate"
+                    title={r.acabado_pral.trim()}
+                  >
+                    <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wide">
+                      Acb
+                    </span>
+                    {r.acabado_pral.trim()}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        );
+      },
     },
     {
-      accessorKey: "material",
+      id: "material_gramaje",
+      size: 132,
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
           Material
         </span>
       ),
       cell: ({ row }) => (
-        <div className="truncate px-1 py-0.5 text-[11px]">
-          {row.original.material?.trim() ? row.original.material : "—"}
+        <div
+          className="w-fit min-w-0 max-w-[11rem] truncate px-1 py-0.5 text-[11px]"
+          title={formatMaterialGramaje(
+            row.original.material,
+            row.original.gramaje
+          )}
+        >
+          {formatMaterialGramaje(row.original.material, row.original.gramaje)}
         </div>
       ),
     },
     {
       accessorKey: "tamano_hoja",
+      size: 76,
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
           Formato
         </span>
       ),
       cell: ({ row }) => (
-        <div className="truncate px-1 py-0.5 text-[11px]">
+        <div className="w-fit min-w-[3.5rem] max-w-[5rem] truncate px-0.5 py-0.5 text-center text-[11px]">
           {row.original.tamano_hoja?.trim() ? row.original.tamano_hoja : "—"}
         </div>
       ),
     },
     {
       id: "hojas",
+      size: 88,
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
           Netas / Brutas
@@ -152,7 +330,7 @@ export function createOtsDespachadasColumns(): ColumnDef<OtsDespachadasTableRow>
         const n = row.original.num_hojas_netas;
         const b = row.original.num_hojas_brutas;
         return (
-          <div className="whitespace-nowrap px-1 py-0.5 text-center text-[11px] tabular-nums">
+          <div className="w-fit min-w-[4.5rem] whitespace-nowrap px-0.5 py-0.5 text-center text-[11px] tabular-nums">
             {n != null || b != null ? (
               <>
                 {n ?? "—"} / {b ?? "—"}
@@ -165,20 +343,42 @@ export function createOtsDespachadasColumns(): ColumnDef<OtsDespachadasTableRow>
       },
     },
     {
+      id: "horas_et",
+      size: 80,
+      header: () => (
+        <span className="text-[10px] font-semibold uppercase tracking-wide">
+          E / T
+        </span>
+      ),
+      cell: ({ row }) => (
+        <div
+          className="w-fit min-w-[4.25rem] whitespace-nowrap px-0.5 py-0.5 text-center text-[11px] tabular-nums text-slate-800"
+          title="Entrada / Tiraje"
+        >
+          {formatHorasEt(
+            row.original.horas_entrada,
+            row.original.horas_tiraje
+          )}
+        </div>
+      ),
+    },
+    {
       accessorKey: "fecha_entrega_prevista",
+      size: 86,
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
           Entrega prev.
         </span>
       ),
       cell: ({ row }) => (
-        <div className="whitespace-nowrap px-0.5 py-0.5 text-center text-[11px] tabular-nums text-slate-700">
+        <div className="w-fit min-w-[4.5rem] whitespace-nowrap px-0.5 py-0.5 text-center text-[11px] tabular-nums text-slate-700">
           {formatDateDDMMYY(row.original.fecha_entrega_prevista)}
         </div>
       ),
     },
     {
       accessorKey: "estado_material",
+      size: 172,
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
           Estado material
@@ -188,20 +388,57 @@ export function createOtsDespachadasColumns(): ColumnDef<OtsDespachadasTableRow>
         const { label, className } = estadoMaterialBadge(
           row.original.estado_material
         );
+        const verCompra = mostrarBotonVerCompra(row.original.estado_material);
         return (
-          <div className="px-0.5 py-0.5">
+          <div className="flex min-w-0 items-center justify-start gap-1 px-0.5 py-0.5">
             <Badge
               variant="outline"
               className={cn(
-                "max-w-full truncate text-[10px] font-medium",
+                "max-w-[9rem] shrink truncate text-[10px] font-medium",
                 className
               )}
             >
               {label}
             </Badge>
+            {verCompra ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0 text-slate-600 hover:text-[#002147]"
+                aria-label={`Ver compra de material OT ${row.original.ot_numero}`}
+                onClick={() => ctx.onVerCompra(row.original)}
+              >
+                <Eye className="h-4 w-4" aria-hidden />
+              </Button>
+            ) : null}
           </div>
         );
       },
+    },
+    {
+      id: "acciones",
+      size: 52,
+      enableSorting: false,
+      header: () => (
+        <span className="text-[10px] font-semibold uppercase tracking-wide">
+          Acc.
+        </span>
+      ),
+      cell: ({ row }) => (
+        <div className="flex justify-center px-0.5 py-0.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0 text-slate-600 hover:text-[#002147]"
+            aria-label={`Editar despacho OT ${row.original.ot_numero}`}
+            onClick={() => ctx.onEditarDespacho(row.original)}
+          >
+            <Pencil className="h-4 w-4" aria-hidden />
+          </Button>
+        </div>
+      ),
     },
   ];
 }

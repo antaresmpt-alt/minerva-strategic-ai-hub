@@ -37,6 +37,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { esPrioridadStockAmarilla } from "@/lib/compras-material-prioridad";
+import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { ComprasMaterialTableRow } from "@/types/prod-compra-material";
 
@@ -72,6 +74,15 @@ function parseGramaje(raw: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function rawNumHojas(v: unknown): number | null {
+  if (typeof v === "number") return Number.isFinite(v) ? Math.trunc(v) : null;
+  if (v != null && v !== "") {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.trunc(n) : null;
+  }
+  return null;
+}
+
 /** Texto numérico para el cuerpo del mail (sin «g» duplicada en la plantilla). */
 function gramajeTextoMail(g: number | null | undefined): string {
   if (g == null || !Number.isFinite(g)) return "—";
@@ -86,21 +97,61 @@ function formatGramajeResumen(g: number | null | undefined): string {
   return `${s}g`;
 }
 
-function abrirMailtoSolicitudMaterial(row: ComprasMaterialTableRow): void {
-  const subject = `Solicitud de Material - ${row.num_compra} - OT ${row.ot_numero}`;
-  const body = `Hola,
+function numStr(n: number | null | undefined): string {
+  return n != null && Number.isFinite(n) ? String(n) : "";
+}
 
-Necesitamos solicitar el siguiente material para la OT ${row.ot_numero}:
+function parseOptionalDecimalInput(s: string): number | null {
+  const t = s.trim();
+  if (!t) return null;
+  const n = Number(t.replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
 
-- Material: ${row.material?.trim() || "—"}
-- Gramaje: ${gramajeTextoMail(row.gramaje)}g
-- Formato: ${row.tamano_hoja?.trim() || "—"}
-- Cantidad: ${row.num_hojas_brutas != null ? row.num_hojas_brutas : "—"} hojas
+function parseOptionalIntInput(s: string): number | null {
+  const t = s.trim();
+  if (!t) return null;
+  const n = Number(t);
+  if (!Number.isFinite(n)) return null;
+  return Math.trunc(n);
+}
 
-Por favor, confirmadnos fecha prevista de entrega.
-Saludos.`;
-  const url = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  window.open(url, "_blank", "noopener,noreferrer");
+/**
+ * Abre Gmail en el navegador (evita mailto: / Outlook local).
+ * `proveedorEmail` puede ir vacío si el catálogo no tiene email.
+ */
+function abrirGmailSolicitudMaterial(
+  row: ComprasMaterialTableRow,
+  proveedorEmail: string
+): void {
+  const asunto = `Solicitud de Material - ${row.num_compra} - OT ${row.ot_numero}`;
+  const fechaPrevista = formatFechaEsCorta(row.fecha_prevista_recepcion);
+  const cuerpo = `Estimados,
+
+Por la presente les solicitamos presupuesto y confirmación de plazo para el siguiente material:
+
+OT: ${row.ot_numero}
+
+Nº Compra: ${row.num_compra}
+
+Título: ${row.titulo?.trim() || "—"}
+
+Material: ${row.material?.trim() || "—"}
+
+Gramaje: ${gramajeTextoMail(row.gramaje)}g
+
+Formato: ${row.tamano_hoja?.trim() || "—"}
+
+Cantidad (Brutas): ${row.num_hojas_brutas != null ? String(row.num_hojas_brutas) : "—"} hojas
+
+Fecha deseada de entrega: ${fechaPrevista}
+
+Quedamos a la espera de su confirmación para proceder con el pedido.
+
+Saludos cordiales.`;
+
+  const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(proveedorEmail.trim())}&su=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+  window.open(gmailUrl, "_blank", "noopener,noreferrer");
 }
 
 export function ComprasMaterialPage() {
@@ -111,6 +162,10 @@ export function ComprasMaterialPage() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [editRow, setEditRow] = useState<ComprasMaterialTableRow | null>(null);
+  const [editMaterial, setEditMaterial] = useState("");
+  const [editGramaje, setEditGramaje] = useState("");
+  const [editTamano, setEditTamano] = useState("");
+  const [editBrutas, setEditBrutas] = useState("");
   const [editFecha, setEditFecha] = useState("");
   const [editAlbaran, setEditAlbaran] = useState("");
   const [editSaving, setEditSaving] = useState(false);
@@ -121,6 +176,7 @@ export function ComprasMaterialPage() {
     { id: string; nombre: string }[]
   >([]);
   const [proveedorSeleccionado, setProveedorSeleccionado] = useState("");
+  const [sobreStockConfirmOpen, setSobreStockConfirmOpen] = useState(false);
 
   const loadRows = useCallback(async () => {
     setLoading(true);
@@ -197,12 +253,16 @@ export function ComprasMaterialPage() {
 
       const masterByOt = new Map<
         string,
-        { cliente: string | null; titulo: string | null }
+        {
+          cliente: string | null;
+          titulo: string | null;
+          fecha_entrega_maestro: string | null;
+        }
       >();
       if (ots.length > 0) {
         const { data: masterRows, error: mErr } = await supabase
           .from(TABLE_MASTER)
-          .select("num_pedido, cliente, titulo")
+          .select("num_pedido, cliente, titulo, fecha_entrega")
           .in("num_pedido", ots);
         if (mErr) throw mErr;
         for (const r of masterRows ?? []) {
@@ -210,12 +270,14 @@ export function ComprasMaterialPage() {
             num_pedido: string;
             cliente: string | null;
             titulo: string | null;
+            fecha_entrega: string | null;
           };
           const k = String(row.num_pedido ?? "").trim();
           if (k) {
             masterByOt.set(k, {
               cliente: row.cliente,
               titulo: row.titulo,
+              fecha_entrega_maestro: row.fecha_entrega ?? null,
             });
           }
         }
@@ -240,20 +302,31 @@ export function ComprasMaterialPage() {
         const d = despByOt.get(ot);
         const m = masterByOt.get(ot);
         const pid = r.proveedor_id as string | null;
+        const materialCompra = (r.material as string | null | undefined) ?? null;
+        const gramajeCompra = parseGramaje(r.gramaje);
+        const tamanoCompra = (r.tamano_hoja as string | null | undefined) ?? null;
+        const nbCompra = rawNumHojas(r.num_hojas_brutas);
         return {
           id: String(r.id ?? ""),
           ot_numero: ot,
           num_compra: String(r.num_compra ?? ""),
           cliente: m?.cliente ?? null,
           titulo: m?.titulo ?? null,
-          material: d?.material ?? null,
-          gramaje: d?.gramaje ?? null,
-          tamano_hoja: d?.tamano_hoja ?? null,
+          material: materialCompra?.trim()
+            ? materialCompra.trim()
+            : d?.material ?? null,
+          gramaje:
+            gramajeCompra != null ? gramajeCompra : d?.gramaje ?? null,
+          tamano_hoja: tamanoCompra?.trim()
+            ? tamanoCompra.trim()
+            : d?.tamano_hoja ?? null,
           num_hojas_netas: d?.num_hojas_netas ?? null,
-          num_hojas_brutas: d?.num_hojas_brutas ?? null,
+          num_hojas_brutas:
+            nbCompra != null ? nbCompra : d?.num_hojas_brutas ?? null,
           proveedor_id: pid ?? null,
           proveedor_nombre:
             pid && provById.has(pid) ? provById.get(pid)! : null,
+          fecha_entrega_maestro: m?.fecha_entrega_maestro ?? null,
           fecha_prevista_recepcion:
             (r.fecha_prevista_recepcion as string | null) ?? null,
           albaran_proveedor: (r.albaran_proveedor as string | null) ?? null,
@@ -306,6 +379,10 @@ export function ComprasMaterialPage() {
 
   const openEdit = useCallback((row: ComprasMaterialTableRow) => {
     setEditRow(row);
+    setEditMaterial(row.material?.trim() ?? "");
+    setEditGramaje(numStr(row.gramaje));
+    setEditTamano(row.tamano_hoja?.trim() ?? "");
+    setEditBrutas(numStr(row.num_hojas_brutas));
     setEditFecha(toDateInputValue(row.fecha_prevista_recepcion));
     setEditAlbaran(row.albaran_proveedor?.trim() ?? "");
     setEditOpen(true);
@@ -339,19 +416,40 @@ export function ComprasMaterialPage() {
   const guardarEdicion = useCallback(async () => {
     if (!editRow) return;
     setEditSaving(true);
+    const ot = String(editRow.ot_numero ?? "").trim();
+    const material = editMaterial.trim() || null;
+    const gramaje = parseOptionalDecimalInput(editGramaje);
+    const tamano_hoja = editTamano.trim() || null;
+    const num_hojas_brutas = parseOptionalIntInput(editBrutas);
+    const fecha =
+      editFecha.trim() === "" ? null : editFecha.trim();
+    const albaran = editAlbaran.trim() === "" ? null : editAlbaran.trim();
+
+    const payloadTecnico = {
+      material,
+      gramaje,
+      tamano_hoja,
+      num_hojas_brutas,
+    };
+
     try {
-      const fecha =
-        editFecha.trim() === "" ? null : editFecha.trim();
-      const albaran = editAlbaran.trim() === "" ? null : editAlbaran.trim();
-      const { error } = await supabase
+      const { error: errDesp } = await supabase
+        .from(TABLE_DESPACHADAS)
+        .update(payloadTecnico)
+        .eq("ot_numero", ot);
+      if (errDesp) throw errDesp;
+
+      const { error: errCompra } = await supabase
         .from(TABLE_COMPRA)
         .update({
+          ...payloadTecnico,
           fecha_prevista_recepcion: fecha,
           albaran_proveedor: albaran,
         })
         .eq("id", editRow.id);
-      if (error) throw error;
-      toast.success("Compra actualizada.");
+      if (errCompra) throw errCompra;
+
+      toast.success("Compra y despacho actualizados.");
       setEditOpen(false);
       setEditRow(null);
       void loadRows();
@@ -363,9 +461,19 @@ export function ComprasMaterialPage() {
     } finally {
       setEditSaving(false);
     }
-  }, [editAlbaran, editFecha, editRow, loadRows, supabase]);
+  }, [
+    editAlbaran,
+    editBrutas,
+    editFecha,
+    editGramaje,
+    editMaterial,
+    editRow,
+    editTamano,
+    loadRows,
+    supabase,
+  ]);
 
-  const generarYEnviar = useCallback(async () => {
+  const ejecutarGenerarYEnviar = useCallback(async () => {
     if (!selectedRow || !proveedorSeleccionado) return;
     setSolicitarSaving(true);
     try {
@@ -386,10 +494,20 @@ export function ComprasMaterialPage() {
         .eq("ot_numero", selectedRow.ot_numero);
       if (u2) throw u2;
 
-      abrirMailtoSolicitudMaterial(selectedRow);
+      const { data: provMail } = await supabase
+        .from(TABLE_PROVEEDORES)
+        .select("email")
+        .eq("id", proveedorSeleccionado)
+        .maybeSingle();
+      const emailProveedor = String(
+        (provMail as { email?: string | null } | null)?.email ?? ""
+      ).trim();
+
+      abrirGmailSolicitudMaterial(selectedRow, emailProveedor);
 
       toast.success("Solicitud generada y enviada.");
       setSolicitarOpen(false);
+      setSobreStockConfirmOpen(false);
       setProveedorSeleccionado("");
       setRowSelection({});
       void loadRows();
@@ -402,6 +520,15 @@ export function ComprasMaterialPage() {
       setSolicitarSaving(false);
     }
   }, [loadRows, proveedorSeleccionado, selectedRow, supabase]);
+
+  const iniciarGenerarYEnviar = useCallback(() => {
+    if (!selectedRow || !proveedorSeleccionado) return;
+    if (esPrioridadStockAmarilla(selectedRow.fecha_entrega_maestro)) {
+      setSobreStockConfirmOpen(true);
+      return;
+    }
+    void ejecutarGenerarYEnviar();
+  }, [ejecutarGenerarYEnviar, proveedorSeleccionado, selectedRow]);
 
   useEffect(() => {
     if (!solicitarOpen) {
@@ -442,7 +569,7 @@ export function ComprasMaterialPage() {
 
       <div className="overflow-hidden rounded-lg border border-slate-200/90 bg-white shadow-sm">
         <div className="max-h-[min(70vh,720px)] overflow-auto">
-          <Table className="table-fixed min-w-[1360px] text-xs">
+          <Table className="table-fixed min-w-[1420px] text-xs">
             <TableHeader className="bg-slate-50/95 sticky top-0 z-20 shadow-[0_1px_0_0_rgb(226_232_240)]">
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id} className="hover:bg-transparent">
@@ -512,8 +639,8 @@ export function ComprasMaterialPage() {
           if (!o) setEditRow(null);
         }}
       >
-        <DialogContent className="max-w-md gap-0 p-0 sm:max-w-md">
-          <DialogHeader className="border-b border-slate-100 px-4 py-3">
+        <DialogContent className="max-h-[min(92vh,640px)] max-w-lg gap-0 overflow-hidden p-0 sm:max-w-lg">
+          <DialogHeader className="shrink-0 border-b border-slate-100 px-4 py-3">
             <DialogTitle className="text-base">Editar compra</DialogTitle>
             <DialogDescription className="text-xs">
               {editRow ? (
@@ -525,31 +652,97 @@ export function ComprasMaterialPage() {
               ) : null}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3 px-4 py-3">
-            <div className="grid gap-1">
-              <Label htmlFor="edit-fecha-prev" className="text-xs">
-                Fecha prevista recepción
-              </Label>
-              <Input
-                id="edit-fecha-prev"
-                type="date"
-                className="h-8 text-xs"
-                value={editFecha}
-                onChange={(e) => setEditFecha(e.target.value)}
-              />
+          <div className="max-h-[min(60vh,480px)] space-y-4 overflow-y-auto px-4 py-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Material acordado
+              </p>
+              <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-1 sm:col-span-1">
+                  <Label htmlFor="edit-compra-material" className="text-xs">
+                    Material
+                  </Label>
+                  <Input
+                    id="edit-compra-material"
+                    className="h-8 text-xs"
+                    value={editMaterial}
+                    onChange={(e) => setEditMaterial(e.target.value)}
+                    placeholder="Ej. Estucado mate"
+                  />
+                </div>
+                <div className="grid gap-1 sm:col-span-1">
+                  <Label htmlFor="edit-compra-gramaje" className="text-xs">
+                    Gramaje (g/m²)
+                  </Label>
+                  <Input
+                    id="edit-compra-gramaje"
+                    type="number"
+                    step="any"
+                    className="h-8 text-xs"
+                    value={editGramaje}
+                    onChange={(e) => setEditGramaje(e.target.value)}
+                    placeholder="—"
+                  />
+                </div>
+                <div className="grid gap-1 sm:col-span-1">
+                  <Label htmlFor="edit-compra-formato" className="text-xs">
+                    Formato
+                  </Label>
+                  <Input
+                    id="edit-compra-formato"
+                    className="h-8 text-xs"
+                    value={editTamano}
+                    onChange={(e) => setEditTamano(e.target.value)}
+                    placeholder="Ej. 72×102"
+                  />
+                </div>
+                <div className="grid gap-1 sm:col-span-1">
+                  <Label htmlFor="edit-compra-brutas" className="text-xs">
+                    Hojas brutas
+                  </Label>
+                  <Input
+                    id="edit-compra-brutas"
+                    type="number"
+                    inputMode="numeric"
+                    className="h-8 text-xs"
+                    value={editBrutas}
+                    onChange={(e) => setEditBrutas(e.target.value)}
+                    placeholder="—"
+                  />
+                </div>
+              </div>
             </div>
-            <div className="grid gap-1">
-              <Label htmlFor="edit-albaran" className="text-xs">
-                Albarán proveedor
-              </Label>
-              <Input
-                id="edit-albaran"
-                type="text"
-                className="h-8 text-xs"
-                value={editAlbaran}
-                onChange={(e) => setEditAlbaran(e.target.value)}
-                placeholder="Opcional"
-              />
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Seguimiento
+              </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-1">
+                  <Label htmlFor="edit-fecha-prev" className="text-xs">
+                    Fecha prevista recepción
+                  </Label>
+                  <Input
+                    id="edit-fecha-prev"
+                    type="date"
+                    className="h-8 text-xs"
+                    value={editFecha}
+                    onChange={(e) => setEditFecha(e.target.value)}
+                  />
+                </div>
+                <div className="grid gap-1">
+                  <Label htmlFor="edit-albaran" className="text-xs">
+                    Albarán proveedor
+                  </Label>
+                  <Input
+                    id="edit-albaran"
+                    type="text"
+                    className="h-8 text-xs"
+                    value={editAlbaran}
+                    onChange={(e) => setEditAlbaran(e.target.value)}
+                    placeholder="Opcional"
+                  />
+                </div>
+              </div>
             </div>
           </div>
           <DialogFooter className="gap-2 border-t border-slate-100 px-4 py-3 sm:flex-row">
@@ -655,7 +848,7 @@ export function ComprasMaterialPage() {
               disabled={
                 !proveedorSeleccionado || solicitarSaving || !selectedRow
               }
-              onClick={() => void generarYEnviar()}
+              onClick={() => void iniciarGenerarYEnviar()}
             >
               {solicitarSaving ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -663,6 +856,56 @@ export function ComprasMaterialPage() {
                 <Send className="size-4" aria-hidden />
               )}
               Generar y enviar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={sobreStockConfirmOpen}
+        onOpenChange={setSobreStockConfirmOpen}
+      >
+        <DialogContent className="max-w-md gap-0 border-amber-200/80 p-0 sm:max-w-md">
+          <DialogHeader className="border-b border-amber-100 bg-amber-50/50 px-4 py-3">
+            <DialogTitle className="text-base text-amber-950">
+              Aviso de sobrestock
+            </DialogTitle>
+            <DialogDescription className="pt-1 text-xs leading-relaxed text-amber-950/90">
+              ⚠️ AVISO DE SOBRESTOCK: Esta OT se entrega el{" "}
+              <span className="font-semibold">
+                {selectedRow?.fecha_entrega_maestro
+                  ? formatFechaEsCorta(selectedRow.fecha_entrega_maestro)
+                  : "—"}
+              </span>{" "}
+              (faltan más de 30 días). ¿Realmente necesitas pedir el material
+              ahora y ocupar espacio en el taller?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 border-t border-slate-100 bg-white px-4 py-3 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="border-slate-200"
+              onClick={() => setSobreStockConfirmOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={solicitarSaving}
+              className="gap-1.5 bg-orange-600 font-medium text-white shadow-sm hover:bg-orange-700 focus-visible:ring-orange-500"
+              onClick={() => void ejecutarGenerarYEnviar()}
+            >
+              {solicitarSaving ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                  Enviando…
+                </>
+              ) : (
+                "Sí, continuar"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

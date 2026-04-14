@@ -6,7 +6,14 @@ import { Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { formatDateDDMMYY } from "@/components/produccion/ots/master-ots-table-helpers";
+import { formatFechaEsCorta } from "@/lib/produccion-date-format";
+import { diasDesdeHastaFecha } from "@/lib/compras-material-prioridad";
 import type { ComprasMaterialTableRow } from "@/types/prod-compra-material";
 import { cn } from "@/lib/utils";
 
@@ -87,6 +94,65 @@ export function createComprasMaterialColumns(
           />
         </div>
       ),
+    },
+    {
+      id: "stock",
+      size: 56,
+      enableSorting: false,
+      header: () => (
+        <span className="text-[10px] font-semibold uppercase tracking-wide">
+          Stock
+        </span>
+      ),
+      cell: ({ row }) => {
+        const f = row.original.fecha_entrega_maestro;
+        const days = diasDesdeHastaFecha(f);
+        const tooltipLabel = f?.trim()
+          ? `Entrega OT: ${formatFechaEsCorta(f)}`
+          : "Sin fecha de entrega en maestro";
+        if (!f?.trim() || days === null) {
+          return (
+            <div className="flex justify-center px-0.5 py-0.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-default text-[11px] text-muted-foreground">
+                    —
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs text-xs">
+                  <p>{tooltipLabel}</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          );
+        }
+        const amarillo = days > 30;
+        return (
+          <div className="flex justify-center px-0.5 py-0.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex cursor-default items-center gap-1">
+                  <span
+                    className={cn(
+                      "inline-block h-2.5 w-2.5 shrink-0 rounded-full",
+                      amarillo ? "bg-amber-400" : "bg-emerald-500"
+                    )}
+                    aria-hidden
+                  />
+                  {amarillo ? (
+                    <span className="text-[9px] leading-none text-muted-foreground">
+                      +30d
+                    </span>
+                  ) : null}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs text-xs">
+                <p>{tooltipLabel}</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        );
+      },
     },
     {
       accessorKey: "ot_numero",
