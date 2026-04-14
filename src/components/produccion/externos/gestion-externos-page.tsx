@@ -172,6 +172,58 @@ type AcabadoRow = {
   created_at: string;
 };
 
+function normalizeTipoNombreSegment(s: string): string {
+  return s.trim().toLowerCase();
+}
+
+/**
+ * IDs en `prod_cat_tipos_proveedor` para cargar acabados. Si el nombre del tipo
+ * del proveedor trae varias categorías con «/», se combinan los acabados de
+ * cada categoría que exista en el catálogo. Si solo hay una categoría, equivale
+ * al comportamiento anterior (un solo `tipo_proveedor_id`).
+ */
+function resolveTipoProveedorIdsForAcabados(
+  prov: ProveedorRow,
+  tipos: TipoProveedorRow[]
+): string[] {
+  const fallback = prov.tipo_proveedor_id;
+  if (!fallback) return [];
+  const tipoRow = tipos.find((t) => t.id === fallback);
+  if (!tipoRow?.nombre?.trim()) return [fallback];
+  const partes = tipoRow.nombre
+    .split("/")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (partes.length <= 1) return [fallback];
+
+  const byNombreNorm = new Map<string, string>();
+  for (const t of tipos) {
+    const k = normalizeTipoNombreSegment(t.nombre);
+    if (k && !byNombreNorm.has(k)) byNombreNorm.set(k, t.id);
+  }
+  const ids: string[] = [];
+  for (const p of partes) {
+    const id = byNombreNorm.get(normalizeTipoNombreSegment(p));
+    if (id) ids.push(id);
+  }
+  const unique = [...new Set(ids)];
+  return unique.length > 0 ? unique : [fallback];
+}
+
+function acabadosFiltradosPorProveedor(
+  prov: ProveedorRow | undefined,
+  tipos: TipoProveedorRow[],
+  catalog: AcabadoRow[]
+): AcabadoRow[] {
+  if (!prov) return [];
+  const tipoIds = resolveTipoProveedorIdsForAcabados(prov, tipos);
+  const allow = new Set(tipoIds);
+  const list = catalog.filter((a) => allow.has(a.tipo_proveedor_id));
+  return [...list].sort((a, b) =>
+    a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" })
+  );
+}
+
 type SeguimientoRow = {
   id: string;
   id_pedido: number;
@@ -939,27 +991,23 @@ export function GestionExternosPage() {
     if (!bulkImportProv) return emptySelect;
     const prov = proveedores.find((p) => p.id === bulkImportProv);
     if (!prov) return emptySelect;
-    const opts = acabadosCatalogo.filter(
-      (a) => a.tipo_proveedor_id === prov.tipo_proveedor_id
-    );
+    const opts = acabadosFiltradosPorProveedor(prov, tipos, acabadosCatalogo);
     return [
       ...emptySelect,
       ...opts.map((a) => ({ value: a.id, label: a.nombre })),
     ];
-  }, [bulkImportProv, proveedores, acabadosCatalogo]);
+  }, [bulkImportProv, proveedores, acabadosCatalogo, tipos]);
 
   const editSeguimientoAcabadoOptions: Option[] = useMemo(() => {
     if (!editSegProveedorId) return emptySelect;
     const prov = proveedores.find((p) => p.id === editSegProveedorId);
     if (!prov) return emptySelect;
-    const opts = acabadosCatalogo.filter(
-      (a) => a.tipo_proveedor_id === prov.tipo_proveedor_id
-    );
+    const opts = acabadosFiltradosPorProveedor(prov, tipos, acabadosCatalogo);
     return [
       ...emptySelect,
       ...opts.map((a) => ({ value: a.id, label: a.nombre })),
     ];
-  }, [editSegProveedorId, proveedores, acabadosCatalogo]);
+  }, [editSegProveedorId, proveedores, acabadosCatalogo, tipos]);
 
   const importSelectionStats = useMemo(() => {
     const selectable = importPreviewRows;
@@ -1371,12 +1419,18 @@ export function GestionExternosPage() {
       setEnvAcabadoId("");
       return;
     }
+    const tipoIds = resolveTipoProveedorIdsForAcabados(prov, tipos);
+    if (tipoIds.length === 0) {
+      setAcabadosForm([]);
+      setEnvAcabadoId("");
+      return;
+    }
     let cancelled = false;
     void (async () => {
       const { data, error } = await supabase
         .from("prod_cat_acabados")
         .select("id, nombre")
-        .eq("tipo_proveedor_id", prov.tipo_proveedor_id)
+        .in("tipo_proveedor_id", tipoIds)
         .order("nombre");
       if (cancelled) return;
       if (error) {
@@ -1385,13 +1439,21 @@ export function GestionExternosPage() {
         setEnvAcabadoId("");
         return;
       }
-      setAcabadosForm((data ?? []) as { id: string; nombre: string }[]);
+      const rows = (data ?? []) as { id: string; nombre: string }[];
+      const byId = new Map<string, { id: string; nombre: string }>();
+      for (const r of rows) {
+        if (!byId.has(r.id)) byId.set(r.id, r);
+      }
+      const sorted = [...byId.values()].sort((a, b) =>
+        a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" })
+      );
+      setAcabadosForm(sorted);
       setEnvAcabadoId("");
     })();
     return () => {
       cancelled = true;
     };
-  }, [envProveedorId, proveedores, supabase]);
+  }, [envProveedorId, proveedores, tipos, supabase]);
 
   async function handleAddProveedor(e: React.FormEvent) {
     e.preventDefault();
@@ -1578,9 +1640,7 @@ export function GestionExternosPage() {
     if (!provId) return emptySelect;
     const prov = proveedores.find((p) => p.id === provId);
     if (!prov) return emptySelect;
-    const opts = acabadosCatalogo.filter(
-      (a) => a.tipo_proveedor_id === prov.tipo_proveedor_id
-    );
+    const opts = acabadosFiltradosPorProveedor(prov, tipos, acabadosCatalogo);
     return [
       ...emptySelect,
       ...opts.map((a) => ({ value: a.id, label: a.nombre })),
@@ -1652,10 +1712,11 @@ export function GestionExternosPage() {
               }
               const prov = proveedores.find((p) => p.id === proveedor_id);
               if (procExcel && prov) {
+                const tipoIds = resolveTipoProveedorIdsForAcabados(prov, tipos);
                 acabado_id = fuzzyMatchAcabadoIdByIncludes(
                   procExcel,
                   acabadosCatalogo,
-                  prov.tipo_proveedor_id
+                  tipoIds
                 );
               }
             }
@@ -1696,7 +1757,7 @@ export function GestionExternosPage() {
         );
       }
     },
-    [proveedores, acabadosCatalogo]
+    [proveedores, acabadosCatalogo, tipos]
   );
 
   function setImportRowProveedor(key: string, provId: string) {
@@ -1705,9 +1766,7 @@ export function GestionExternosPage() {
         if (r.key !== key) return r;
         const prov = proveedores.find((p) => p.id === provId);
         if (!prov) return { ...r, proveedor_id: provId, acabado_id: "" };
-        const opts = acabadosCatalogo.filter(
-          (a) => a.tipo_proveedor_id === prov.tipo_proveedor_id
-        );
+        const opts = acabadosFiltradosPorProveedor(prov, tipos, acabadosCatalogo);
         let acab = r.acabado_id;
         if (!opts.some((o) => o.id === acab)) acab = "";
         return { ...r, proveedor_id: provId, acabado_id: acab };
@@ -1747,9 +1806,7 @@ export function GestionExternosPage() {
         if (!r.selected) return r;
         const prov = proveedores.find((p) => p.id === bulkImportProv);
         if (!prov) return r;
-        const opts = acabadosCatalogo.filter(
-          (a) => a.tipo_proveedor_id === prov.tipo_proveedor_id
-        );
+        const opts = acabadosFiltradosPorProveedor(prov, tipos, acabadosCatalogo);
         let acab = bulkImportAcab;
         if (!acab || !opts.some((o) => o.id === acab)) acab = "";
         return {
@@ -2005,10 +2062,11 @@ export function GestionExternosPage() {
       toast.error("Proveedor no válido.");
       return;
     }
-    const acabOk = acabadosCatalogo.some(
-      (a) =>
-        a.id === editSegAcabadoId && a.tipo_proveedor_id === prov.tipo_proveedor_id
-    );
+    const acabOk = acabadosFiltradosPorProveedor(
+      prov,
+      tipos,
+      acabadosCatalogo
+    ).some((a) => a.id === editSegAcabadoId);
     if (!acabOk) {
       toast.error("El acabado no corresponde al tipo del proveedor.");
       return;
@@ -3666,9 +3724,10 @@ export function GestionExternosPage() {
                 Nuevo envío externo (OT) — manual
               </CardTitle>
               <CardDescription>
-                El acabado depende del tipo del proveedor. Fecha prevista en
-                calendario (zona horaria en Supabase). El estado inicial suele ser
-                Pendiente.
+                Los acabados se filtran por el tipo del proveedor; si el tipo
+                incluye varias categorías separadas por «/», se combinan todas.
+                Fecha prevista en calendario (zona horaria en Supabase). El estado
+                inicial suele ser Pendiente.
               </CardDescription>
             </CardHeader>
             <CardContent>

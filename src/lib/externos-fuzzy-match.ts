@@ -25,18 +25,20 @@ export function fuzzyMatchIdByIncludes(
 export type AcabadoFuzzyRow = FuzzyNamed & { tipo_proveedor_id: string };
 
 /**
- * Igual que proveedor, pero solo entre acabados del tipo de proveedor indicado (si existe).
+ * Igual que proveedor, pero solo entre acabados cuyo `tipo_proveedor_id` esté en la lista
+ * (un solo tipo o varios si el proveedor es híbrido).
  */
 export function fuzzyMatchAcabadoIdByIncludes(
   procesoExcel: string,
   acabados: AcabadoFuzzyRow[],
-  tipoProveedorId: string | null | undefined
+  tipoProveedorIds: string[] | null | undefined
 ): string {
   const needle = procesoExcel.trim().toLowerCase();
   if (!needle) return "";
-  const pool =
-    tipoProveedorId != null && tipoProveedorId !== ""
-      ? acabados.filter((a) => a.tipo_proveedor_id === tipoProveedorId)
-      : acabados;
+  let pool = acabados;
+  if (tipoProveedorIds && tipoProveedorIds.length > 0) {
+    const allow = new Set(tipoProveedorIds);
+    pool = acabados.filter((a) => allow.has(a.tipo_proveedor_id));
+  }
   return fuzzyMatchIdByIncludes(procesoExcel, pool);
 }
