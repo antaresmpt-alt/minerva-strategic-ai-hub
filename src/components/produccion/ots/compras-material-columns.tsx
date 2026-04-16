@@ -1,7 +1,7 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import { Pencil } from "lucide-react";
+import { Camera, Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -72,6 +72,7 @@ function InlineFechaPrevistaCompraCell({
 
 export type ComprasMaterialColumnsContext = {
   onEdit: (row: ComprasMaterialTableRow) => void;
+  onOpenRecepcionFotos: (row: ComprasMaterialTableRow) => void;
   proveedoresPapelCarton: { id: string; nombre: string }[];
   isRowCheckboxDisabled: (row: ComprasMaterialTableRow) => boolean;
   isSavingRow: (rowId: string) => boolean;
@@ -323,6 +324,39 @@ export function createComprasMaterialColumns(
             : "—"}
         </div>
       ),
+      size: 120,
+    },
+    {
+      id: "fotos_recepcion",
+      size: 44,
+      enableSorting: false,
+      header: () => (
+        <span className="text-[10px] font-normal uppercase tracking-wide text-slate-600">
+          Fotos
+        </span>
+      ),
+      cell: ({ row }) => {
+        const urls = row.original.recepcion_foto_urls;
+        if (!urls?.length) return <div className="h-6 min-h-6 w-full" />;
+        return (
+          <div className="flex min-h-6 items-center justify-center px-0.5 py-0">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="size-8 shrink-0 text-blue-800 hover:bg-blue-50 hover:text-blue-900"
+              onClick={(e) => {
+                e.stopPropagation();
+                ctx.onOpenRecepcionFotos(row.original);
+              }}
+              aria-label={`Ver ${urls.length} foto${urls.length === 1 ? "" : "s"} de recepción, compra ${row.original.num_compra}`}
+              title="Fotos de recepción en muelle"
+            >
+              <Camera className="size-4" strokeWidth={1.75} aria-hidden />
+            </Button>
+          </div>
+        );
+      },
     },
     {
       id: "estado",

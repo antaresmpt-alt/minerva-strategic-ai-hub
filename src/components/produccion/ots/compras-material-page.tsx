@@ -8,7 +8,14 @@ import {
 } from "@tanstack/react-table";
 import autoTable from "jspdf-autotable";
 import { jsPDF } from "jspdf";
-import { FileSpreadsheet, Loader2, Mail, Printer, Send } from "lucide-react";
+import {
+  Download,
+  FileSpreadsheet,
+  Loader2,
+  Mail,
+  Printer,
+  Send,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
@@ -54,6 +61,7 @@ import {
 } from "@/lib/compras-material-estados";
 import { esPrioridadStockAmarilla } from "@/lib/compras-material-prioridad";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
+import { resolveRecepcionFotoPublicUrls } from "@/lib/recepcion-fotos-url";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { ComprasMaterialTableRow } from "@/types/prod-compra-material";
 
@@ -62,7 +70,39 @@ const TABLE_DESPACHADAS = "produccion_ot_despachadas";
 const TABLE_MASTER = "prod_ots_general";
 const TABLE_PROVEEDORES = "prod_proveedores";
 const TABLE_TIPOS_PROVEEDOR = "prod_cat_tipos_proveedor";
+const TABLE_RECEPCION = "prod_recepciones_material";
+const TABLE_RECEPCION_FOTOS = "prod_recepciones_fotos";
 const PAGE_SIZE = 500;
+
+const RECEPCION_FOTOS_MODAL_INITIAL = {
+  open: false,
+  ot: "",
+  numCompra: "",
+  urls: [] as string[],
+};
+
+async function descargarFotoRecepcionDesdeUrl(
+  url: string,
+  baseName: string,
+  index: number
+): Promise<void> {
+  const res = await fetch(url, { mode: "cors" });
+  if (!res.ok) throw new Error(res.statusText);
+  const blob = await res.blob();
+  const ext = blob.type.includes("png")
+    ? "png"
+    : blob.type.includes("webp")
+      ? "webp"
+      : "jpg";
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${baseName}-foto-${index + 1}.${ext}`;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+}
 
 function toDateInputValue(iso: string | null | undefined): string {
   if (!iso) return "";
@@ -197,6 +237,9 @@ export function ComprasMaterialPage() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [editRow, setEditRow] = useState<ComprasMaterialTableRow | null>(null);
+  const [recepcionFotosModal, setRecepcionFotosModal] = useState(
+    RECEPCION_FOTOS_MODAL_INITIAL
+  );
   const [editMaterial, setEditMaterial] = useState("");
   const [editGramaje, setEditGramaje] = useState("");
   const [editTamano, setEditTamano] = useState("");
@@ -370,7 +413,7 @@ export function ComprasMaterialPage() {
         }
       }
 
-      const merged: ComprasMaterialTableRow[] = list.map((raw) => {
+      const mergedBase: ComprasMaterialTableRow[] = list.map((raw) => {
         const r = raw as Record<string, unknown>;
         const ot = String(r.ot_numero ?? "").trim();
         const d = despByOt.get(ot);
@@ -407,8 +450,48 @@ export function ComprasMaterialPage() {
             (r.fecha_prevista_recepcion as string | null) ?? null,
           albaran_proveedor: (r.albaran_proveedor as string | null) ?? null,
           estado: (r.estado as string | null) ?? null,
+          recepcion_foto_urls: [] as string[],
         };
       });
+
+      const fotosByCompra = new Map<string, string[]>();
+      const compraIds = mergedBase.map((r) => r.id).filter((id) => id.length > 0);
+      if (compraIds.length > 0) {
+        const { data: receps, error: recErr } = await supabase
+          .from(TABLE_RECEPCION)
+          .select("id, compra_id")
+          .in("compra_id", compraIds);
+        if (recErr) throw recErr;
+        const recepToCompra = new Map<string, string>();
+        const recepIds: string[] = [];
+        for (const row of receps ?? []) {
+          const rec = row as { id: string; compra_id: string };
+          if (!rec.id || !rec.compra_id) continue;
+          recepToCompra.set(rec.id, rec.compra_id);
+          recepIds.push(rec.id);
+        }
+        if (recepIds.length > 0) {
+          const { data: fotos, error: fErr } = await supabase
+            .from(TABLE_RECEPCION_FOTOS)
+            .select("recepcion_id, foto_url")
+            .in("recepcion_id", recepIds);
+          if (fErr) throw fErr;
+          for (const row of fotos ?? []) {
+            const f = row as { recepcion_id: string; foto_url: string | null };
+            const cid = recepToCompra.get(f.recepcion_id);
+            const url = f.foto_url?.trim();
+            if (!cid || !url) continue;
+            const arr = fotosByCompra.get(cid) ?? [];
+            arr.push(url);
+            fotosByCompra.set(cid, arr);
+          }
+        }
+      }
+
+      const merged = mergedBase.map((r) => ({
+        ...r,
+        recepcion_foto_urls: fotosByCompra.get(r.id) ?? [],
+      }));
 
       setRows(merged);
     } catch (e) {
@@ -552,6 +635,44 @@ export function ComprasMaterialPage() {
     [selectedRows]
   );
 
+  const openRecepcionFotos = useCallback(
+    (row: ComprasMaterialTableRow) => {
+      try {
+        const raw = [...(row.recepcion_foto_urls ?? [])].map((u) => String(u).trim()).filter(Boolean);
+        console.log("URLs encontradas (raw, BD/storage):", raw);
+        if (raw.length === 0) {
+          toast.error("No hay URLs de fotos para esta compra.");
+          return;
+        }
+        const urls = resolveRecepcionFotoPublicUrls(supabase, raw);
+        console.log("URLs encontradas (públicas resueltas):", urls);
+        if (urls.length === 0) {
+          setRecepcionFotosModal({
+            open: true,
+            ot: row.ot_numero,
+            numCompra: row.num_compra,
+            urls: [],
+          });
+          return;
+        }
+        setRecepcionFotosModal({
+          open: true,
+          ot: row.ot_numero,
+          numCompra: row.num_compra,
+          urls,
+        });
+      } catch (err) {
+        console.error("[Compras] openRecepcionFotos", err);
+        toast.error(
+          err instanceof Error
+            ? err.message
+            : "No se pudo abrir el visor de fotos de recepción."
+        );
+      }
+    },
+    [supabase]
+  );
+
   const openEdit = useCallback((row: ComprasMaterialTableRow) => {
     setEditRow(row);
     setEditMaterial(row.material?.trim() ?? "");
@@ -690,6 +811,7 @@ export function ComprasMaterialPage() {
     () =>
       createComprasMaterialColumns({
         onEdit: openEdit,
+        onOpenRecepcionFotos: openRecepcionFotos,
         proveedoresPapelCarton,
         isRowCheckboxDisabled,
         isSavingRow,
@@ -705,6 +827,7 @@ export function ComprasMaterialPage() {
       onFechaPrevistaCommit,
       onProveedorChange,
       openEdit,
+      openRecepcionFotos,
       proveedoresPapelCarton,
       umbralesOtsCompras,
     ]
@@ -903,6 +1026,7 @@ export function ComprasMaterialPage() {
         ? formatFechaEsCorta(r.fecha_entrega_maestro)
         : "",
       Albarán: r.albaran_proveedor?.trim() ?? "",
+      "Fotos recep.": r.recepcion_foto_urls?.length ?? 0,
     }));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
@@ -1258,7 +1382,7 @@ export function ComprasMaterialPage() {
 
       <div className="overflow-hidden rounded-lg border border-slate-200/90 bg-white shadow-sm">
         <div className="max-h-[min(70vh,720px)] overflow-auto">
-          <Table className="table-fixed min-w-[1480px] text-xs">
+          <Table className="table-fixed min-w-[1524px] text-xs">
             <TableHeader className="bg-slate-50/95 sticky top-0 z-20 shadow-[0_1px_0_0_rgb(226_232_240)]">
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id} className="hover:bg-transparent">
@@ -1464,6 +1588,112 @@ export function ComprasMaterialPage() {
               ) : (
                 "Guardar"
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={recepcionFotosModal.open}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) {
+            setRecepcionFotosModal(RECEPCION_FOTOS_MODAL_INITIAL);
+          }
+        }}
+      >
+        <DialogContent
+          showCloseButton
+          className="flex max-h-[min(92vh,760px)] w-[calc(100%-2rem)] max-w-3xl flex-col gap-0 overflow-y-auto p-0 sm:max-w-3xl"
+        >
+          <DialogHeader className="shrink-0 border-b border-slate-100 px-4 py-3">
+            <DialogTitle className="text-base font-normal text-[#002147]">
+              Fotos de recepción (muelle)
+            </DialogTitle>
+            <DialogDescription className="text-xs font-normal">
+              {recepcionFotosModal.open ? (
+                <>
+                  OT{" "}
+                  <span className="font-mono font-normal text-[#002147]">
+                    {recepcionFotosModal.ot}
+                  </span>{" "}
+                  · Nº compra{" "}
+                  <span className="font-mono font-normal text-[#002147]">
+                    {recepcionFotosModal.numCompra}
+                  </span>
+                  {recepcionFotosModal.urls.length > 0 ? (
+                    <>
+                      {" · "}
+                      {recepcionFotosModal.urls.length} imagen
+                      {recepcionFotosModal.urls.length === 1 ? "" : "es"}
+                    </>
+                  ) : null}
+                </>
+              ) : null}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-[12rem] flex-1 overflow-y-auto px-4 py-4">
+            {recepcionFotosModal.open && recepcionFotosModal.urls.length > 0 ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {recepcionFotosModal.urls.map((url, i) => {
+                  const baseName = `ot-${recepcionFotosModal.ot}-compra-${recepcionFotosModal.numCompra}`
+                    .replace(/[^\w.-]+/g, "_")
+                    .slice(0, 96);
+                  return (
+                    <div
+                      key={`${url}-${i}`}
+                      className="rounded-lg border border-slate-200/90 bg-slate-50/90 p-2 shadow-xs"
+                    >
+                      <div className="relative aspect-video w-full overflow-hidden rounded-md bg-white">
+                        <img
+                          src={url}
+                          alt={`Foto recepción ${i + 1}`}
+                          className="h-full w-full object-contain"
+                          loading="lazy"
+                        />
+                      </div>
+                      <div className="mt-2 flex flex-wrap justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 font-normal"
+                          onClick={() => {
+                            void descargarFotoRecepcionDesdeUrl(
+                              url,
+                              baseName,
+                              i
+                            ).catch(() => {
+                              toast.error("No se pudo descargar la imagen.");
+                            });
+                          }}
+                        >
+                          <Download className="size-3.5 opacity-90" aria-hidden />
+                          Descargar
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : recepcionFotosModal.open ? (
+              <p className="text-center text-sm font-normal text-muted-foreground">
+                No se pudieron cargar las imágenes. Revisa la consola (URLs
+                encontradas) y que el path en base de datos coincida con el
+                archivo en el bucket{" "}
+                <span className="font-mono text-xs">recepciones-fotos</span>.
+              </p>
+            ) : null}
+          </div>
+          <DialogFooter className="shrink-0 gap-2 border-t border-slate-100 px-4 py-3 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="secondary"
+              className="font-normal"
+              onClick={() => {
+                setRecepcionFotosModal(RECEPCION_FOTOS_MODAL_INITIAL);
+              }}
+            >
+              Cerrar
             </Button>
           </DialogFooter>
         </DialogContent>

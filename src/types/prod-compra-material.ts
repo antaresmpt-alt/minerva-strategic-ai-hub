@@ -18,4 +18,9 @@ export type ComprasMaterialTableRow = {
   fecha_prevista_recepcion: string | null;
   albaran_proveedor: string | null;
   estado: string | null;
+  /**
+   * URLs públicas (`recepciones-fotos`) de todas las recepciones de esta compra
+   * (`prod_recepciones_material` → `prod_recepciones_fotos`).
+   */
+  recepcion_foto_urls: string[];
 };
