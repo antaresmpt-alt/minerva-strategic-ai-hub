@@ -49,8 +49,31 @@ const TABLE_COMPRA_MATERIAL = "prod_compra_material";
 const TABLE_PROVEEDORES = "prod_proveedores";
 const PAGE_SIZE = 500;
 
-function esSinOrdenCompraDespacho(estado: string | null | undefined): boolean {
-  return (estado ?? "").trim().toLowerCase() === "sin orden compra";
+/**
+ * Normaliza `estado_material` para comparaciones laxas (mayúsculas, espacios,
+ * acentos combinantes Unicode).
+ */
+function normalizeEstadoMaterialParaMatch(
+  estado: string | null | undefined
+): string {
+  return (estado ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * True si la OT aún no tiene flujo de compra (texto tipo «sin orden…»).
+ * Heurística acordada: contiene "sin" tras normalizar.
+ */
+function estadoMaterialPermiteNuevaCompra(
+  estado: string | null | undefined
+): boolean {
+  const n = normalizeEstadoMaterialParaMatch(estado);
+  if (!n) return true;
+  return n.includes("sin");
 }
 
 async function fetchTroquelExcelMap(
@@ -231,7 +254,8 @@ export function OtsDespachadasPage({
   }, []);
 
   const isSeleccionCompraDeshabilitada = useCallback(
-    (row: OtsDespachadasTableRow) => !esSinOrdenCompraDespacho(row.estado_material),
+    (row: OtsDespachadasTableRow) =>
+      !estadoMaterialPermiteNuevaCompra(row.estado_material),
     []
   );
 
@@ -458,10 +482,12 @@ export function OtsDespachadasPage({
   const handleGenerarComprasLote = useCallback(async () => {
     if (selectedRows.length === 0) return;
     const invalid = selectedRows.filter(
-      (r) => !esSinOrdenCompraDespacho(r.estado_material)
+      (r) => !estadoMaterialPermiteNuevaCompra(r.estado_material)
     );
     if (invalid.length > 0) {
-      toast.error("Solo se pueden generar compras en filas «Sin orden compra».");
+      toast.error(
+        "Alguna fila seleccionada ya tiene gestión de compra. Solo aplica a estados sin pedido (p. ej. «Sin orden compra»)."
+      );
       return;
     }
     setComprando(true);
@@ -824,27 +850,27 @@ export function OtsDespachadasPage({
             entrega). Hasta {PAGE_SIZE} filas recientes.
           </p>
         </div>
-        {selectedRows.length > 0 ? (
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            className="gap-1.5 shrink-0"
-            disabled={comprando}
-            onClick={() => void handleGenerarComprasLote()}
-          >
-            {comprando ? (
-              <Loader2
-                className="size-4 animate-spin text-[#002147]"
-                aria-hidden
-              />
-            ) : (
-              <Layers className="size-4 text-[#002147]" aria-hidden />
-            )}
-            Generar compras en lote
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="gap-1.5 shrink-0"
+          disabled={selectedRows.length === 0 || comprando}
+          onClick={() => void handleGenerarComprasLote()}
+        >
+          {comprando ? (
+            <Loader2
+              className="size-4 animate-spin text-[#002147]"
+              aria-hidden
+            />
+          ) : (
+            <Layers className="size-4 text-[#002147]" aria-hidden />
+          )}
+          Generar compras en lote
+          {selectedRows.length > 0 ? (
             <span className="tabular-nums">({selectedRows.length})</span>
-          </Button>
-        ) : null}
+          ) : null}
+        </Button>
       </div>
 
       <div className="overflow-hidden rounded-lg border border-slate-200/90 bg-white shadow-sm">

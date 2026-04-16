@@ -143,7 +143,7 @@ export type OtsDespachadasColumnsContext = {
   onVerCompra: (row: OtsDespachadasTableRow) => void;
   onEditarDespacho: (row: OtsDespachadasTableRow) => void;
   troquelExcelByCodigo: Map<string, TroquelExcelTooltip>;
-  /** true = no se puede marcar (solo «Sin orden compra» es seleccionable). */
+  /** true = checkbox deshabilitado (OT con gestión de compra ya iniciada). */
   isSeleccionCompraDeshabilitada: (row: OtsDespachadasTableRow) => boolean;
 };
 
@@ -159,10 +159,16 @@ export function createOtsDespachadasColumns(
       cell: ({ row }) => {
         const disabled = ctx.isSeleccionCompraDeshabilitada(row.original);
         return (
-          <div className="flex justify-center px-0.5 py-0.5">
+          <div
+            className={cn(
+              "flex justify-center px-0.5 py-0.5",
+              disabled ? "cursor-not-allowed" : "cursor-pointer"
+            )}
+          >
             <Checkbox
               checked={row.getIsSelected()}
               disabled={disabled}
+              className={cn(!disabled && "cursor-pointer")}
               onCheckedChange={(checked) =>
                 row.toggleSelected(checked === true)
               }
