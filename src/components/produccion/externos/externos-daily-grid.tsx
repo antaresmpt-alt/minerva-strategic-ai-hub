@@ -22,6 +22,8 @@ import { Truck } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { OtNumeroSemaforoBadge } from "@/components/produccion/ots/ot-numero-semaforo-badge";
+import type { OtsComprasUmbralesParametros } from "@/lib/sys-parametros-ots-compras";
 import { cn } from "@/lib/utils";
 
 /** Fila compatible con `SeguimientoRow` del padre (campos usados en tarjeta). */
@@ -35,6 +37,7 @@ export type ExternosDailyGridRow = {
   estado: string;
   fecha_prevista: string | null;
   orden_diario?: number | null;
+  f_entrega_ot?: string | null;
 };
 
 function getOtDisplay(row: ExternosDailyGridRow): string {
@@ -97,6 +100,7 @@ function SortableCard({
   acabadoLabel,
   onCardClick,
   mrpSlot,
+  otEntregaUmbrales,
 }: {
   row: ExternosDailyGridRow;
   disabled?: boolean;
@@ -104,6 +108,7 @@ function SortableCard({
   acabadoLabel: string;
   onCardClick: (row: ExternosDailyGridRow) => void;
   mrpSlot: ReactNode;
+  otEntregaUmbrales: OtsComprasUmbralesParametros;
 }) {
   const suppressClick = useRef(false);
   useDndMonitor({
@@ -154,9 +159,14 @@ function SortableCard({
         )}
       >
         <div className="flex items-start justify-between gap-1">
-          <span className="flex min-w-0 items-center gap-1 font-semibold text-[#002147]">
+          <span className="flex min-w-0 flex-1 items-center gap-1 font-normal text-[#002147]">
             <Truck className="size-3.5 shrink-0 text-slate-500" aria-hidden />
-            <span className="truncate">OT {getOtDisplay(row)}</span>
+            <OtNumeroSemaforoBadge
+              otNumero={getOtDisplay(row)}
+              fechaEntregaIso={row.f_entrega_ot}
+              umbrales={otEntregaUmbrales}
+              className="min-w-0 flex-1"
+            />
           </span>
           <div className="flex shrink-0 items-center gap-1">
             {mrpSlot}
@@ -186,6 +196,7 @@ export type ExternosDailyGridProps = {
   /** Persistir nuevo orden (ids en orden visual). */
   onReorder: (orderedIds: string[]) => void | Promise<void>;
   renderMrp: (row: ExternosDailyGridRow) => ReactNode;
+  otEntregaUmbrales: OtsComprasUmbralesParametros;
 };
 
 export function ExternosDailyGrid({
@@ -197,6 +208,7 @@ export function ExternosDailyGrid({
   onCardClick,
   onReorder,
   renderMrp,
+  otEntregaUmbrales,
 }: ExternosDailyGridProps) {
   const sorted = useMemo(
     () => [...rows].sort(compareDailyRows),
@@ -269,6 +281,7 @@ export function ExternosDailyGrid({
                   acabadoLabel={acabadoNombreById.get(row.acabado_id) ?? "—"}
                   onCardClick={onCardClick}
                   mrpSlot={renderMrp(row)}
+                  otEntregaUmbrales={otEntregaUmbrales}
                 />
               ))}
             </div>

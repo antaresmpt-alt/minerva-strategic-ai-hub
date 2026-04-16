@@ -6,9 +6,12 @@ import {
   useReactTable,
   type RowSelectionState,
 } from "@tanstack/react-table";
-import { Loader2, Mail, Send } from "lucide-react";
+import autoTable from "jspdf-autotable";
+import { jsPDF } from "jspdf";
+import { FileSpreadsheet, Loader2, Mail, Printer, Send } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
 
 import { createComprasMaterialColumns } from "@/components/produccion/ots/compras-material-columns";
 import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
@@ -23,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect, type Option } from "@/components/ui/select-native";
 import {
   Select,
   SelectContent,
@@ -44,6 +48,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  COMPRAS_MATERIAL_ESTADOS,
   estadoMaterialDesdeEstadoCompra,
   normalizeCompraEstado,
 } from "@/lib/compras-material-estados";
@@ -185,6 +190,10 @@ export function ComprasMaterialPage() {
   const [proveedoresPapelCarton, setProveedoresPapelCarton] = useState<
     { id: string; nombre: string }[]
   >([]);
+
+  const [filtroBusqueda, setFiltroBusqueda] = useState("");
+  const [filtroProveedorId, setFiltroProveedorId] = useState("");
+  const [filtroEstado, setFiltroEstado] = useState("");
 
   const [editOpen, setEditOpen] = useState(false);
   const [editRow, setEditRow] = useState<ComprasMaterialTableRow | null>(null);
@@ -417,15 +426,91 @@ export function ComprasMaterialPage() {
     void loadRows();
   }, [loadRows]);
 
+  const rowsFiltradas = useMemo(() => {
+    let list = rows;
+    if (filtroProveedorId) {
+      list = list.filter((r) => (r.proveedor_id ?? "") === filtroProveedorId);
+    }
+    if (filtroEstado) {
+      list = list.filter((r) => (r.estado ?? "").trim() === filtroEstado);
+    }
+    const q = filtroBusqueda.trim().toLowerCase();
+    if (q) {
+      list = list.filter((r) => {
+        const bloques = [
+          r.ot_numero,
+          r.num_compra,
+          r.cliente,
+          r.titulo,
+        ].map((x) => String(x ?? "").toLowerCase());
+        return bloques.some((s) => s.includes(q));
+      });
+    }
+    return list;
+  }, [rows, filtroBusqueda, filtroEstado, filtroProveedorId]);
+
+  const proveedoresUnicosDeLista = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of rows) {
+      const id = r.proveedor_id;
+      if (!id) continue;
+      if (!map.has(id)) {
+        map.set(
+          id,
+          (r.proveedor_nombre?.trim() || "Sin nombre").trim() || "Sin nombre"
+        );
+      }
+    }
+    return [...map.entries()].sort((a, b) =>
+      a[1].localeCompare(b[1], "es", { sensitivity: "base" })
+    );
+  }, [rows]);
+
+  const proveedorFiltroOptions = useMemo<Option[]>(() => {
+    const opts: Option[] = [{ value: "", label: "Todos los proveedores" }];
+    for (const [id, nombre] of proveedoresUnicosDeLista) {
+      opts.push({ value: id, label: nombre });
+    }
+    return opts;
+  }, [proveedoresUnicosDeLista]);
+
+  const estadoFiltroOptions = useMemo<Option[]>(
+    () => [
+      { value: "", label: "Todos los estados" },
+      ...COMPRAS_MATERIAL_ESTADOS.map((e) => ({ value: e, label: e })),
+    ],
+    []
+  );
+
+  const conteosEstadoFiltrado = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of rowsFiltradas) {
+      const key = (r.estado ?? "").trim() || "Sin estado";
+      m.set(key, (m.get(key) ?? 0) + 1);
+    }
+    return m;
+  }, [rowsFiltradas]);
+
+  useEffect(() => {
+    const allowed = new Set(rowsFiltradas.map((r) => r.id));
+    setRowSelection((prev) => {
+      const next: RowSelectionState = {};
+      for (const id of allowed) {
+        if (prev[id]) next[id] = true;
+      }
+      return next;
+    });
+  }, [rowsFiltradas]);
+
   const selectedRows = useMemo(() => {
     const keys = Object.keys(rowSelection).filter((k) => rowSelection[k]);
     const out: ComprasMaterialTableRow[] = [];
     for (const k of keys) {
-      const r = rows.find((x) => x.id === k);
+      const r = rowsFiltradas.find((x) => x.id === k);
       if (r) out.push(r);
     }
     return out;
-  }, [rowSelection, rows]);
+  }, [rowSelection, rowsFiltradas]);
 
   const mismoProveedorSeleccion = useMemo(() => {
     if (selectedRows.length === 0) return false;
@@ -626,7 +711,7 @@ export function ComprasMaterialPage() {
   );
 
   const table = useReactTable({
-    data: rows,
+    data: rowsFiltradas,
     columns,
     getRowId: (row) => row.id,
     state: { rowSelection },
@@ -799,6 +884,102 @@ export function ComprasMaterialPage() {
     }
   }, [loadProveedoresPapelCarton, solicitarOpen, selectedRows]);
 
+  const exportComprasMaterialExcel = useCallback(() => {
+    const data = rowsFiltradas.map((r) => ({
+      OT: r.ot_numero,
+      "Nº compra": r.num_compra,
+      Cliente: r.cliente?.trim() ?? "",
+      Título: r.titulo?.trim() ?? "",
+      Material: r.material?.trim() ?? "",
+      Gramaje: formatGramajeResumen(r.gramaje),
+      Formato: r.tamano_hoja?.trim() ?? "",
+      "H. brutas": r.num_hojas_brutas ?? "",
+      Proveedor: r.proveedor_nombre?.trim() ?? "",
+      Estado: r.estado?.trim() ?? "",
+      "F. prevista recep.": r.fecha_prevista_recepcion
+        ? formatFechaEsCorta(r.fecha_prevista_recepcion)
+        : "",
+      "F. entrega OT": r.fecha_entrega_maestro
+        ? formatFechaEsCorta(r.fecha_entrega_maestro)
+        : "",
+      Albarán: r.albaran_proveedor?.trim() ?? "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Compras");
+    const stamp = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `compras-material-${stamp}.xlsx`);
+    toast.success("Excel descargado (vista filtrada actual).");
+  }, [rowsFiltradas]);
+
+  const exportComprasMaterialPdf = useCallback(() => {
+    if (rowsFiltradas.length === 0) return;
+    const doc = new jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: "a4",
+    });
+    doc.setTextColor(0, 33, 71);
+    doc.setFontSize(13);
+    doc.text("Compras de material", 10, 12);
+    doc.setFontSize(8);
+    doc.setTextColor(60, 60, 60);
+    doc.text(
+      `Listado filtrado · ${rowsFiltradas.length} fila(s) · ${new Date().toLocaleString("es-ES")}`,
+      10,
+      18
+    );
+    const head = [
+      [
+        "OT",
+        "Nº compra",
+        "Cliente",
+        "Material",
+        "Proveedor",
+        "Estado",
+        "F. prev.",
+        "F. entrega OT",
+      ],
+    ];
+    const cell = (v: string | number | null | undefined) =>
+      String(v ?? "").trim() || "—";
+    const body = rowsFiltradas.map((r) => [
+      cell(r.ot_numero),
+      cell(r.num_compra),
+      cell(r.cliente),
+      cell(r.material),
+      cell(r.proveedor_nombre),
+      cell(r.estado),
+      r.fecha_prevista_recepcion
+        ? formatFechaEsCorta(r.fecha_prevista_recepcion)
+        : "—",
+      r.fecha_entrega_maestro
+        ? formatFechaEsCorta(r.fecha_entrega_maestro)
+        : "—",
+    ]);
+    autoTable(doc, {
+      head,
+      body,
+      startY: 22,
+      styles: { fontSize: 7, cellPadding: 1.2, overflow: "linebreak" },
+      headStyles: { fontSize: 7, fillColor: [0, 33, 71], textColor: 255 },
+      columnStyles: {
+        0: { cellWidth: 18 },
+        1: { cellWidth: 22 },
+        2: { cellWidth: 38 },
+        3: { cellWidth: 42 },
+        4: { cellWidth: 36 },
+        5: { cellWidth: 24 },
+        6: { cellWidth: 22 },
+        7: { cellWidth: 22 },
+      },
+      margin: { left: 10, right: 10 },
+    });
+    const stamp = new Date().toISOString().slice(0, 10);
+    doc.save(`compras-material-${stamp}.pdf`);
+    toast.success("PDF descargado (vista filtrada actual).");
+  }, [rowsFiltradas]);
+
   const solicitarButton = (
     <Button
       type="button"
@@ -822,35 +1003,257 @@ export function ComprasMaterialPage() {
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-4">
-      <div className="flex flex-col gap-3 border-b border-slate-200/80 pb-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="font-heading text-lg font-semibold text-[#002147] sm:text-xl">
-            Compras de material
-          </h2>
-          <p className="text-muted-foreground mt-1 max-w-2xl text-xs sm:text-sm">
-            Peticiones en{" "}
-            <span className="font-mono text-[11px]">{TABLE_COMPRA}</span> con
-            datos de despacho, maestro y proveedor. Proveedores del desplegable:
-            tipo «Papel/Cartón». Hasta {PAGE_SIZE} registros recientes.
-          </p>
-        </div>
-        {!puedeSolicitar && solicitarDisabledReason ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span
-                className="inline-flex shrink-0 cursor-help outline-none"
-                tabIndex={0}
+      <div className="border-b border-slate-200/80 pb-4">
+        <h2 className="font-heading text-lg font-semibold text-[#002147] sm:text-xl">
+          Compras de material
+        </h2>
+        <p className="text-muted-foreground mt-1 max-w-2xl text-xs sm:text-sm">
+          Peticiones en{" "}
+          <span className="font-mono text-[11px]">{TABLE_COMPRA}</span> con datos
+          de despacho, maestro y proveedor. Proveedores en línea: tipo «Papel/Cartón».
+          Hasta {PAGE_SIZE} registros recientes. Los totales y exportaciones usan
+          la vista filtrada.
+        </p>
+      </div>
+
+      <div className="rounded-lg border border-slate-200/90 bg-slate-50/40 p-3 shadow-sm">
+        <div className="hidden flex-col gap-3 md:flex">
+          <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5">
+            <div className="w-[12rem] min-w-[11rem] shrink-0">
+              <NativeSelect
+                label="Estado"
+                options={estadoFiltroOptions}
+                value={filtroEstado}
+                onChange={(e) => setFiltroEstado(e.target.value)}
+              />
+            </div>
+            <div className="w-[13rem] min-w-[12rem] shrink-0">
+              <NativeSelect
+                label="Proveedor"
+                options={proveedorFiltroOptions}
+                value={filtroProveedorId}
+                onChange={(e) => setFiltroProveedorId(e.target.value)}
+              />
+            </div>
+            <div className="grid min-w-0 max-w-sm flex-1 gap-1.5">
+              <Label htmlFor="busq-compra-mat">
+                Buscar (OT, compra, cliente, título)
+              </Label>
+              <Input
+                id="busq-compra-mat"
+                placeholder="Ej. 24001 o cliente"
+                value={filtroBusqueda}
+                onChange={(e) => setFiltroBusqueda(e.target.value)}
+                className="h-9 w-full max-w-sm"
+              />
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/80 pt-3">
+            <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <p className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                Mostrando{" "}
+                <span className="font-normal text-foreground">
+                  {rowsFiltradas.length}
+                </span>{" "}
+                de{" "}
+                <span className="font-normal text-foreground">{rows.length}</span>{" "}
+                registros
+              </p>
+              <div className="flex min-w-0 flex-wrap gap-1.5">
+                {COMPRAS_MATERIAL_ESTADOS.map((est) => {
+                  const n = conteosEstadoFiltrado.get(est) ?? 0;
+                  if (n === 0) return null;
+                  return (
+                    <span
+                      key={est}
+                      className="inline-flex items-center rounded-md border border-slate-200/90 bg-white px-2 py-0.5 text-[10px] font-normal tabular-nums text-[#002147] shadow-xs"
+                    >
+                      {est}: {n}
+                    </span>
+                  );
+                })}
+                {[...conteosEstadoFiltrado.entries()]
+                  .filter(
+                    ([k]) =>
+                      !(COMPRAS_MATERIAL_ESTADOS as readonly string[]).includes(k)
+                  )
+                  .sort(([a], [b]) => a.localeCompare(b, "es"))
+                  .map(([est, n]) => (
+                    <span
+                      key={est}
+                      className="inline-flex items-center rounded-md border border-slate-200/90 bg-white px-2 py-0.5 text-[10px] font-normal tabular-nums text-[#002147] shadow-xs"
+                    >
+                      {est}: {n}
+                    </span>
+                  ))}
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                disabled={loading || rowsFiltradas.length === 0}
+                title="Descargar Excel (vista filtrada)"
+                onClick={exportComprasMaterialExcel}
               >
-                {solicitarButton}
+                <span aria-hidden className="text-base leading-none">
+                  📊
+                </span>
+                <FileSpreadsheet
+                  className="size-4 text-[#002147]/80"
+                  aria-hidden
+                />
+                Excel
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                disabled={loading || rowsFiltradas.length === 0}
+                title="Descargar PDF (vista filtrada)"
+                onClick={() => exportComprasMaterialPdf()}
+              >
+                <span aria-hidden className="text-base leading-none">
+                  📄
+                </span>
+                <Printer className="size-4 text-[#002147]/80" aria-hidden />
+                PDF
+              </Button>
+              {!puedeSolicitar && solicitarDisabledReason ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex cursor-help outline-none">
+                      {solicitarButton}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs text-xs">
+                    {solicitarDisabledReason}
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                solicitarButton
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 md:hidden">
+          <NativeSelect
+            label="Estado"
+            options={estadoFiltroOptions}
+            value={filtroEstado}
+            onChange={(e) => setFiltroEstado(e.target.value)}
+            className="min-h-11 text-base"
+          />
+          <NativeSelect
+            label="Proveedor"
+            options={proveedorFiltroOptions}
+            value={filtroProveedorId}
+            onChange={(e) => setFiltroProveedorId(e.target.value)}
+            className="min-h-11 text-base"
+          />
+          <div className="grid min-w-0 gap-1.5">
+            <Label htmlFor="busq-compra-mat-m">
+              Buscar (OT, compra, cliente, título)
+            </Label>
+            <Input
+              id="busq-compra-mat-m"
+              placeholder="Ej. 24001 o cliente"
+              value={filtroBusqueda}
+              onChange={(e) => setFiltroBusqueda(e.target.value)}
+              className="min-h-11 w-full touch-manipulation text-base"
+            />
+          </div>
+          <p className="text-xs tabular-nums text-muted-foreground">
+            Mostrando{" "}
+            <span className="font-normal text-foreground">
+              {rowsFiltradas.length}
+            </span>{" "}
+            de{" "}
+            <span className="font-normal text-foreground">{rows.length}</span>{" "}
+            registros
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {COMPRAS_MATERIAL_ESTADOS.map((est) => {
+              const n = conteosEstadoFiltrado.get(est) ?? 0;
+              if (n === 0) return null;
+              return (
+                <span
+                  key={est}
+                  className="inline-flex items-center rounded-md border border-slate-200/90 bg-white px-2 py-0.5 text-[10px] font-normal tabular-nums text-[#002147]"
+                >
+                  {est}: {n}
+                </span>
+              );
+            })}
+            {[...conteosEstadoFiltrado.entries()]
+              .filter(
+                ([k]) =>
+                  !(COMPRAS_MATERIAL_ESTADOS as readonly string[]).includes(k)
+              )
+              .sort(([a], [b]) => a.localeCompare(b, "es"))
+              .map(([est, n]) => (
+                <span
+                  key={est}
+                  className="inline-flex items-center rounded-md border border-slate-200/90 bg-white px-2 py-0.5 text-[10px] font-normal tabular-nums text-[#002147]"
+                >
+                  {est}: {n}
+                </span>
+              ))}
+          </div>
+          <div className="flex flex-wrap gap-2 pt-0.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              disabled={loading || rowsFiltradas.length === 0}
+              title="Descargar Excel (vista filtrada)"
+              onClick={exportComprasMaterialExcel}
+            >
+              <span aria-hidden className="text-base leading-none">
+                📊
               </span>
-            </TooltipTrigger>
-            <TooltipContent side="left" className="max-w-xs text-xs">
-              {solicitarDisabledReason}
-            </TooltipContent>
-          </Tooltip>
-        ) : (
-          solicitarButton
-        )}
+              <FileSpreadsheet
+                className="size-4 text-[#002147]/80"
+                aria-hidden
+              />
+              Excel
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              disabled={loading || rowsFiltradas.length === 0}
+              title="Descargar PDF (vista filtrada)"
+              onClick={() => exportComprasMaterialPdf()}
+            >
+              <span aria-hidden className="text-base leading-none">
+                📄
+              </span>
+              <Printer className="size-4 text-[#002147]/80" aria-hidden />
+              PDF
+            </Button>
+            {!puedeSolicitar && solicitarDisabledReason ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex cursor-help outline-none">
+                    {solicitarButton}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs text-xs">
+                  {solicitarDisabledReason}
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              solicitarButton
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-lg border border-slate-200/90 bg-white shadow-sm">
@@ -895,6 +1298,16 @@ export function ComprasMaterialPage() {
                     No hay compras de material registradas.
                   </TableCell>
                 </TableRow>
+              ) : rowsFiltradas.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={columns.length}
+                    className="text-muted-foreground py-8 text-center text-sm"
+                  >
+                    Ningún resultado con los filtros actuales. Ajusta búsqueda,
+                    proveedor o estado.
+                  </TableCell>
+                </TableRow>
               ) : (
                 table.getRowModel().rows.map((row) => (
                   <TableRow
@@ -932,7 +1345,7 @@ export function ComprasMaterialPage() {
               {editRow ? (
                 <>
                   OT{" "}
-                  <span className="font-mono font-medium">{editRow.ot_numero}</span>{" "}
+                  <span className="font-mono font-normal">{editRow.ot_numero}</span>{" "}
                   · {editRow.num_compra}
                 </>
               ) : null}

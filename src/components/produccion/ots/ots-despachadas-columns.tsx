@@ -190,7 +190,7 @@ export function createOtsDespachadasColumns(
         </span>
       ),
       cell: ({ row }) => (
-        <div className="min-w-0 max-w-[7rem] px-0.5 py-0.5">
+        <div className="flex min-h-6 min-w-0 max-w-[7rem] items-center px-0.5 py-0">
           <OtNumeroSemaforoBadge
             otNumero={row.original.ot_numero}
             fechaEntregaIso={row.original.fecha_entrega_prevista}

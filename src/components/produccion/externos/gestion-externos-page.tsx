@@ -40,6 +40,7 @@ import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
 import { GlobalModelSelector } from "@/components/layout/header";
+import { OtNumeroSemaforoBadge } from "@/components/produccion/ots/ot-numero-semaforo-badge";
 import {
   ExternosDailyGrid,
   type ExternosDailyGridRow,
@@ -112,6 +113,7 @@ import {
   fuzzyMatchAcabadoIdByIncludes,
   fuzzyMatchIdByIncludes,
 } from "@/lib/externos-fuzzy-match";
+import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import { useHubStore } from "@/lib/store";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -595,7 +597,7 @@ function computeDiasHastaFEntregaOt(
 
 /** Estilo del paréntesis (X) según urgencia (>7 días: verde). */
 function fEntregaOtParenClass(d: number): string {
-  if (d <= 3) return "font-bold text-red-600 dark:text-red-400";
+  if (d <= 3) return "font-normal text-red-600 dark:text-red-400";
   if (d <= 7) return "text-orange-600 dark:text-orange-400";
   return "text-green-700 dark:text-green-500";
 }
@@ -887,6 +889,7 @@ function formatPostgrestError(err: unknown): string {
 
 export function GestionExternosPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const { umbrales: umbralesOtsCompras } = useSysParametrosOtsCompras();
 
   const [tab, setTab] = useState("seguimiento");
 
@@ -2754,7 +2757,7 @@ export function GestionExternosPage() {
                         <th className="sticky top-0 z-30 w-9 bg-slate-50/95 px-0.5 py-1 text-center font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Sem.
                         </th>
-                        <th className="sticky top-0 z-30 w-12 bg-slate-50/95 px-1 py-1 text-left font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                        <th className="sticky top-0 z-30 w-[4.5rem] min-w-[4.25rem] max-w-[6rem] bg-slate-50/95 px-0.5 py-1 text-left font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           OT
                         </th>
                         <th className="sticky top-0 z-30 w-8 bg-slate-50/95 px-0.5 py-1 text-center font-medium tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
@@ -2871,8 +2874,12 @@ export function GestionExternosPage() {
                             <td className="w-9 px-0.5 py-0.5 text-center align-middle">
                               <SemaforoCell row={row} />
                             </td>
-                            <td className="w-12 px-1 py-0.5 font-medium whitespace-nowrap tabular-nums">
-                              {getOtDisplay(row)}
+                            <td className="w-[4.5rem] min-w-[4.25rem] max-w-[6rem] px-0.5 py-0.5 align-middle">
+                              <OtNumeroSemaforoBadge
+                                otNumero={getOtDisplay(row)}
+                                fechaEntregaIso={row.f_entrega_ot}
+                                umbrales={umbralesOtsCompras}
+                              />
                             </td>
                             <td className="w-8 px-0.5 py-0.5 text-center tabular-nums">
                               {row.num_operacion ?? "—"}
@@ -3018,13 +3025,17 @@ export function GestionExternosPage() {
                         <CardHeader className="space-y-3 pb-2">
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0 flex-1 space-y-2">
-                              <p className="text-lg font-bold tabular-nums text-[#002147]">
-                                OT {getOtDisplay(row)}
-                                <span className="ml-2 text-sm font-semibold text-muted-foreground">
+                              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                                <OtNumeroSemaforoBadge
+                                  otNumero={getOtDisplay(row)}
+                                  fechaEntregaIso={row.f_entrega_ot}
+                                  umbrales={umbralesOtsCompras}
+                                />
+                                <span className="text-sm font-normal tabular-nums text-muted-foreground">
                                   · Op {row.num_operacion ?? "—"}
                                 </span>
-                              </p>
-                              <p className="text-base font-bold leading-snug text-[#002147]">
+                              </div>
+                              <p className="text-base font-normal leading-snug text-[#002147]">
                                 {row.cliente_nombre?.trim() || "—"}
                               </p>
                             </div>
@@ -3331,6 +3342,7 @@ export function GestionExternosPage() {
                           proveedorNombreById={proveedorNombreById}
                           acabadoNombreById={acabadoNombreById}
                           saving={saving}
+                          otEntregaUmbrales={umbralesOtsCompras}
                           renderMrp={(r) => (
                             <MaterialCompraColumnCell
                               info={lookupCompraMaterialStatus(
@@ -3367,6 +3379,7 @@ export function GestionExternosPage() {
                           proveedorNombreById={proveedorNombreById}
                           acabadoNombreById={acabadoNombreById}
                           saving={saving}
+                          otEntregaUmbrales={umbralesOtsCompras}
                           onCardClick={(r) => {
                             const full = seguimientos.find(
                               (x) => x.id === r.id
@@ -3494,8 +3507,12 @@ export function GestionExternosPage() {
                       <td className="border border-slate-200 px-1 py-1">
                         {sem.excelLabel}
                       </td>
-                      <td className="border border-slate-200 px-1 py-1 font-medium">
-                        {getOtDisplay(row)}
+                      <td className="border border-slate-200 px-1 py-1 align-middle">
+                        <OtNumeroSemaforoBadge
+                          otNumero={getOtDisplay(row)}
+                          fechaEntregaIso={row.f_entrega_ot}
+                          umbrales={umbralesOtsCompras}
+                        />
                       </td>
                       <td className="border border-slate-200 px-1 py-1 tabular-nums">
                         {row.num_operacion ?? "—"}

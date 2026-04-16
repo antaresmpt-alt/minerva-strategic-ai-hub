@@ -25,6 +25,8 @@ import { CalendarDays, Truck } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useMemo, useRef } from "react";
 
+import { OtNumeroSemaforoBadge } from "@/components/produccion/ots/ot-numero-semaforo-badge";
+import type { OtsComprasUmbralesParametros } from "@/lib/sys-parametros-ots-compras";
 import { cn } from "@/lib/utils";
 
 /** Fila mínima para el tablero (compatible con `SeguimientoRow` del padre). */
@@ -37,6 +39,8 @@ export type ExternosWeeklyBoardRow = {
   acabado_id: string;
   estado: string;
   fecha_prevista: string | null;
+  /** F. entrega OT (cliente); semáforo alineado con Compras / Despachadas. */
+  f_entrega_ot?: string | null;
 };
 
 function getOtDisplay(row: ExternosWeeklyBoardRow): string {
@@ -130,6 +134,7 @@ type ExternosWeeklyBoardProps = {
     ymd: string | null
   ) => void | Promise<void>;
   renderMrp?: (row: ExternosWeeklyBoardRow) => ReactNode;
+  otEntregaUmbrales: OtsComprasUmbralesParametros;
 };
 
 function DroppableColumn({
@@ -176,6 +181,7 @@ function DraggableCard({
   acabadoLabel,
   onCardClick,
   mrpSlot,
+  otEntregaUmbrales,
 }: {
   row: ExternosWeeklyBoardRow;
   disabled?: boolean;
@@ -183,6 +189,7 @@ function DraggableCard({
   acabadoLabel: string;
   onCardClick: (row: ExternosWeeklyBoardRow) => void;
   mrpSlot?: ReactNode;
+  otEntregaUmbrales: OtsComprasUmbralesParametros;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
@@ -226,9 +233,14 @@ function DraggableCard({
       )}
     >
       <div className="flex items-start justify-between gap-1">
-        <span className="flex min-w-0 items-center gap-1 font-semibold text-[#002147]">
+        <span className="flex min-w-0 flex-1 items-center gap-1 font-normal text-[#002147]">
           <Truck className="size-3.5 shrink-0 text-slate-500" aria-hidden />
-          <span className="truncate">OT {getOtDisplay(row)}</span>
+          <OtNumeroSemaforoBadge
+            otNumero={getOtDisplay(row)}
+            fechaEntregaIso={row.f_entrega_ot}
+            umbrales={otEntregaUmbrales}
+            className="min-w-0 flex-1"
+          />
         </span>
         <div className="flex shrink-0 items-center gap-1">
           {mrpSlot != null ? mrpSlot : null}
@@ -256,6 +268,7 @@ export function ExternosWeeklyBoard({
   onCardClick,
   onMoveToDate,
   renderMrp,
+  otEntregaUmbrales,
 }: ExternosWeeklyBoardProps) {
 
   const weekDays = useMemo(
@@ -372,6 +385,7 @@ export function ExternosWeeklyBoard({
                   acabadoLabel={acabadoNombreById.get(row.acabado_id) ?? "—"}
                   onCardClick={onCardClick}
                   mrpSlot={renderMrp?.(row)}
+                  otEntregaUmbrales={otEntregaUmbrales}
                 />
               ))}
             </DroppableColumn>
@@ -410,6 +424,7 @@ export function ExternosWeeklyBoard({
                       acabadoLabel={acabadoNombreById.get(row.acabado_id) ?? "—"}
                       onCardClick={onCardClick}
                       mrpSlot={renderMrp?.(row)}
+                      otEntregaUmbrales={otEntregaUmbrales}
                     />
                   ))}
                 </DroppableColumn>

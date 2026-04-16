@@ -68,15 +68,17 @@ export function semaforoOtEntregaVariant(
   return "ok";
 }
 
+/** Clases Tailwind del chip OT (fondo sólido + texto legible sin negrita). */
 export function clasesBadgeSemaforoOt(v: SemaforoOtEntregaVariant): string {
   switch (v) {
     case "rojo":
-      return "bg-red-600 text-white ring-1 ring-red-700/30";
+      return "bg-red-600 text-white";
     case "naranja":
-      return "bg-orange-500 text-white ring-1 ring-orange-700/25";
+      return "bg-orange-600 text-white";
     case "ok":
-      return "bg-emerald-600 text-white ring-1 ring-emerald-800/25";
+      return "bg-emerald-600 text-white";
     default:
-      return "bg-slate-300 text-slate-900 ring-1 ring-slate-400/30";
+      /* Sin fecha: chip sólido neutro, texto claro */
+      return "bg-slate-500 text-white";
   }
 }

@@ -45,7 +45,7 @@ export function OtNumeroSemaforoBadge({
     >
       <span
         className={cn(
-          "inline-flex min-w-0 max-w-full truncate rounded-md px-1.5 py-0.5 font-mono text-[11px] font-semibold leading-tight",
+          "box-border inline-flex h-6 min-h-6 min-w-0 max-w-full shrink-0 items-center justify-center truncate rounded-md px-2 font-mono text-[11px] font-normal tabular-nums leading-none antialiased",
           badgeCls
         )}
       >
