@@ -1,5 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
-import { canAccessApiRoute, canAccessPagePath } from "@/lib/permissions";
+import {
+  canAccessApiRoute,
+  canAccessPagePath,
+  normalizeDbRole,
+} from "@/lib/permissions";
 import { fetchRolePermissionMap } from "@/lib/role-permissions-fetch";
 import { NextResponse, type NextRequest } from "next/server";
 
@@ -133,6 +137,16 @@ export async function updateSession(request: NextRequest) {
   const role = profile?.role ?? null;
 
   const dynamic = role ? await fetchRolePermissionMap(role) : null;
+
+  if (
+    (pathname === "/" || pathname === "") &&
+    normalizeDbRole(role) === "almacen"
+  ) {
+    const url = new URL("/produccion/muelle", request.url);
+    const redirect = NextResponse.redirect(url);
+    copyAuthCookies(response, redirect);
+    return redirect;
+  }
 
   if (pathname.startsWith("/admin")) {
     const url = new URL("/settings", request.url);

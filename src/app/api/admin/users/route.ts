@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireSettingsAdmin } from "@/lib/api/require-settings-admin";
+import { PROFILE_ROLES } from "@/lib/permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export async function GET() {
@@ -71,6 +72,10 @@ export async function POST(request: Request) {
       { error: "email, password y role son obligatorios" },
       { status: 400 }
     );
+  }
+
+  if (!PROFILE_ROLES.has(role)) {
+    return NextResponse.json({ error: "Rol no permitido" }, { status: 400 });
   }
 
   try {

@@ -31,6 +31,10 @@ const MODULE_IMG = {
     src: "/images/module-chatbot.png",
     alt: "Minerva AI Assistant — icono del módulo",
   },
+  muelle: {
+    src: "/images/module_muelle.png",
+    alt: "Muelle — icono del módulo",
+  },
 } as const;
 
 /**
@@ -159,6 +163,21 @@ export function HubModulesGrid({
           actionLabel="Abrir Chat"
           href="/chat"
           accessAllowed={allow("chat")}
+          onAccessDenied={onDenied}
+        />
+        <ModuleCard
+          title="Muelle"
+          description="Muelle: Recepción de Material (Próximamente)"
+          iconFrame="module"
+          icon={
+            <ModuleMark
+              src={MODULE_IMG.muelle.src}
+              alt={MODULE_IMG.muelle.alt}
+            />
+          }
+          actionLabel="Acceder a Muelle"
+          href="/produccion/muelle"
+          accessAllowed={allow("muelle")}
           onAccessDenied={onDenied}
         />
       </div>

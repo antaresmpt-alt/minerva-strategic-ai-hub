@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Anchor,
   FileCog,
   Home,
   LayoutList,
+  MessageCircle,
   Package,
   Stamp,
   Truck,
@@ -71,11 +73,29 @@ const NAV: NavItem[] = [
       p === "/produccion/externos" ||
       p.startsWith("/produccion/externos/"),
   },
+  {
+    href: "/produccion/muelle",
+    label: "Muelle",
+    icon: Anchor,
+    match: (p) =>
+      p === "/produccion/muelle" || p.startsWith("/produccion/muelle/"),
+  },
 ];
 
-export function ProduccionShell({ children }: { children: React.ReactNode }) {
+export function ProduccionShell({
+  children,
+  hasProduccionModule = true,
+}: {
+  children: React.ReactNode;
+  /** Si es false (p. ej. rol Almacén), en rutas de Muelle solo se muestra navegación mínima. */
+  hasProduccionModule?: boolean;
+}) {
   const pathname = usePathname();
-  const navLinks = NAV.filter((item) => item.href !== "/");
+  const underMuelle = pathname.startsWith("/produccion/muelle");
+  const showFullProduccionNav = !underMuelle || hasProduccionModule;
+  const navLinks: NavItem[] = showFullProduccionNav
+    ? NAV.filter((item) => item.href !== "/")
+    : [];
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -95,6 +115,24 @@ export function ProduccionShell({ children }: { children: React.ReactNode }) {
             className="flex min-w-0 flex-1 flex-wrap items-center gap-1"
             aria-label="Módulo Producción"
           >
+            {!showFullProduccionNav && (
+              <>
+                <Link
+                  href="/chat"
+                  className="inline-flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-100 hover:text-[#002147] sm:px-3 sm:text-sm"
+                >
+                  <MessageCircle className="size-4 shrink-0 opacity-90" aria-hidden />
+                  <span className="whitespace-nowrap">Chat</span>
+                </Link>
+                <span
+                  className="inline-flex items-center gap-2 rounded-lg bg-[#C69C2B]/25 px-2.5 py-2 text-xs font-semibold text-[#002147] shadow-sm sm:px-3 sm:text-sm"
+                  aria-current="page"
+                >
+                  <Anchor className="size-4 shrink-0 opacity-90" aria-hidden />
+                  Muelle
+                </span>
+              </>
+            )}
             {navLinks.map((item) => {
               const Icon = item.icon;
               const active = item.match(pathname);

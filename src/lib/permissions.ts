@@ -7,6 +7,7 @@ export type HubModuleId =
   | "sales"
   | "sem"
   | "seo"
+  | "muelle"
   | "produccion"
   | "chat"
   | "settings";
@@ -15,6 +16,7 @@ export const HUB_MODULE_IDS: HubModuleId[] = [
   "sales",
   "sem",
   "seo",
+  "muelle",
   "produccion",
   "chat",
   "settings",
@@ -76,6 +78,10 @@ export function canAccessHubModule(
     return module === "chat" || module === "produccion";
   }
 
+  if (r === "almacen") {
+    return module === "chat" || module === "muelle";
+  }
+
   if (r === "comercial") {
     return (
       module === "chat" ||
@@ -109,6 +115,8 @@ export function canAccessPagePath(
       return canAccessHubModule(role, "sales", dynamic);
     if (p.startsWith("/sem")) return canAccessHubModule(role, "sem", dynamic);
     if (p.startsWith("/seo")) return canAccessHubModule(role, "seo", dynamic);
+    if (p.startsWith("/produccion/muelle"))
+      return canAccessHubModule(role, "muelle", dynamic);
     if (p.startsWith("/produccion"))
       return canAccessHubModule(role, "produccion", dynamic);
     return false;
@@ -127,6 +135,8 @@ export function canAccessPagePath(
     return canAccessHubModule(role, "sales");
   if (p.startsWith("/sem")) return canAccessHubModule(role, "sem");
   if (p.startsWith("/seo")) return canAccessHubModule(role, "seo");
+  if (p.startsWith("/produccion/muelle"))
+    return canAccessHubModule(role, "muelle");
   if (p.startsWith("/produccion"))
     return canAccessHubModule(role, "produccion");
 
@@ -176,6 +186,10 @@ export function canAccessApiRoute(
     }
     if (pathname.startsWith("/api/produccion")) {
       return canAccessHubModule(role, "produccion", dynamic);
+    }
+    /** Reservado para APIs del módulo Muelle (misma convención que páginas). */
+    if (pathname.startsWith("/api/muelle")) {
+      return canAccessHubModule(role, "muelle", dynamic);
     }
     if (pathname.startsWith("/api/gemini")) {
       return canAccessHubModule(role, "sem", dynamic);
@@ -227,6 +241,10 @@ export function canAccessApiRoute(
     return canAccessHubModule(role, "produccion");
   }
 
+  if (pathname.startsWith("/api/muelle")) {
+    return canAccessHubModule(role, "muelle");
+  }
+
   if (pathname.startsWith("/api/gemini")) {
     return canAccessHubModule(role, "sem");
   }
@@ -240,6 +258,7 @@ export const ROLE_LABELS: Record<string, string> = {
   comercial: "Comercial",
   produccion: "Producción",
   logistica: "Logística",
+  almacen: "Almacén",
   oficina_tecnica: "Oficina técnica",
   administracion: "Administración",
   ctp: "CTP",
@@ -251,10 +270,18 @@ export const ASSIGNABLE_ROLES = [
   "comercial",
   "produccion",
   "logistica",
+  "almacen",
   "ctp",
   "administracion",
   "oficina_tecnica",
 ] as const;
+
+/** Roles válidos en `profiles.role` (creación / actualización desde API admin). */
+export const PROFILE_ROLES = new Set<string>([
+  "admin",
+  "gerencia",
+  ...ASSIGNABLE_ROLES.filter((r) => r !== "admin" && r !== "gerencia"),
+]);
 
 export function formatRoleLabel(role: string | null): string {
   if (!role) return "Sin rol asignado";
@@ -271,6 +298,7 @@ export const MODULE_LABELS: Record<HubModuleId, string> = {
   sales: "Ventas",
   sem: "SEM",
   seo: "SEO",
+  muelle: "Muelle",
   produccion: "Producción",
   chat: "Chat",
   settings: "Configuración",

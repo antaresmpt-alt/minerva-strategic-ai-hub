@@ -69,14 +69,15 @@ create policy "role_permissions_delete"
   );
 
 insert into public.role_permissions (role, module_name, is_enabled) values
-  ('admin', 'sales', true), ('admin', 'sem', true), ('admin', 'seo', true), ('admin', 'produccion', true), ('admin', 'chat', true), ('admin', 'settings', true),
-  ('gerencia', 'sales', true), ('gerencia', 'sem', true), ('gerencia', 'seo', true), ('gerencia', 'produccion', true), ('gerencia', 'chat', true), ('gerencia', 'settings', true),
-  ('comercial', 'sales', true), ('comercial', 'sem', true), ('comercial', 'seo', true), ('comercial', 'produccion', false), ('comercial', 'chat', true), ('comercial', 'settings', false),
-  ('produccion', 'sales', false), ('produccion', 'sem', false), ('produccion', 'seo', false), ('produccion', 'produccion', true), ('produccion', 'chat', true), ('produccion', 'settings', false),
-  ('logistica', 'sales', false), ('logistica', 'sem', false), ('logistica', 'seo', false), ('logistica', 'produccion', true), ('logistica', 'chat', true), ('logistica', 'settings', false),
-  ('ctp', 'sales', false), ('ctp', 'sem', false), ('ctp', 'seo', false), ('ctp', 'produccion', false), ('ctp', 'chat', true), ('ctp', 'settings', false),
-  ('administracion', 'sales', false), ('administracion', 'sem', false), ('administracion', 'seo', false), ('administracion', 'produccion', false), ('administracion', 'chat', true), ('administracion', 'settings', false),
-  ('oficina_tecnica', 'sales', false), ('oficina_tecnica', 'sem', false), ('oficina_tecnica', 'seo', false), ('oficina_tecnica', 'produccion', false), ('oficina_tecnica', 'chat', true), ('oficina_tecnica', 'settings', false)
+  ('admin', 'sales', true), ('admin', 'sem', true), ('admin', 'seo', true), ('admin', 'muelle', true), ('admin', 'produccion', true), ('admin', 'chat', true), ('admin', 'settings', true),
+  ('gerencia', 'sales', true), ('gerencia', 'sem', true), ('gerencia', 'seo', true), ('gerencia', 'muelle', true), ('gerencia', 'produccion', true), ('gerencia', 'chat', true), ('gerencia', 'settings', true),
+  ('comercial', 'sales', true), ('comercial', 'sem', true), ('comercial', 'seo', true), ('comercial', 'muelle', false), ('comercial', 'produccion', false), ('comercial', 'chat', true), ('comercial', 'settings', false),
+  ('produccion', 'sales', false), ('produccion', 'sem', false), ('produccion', 'seo', false), ('produccion', 'muelle', false), ('produccion', 'produccion', true), ('produccion', 'chat', true), ('produccion', 'settings', false),
+  ('logistica', 'sales', false), ('logistica', 'sem', false), ('logistica', 'seo', false), ('logistica', 'muelle', false), ('logistica', 'produccion', true), ('logistica', 'chat', true), ('logistica', 'settings', false),
+  ('ctp', 'sales', false), ('ctp', 'sem', false), ('ctp', 'seo', false), ('ctp', 'muelle', false), ('ctp', 'produccion', false), ('ctp', 'chat', true), ('ctp', 'settings', false),
+  ('administracion', 'sales', false), ('administracion', 'sem', false), ('administracion', 'seo', false), ('administracion', 'muelle', false), ('administracion', 'produccion', false), ('administracion', 'chat', true), ('administracion', 'settings', false),
+  ('oficina_tecnica', 'sales', false), ('oficina_tecnica', 'sem', false), ('oficina_tecnica', 'seo', false), ('oficina_tecnica', 'muelle', false), ('oficina_tecnica', 'produccion', false), ('oficina_tecnica', 'chat', true), ('oficina_tecnica', 'settings', false),
+  ('almacen', 'sales', false), ('almacen', 'sem', false), ('almacen', 'seo', false), ('almacen', 'muelle', true), ('almacen', 'produccion', false), ('almacen', 'chat', true), ('almacen', 'settings', false)
 on conflict (role, module_name) do update set
   is_enabled = excluded.is_enabled,
   updated_at = timezone('utc'::text, now());

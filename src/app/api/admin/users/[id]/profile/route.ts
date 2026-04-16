@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireSettingsAdmin } from "@/lib/api/require-settings-admin";
+import { PROFILE_ROLES } from "@/lib/permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -20,6 +21,10 @@ export async function PATCH(request: Request, ctx: Ctx) {
   const role = body.role?.trim();
   if (!role) {
     return NextResponse.json({ error: "role requerido" }, { status: 400 });
+  }
+
+  if (!PROFILE_ROLES.has(role)) {
+    return NextResponse.json({ error: "Rol no permitido" }, { status: 400 });
   }
 
   try {
