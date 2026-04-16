@@ -237,6 +237,10 @@ type SeguimientoRow = {
   estado: string;
   fecha_envio: string | null;
   fecha_prevista: string | null;
+  /** Entrega final pactada con el cliente (OT); manual. */
+  f_entrega_ot?: string | null;
+  /** Días hasta F. entrega OT (Fecha OT − hoy); persistido al guardar. */
+  dias_a_fEntOT?: number | null;
   notas_logistica: string | null;
   created_at: string;
   /** Si existe en BD (trigger / columna), última modificación */
@@ -407,6 +411,96 @@ function InlineFechaSeguimientoCell({
   );
 }
 
+/** Celda seguimiento: prefijo (X) + selector fecha en una sola fila. */
+function FEntregaOtTableCell({
+  row,
+  saving,
+  onCommit,
+  inputClassName,
+  inputId,
+}: {
+  row: SeguimientoRow;
+  saving: boolean;
+  onCommit: (ymd: string) => void | Promise<void>;
+  /** p. ej. controles táctiles en vista móvil. */
+  inputClassName?: string;
+  inputId?: string;
+}) {
+  const d = computeDiasHastaFEntregaOt(row.f_entrega_ot);
+  return (
+    <div className="flex w-full min-w-[8.25rem] max-w-full flex-row items-center gap-2">
+      {d !== null ? (
+        <span
+          className={cn(
+            "shrink-0 text-[11px] tabular-nums leading-none",
+            fEntregaOtParenClass(d)
+          )}
+        >
+          ({d})
+        </span>
+      ) : null}
+      <InlineFechaSeguimientoCell
+        id={inputId}
+        rowId={row.id}
+        isoValue={row.f_entrega_ot}
+        disabled={saving}
+        ariaLabel={`F. entrega OT ${getOtDisplay(row)}`}
+        onCommit={onCommit}
+        inputClassName={cn(
+          "min-w-[6.75rem] max-w-[8rem] flex-1 px-0.5 sm:px-1",
+          inputClassName
+        )}
+      />
+    </div>
+  );
+}
+
+/** Modal / alta manual: `value` en yyyy-mm-dd; prefijo (X) a la izquierda del input. */
+function FEntregaOtYmdInputWithUrgencyPrefix({
+  id,
+  value,
+  onChange,
+  disabled,
+  inputHeightClass,
+}: {
+  id: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  disabled?: boolean;
+  inputHeightClass: string;
+}) {
+  const d =
+    value.trim().length === 10
+      ? computeDiasHastaFEntregaOt(dateInputToTimestamptz(value.trim()))
+      : null;
+  return (
+    <div className="flex min-w-0 flex-row items-center gap-2">
+      {d !== null ? (
+        <span
+          className={cn(
+            "shrink-0 text-[11px] tabular-nums leading-none",
+            fEntregaOtParenClass(d)
+          )}
+        >
+          ({d})
+        </span>
+      ) : null}
+      <Input
+        id={id}
+        type="date"
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        className={cn(
+          inputHeightClass,
+          "min-w-0 flex-1 px-1 py-0 text-sm",
+          disabled && "cursor-not-allowed opacity-50"
+        )}
+      />
+    </div>
+  );
+}
+
 type ImportPreviewRow = {
   key: string;
   ot_raw: string;
@@ -479,6 +573,31 @@ function diasHastaFechaPrevista(fechaPrevista: string | null): number | null {
   return Math.round(
     (fp.getTime() - today.getTime()) / (24 * 60 * 60 * 1000)
   );
+}
+
+/**
+ * Días hasta la fecha de entrega OT pactada con el cliente (zona local).
+ * Fecha entrega − hoy: 0 = hoy, negativo = vencido.
+ */
+function computeDiasHastaFEntregaOt(
+  iso: string | null | undefined
+): number | null {
+  if (iso == null || iso === "") return null;
+  const fp = new Date(iso);
+  if (Number.isNaN(fp.getTime())) return null;
+  fp.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round(
+    (fp.getTime() - today.getTime()) / (24 * 60 * 60 * 1000)
+  );
+}
+
+/** Estilo del paréntesis (X) según urgencia (>7 días: verde). */
+function fEntregaOtParenClass(d: number): string {
+  if (d <= 3) return "font-bold text-red-600 dark:text-red-400";
+  if (d <= 7) return "text-orange-600 dark:text-orange-400";
+  return "text-green-700 dark:text-green-500";
 }
 
 type SemaforoInfo = {
@@ -812,6 +931,7 @@ export function GestionExternosPage() {
   const [envProveedorId, setEnvProveedorId] = useState("");
   const [envAcabadoId, setEnvAcabadoId] = useState("");
   const [envFecha, setEnvFecha] = useState("");
+  const [envFechaEntregaOt, setEnvFechaEntregaOt] = useState("");
   const [envNotas, setEnvNotas] = useState("");
   const [envUnidades, setEnvUnidades] = useState("");
   const [envPrioridad, setEnvPrioridad] = useState("");
@@ -842,6 +962,7 @@ export function GestionExternosPage() {
   const [editSegProveedorId, setEditSegProveedorId] = useState("");
   const [editSegAcabadoId, setEditSegAcabadoId] = useState("");
   const [editSegFecha, setEditSegFecha] = useState("");
+  const [editSegFechaEntregaOt, setEditSegFechaEntregaOt] = useState("");
   const [editSegNotas, setEditSegNotas] = useState("");
   const [editSegObservaciones, setEditSegObservaciones] = useState("");
   const [editSegUnidades, setEditSegUnidades] = useState("");
@@ -1168,6 +1289,7 @@ export function GestionExternosPage() {
       acabado: acabadoNombreById.get(r.acabado_id) ?? "—",
       estado: r.estado,
       fechaPrevista: formatFechaEsCorta(r.fecha_prevista),
+      fEntregaOt: formatFechaEsCorta(r.f_entrega_ot),
       fechaEnvio: formatFechaEsCorta(r.fecha_envio),
       diasEnExterno: computeDiasEnExternoUi(r.fecha_envio, r.fecha_prevista),
       semaforo: computeSemaforo(r).excelLabel,
@@ -1588,6 +1710,10 @@ export function GestionExternosPage() {
     )
       ? envEstado
       : "Pendiente";
+    const fEntIso =
+      envFechaEntregaOt.trim().length === 10
+        ? dateInputToTimestamptz(envFechaEntregaOt.trim())
+        : null;
     const { error } = await supabase.from("prod_seguimiento_externos").insert({
       id_pedido,
       OT: otRaw,
@@ -1598,6 +1724,9 @@ export function GestionExternosPage() {
       proveedor_id: envProveedorId,
       acabado_id: envAcabadoId,
       estado: estadoInsert,
+      f_entrega_ot: fEntIso,
+      dias_a_fEntOT:
+        fEntIso != null ? computeDiasHastaFEntregaOt(fEntIso) : null,
       fecha_prevista: dateInputToTimestamptz(envFecha),
       notas_logistica: envNotas.trim() || null,
       unidades:
@@ -1626,6 +1755,7 @@ export function GestionExternosPage() {
     setEnvProveedorId("");
     setEnvAcabadoId("");
     setEnvFecha("");
+    setEnvFechaEntregaOt("");
     setEnvNotas("");
     setEnvUnidades("");
     setEnvPrioridad("");
@@ -1941,6 +2071,9 @@ export function GestionExternosPage() {
         "Días externo": dias ?? "",
         Cliente: r.cliente_nombre,
         Trabajo: r.trabajo_titulo,
+        "F. entrega OT": r.f_entrega_ot
+          ? formatFechaEsCorta(r.f_entrega_ot)
+          : "",
         "Pedido cliente": r.pedido_cliente,
         Proveedor: proveedorNombreById.get(r.proveedor_id) ?? "",
         Acabado: acabadoNombreById.get(r.acabado_id) ?? "",
@@ -1993,20 +2126,31 @@ export function GestionExternosPage() {
 
   async function updateSeguimientoFecha(
     row: SeguimientoRow,
-    field: "fecha_envio" | "fecha_prevista",
+    field: "fecha_envio" | "fecha_prevista" | "f_entrega_ot",
     ymd: string
   ) {
     const currentIso =
-      field === "fecha_envio" ? row.fecha_envio : row.fecha_prevista;
+      field === "fecha_envio"
+        ? row.fecha_envio
+        : field === "fecha_prevista"
+          ? row.fecha_prevista
+          : row.f_entrega_ot;
     const prevYmd = isoToDateInput(currentIso);
     if (ymd === prevYmd) return;
 
     const now = new Date().toISOString();
-    const patch: Record<string, string | null> = { updated_at: now };
+    const patch: Record<string, string | number | null> = { updated_at: now };
     if (ymd.trim().length === 10) {
-      patch[field] = dateInputToTimestamptz(ymd.trim());
+      const iso = dateInputToTimestamptz(ymd.trim());
+      patch[field] = iso;
+      if (field === "f_entrega_ot") {
+        patch.dias_a_fEntOT = computeDiasHastaFEntregaOt(iso);
+      }
     } else {
       patch[field] = null;
+      if (field === "f_entrega_ot") {
+        patch.dias_a_fEntOT = null;
+      }
     }
 
     setSaving(true);
@@ -2030,6 +2174,7 @@ export function GestionExternosPage() {
     setEditSegProveedorId(row.proveedor_id);
     setEditSegAcabadoId(row.acabado_id);
     setEditSegFecha(isoToDateInput(row.fecha_prevista));
+    setEditSegFechaEntregaOt(isoToDateInput(row.f_entrega_ot));
     setEditSegNotas(row.notas_logistica ?? "");
     setEditSegObservaciones(row.observaciones ?? "");
     setEditSegUnidades(
@@ -2093,11 +2238,20 @@ export function GestionExternosPage() {
     ) {
       fechaEnvioPatch = now;
     }
+    const fEntPatchIso =
+      editSegFechaEntregaOt.trim().length === 10
+        ? dateInputToTimestamptz(editSegFechaEntregaOt.trim())
+        : null;
     const patch: Record<string, string | number | null> = {
       cliente_nombre: editSegCliente.trim(),
       trabajo_titulo: editSegTrabajo.trim(),
       proveedor_id: editSegProveedorId,
       acabado_id: editSegAcabadoId,
+      f_entrega_ot: fEntPatchIso,
+      dias_a_fEntOT:
+        fEntPatchIso != null
+          ? computeDiasHastaFEntregaOt(fEntPatchIso)
+          : null,
       fecha_prevista: dateInputToTimestamptz(editSegFecha),
       fecha_envio: fechaEnvioPatch,
       estado: editSegEstado,
@@ -2575,7 +2729,7 @@ export function GestionExternosPage() {
                 {seguimientoVista === "lista" ? (
                 <>
                 <div className="hidden max-h-[min(78vh,56rem)] w-full min-w-0 max-w-full overflow-x-auto rounded-lg border border-slate-200/80 sm:rounded-xl md:block">
-                  <table className="hidden w-full min-w-[136rem] caption-bottom border-collapse text-xs md:table">
+                  <table className="hidden w-full min-w-[144rem] caption-bottom border-collapse text-xs md:table">
                     <thead>
                       <tr className="border-b border-slate-200">
                         <th className="sticky top-0 z-30 w-8 bg-slate-50/95 px-0.5 py-1 text-center font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
@@ -2621,7 +2775,13 @@ export function GestionExternosPage() {
                         <th className="sticky top-0 z-30 w-[10rem] min-w-[8rem] max-w-[11rem] bg-slate-50/95 px-1 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Trabajo
                         </th>
-                        <th className="sticky top-0 z-30 min-w-[6.5rem] bg-slate-50/95 px-1 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                        <th
+                          className="sticky top-0 z-30 w-[9rem] min-w-[8.5rem] max-w-[10rem] bg-slate-50/95 py-1 pr-4 pl-0.5 text-center font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95"
+                          title="Fecha entrega final pactada (OT)"
+                        >
+                          F. ent. OT
+                        </th>
+                        <th className="sticky top-0 z-30 min-w-[7.5rem] max-w-[9rem] bg-slate-50/95 px-1 py-1 pl-3 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Prov.
                         </th>
                         <th className="sticky top-0 z-30 min-w-[6.5rem] bg-slate-50/95 px-1 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
@@ -2739,7 +2899,20 @@ export function GestionExternosPage() {
                                 {row.trabajo_titulo}
                               </span>
                             </td>
-                            <td className="max-w-[7rem] truncate py-0.5">
+                            <td className="w-[9rem] min-w-[8.5rem] max-w-[10rem] py-0.5 pr-4 pl-0.5 align-middle">
+                              <FEntregaOtTableCell
+                                row={row}
+                                saving={saving}
+                                onCommit={(ymd) =>
+                                  void updateSeguimientoFecha(
+                                    row,
+                                    "f_entrega_ot",
+                                    ymd
+                                  )
+                                }
+                              />
+                            </td>
+                            <td className="max-w-[8.5rem] min-w-[7.5rem] truncate py-0.5 pl-2">
                               {proveedorNombreById.get(row.proveedor_id) ?? "—"}
                             </td>
                             <td className="max-w-[7rem] truncate py-0.5">
@@ -2901,7 +3074,7 @@ export function GestionExternosPage() {
                           </div>
                         </CardHeader>
                         <CardContent className="min-w-0 space-y-4 pt-0">
-                          <div className="space-y-1.5 text-sm leading-relaxed text-muted-foreground">
+                          <div className="space-y-2.5 text-sm leading-relaxed text-muted-foreground">
                             <p>
                               <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
                                 Trabajo
@@ -2942,7 +3115,7 @@ export function GestionExternosPage() {
                               aria-label={`Estado OT ${getOtDisplay(row)}`}
                             />
                           </div>
-                          <div className="grid min-w-0 grid-cols-1 gap-4 min-[480px]:grid-cols-2">
+                          <div className="grid min-w-0 grid-cols-1 gap-4 min-[480px]:grid-cols-2 min-[680px]:grid-cols-3">
                             <div className="space-y-2">
                               <Label
                                 htmlFor={`fe-env-${row.id}`}
@@ -2966,7 +3139,28 @@ export function GestionExternosPage() {
                                 inputClassName="min-h-12 w-full max-w-none text-base"
                               />
                             </div>
-                            <div className="space-y-2">
+                            <div className="space-y-2 pr-3 min-[680px]:pr-2">
+                              <Label
+                                htmlFor={`fe-ot-${row.id}`}
+                                className="text-xs font-medium text-[#002147]"
+                              >
+                                F. entrega OT
+                              </Label>
+                              <FEntregaOtTableCell
+                                row={row}
+                                saving={saving}
+                                inputId={`fe-ot-${row.id}`}
+                                inputClassName="min-h-12 h-12 w-full max-w-none text-base px-1.5"
+                                onCommit={(ymd) =>
+                                  void updateSeguimientoFecha(
+                                    row,
+                                    "f_entrega_ot",
+                                    ymd
+                                  )
+                                }
+                              />
+                            </div>
+                            <div className="space-y-2 min-[480px]:col-span-2 min-[680px]:col-span-1 pl-1 min-[680px]:pl-2">
                               <Label
                                 htmlFor={`fe-prev-${row.id}`}
                                 className="text-xs font-medium text-[#002147]"
@@ -3245,7 +3439,10 @@ export function GestionExternosPage() {
                   <th className="border border-[#002147] px-1 py-1.5 text-left font-semibold">
                     Trabajo
                   </th>
-                  <th className="border border-[#002147] px-1 py-1.5 text-left font-semibold">
+                  <th className="border border-[#002147] py-1.5 pr-4 pl-1 text-left font-semibold whitespace-nowrap">
+                    F. ent. OT
+                  </th>
+                  <th className="border border-[#002147] px-1 py-1.5 pl-3 text-left font-semibold">
                     Prov.
                   </th>
                   <th className="border border-[#002147] px-1 py-1.5 text-left font-semibold">
@@ -3283,6 +3480,7 @@ export function GestionExternosPage() {
               <tbody>
                 {seguimientosFiltrados.map((row) => {
                   const sem = computeSemaforo(row);
+                  const diasFentOt = computeDiasHastaFEntregaOt(row.f_entrega_ot);
                   const compraSem = lookupCompraMaterialStatus(
                     compraMaterialByOt,
                     getOtDisplay(row)
@@ -3311,7 +3509,28 @@ export function GestionExternosPage() {
                       <td className="border border-slate-200 px-1 py-1">
                         {row.trabajo_titulo}
                       </td>
-                      <td className="border border-slate-200 px-1 py-1">
+                      <td className="border border-slate-200 py-1 pr-4 pl-1 whitespace-nowrap">
+                        {row.f_entrega_ot ? (
+                          <span className="inline-flex items-center gap-2">
+                            {diasFentOt != null ? (
+                              <span
+                                className={cn(
+                                  "shrink-0 text-[8pt] tabular-nums leading-none",
+                                  fEntregaOtParenClass(diasFentOt)
+                                )}
+                              >
+                                ({diasFentOt})
+                              </span>
+                            ) : null}
+                            <span className="text-[8.5pt] tabular-nums">
+                              {formatFechaEsCorta(row.f_entrega_ot)}
+                            </span>
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="border border-slate-200 py-1 pr-1 pl-3">
                         {proveedorNombreById.get(row.proveedor_id) ?? "—"}
                       </td>
                       <td className="border border-slate-200 px-1 py-1">
@@ -3812,9 +4031,9 @@ export function GestionExternosPage() {
                   />
                 </div>
 
-                {/* Fila 4: Logística — Unidades → Prioridad → Nº palets → Fecha prevista → Estado (defecto Pendiente) */}
+                {/* Fila 4: Unidades, prioridad, palets */}
                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-12 sm:items-end sm:gap-3">
-                  <div className="grid min-w-0 content-start gap-1.5 sm:col-span-2">
+                  <div className="grid min-w-0 content-start gap-1.5 sm:col-span-4">
                     <Label htmlFor="env-u" className="text-xs leading-none">
                       Unidades
                     </Label>
@@ -3828,7 +4047,7 @@ export function GestionExternosPage() {
                       className="h-9 max-w-full sm:max-w-[5.5rem]"
                     />
                   </div>
-                  <div className="grid min-w-0 content-start gap-1.5 sm:col-span-2">
+                  <div className="grid min-w-0 content-start gap-1.5 sm:col-span-4">
                     <Label
                       htmlFor="env-prio"
                       className="text-xs leading-none"
@@ -3853,7 +4072,7 @@ export function GestionExternosPage() {
                       ))}
                     </select>
                   </div>
-                  <div className="grid min-w-0 content-start gap-1.5 sm:col-span-2">
+                  <div className="grid min-w-0 content-start gap-1.5 sm:col-span-4">
                     <Label htmlFor="env-pal" className="text-xs leading-none">
                       Nº palets
                     </Label>
@@ -3867,7 +4086,25 @@ export function GestionExternosPage() {
                       className="h-9 max-w-full sm:max-w-[5.5rem]"
                     />
                   </div>
-                  <div className="grid min-w-0 content-start gap-1.5 sm:col-span-3">
+                </div>
+                {/* Fila 5: F. entrega OT (cliente) y fecha prevista (proveedor) + estado */}
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-12 sm:items-end sm:gap-3">
+                  <div className="grid min-w-0 content-start gap-1.5 sm:col-span-4">
+                    <Label
+                      htmlFor="env-f-entrega-ot"
+                      className="text-xs leading-none"
+                    >
+                      F. entrega OT
+                    </Label>
+                    <FEntregaOtYmdInputWithUrgencyPrefix
+                      id="env-f-entrega-ot"
+                      value={envFechaEntregaOt}
+                      onChange={(e) => setEnvFechaEntregaOt(e.target.value)}
+                      disabled={!proveedores.length}
+                      inputHeightClass="h-9 min-h-9"
+                    />
+                  </div>
+                  <div className="grid min-w-0 content-start gap-1.5 sm:col-span-4">
                     <Label htmlFor="fp" className="text-xs leading-none">
                       Fecha prevista
                     </Label>
@@ -3880,7 +4117,7 @@ export function GestionExternosPage() {
                       className="h-9 w-full min-w-0"
                     />
                   </div>
-                  <div className="grid min-w-0 content-start gap-1.5 sm:col-span-3">
+                  <div className="grid min-w-0 content-start gap-1.5 sm:col-span-4">
                     <Label htmlFor="env-estado" className="text-xs leading-none">
                       Estado
                     </Label>
@@ -4273,21 +4510,37 @@ export function GestionExternosPage() {
               </DialogTitle>
             </DialogHeader>
             <div className="grid max-h-[min(52vh,420px)] flex-1 gap-3 overflow-y-auto px-6 py-3">
-              <div className="grid gap-1.5">
-                <Label
-                  htmlFor="edit-seg-cli"
-                  className="text-xs font-medium text-slate-700"
-                >
-                  Cliente
-                </Label>
-                <Input
-                  id="edit-seg-cli"
-                  required
-                  value={editSegCliente}
-                  onChange={(e) => setEditSegCliente(e.target.value)}
-                  className="h-8 min-h-8 w-full text-sm px-2 py-1"
-                  autoComplete="off"
-                />
+              <div className="grid gap-3 sm:grid-cols-[minmax(0,7fr)_minmax(0,3fr)] sm:items-end">
+                <div className="grid min-w-0 gap-1.5">
+                  <Label
+                    htmlFor="edit-seg-cli"
+                    className="text-xs font-medium text-slate-700"
+                  >
+                    Cliente
+                  </Label>
+                  <Input
+                    id="edit-seg-cli"
+                    required
+                    value={editSegCliente}
+                    onChange={(e) => setEditSegCliente(e.target.value)}
+                    className="h-8 min-h-8 w-full min-w-0 text-sm px-2 py-1"
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="grid min-w-0 gap-1.5">
+                  <Label
+                    htmlFor="edit-seg-f-entrega-ot"
+                    className="text-xs font-medium text-slate-700"
+                  >
+                    F. entrega OT
+                  </Label>
+                  <FEntregaOtYmdInputWithUrgencyPrefix
+                    id="edit-seg-f-entrega-ot"
+                    value={editSegFechaEntregaOt}
+                    onChange={(e) => setEditSegFechaEntregaOt(e.target.value)}
+                    inputHeightClass="h-8 min-h-8"
+                  />
+                </div>
               </div>
               <div className="grid gap-1.5">
                 <Label
