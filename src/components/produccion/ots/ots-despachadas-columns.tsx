@@ -47,8 +47,11 @@ function bucketEstadoMaterial(estado: string | null | undefined): BucketEstadoMa
   if (n === "sin orden compra") return "sin_orden";
   if (n === "pendiente de pedir" || n === "pendiente") return "naranja";
   if (n === "orden compra generada" || n === "generada") return "azul";
-  if (n === "compra confirmada" || n === "confirmada") return "amarillo";
+  if (n === "compra confirmada" || n === "confirmada" || n === "confirmado")
+    return "amarillo";
   if (n === "material recibido" || n === "recepcionada") return "verde";
+  if (n === "material parcialmente recibido") return "amarillo";
+  if (n === "compra cancelada") return "sin_orden";
   return "otro";
 }
 
@@ -140,6 +143,8 @@ export type OtsDespachadasColumnsContext = {
   onVerCompra: (row: OtsDespachadasTableRow) => void;
   onEditarDespacho: (row: OtsDespachadasTableRow) => void;
   troquelExcelByCodigo: Map<string, TroquelExcelTooltip>;
+  /** true = no se puede marcar (solo «Sin orden compra» es seleccionable). */
+  isSeleccionCompraDeshabilitada: (row: OtsDespachadasTableRow) => boolean;
 };
 
 export function createOtsDespachadasColumns(
@@ -151,21 +156,21 @@ export function createOtsDespachadasColumns(
       size: 36,
       enableSorting: false,
       header: () => null,
-      cell: ({ row, table }) => (
-        <div className="flex justify-center px-0.5 py-0.5">
-          <Checkbox
-            checked={row.getIsSelected()}
-            onCheckedChange={(checked) => {
-              if (checked) {
-                table.setRowSelection({ [row.id]: true });
-              } else {
-                table.setRowSelection({});
+      cell: ({ row }) => {
+        const disabled = ctx.isSeleccionCompraDeshabilitada(row.original);
+        return (
+          <div className="flex justify-center px-0.5 py-0.5">
+            <Checkbox
+              checked={row.getIsSelected()}
+              disabled={disabled}
+              onCheckedChange={(checked) =>
+                row.toggleSelected(checked === true)
               }
-            }}
-            aria-label={`Seleccionar OT ${row.original.ot_numero}`}
-          />
-        </div>
-      ),
+              aria-label={`Seleccionar OT ${row.original.ot_numero}`}
+            />
+          </div>
+        );
+      },
     },
     {
       accessorKey: "ot_numero",

@@ -111,10 +111,12 @@ function proveedorNombre(
 /** Prioridad al fusionar varias filas por OT: la fase más avanzada gana. */
 function rankEstado(estado: string | null): number {
   const n = normEstado(estado);
-  if (n === "recepcionada") return 4;
-  if (n === "confirmada") return 3;
+  if (n === "recepcionada" || n === "recibido") return 5;
+  if (n === "recibido parcial") return 4;
+  if (n === "confirmada" || n === "confirmado") return 3;
   if (n === "generada") return 2;
   if (n === "pendiente") return 1;
+  if (n === "cancelado") return 0;
   return 0;
 }
 
@@ -138,17 +140,29 @@ function infoFromRow(
       tooltip: `Pedido a ${nombre}`,
     };
   }
-  if (n === "confirmada") {
+  if (n === "confirmada" || n === "confirmado") {
     const fp = formatFechaEsCorta(row.fecha_prevista_recepcion);
     return {
       semaforo: "amarillo",
       tooltip: `Confirmado para el ${fp}`,
     };
   }
-  if (n === "recepcionada") {
+  if (n === "recibido parcial") {
+    return {
+      semaforo: "amarillo",
+      tooltip: "Recepción parcial de material",
+    };
+  }
+  if (n === "recepcionada" || n === "recibido") {
     return {
       semaforo: "verde",
       tooltip: "Material en planta",
+    };
+  }
+  if (n === "cancelado") {
+    return {
+      semaforo: "gris",
+      tooltip: "Compra cancelada",
     };
   }
   return { semaforo: "gris", tooltip: TOOLTIP_GRIS };

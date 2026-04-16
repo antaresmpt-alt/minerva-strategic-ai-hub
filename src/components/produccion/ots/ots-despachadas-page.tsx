@@ -6,7 +6,7 @@ import {
   useReactTable,
   type RowSelectionState,
 } from "@tanstack/react-table";
-import { Loader2, ShoppingCart } from "lucide-react";
+import { Layers, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -48,6 +48,10 @@ const TABLE_MASTER = "prod_ots_general";
 const TABLE_COMPRA_MATERIAL = "prod_compra_material";
 const TABLE_PROVEEDORES = "prod_proveedores";
 const PAGE_SIZE = 500;
+
+function esSinOrdenCompraDespacho(estado: string | null | undefined): boolean {
+  return (estado ?? "").trim().toLowerCase() === "sin orden compra";
+}
 
 async function fetchTroquelExcelMap(
   supabase: ReturnType<typeof createSupabaseBrowserClient>,
@@ -226,13 +230,24 @@ export function OtsDespachadasPage({
     setEditOpen(true);
   }, []);
 
+  const isSeleccionCompraDeshabilitada = useCallback(
+    (row: OtsDespachadasTableRow) => !esSinOrdenCompraDespacho(row.estado_material),
+    []
+  );
+
   const columnCtx = useMemo<OtsDespachadasColumnsContext>(
     () => ({
       onVerCompra: handleVerCompra,
       onEditarDespacho: handleEditarDespacho,
       troquelExcelByCodigo,
+      isSeleccionCompraDeshabilitada,
     }),
-    [handleVerCompra, handleEditarDespacho, troquelExcelByCodigo]
+    [
+      handleVerCompra,
+      handleEditarDespacho,
+      troquelExcelByCodigo,
+      isSeleccionCompraDeshabilitada,
+    ]
   );
 
   const columns = useMemo(
@@ -426,58 +441,94 @@ export function OtsDespachadasPage({
     getRowId: (row) => row.id,
     state: { rowSelection },
     onRowSelectionChange: setRowSelection,
-    enableMultiRowSelection: false,
+    enableMultiRowSelection: true,
     getCoreRowModel: getCoreRowModel(),
   });
 
-  const selectedRow = useMemo(() => {
-    const id = Object.keys(rowSelection).find((k) => rowSelection[k]);
-    if (!id) return null;
-    return rows.find((r) => r.id === id) ?? null;
+  const selectedRows = useMemo(() => {
+    const keys = Object.keys(rowSelection).filter((k) => rowSelection[k]);
+    const out: OtsDespachadasTableRow[] = [];
+    for (const k of keys) {
+      const r = rows.find((x) => x.id === k);
+      if (r) out.push(r);
+    }
+    return out;
   }, [rowSelection, rows]);
 
-  const handleComprarMaterial = useCallback(async () => {
-    if (!selectedRow) return;
-    const ot = String(selectedRow.ot_numero ?? "").trim();
-    if (!ot) {
-      toast.error("La fila no tiene número de OT.");
+  const handleGenerarComprasLote = useCallback(async () => {
+    if (selectedRows.length === 0) return;
+    const invalid = selectedRows.filter(
+      (r) => !esSinOrdenCompraDespacho(r.estado_material)
+    );
+    if (invalid.length > 0) {
+      toast.error("Solo se pueden generar compras en filas «Sin orden compra».");
       return;
     }
     setComprando(true);
+    let ok = 0;
+    let skipped = 0;
+    let failed = 0;
     try {
-      const { error: insertError } = await supabase
-        .from(TABLE_COMPRA_MATERIAL)
-        .insert({
+      for (const row of selectedRows) {
+        const ot = String(row.ot_numero ?? "").trim();
+        if (!ot) {
+          failed++;
+          continue;
+        }
+        const payload = {
           ot_numero: ot,
           num_compra: `OCM-${ot}`,
           estado: "Pendiente",
-        });
-      if (insertError) {
-        if (insertError.code === "23505") {
-          toast.error("Esta OT ya tiene una compra iniciada");
-          return;
+          material: row.material?.trim() || null,
+          gramaje: row.gramaje,
+          tamano_hoja: row.tamano_hoja?.trim() || null,
+          num_hojas_brutas: row.num_hojas_brutas,
+        };
+        const { error: insertError } = await supabase
+          .from(TABLE_COMPRA_MATERIAL)
+          .insert(payload);
+        if (insertError) {
+          if (insertError.code === "23505") {
+            skipped++;
+            continue;
+          }
+          throw insertError;
         }
-        throw insertError;
+
+        const { error: updateError } = await supabase
+          .from(TABLE_DESPACHADAS)
+          .update({ estado_material: "Pendiente de pedir" })
+          .eq("id", row.id);
+        if (updateError) throw updateError;
+        ok++;
       }
 
-      const { error: updateError } = await supabase
-        .from(TABLE_DESPACHADAS)
-        .update({ estado_material: "Pendiente de pedir" })
-        .eq("id", selectedRow.id);
-      if (updateError) throw updateError;
-
-      toast.success("Compra de material registrada.");
-      onCompraMaterialSuccess?.();
+      if (ok > 0) {
+        toast.success(
+          skipped || failed
+            ? `Compras generadas: ${ok}. Omitidas (ya existían): ${skipped}. Errores: ${failed}.`
+            : `Compras generadas: ${ok}.`
+        );
+        onCompraMaterialSuccess?.();
+      } else if (skipped > 0 && failed === 0) {
+        toast.info(
+          "Ninguna compra nueva: todas las OT seleccionadas ya tenían registro."
+        );
+      } else {
+        toast.error("No se pudo generar ninguna compra.");
+      }
+      setRowSelection({});
       void loadRows();
     } catch (e) {
       console.error(e);
       toast.error(
-        e instanceof Error ? e.message : "No se pudo iniciar la compra de material."
+        e instanceof Error ? e.message : "Error al generar compras en lote."
       );
+      void loadRows();
     } finally {
       setComprando(false);
     }
-  }, [loadRows, onCompraMaterialSuccess, selectedRow, supabase]);
+  }, [loadRows, onCompraMaterialSuccess, selectedRows, supabase]);
 
   const submitEditDespacho = useCallback(async () => {
     if (!editRow) return;
@@ -773,23 +824,27 @@ export function OtsDespachadasPage({
             entrega). Hasta {PAGE_SIZE} filas recientes.
           </p>
         </div>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          className="gap-1.5 shrink-0"
-          disabled={!selectedRow || comprando}
-          onClick={() => {
-            void handleComprarMaterial();
-          }}
-        >
-          {comprando ? (
-            <Loader2 className="size-4 animate-spin text-[#002147]" aria-hidden />
-          ) : (
-            <ShoppingCart className="size-4 text-[#002147]" aria-hidden />
-          )}
-          Comprar material
-        </Button>
+        {selectedRows.length > 0 ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="gap-1.5 shrink-0"
+            disabled={comprando}
+            onClick={() => void handleGenerarComprasLote()}
+          >
+            {comprando ? (
+              <Loader2
+                className="size-4 animate-spin text-[#002147]"
+                aria-hidden
+              />
+            ) : (
+              <Layers className="size-4 text-[#002147]" aria-hidden />
+            )}
+            Generar compras en lote
+            <span className="tabular-nums">({selectedRows.length})</span>
+          </Button>
+        ) : null}
       </div>
 
       <div className="overflow-hidden rounded-lg border border-slate-200/90 bg-white shadow-sm">
