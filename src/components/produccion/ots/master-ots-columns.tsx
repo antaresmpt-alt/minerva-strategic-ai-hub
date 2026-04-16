@@ -82,7 +82,7 @@ export function createMasterOtsColumns(
         </span>
       ),
       cell: ({ row }) => (
-        <div className="truncate px-1 py-0.5 font-mono text-[11px] font-medium text-[#002147]">
+        <div className="truncate px-1 py-0.5 font-mono text-[11px] font-normal text-[#002147]">
           {row.original.num_pedido}
         </div>
       ),

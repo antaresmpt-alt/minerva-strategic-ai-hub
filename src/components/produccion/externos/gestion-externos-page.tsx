@@ -2757,7 +2757,7 @@ export function GestionExternosPage() {
                         <th className="sticky top-0 z-30 w-9 bg-slate-50/95 px-0.5 py-1 text-center font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Sem.
                         </th>
-                        <th className="sticky top-0 z-30 w-[4.5rem] min-w-[4.25rem] max-w-[6rem] bg-slate-50/95 px-0.5 py-1 text-left font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                        <th className="sticky top-0 z-30 w-12 min-w-0 max-w-[6rem] bg-slate-50/95 px-1 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           OT
                         </th>
                         <th className="sticky top-0 z-30 w-8 bg-slate-50/95 px-0.5 py-1 text-center font-medium tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
@@ -3077,9 +3077,11 @@ export function GestionExternosPage() {
                                 />
                               </div>
                             </div>
-                            <span className="text-xs text-muted-foreground">
-                              Ud. {row.unidades != null ? row.unidades : "—"} · Pal.{" "}
-                              {row.palets != null ? row.palets : "—"}
+                            <span className="inline-flex flex-wrap items-center gap-x-1 gap-y-1 text-xs text-muted-foreground">
+                              <span>
+                                Ud. {row.unidades != null ? row.unidades : "—"} · Pal.{" "}
+                                {row.palets != null ? row.palets : "—"}
+                              </span>
                               {diasUi != null ? ` · ${diasUi} días` : ""}
                             </span>
                           </div>
