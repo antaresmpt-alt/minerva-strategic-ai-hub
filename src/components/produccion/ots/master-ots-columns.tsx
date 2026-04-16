@@ -85,7 +85,7 @@ export function createMasterOtsColumns(
         </span>
       ),
       cell: ({ row }) => (
-        <div className="flex min-h-6 min-w-0 items-center justify-center px-0.5 py-0">
+        <div className="flex min-h-6 min-w-0 items-center px-0.5 py-0">
           <OtNumeroSemaforoBadge
             otNumero={String(row.original.num_pedido ?? "").trim()}
             fechaEntregaIso={row.original.fecha_entrega}
@@ -93,7 +93,7 @@ export function createMasterOtsColumns(
           />
         </div>
       ),
-      size: 104,
+      size: 88,
     },
     {
       id: "despachado",

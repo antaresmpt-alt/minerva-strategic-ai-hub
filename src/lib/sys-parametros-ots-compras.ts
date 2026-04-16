@@ -82,3 +82,31 @@ export function clasesBadgeSemaforoOt(v: SemaforoOtEntregaVariant): string {
       return "bg-slate-500 text-white";
   }
 }
+
+/** Tablas maestro/compras: fondo muy claro + texto de color (sin pastilla sólida). */
+export function clasesSemaforoOtSuave(v: SemaforoOtEntregaVariant): string {
+  switch (v) {
+    case "rojo":
+      return "bg-red-50/90 text-red-800";
+    case "naranja":
+      return "bg-amber-50/90 text-amber-900";
+    case "ok":
+      return "bg-emerald-50/90 text-emerald-900";
+    default:
+      return "bg-slate-100 text-slate-700";
+  }
+}
+
+/** Punto pequeño de semáforo (p. ej. columna OT en Externos, sin pastilla). */
+export function clasesPuntoSemaforoOt(v: SemaforoOtEntregaVariant): string {
+  switch (v) {
+    case "rojo":
+      return "bg-red-500";
+    case "naranja":
+      return "bg-amber-500";
+    case "ok":
+      return "bg-emerald-500";
+    default:
+      return "bg-slate-400";
+  }
+}

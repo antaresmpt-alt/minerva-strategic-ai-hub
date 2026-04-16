@@ -11,9 +11,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { DiasEntregaPill } from "@/components/produccion/ots/dias-entrega-pill";
 import { OtNumeroSemaforoBadge } from "@/components/produccion/ots/ot-numero-semaforo-badge";
 import { COMPRAS_MATERIAL_ESTADOS } from "@/lib/compras-material-estados";
+import { diasDesdeHastaFecha } from "@/lib/compras-material-prioridad";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import type { OtsComprasUmbralesParametros } from "@/lib/sys-parametros-ots-compras";
 import type { ComprasMaterialTableRow } from "@/types/prod-compra-material";
@@ -107,7 +107,7 @@ export function createComprasMaterialColumns(
     },
     {
       id: "stock",
-      size: 68,
+      size: 56,
       enableSorting: false,
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
@@ -116,18 +116,45 @@ export function createComprasMaterialColumns(
       ),
       cell: ({ row }) => {
         const f = row.original.fecha_entrega_maestro;
+        const days = diasDesdeHastaFecha(f);
         const tooltipLabel = f?.trim()
           ? `Entrega OT: ${formatFechaEsCorta(f)}`
           : "Sin fecha de entrega en maestro";
+        if (!f?.trim() || days === null) {
+          return (
+            <div className="flex justify-center px-0.5 py-0.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-default text-[11px] text-muted-foreground">
+                    —
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs text-xs">
+                  <p>{tooltipLabel}</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          );
+        }
+        const um = ctx.umbralesOtsCompras.sobrestockUmbral;
+        const amarillo = days > um;
         return (
-          <div className="flex min-h-6 items-center justify-center px-0.5 py-0">
+          <div className="flex justify-center px-0.5 py-0.5">
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="inline-flex cursor-default">
-                  <DiasEntregaPill
-                    fechaEntregaIso={f}
-                    umbrales={ctx.umbralesOtsCompras}
+                <span className="inline-flex cursor-default items-center gap-1">
+                  <span
+                    className={cn(
+                      "inline-block h-2.5 w-2.5 shrink-0 rounded-full",
+                      amarillo ? "bg-amber-400" : "bg-emerald-500"
+                    )}
+                    aria-hidden
                   />
+                  {amarillo ? (
+                    <span className="text-[9px] leading-none text-muted-foreground">
+                      +{um}d
+                    </span>
+                  ) : null}
                 </span>
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-xs text-xs">
@@ -146,7 +173,7 @@ export function createComprasMaterialColumns(
         </span>
       ),
       cell: ({ row }) => (
-        <div className="flex min-h-6 min-w-0 items-center justify-center px-0.5 py-0">
+        <div className="flex min-h-6 min-w-0 items-center px-0.5 py-0">
           <OtNumeroSemaforoBadge
             otNumero={row.original.ot_numero}
             fechaEntregaIso={row.original.fecha_entrega_maestro}
@@ -154,7 +181,7 @@ export function createComprasMaterialColumns(
           />
         </div>
       ),
-      size: 104,
+      size: 88,
     },
     {
       accessorKey: "num_compra",

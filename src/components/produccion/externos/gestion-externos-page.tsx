@@ -40,7 +40,6 @@ import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
 import { GlobalModelSelector } from "@/components/layout/header";
-import { DiasExternoVentanaPill } from "@/components/produccion/ots/dias-entrega-pill";
 import { OtNumeroSemaforoBadge } from "@/components/produccion/ots/ot-numero-semaforo-badge";
 import {
   ExternosDailyGrid,
@@ -2758,7 +2757,7 @@ export function GestionExternosPage() {
                         <th className="sticky top-0 z-30 w-9 bg-slate-50/95 px-0.5 py-1 text-center font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Sem.
                         </th>
-                        <th className="sticky top-0 z-30 w-16 min-w-[65px] max-w-16 bg-slate-50/95 px-0.5 py-1 text-center font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                        <th className="sticky top-0 z-30 w-12 min-w-0 max-w-[6rem] bg-slate-50/95 px-1 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           OT
                         </th>
                         <th className="sticky top-0 z-30 w-8 bg-slate-50/95 px-0.5 py-1 text-center font-medium tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
@@ -2770,7 +2769,7 @@ export function GestionExternosPage() {
                         <th className="sticky top-0 z-30 w-16 bg-slate-50/95 px-0.5 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Prio.
                         </th>
-                        <th className="sticky top-0 z-30 w-16 min-w-[65px] max-w-16 bg-slate-50/95 px-0.5 py-1 text-center font-medium tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                        <th className="sticky top-0 z-30 w-8 bg-slate-50/95 px-0.5 py-1 text-center font-medium tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Días
                         </th>
                         <th className="sticky top-0 z-30 w-[7.5rem] min-w-[6rem] max-w-[8rem] bg-slate-50/95 px-1 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
@@ -2875,14 +2874,13 @@ export function GestionExternosPage() {
                             <td className="w-9 px-0.5 py-0.5 text-center align-middle">
                               <SemaforoCell row={row} />
                             </td>
-                            <td className="w-16 min-w-[65px] max-w-16 px-0.5 py-0.5 align-middle">
-                              <div className="flex justify-center">
-                                <OtNumeroSemaforoBadge
-                                  otNumero={getOtDisplay(row)}
-                                  fechaEntregaIso={row.f_entrega_ot}
-                                  umbrales={umbralesOtsCompras}
-                                />
-                              </div>
+                            <td className="w-[4.5rem] min-w-[4.25rem] max-w-[6rem] px-0.5 py-0.5 align-middle">
+                              <OtNumeroSemaforoBadge
+                                appearance="externos-inline"
+                                otNumero={getOtDisplay(row)}
+                                fechaEntregaIso={row.f_entrega_ot}
+                                umbrales={umbralesOtsCompras}
+                              />
                             </td>
                             <td className="w-8 px-0.5 py-0.5 text-center tabular-nums">
                               {row.num_operacion ?? "—"}
@@ -2895,10 +2893,8 @@ export function GestionExternosPage() {
                                 ? row.prioridad
                                 : "—"}
                             </td>
-                            <td className="w-16 min-w-[65px] max-w-16 px-0.5 py-0.5 align-middle">
-                              <div className="flex justify-center">
-                                <DiasExternoVentanaPill dias={diasUi} />
-                              </div>
+                            <td className="w-8 px-0.5 py-0.5 text-center tabular-nums text-foreground">
+                              {diasUi != null ? diasUi : "—"}
                             </td>
                             <td className="w-[7.5rem] min-w-[6rem] max-w-[8rem] truncate px-1 py-0.5 leading-tight">
                               {row.cliente_nombre}
@@ -3032,6 +3028,7 @@ export function GestionExternosPage() {
                             <div className="min-w-0 flex-1 space-y-2">
                               <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                                 <OtNumeroSemaforoBadge
+                                  appearance="externos-inline"
                                   otNumero={getOtDisplay(row)}
                                   fechaEntregaIso={row.f_entrega_ot}
                                   umbrales={umbralesOtsCompras}
@@ -3087,12 +3084,7 @@ export function GestionExternosPage() {
                                 Ud. {row.unidades != null ? row.unidades : "—"} · Pal.{" "}
                                 {row.palets != null ? row.palets : "—"}
                               </span>
-                              {diasUi != null ? (
-                                <span className="inline-flex items-center gap-1.5">
-                                  <DiasExternoVentanaPill dias={diasUi} />
-                                  <span>días</span>
-                                </span>
-                              ) : null}
+                              {diasUi != null ? ` · ${diasUi} días` : ""}
                             </span>
                           </div>
                         </CardHeader>
@@ -3521,6 +3513,7 @@ export function GestionExternosPage() {
                       </td>
                       <td className="border border-slate-200 px-1 py-1 align-middle">
                         <OtNumeroSemaforoBadge
+                          appearance="externos-inline"
                           otNumero={getOtDisplay(row)}
                           fechaEntregaIso={row.f_entrega_ot}
                           umbrales={umbralesOtsCompras}
