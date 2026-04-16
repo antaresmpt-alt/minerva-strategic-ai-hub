@@ -3,8 +3,10 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Check, Pencil, Truck } from "lucide-react";
 
+import { OtNumeroSemaforoBadge } from "@/components/produccion/ots/ot-numero-semaforo-badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import type { OtsComprasUmbralesParametros } from "@/lib/sys-parametros-ots-compras";
 import type { ProdOtsGeneralRow } from "@/types/prod-ots";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +18,7 @@ import {
 export type MasterOtsColumnsContext = {
   rowHasExterno: (r: ProdOtsGeneralRow) => boolean;
   openEdit: (r: ProdOtsGeneralRow) => void;
+  umbralesOtsCompras: OtsComprasUmbralesParametros;
 };
 
 export function createMasterOtsColumns(
@@ -82,11 +85,15 @@ export function createMasterOtsColumns(
         </span>
       ),
       cell: ({ row }) => (
-        <div className="truncate px-1 py-0.5 font-mono text-[11px] font-normal text-[#002147]">
-          {row.original.num_pedido}
+        <div className="flex min-h-6 min-w-0 items-center justify-center px-0.5 py-0">
+          <OtNumeroSemaforoBadge
+            otNumero={String(row.original.num_pedido ?? "").trim()}
+            fechaEntregaIso={row.original.fecha_entrega}
+            umbrales={ctx.umbralesOtsCompras}
+          />
         </div>
       ),
-      size: 72,
+      size: 104,
     },
     {
       id: "despachado",

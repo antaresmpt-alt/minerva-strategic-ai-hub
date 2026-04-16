@@ -23,6 +23,7 @@ import { toast } from "sonner";
 
 import { GlobalModelSelector } from "@/components/layout/header";
 import { createMasterOtsColumns } from "@/components/produccion/ots/master-ots-columns";
+import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
 import { TroquelPickerField } from "@/components/produccion/ots/troquel-picker-field";
 import { estadoDisplayForRow } from "@/components/produccion/ots/master-ots-table-helpers";
 import { Button } from "@/components/ui/button";
@@ -219,6 +220,7 @@ async function collectDistinctTriples(
 export function MasterOtsPage() {
   const router = useRouter();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const { umbrales: umbralesOtsCompras } = useSysParametrosOtsCompras();
   const globalModel = useHubStore((s) => s.globalModel);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -512,8 +514,9 @@ export function MasterOtsPage() {
       createMasterOtsColumns({
         rowHasExterno,
         openEdit,
+        umbralesOtsCompras,
       }),
-    [rowHasExterno, openEdit]
+    [rowHasExterno, openEdit, umbralesOtsCompras]
   );
 
   const despachoSeleccion = useMemo(() => {
