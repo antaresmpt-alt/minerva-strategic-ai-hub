@@ -11,9 +11,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { OtsComprasUmbralesParametros } from "@/lib/sys-parametros-ots-compras";
 import type { OtsDespachadasTableRow } from "@/types/prod-ots-despachadas";
 import { cn } from "@/lib/utils";
 
+import { OtNumeroSemaforoBadge } from "@/components/produccion/ots/ot-numero-semaforo-badge";
 import { formatDateDDMMYY } from "@/components/produccion/ots/master-ots-table-helpers";
 
 /** Datos «Tipo Excel» desde `prod_troqueles` (clave = `num_troquel` en minúsculas). */
@@ -145,6 +147,7 @@ export type OtsDespachadasColumnsContext = {
   troquelExcelByCodigo: Map<string, TroquelExcelTooltip>;
   /** true = checkbox deshabilitado (OT con gestión de compra ya iniciada). */
   isSeleccionCompraDeshabilitada: (row: OtsDespachadasTableRow) => boolean;
+  umbralesOtsCompras: OtsComprasUmbralesParametros;
 };
 
 export function createOtsDespachadasColumns(
@@ -187,8 +190,12 @@ export function createOtsDespachadasColumns(
         </span>
       ),
       cell: ({ row }) => (
-        <div className="w-fit min-w-0 max-w-[5rem] truncate px-1 py-0.5 font-mono text-[11px] font-medium text-[#002147]">
-          {row.original.ot_numero}
+        <div className="min-w-0 max-w-[7rem] px-0.5 py-0.5">
+          <OtNumeroSemaforoBadge
+            otNumero={row.original.ot_numero}
+            fechaEntregaIso={row.original.fecha_entrega_prevista}
+            umbrales={ctx.umbralesOtsCompras}
+          />
         </div>
       ),
     },

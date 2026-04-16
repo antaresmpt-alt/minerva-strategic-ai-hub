@@ -4,7 +4,7 @@ import { SettingsShell } from "@/components/settings/settings-shell";
 
 export const metadata: Metadata = {
   title: "Configuración | Minerva Strategic AI Hub",
-  description: "Ingesta RAG y gestión de usuarios.",
+  description: "Ingesta RAG, gestión de usuarios y variables de sistema.",
 };
 
 type SettingsPageProps = {
@@ -16,7 +16,12 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   const raw = sp.tab;
   const tabStr =
     typeof raw === "string" ? raw : Array.isArray(raw) ? raw[0] : undefined;
-  const defaultTab = tabStr === "users" ? "users" : "ingest";
+  const defaultTab =
+    tabStr === "users"
+      ? "users"
+      : tabStr === "variables"
+        ? "variables"
+        : "ingest";
 
   return <SettingsShell defaultTab={defaultTab} />;
 }

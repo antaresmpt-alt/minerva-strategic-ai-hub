@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { createComprasMaterialColumns } from "@/components/produccion/ots/compras-material-columns";
+import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -175,6 +176,7 @@ Saludos cordiales.`;
 
 export function ComprasMaterialPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const { umbrales: umbralesOtsCompras } = useSysParametrosOtsCompras();
   const [rows, setRows] = useState<ComprasMaterialTableRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
@@ -609,6 +611,7 @@ export function ComprasMaterialPage() {
         onProveedorChange,
         onEstadoChange,
         onFechaPrevistaCommit,
+        umbralesOtsCompras,
       }),
     [
       isRowCheckboxDisabled,
@@ -618,6 +621,7 @@ export function ComprasMaterialPage() {
       onProveedorChange,
       openEdit,
       proveedoresPapelCarton,
+      umbralesOtsCompras,
     ]
   );
 
@@ -760,12 +764,24 @@ export function ComprasMaterialPage() {
       toast.error("Selecciona un proveedor.");
       return;
     }
-    if (selectedRows.some((r) => esPrioridadStockAmarilla(r.fecha_entrega_maestro))) {
+    if (
+      selectedRows.some((r) =>
+        esPrioridadStockAmarilla(
+          r.fecha_entrega_maestro,
+          umbralesOtsCompras.sobrestockUmbral
+        )
+      )
+    ) {
       setSobreStockConfirmOpen(true);
       return;
     }
     void ejecutarGenerarYEnviar();
-  }, [ejecutarGenerarYEnviar, proveedorSeleccionado, selectedRows]);
+  }, [
+    ejecutarGenerarYEnviar,
+    proveedorSeleccionado,
+    selectedRows,
+    umbralesOtsCompras.sobrestockUmbral,
+  ]);
 
   useEffect(() => {
     if (!solicitarOpen) {

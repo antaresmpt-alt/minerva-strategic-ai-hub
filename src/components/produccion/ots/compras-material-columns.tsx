@@ -11,9 +11,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { OtNumeroSemaforoBadge } from "@/components/produccion/ots/ot-numero-semaforo-badge";
 import { COMPRAS_MATERIAL_ESTADOS } from "@/lib/compras-material-estados";
 import { diasDesdeHastaFecha } from "@/lib/compras-material-prioridad";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
+import type { OtsComprasUmbralesParametros } from "@/lib/sys-parametros-ots-compras";
 import type { ComprasMaterialTableRow } from "@/types/prod-compra-material";
 import { cn } from "@/lib/utils";
 
@@ -76,6 +78,7 @@ export type ComprasMaterialColumnsContext = {
   onProveedorChange: (rowId: string, proveedorId: string) => void;
   onEstadoChange: (rowId: string, estado: string) => void;
   onFechaPrevistaCommit: (rowId: string, ymd: string) => void;
+  umbralesOtsCompras: OtsComprasUmbralesParametros;
 };
 
 export function createComprasMaterialColumns(
@@ -132,7 +135,8 @@ export function createComprasMaterialColumns(
             </div>
           );
         }
-        const amarillo = days > 30;
+        const um = ctx.umbralesOtsCompras.sobrestockUmbral;
+        const amarillo = days > um;
         return (
           <div className="flex justify-center px-0.5 py-0.5">
             <Tooltip>
@@ -147,7 +151,7 @@ export function createComprasMaterialColumns(
                   />
                   {amarillo ? (
                     <span className="text-[9px] leading-none text-muted-foreground">
-                      +30d
+                      +{um}d
                     </span>
                   ) : null}
                 </span>
@@ -168,11 +172,15 @@ export function createComprasMaterialColumns(
         </span>
       ),
       cell: ({ row }) => (
-        <div className="truncate px-1 py-0.5 font-mono text-[11px] font-medium text-[#002147]">
-          {row.original.ot_numero}
+        <div className="min-w-0 px-0.5 py-0.5">
+          <OtNumeroSemaforoBadge
+            otNumero={row.original.ot_numero}
+            fechaEntregaIso={row.original.fecha_entrega_maestro}
+            umbrales={ctx.umbralesOtsCompras}
+          />
         </div>
       ),
-      size: 80,
+      size: 96,
     },
     {
       accessorKey: "num_compra",

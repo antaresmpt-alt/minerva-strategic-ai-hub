@@ -36,6 +36,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
   DetallesCompraDialog,
@@ -215,6 +216,7 @@ export function OtsDespachadasPage({
   onCompraMaterialSuccess,
 }: OtsDespachadasPageProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const { umbrales: umbralesOtsCompras } = useSysParametrosOtsCompras();
   const [rows, setRows] = useState<OtsDespachadasTableRow[]>([]);
   const [troquelExcelByCodigo, setTroquelExcelByCodigo] = useState<
     Map<string, TroquelExcelTooltip>
@@ -265,12 +267,14 @@ export function OtsDespachadasPage({
       onEditarDespacho: handleEditarDespacho,
       troquelExcelByCodigo,
       isSeleccionCompraDeshabilitada,
+      umbralesOtsCompras,
     }),
     [
       handleVerCompra,
       handleEditarDespacho,
       troquelExcelByCodigo,
       isSeleccionCompraDeshabilitada,
+      umbralesOtsCompras,
     ]
   );
 

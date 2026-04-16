@@ -6,10 +6,11 @@ import { ArrowLeft } from "lucide-react";
 import { GlobalModelSelector } from "@/components/layout/header";
 import { IngestKnowledgeTab } from "@/components/settings/ingest-knowledge-tab";
 import { UsersManagementPanel } from "@/components/settings/users-management-panel";
+import { VariablesSistemaTab } from "@/components/settings/variables-sistema-tab";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type SettingsShellProps = {
-  defaultTab: "ingest" | "users";
+  defaultTab: "ingest" | "users" | "variables";
 };
 
 export function SettingsShell({ defaultTab }: SettingsShellProps) {
@@ -29,7 +30,8 @@ export function SettingsShell({ defaultTab }: SettingsShellProps) {
               Configuración
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Ingesta de conocimiento y gestión de usuarios (admin / gerencia).
+              Ingesta de conocimiento, gestión de usuarios y variables de sistema
+              (admin / gerencia).
             </p>
           </div>
           <GlobalModelSelector layout="row" className="shrink-0" />
@@ -39,12 +41,16 @@ export function SettingsShell({ defaultTab }: SettingsShellProps) {
           <TabsList variant="line" className="w-full justify-start gap-1">
             <TabsTrigger value="ingest">Ingesta de conocimiento</TabsTrigger>
             <TabsTrigger value="users">Gestión de usuarios</TabsTrigger>
+            <TabsTrigger value="variables">Variables Sistema</TabsTrigger>
           </TabsList>
           <TabsContent value="ingest" className="mt-6 outline-none">
             <IngestKnowledgeTab />
           </TabsContent>
           <TabsContent value="users" className="mt-6 outline-none">
             <UsersManagementPanel />
+          </TabsContent>
+          <TabsContent value="variables" className="mt-6 outline-none">
+            <VariablesSistemaTab />
           </TabsContent>
         </Tabs>
       </div>
