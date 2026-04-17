@@ -16,6 +16,7 @@ import {
   type ColumnFiltersState,
   type OnChangeFn,
   type RowSelectionState,
+  type SortingState,
 } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -78,6 +79,27 @@ import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
 const TABLE = "prod_ots_general";
+
+const MASTER_OTS_SORTABLE_IDS = new Set<string>([
+  "num_pedido",
+  "fecha_entrega",
+  "fecha_apertura",
+]);
+
+const MASTER_OTS_DEFAULT_SORTING: SortingState = [
+  { id: "fecha_entrega", desc: false },
+];
+
+function masterOtsPrimaryOrder(sorting: SortingState): {
+  column: string;
+  ascending: boolean;
+} {
+  const s = sorting[0];
+  if (s && MASTER_OTS_SORTABLE_IDS.has(s.id)) {
+    return { column: s.id, ascending: !s.desc };
+  }
+  return { column: "fecha_entrega", ascending: true };
+}
 const TABLE_OT_DESPACHADAS = "produccion_ot_despachadas";
 /** Seguimiento externo: columna `OT` e `id_pedido` (equivalente a `num_pedido` / OT). */
 const SEGUIMIENTO_EXTERNOS = "prod_seguimiento_externos";
@@ -236,6 +258,8 @@ export function MasterOtsPage() {
   const [despachadoFilter, setDespachadoFilter] = useState<
     "todos" | "si" | "no"
   >("todos");
+  const [sorting, setSorting] =
+    useState<SortingState>(MASTER_OTS_DEFAULT_SORTING);
 
   const [estadoOptions, setEstadoOptions] = useState<string[]>([]);
   const [vendedorOptions, setVendedorOptions] = useState<string[]>([]);
@@ -439,8 +463,9 @@ export function MasterOtsPage() {
 
         let dataQ = supabase.from(TABLE).select("*");
         dataQ = applyFilters(dataQ);
+        const { column: orderCol, ascending } = masterOtsPrimaryOrder(sorting);
         const { data, error } = await dataQ
-          .order("num_pedido", { ascending: false, nullsFirst: false })
+          .order(orderCol, { ascending, nullsFirst: false })
           .order("id", { ascending: false })
           .range(from, to);
         if (error) throw error;
@@ -460,7 +485,14 @@ export function MasterOtsPage() {
         if (!silent) setLoading(false);
       }
     },
-    [supabase, page, applyFilters, loadExternosForRows, loadDespachadasForRows]
+    [
+      supabase,
+      page,
+      applyFilters,
+      sorting,
+      loadExternosForRows,
+      loadDespachadasForRows,
+    ]
   );
 
   useEffect(() => {
@@ -573,6 +605,16 @@ export function MasterOtsPage() {
     }
   };
 
+  const onSortingChange: OnChangeFn<SortingState> = (updater) => {
+    setSorting((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      if (next.length === 0) return MASTER_OTS_DEFAULT_SORTING;
+      return next;
+    });
+    setPage(0);
+    setRowSelection({});
+  };
+
   const table = useReactTable({
     data: rows,
     columns,
@@ -580,14 +622,14 @@ export function MasterOtsPage() {
     state: {
       rowSelection,
       columnFilters: despachadoColumnFilters,
+      sorting,
     },
     onRowSelectionChange: setRowSelection,
     onColumnFiltersChange: onDespachadoColumnFiltersChange,
+    onSortingChange,
     manualFiltering: true,
     manualSorting: true,
-    initialState: {
-      sorting: [{ id: "num_pedido", desc: true }],
-    },
+    enableMultiSort: false,
     enableMultiRowSelection: false,
     getCoreRowModel: getCoreRowModel(),
   });

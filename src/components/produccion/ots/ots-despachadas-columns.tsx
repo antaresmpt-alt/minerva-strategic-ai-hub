@@ -183,14 +183,14 @@ export function createOtsDespachadasColumns(
     },
     {
       accessorKey: "ot_numero",
-      size: 72,
+      size: 96,
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
           OT
         </span>
       ),
       cell: ({ row }) => (
-        <div className="flex min-h-6 min-w-0 max-w-[7rem] items-center px-0.5 py-0">
+        <div className="flex min-h-6 min-w-0 max-w-[9rem] items-center px-0.5 py-0">
           <OtNumeroSemaforoBadge
             otNumero={row.original.ot_numero}
             fechaEntregaIso={row.original.fecha_entrega_prevista}

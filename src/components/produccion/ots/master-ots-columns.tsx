@@ -1,7 +1,14 @@
 "use client";
 
-import type { ColumnDef } from "@tanstack/react-table";
-import { Check, Pencil, Truck } from "lucide-react";
+import type { Column, ColumnDef } from "@tanstack/react-table";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Check,
+  Pencil,
+  Truck,
+} from "lucide-react";
 
 import { OtNumeroSemaforoBadge } from "@/components/produccion/ots/ot-numero-semaforo-badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +21,43 @@ import {
   formatDateDDMMYY,
   statusBadge,
 } from "@/components/produccion/ots/master-ots-table-helpers";
+
+function MasterOtsSortHeader({
+  column,
+  label,
+  title,
+}: {
+  column: Column<ProdOtsGeneralRow, unknown>;
+  label: string;
+  title?: string;
+}) {
+  const sorted = column.getIsSorted();
+  return (
+    <button
+      type="button"
+      title={title ?? `Ordenar por ${label}`}
+      className={cn(
+        "-mx-0.5 inline-flex max-w-full min-w-0 items-center gap-0.5 rounded px-0.5 py-0.5 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-600 hover:bg-slate-100/90 hover:text-slate-800",
+        sorted && "text-[#002147]"
+      )}
+      onClick={column.getToggleSortingHandler()}
+    >
+      <span className="min-w-0 shrink truncate">{label}</span>
+      <span
+        className="inline-flex size-3 shrink-0 items-center justify-center"
+        aria-hidden
+      >
+        {sorted === "asc" ? (
+          <ArrowUp className="size-3 text-[#002147]" strokeWidth={2.25} />
+        ) : sorted === "desc" ? (
+          <ArrowDown className="size-3 text-[#002147]" strokeWidth={2.25} />
+        ) : (
+          <ArrowUpDown className="size-3 text-slate-300" strokeWidth={2} />
+        )}
+      </span>
+    </button>
+  );
+}
 
 export type MasterOtsColumnsContext = {
   rowHasExterno: (r: ProdOtsGeneralRow) => boolean;
@@ -48,6 +92,7 @@ export function createMasterOtsColumns(
     },
     {
       id: "ext",
+      enableSorting: false,
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
           Ext.
@@ -79,10 +124,12 @@ export function createMasterOtsColumns(
     },
     {
       accessorKey: "num_pedido",
-      header: () => (
-        <span className="text-[10px] font-semibold uppercase tracking-wide">
-          OT
-        </span>
+      header: ({ column }) => (
+        <MasterOtsSortHeader
+          column={column}
+          label="Nº OT"
+          title="Ordenar por número de OT"
+        />
       ),
       cell: ({ row }) => (
         <div className="flex min-h-6 min-w-0 items-center px-0.5 py-0">
@@ -93,10 +140,11 @@ export function createMasterOtsColumns(
           />
         </div>
       ),
-      size: 88,
+      size: 96,
     },
     {
       id: "despachado",
+      enableSorting: false,
       size: 40,
       header: () => (
         <div className="text-[10px] font-semibold uppercase tracking-wide">
@@ -118,6 +166,7 @@ export function createMasterOtsColumns(
     },
     {
       id: "estado",
+      enableSorting: false,
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
           Estado
@@ -146,6 +195,7 @@ export function createMasterOtsColumns(
     },
     {
       accessorKey: "cliente",
+      enableSorting: false,
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
           Cliente
@@ -159,6 +209,7 @@ export function createMasterOtsColumns(
     },
     {
       accessorKey: "pedido_cliente",
+      enableSorting: false,
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
           Ped. cli.
@@ -174,6 +225,7 @@ export function createMasterOtsColumns(
     },
     {
       accessorKey: "cantidad",
+      enableSorting: false,
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
           Cant.
@@ -188,6 +240,7 @@ export function createMasterOtsColumns(
     },
     {
       accessorKey: "titulo",
+      enableSorting: false,
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
           Título
@@ -203,10 +256,12 @@ export function createMasterOtsColumns(
     },
     {
       accessorKey: "fecha_apertura",
-      header: () => (
-        <span className="text-[10px] font-semibold uppercase tracking-wide">
-          Apert.
-        </span>
+      header: ({ column }) => (
+        <MasterOtsSortHeader
+          column={column}
+          label="Apertura"
+          title="Ordenar por fecha de apertura"
+        />
       ),
       cell: ({ row }) => (
         <div className="whitespace-nowrap px-0.5 py-0.5 text-center text-[11px] tabular-nums text-slate-700">
@@ -216,10 +271,12 @@ export function createMasterOtsColumns(
     },
     {
       accessorKey: "fecha_entrega",
-      header: () => (
-        <span className="text-[10px] font-semibold uppercase tracking-wide">
-          Entr.
-        </span>
+      header: ({ column }) => (
+        <MasterOtsSortHeader
+          column={column}
+          label="Entrega"
+          title="Ordenar por fecha de entrega"
+        />
       ),
       cell: ({ row }) => (
         <div className="whitespace-nowrap px-0.5 py-0.5 text-center text-[11px] tabular-nums text-slate-700">
@@ -229,6 +286,7 @@ export function createMasterOtsColumns(
     },
     {
       accessorKey: "vendedor",
+      enableSorting: false,
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
           Vendedor
@@ -242,6 +300,7 @@ export function createMasterOtsColumns(
     },
     {
       accessorKey: "prueba_color",
+      enableSorting: false,
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
           Prueba col.
@@ -256,6 +315,7 @@ export function createMasterOtsColumns(
     },
     {
       accessorKey: "pdf_ok",
+      enableSorting: false,
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
           PDF ok
@@ -270,6 +330,7 @@ export function createMasterOtsColumns(
     },
     {
       accessorKey: "muestra_ok",
+      enableSorting: false,
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
           Muestra
@@ -284,6 +345,7 @@ export function createMasterOtsColumns(
     },
     {
       id: "edit",
+      enableSorting: false,
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
           Ed.

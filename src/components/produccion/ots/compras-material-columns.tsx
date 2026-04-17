@@ -181,7 +181,7 @@ export function createComprasMaterialColumns(
           />
         </div>
       ),
-      size: 88,
+      size: 96,
     },
     {
       accessorKey: "num_compra",

@@ -11,6 +11,7 @@ import { jsPDF } from "jspdf";
 import {
   Download,
   FileSpreadsheet,
+  History,
   Loader2,
   Mail,
   Printer,
@@ -22,6 +23,7 @@ import * as XLSX from "xlsx";
 import { createComprasMaterialColumns } from "@/components/produccion/ots/compras-material-columns";
 import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
 import { Button } from "@/components/ui/button";
+import { Toggle } from "@/components/ui/toggle";
 import {
   Dialog,
   DialogContent,
@@ -240,6 +242,8 @@ export function ComprasMaterialPage() {
   const [filtroBusqueda, setFiltroBusqueda] = useState("");
   const [filtroProveedorId, setFiltroProveedorId] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("");
+  /** `false`: ocultar compras en estado «Recibido» (vista limpia). `true`: ver todo el histórico. */
+  const [verHistorial, setVerHistorial] = useState(false);
 
   const [editOpen, setEditOpen] = useState(false);
   const [editRow, setEditRow] = useState<ComprasMaterialTableRow | null>(null);
@@ -521,6 +525,11 @@ export function ComprasMaterialPage() {
 
   const rowsFiltradas = useMemo(() => {
     let list = rows;
+    if (!verHistorial) {
+      list = list.filter(
+        (r) => normalizeCompraEstado(r.estado) !== "recibido"
+      );
+    }
     if (filtroProveedorId) {
       list = list.filter((r) => (r.proveedor_id ?? "") === filtroProveedorId);
     }
@@ -540,7 +549,7 @@ export function ComprasMaterialPage() {
       });
     }
     return list;
-  }, [rows, filtroBusqueda, filtroEstado, filtroProveedorId]);
+  }, [rows, verHistorial, filtroBusqueda, filtroEstado, filtroProveedorId]);
 
   const proveedoresUnicosDeLista = useMemo(() => {
     const map = new Map<string, string>();
@@ -1204,6 +1213,26 @@ export function ComprasMaterialPage() {
                 className="h-9 w-full max-w-sm"
               />
             </div>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                Histórico
+              </span>
+              <Toggle
+                variant="outline"
+                size="sm"
+                pressed={verHistorial}
+                onPressedChange={setVerHistorial}
+                className="h-9 w-auto shrink-0 justify-start gap-2 px-3"
+                aria-label={
+                  verHistorial
+                    ? "Ocultar compras recibidas"
+                    : "Ver histórico incluyendo compras recibidas"
+                }
+              >
+                <History className="size-4 shrink-0 opacity-80" aria-hidden />
+                {verHistorial ? "Ocultar Recibidos" : "Ver Histórico"}
+              </Toggle>
+            </div>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/80 pt-3">
             <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
@@ -1323,6 +1352,26 @@ export function ComprasMaterialPage() {
               onChange={(e) => setFiltroBusqueda(e.target.value)}
               className="min-h-11 w-full touch-manipulation text-base"
             />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground">
+              Histórico
+            </span>
+            <Toggle
+              variant="outline"
+              size="sm"
+              pressed={verHistorial}
+              onPressedChange={setVerHistorial}
+              className="h-9 w-auto min-w-0 self-start touch-manipulation justify-start gap-2 px-3"
+              aria-label={
+                verHistorial
+                  ? "Ocultar compras recibidas"
+                  : "Ver histórico incluyendo compras recibidas"
+              }
+            >
+              <History className="size-4 shrink-0 opacity-80" aria-hidden />
+              {verHistorial ? "Ocultar Recibidos" : "Ver Histórico"}
+            </Toggle>
           </div>
           <p className="text-xs tabular-nums text-muted-foreground">
             Mostrando{" "}

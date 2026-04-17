@@ -236,7 +236,6 @@ function DraggableCard({
         <span className="flex min-w-0 flex-1 items-center gap-1 font-normal text-[#002147]">
           <Truck className="size-3.5 shrink-0 text-slate-500" aria-hidden />
           <OtNumeroSemaforoBadge
-            appearance="externos-inline"
             otNumero={getOtDisplay(row)}
             fechaEntregaIso={row.f_entrega_ot}
             umbrales={otEntregaUmbrales}

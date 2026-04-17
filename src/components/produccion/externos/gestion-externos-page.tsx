@@ -2920,7 +2920,6 @@ export function GestionExternosPage() {
                             </td>
                             <td className="w-[4.5rem] min-w-[4.25rem] max-w-[6rem] px-0.5 py-0.5 align-middle">
                               <OtNumeroSemaforoBadge
-                                appearance="externos-inline"
                                 otNumero={getOtDisplay(row)}
                                 fechaEntregaIso={row.f_entrega_ot}
                                 umbrales={umbralesOtsCompras}
@@ -3077,7 +3076,6 @@ export function GestionExternosPage() {
                             <div className="min-w-0 flex-1 space-y-2">
                               <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                                 <OtNumeroSemaforoBadge
-                                  appearance="externos-inline"
                                   otNumero={getOtDisplay(row)}
                                   fechaEntregaIso={row.f_entrega_ot}
                                   umbrales={umbralesOtsCompras}
@@ -3578,7 +3576,6 @@ export function GestionExternosPage() {
                       </td>
                       <td className="border border-slate-200 px-1 py-1 align-middle">
                         <OtNumeroSemaforoBadge
-                          appearance="externos-inline"
                           otNumero={getOtDisplay(row)}
                           fechaEntregaIso={row.f_entrega_ot}
                           umbrales={umbralesOtsCompras}
