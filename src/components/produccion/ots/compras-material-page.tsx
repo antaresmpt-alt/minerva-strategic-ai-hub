@@ -14,7 +14,6 @@ import {
   Loader2,
   Mail,
   Printer,
-  Send,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -73,6 +72,12 @@ const TABLE_TIPOS_PROVEEDOR = "prod_cat_tipos_proveedor";
 const TABLE_RECEPCION = "prod_recepciones_material";
 const TABLE_RECEPCION_FOTOS = "prod_recepciones_fotos";
 const PAGE_SIZE = 500;
+
+type PendingCompraCorreoEnvio = {
+  ids: string[];
+  ots: string[];
+  proveedorId: string;
+};
 
 const RECEPCION_FOTOS_MODAL_INITIAL = {
   open: false,
@@ -215,7 +220,8 @@ Quedamos a la espera de su confirmación para proceder con el pedido.
 
 Saludos cordiales.`;
 
-  const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(proveedorEmail.trim())}&su=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+  const to = proveedorEmail.trim();
+  const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
   window.open(gmailUrl, "_blank", "noopener,noreferrer");
 }
 
@@ -252,6 +258,10 @@ export function ComprasMaterialPage() {
   const [solicitarSaving, setSolicitarSaving] = useState(false);
   const [proveedorSeleccionado, setProveedorSeleccionado] = useState("");
   const [sobreStockConfirmOpen, setSobreStockConfirmOpen] = useState(false);
+  const [correoComprasConfirmOpen, setCorreoComprasConfirmOpen] =
+    useState(false);
+  const [pendingCompraCorreo, setPendingCompraCorreo] =
+    useState<PendingCompraCorreoEnvio | null>(null);
 
   const loadProveedoresPapelCarton = useCallback(async () => {
     try {
@@ -902,7 +912,7 @@ export function ComprasMaterialPage() {
     supabase,
   ]);
 
-  const ejecutarGenerarYEnviar = useCallback(async () => {
+  const abrirGmailYModalConfirmCompras = useCallback(async () => {
     if (selectedRows.length === 0) return;
     const provTarget =
       proveedorSeleccionado || selectedRows[0].proveedor_id || "";
@@ -912,9 +922,43 @@ export function ComprasMaterialPage() {
     }
     setSolicitarSaving(true);
     try {
-      const now = new Date().toISOString();
       const ids = selectedRows.map((r) => r.id);
       const ots = [...new Set(selectedRows.map((r) => r.ot_numero))];
+
+      const { data: provMail } = await supabase
+        .from(TABLE_PROVEEDORES)
+        .select("email")
+        .eq("id", provTarget)
+        .maybeSingle();
+      const emailProveedor = String(
+        (provMail as { email?: string | null } | null)?.email ?? ""
+      ).trim();
+
+      abrirGmailSolicitudMaterialBulk(selectedRows, emailProveedor);
+      setPendingCompraCorreo({ ids, ots, proveedorId: provTarget });
+      setSolicitarOpen(false);
+      setSobreStockConfirmOpen(false);
+      setCorreoComprasConfirmOpen(true);
+      toast.message("Gmail abierto en una pestaña nueva", {
+        description:
+          "Si ya has enviado el mail, confirma aquí para registrar la solicitud y actualizar el estado.",
+      });
+    } catch (e) {
+      console.error(e);
+      toast.error(
+        e instanceof Error ? e.message : "No se pudo abrir Gmail."
+      );
+    } finally {
+      setSolicitarSaving(false);
+    }
+  }, [proveedorSeleccionado, selectedRows, supabase]);
+
+  const confirmarEnvioCorreoCompras = useCallback(async () => {
+    if (!pendingCompraCorreo) return;
+    setSolicitarSaving(true);
+    try {
+      const now = new Date().toISOString();
+      const { ids, ots, proveedorId: provTarget } = pendingCompraCorreo;
 
       const { error: u1 } = await supabase
         .from(TABLE_COMPRA)
@@ -934,36 +978,25 @@ export function ComprasMaterialPage() {
         if (u2) throw u2;
       }
 
-      const { data: provMail } = await supabase
-        .from(TABLE_PROVEEDORES)
-        .select("email")
-        .eq("id", provTarget)
-        .maybeSingle();
-      const emailProveedor = String(
-        (provMail as { email?: string | null } | null)?.email ?? ""
-      ).trim();
-
-      abrirGmailSolicitudMaterialBulk(selectedRows, emailProveedor);
-
       toast.success(
         ids.length > 1
-          ? `Solicitud generada (${ids.length} líneas) y enviada.`
-          : "Solicitud generada y enviada."
+          ? `Solicitud registrada (${ids.length} líneas). Estado «Generada».`
+          : "Solicitud registrada. Estado «Generada»."
       );
-      setSolicitarOpen(false);
-      setSobreStockConfirmOpen(false);
+      setCorreoComprasConfirmOpen(false);
+      setPendingCompraCorreo(null);
       setProveedorSeleccionado("");
       setRowSelection({});
       void loadRows();
     } catch (e) {
       console.error(e);
       toast.error(
-        e instanceof Error ? e.message : "No se pudo completar la solicitud."
+        e instanceof Error ? e.message : "No se pudo confirmar la solicitud."
       );
     } finally {
       setSolicitarSaving(false);
     }
-  }, [loadRows, proveedorSeleccionado, selectedRows, supabase]);
+  }, [loadRows, pendingCompraCorreo, supabase]);
 
   const iniciarGenerarYEnviar = useCallback(() => {
     if (selectedRows.length === 0) return;
@@ -983,9 +1016,9 @@ export function ComprasMaterialPage() {
       setSobreStockConfirmOpen(true);
       return;
     }
-    void ejecutarGenerarYEnviar();
+    void abrirGmailYModalConfirmCompras();
   }, [
-    ejecutarGenerarYEnviar,
+    abrirGmailYModalConfirmCompras,
     proveedorSeleccionado,
     selectedRows,
     umbralesOtsCompras.sobrestockUmbral,
@@ -1705,8 +1738,8 @@ export function ComprasMaterialPage() {
             <DialogTitle className="text-base">Solicitar material</DialogTitle>
             <DialogDescription className="text-xs">
               {selectedRows.length > 1
-                ? `Lote de ${selectedRows.length} líneas. Mismo proveedor en todas las filas.`
-                : "Asigna un proveedor y genera la orden de solicitud."}
+                ? `Lote de ${selectedRows.length} líneas. Mismo proveedor en todas las filas. Tras «Abrir Gmail», confirma el envío para pasar el estado a «Generada».`
+                : "Asigna un proveedor. Tras «Abrir Gmail», confirma el envío para pasar el estado a «Generada»."}
             </DialogDescription>
           </DialogHeader>
           <div className="grid max-h-[min(50vh,360px)] gap-3 overflow-y-auto px-4 py-3">
@@ -1781,9 +1814,9 @@ export function ComprasMaterialPage() {
               {solicitarSaving ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
-                <Send className="size-4" aria-hidden />
+                <Mail className="size-4" aria-hidden />
               )}
-              Generar y enviar
+              Abrir Gmail
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1818,15 +1851,66 @@ export function ComprasMaterialPage() {
               size="sm"
               disabled={solicitarSaving}
               className="gap-1.5 bg-orange-600 font-medium text-white shadow-sm hover:bg-orange-700 focus-visible:ring-orange-500"
-              onClick={() => void ejecutarGenerarYEnviar()}
+              onClick={() => void abrirGmailYModalConfirmCompras()}
             >
               {solicitarSaving ? (
                 <>
                   <Loader2 className="size-4 animate-spin" aria-hidden />
-                  Enviando…
+                  Abriendo…
                 </>
               ) : (
                 "Sí, continuar"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={correoComprasConfirmOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCorreoComprasConfirmOpen(false);
+            setPendingCompraCorreo(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md gap-0 p-0 sm:max-w-md">
+          <DialogHeader className="border-b border-slate-100 px-4 py-3">
+            <DialogTitle className="text-base text-[#002147]">
+              ¿Confirmar envío de correo?
+            </DialogTitle>
+            <DialogDescription className="pt-1 text-sm leading-relaxed">
+              Si ya has enviado el mail, confirma para actualizar el estado.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 border-t border-slate-100 px-4 py-3 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={solicitarSaving}
+              onClick={() => {
+                setCorreoComprasConfirmOpen(false);
+                setPendingCompraCorreo(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={solicitarSaving || !pendingCompraCorreo}
+              className="bg-emerald-600 font-semibold text-white shadow-sm hover:bg-emerald-700 hover:text-white"
+              onClick={() => void confirmarEnvioCorreoCompras()}
+            >
+              {solicitarSaving ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                  Guardando…
+                </>
+              ) : (
+                "Sí, confirmar envío"
               )}
             </Button>
           </DialogFooter>

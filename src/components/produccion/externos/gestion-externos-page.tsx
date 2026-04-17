@@ -466,7 +466,7 @@ function DiasHastaFEntregaOtTableCell({
     <span
       title={title}
       className={cn(
-        "inline-block w-full text-center font-mono text-[11px] tabular-nums leading-none",
+        "w-full text-center font-mono text-[11px] font-normal tabular-nums leading-none",
         d != null ? fEntregaOtDiasUrgencyTextClass(d) : "text-muted-foreground",
         className
       )}
@@ -1007,6 +1007,8 @@ export function GestionExternosPage() {
   const analistaDialogDescId = useId();
   const comunicacionDialogTitleId = useId();
   const comunicacionDialogDescId = useId();
+  const comunicacionConfirmTitleId = useId();
+  const comunicacionConfirmDescId = useId();
 
   const [selectedSeguimientoIds, setSelectedSeguimientoIds] = useState<string[]>(
     []
@@ -1015,6 +1017,10 @@ export function GestionExternosPage() {
     Map<string, OtCompraMaterialInfo>
   >(() => new Map());
   const [comunicacionModalOpen, setComunicacionModalOpen] = useState(false);
+  /** Tras abrir Gmail: paso de confirmación manual antes de persistir estado en BD. */
+  const [comunicacionStep, setComunicacionStep] = useState<
+    "preview" | "confirm"
+  >("preview");
   const [comunicacionBodyCopied, setComunicacionBodyCopied] = useState(false);
   const copyComunicacionBodyTimeoutRef = useRef<ReturnType<
     typeof setTimeout
@@ -1046,6 +1052,7 @@ export function GestionExternosPage() {
 
   useEffect(() => {
     if (comunicacionModalOpen) return;
+    setComunicacionStep("preview");
     setComunicacionBodyCopied(false);
     if (copyComunicacionBodyTimeoutRef.current) {
       clearTimeout(copyComunicacionBodyTimeoutRef.current);
@@ -2352,18 +2359,29 @@ export function GestionExternosPage() {
     }
   }
 
-  async function handleComunicacionFinalizar() {
+  function handleComunicacionAbrirGmail() {
+    if (!prepararEnvioEnabled || seleccionSeguimientoRows.length === 0) return;
+    if (!comunicacionPreview) return;
+    const email = comunicacionPreview.prov?.email?.trim() ?? "";
+    const url = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}&su=${encodeURIComponent(comunicacionPreview.subject)}&body=${encodeURIComponent(comunicacionPreview.body)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+    setComunicacionStep("confirm");
+    toast.message("Gmail abierto en una pestaña nueva", {
+      description:
+        "Si ya has enviado el mail, confirma aquí para actualizar el estado de las OTs.",
+    });
+  }
+
+  async function handleComunicacionConfirmarEnvio() {
     if (!prepararEnvioEnabled || seleccionSeguimientoRows.length === 0) return;
     const rows = [...seleccionSeguimientoRows].sort(compareSeguimientoRows);
     const prov = proveedores.find((p) => p.id === rows[0].proveedor_id);
-    const email = prov?.email?.trim() ?? "";
     const body = buildComunicacionEmailBody(
       rows,
       acabadoNombreById,
       prov?.nombre ?? ""
     );
     const ots = rows.map((r) => r.id_pedido);
-    const subject = `Envío de trabajos Minerva - OTs: ${ots.join(", ")}`;
     const now = new Date().toISOString();
     const ids = rows.map((r) => r.id);
     setSaving(true);
@@ -2391,12 +2409,11 @@ export function GestionExternosPage() {
         `Estado actualizado, pero no se guardó el historial: ${logErr.message}`
       );
     }
-    const url = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.open(url, "_blank", "noopener,noreferrer");
     setComunicacionModalOpen(false);
+    setComunicacionStep("preview");
     setSelectedSeguimientoIds([]);
     setSaving(false);
-    toast.success("Envío registrado. Se abrió Gmail en una pestaña nueva.");
+    toast.success("Envío confirmado y estados actualizados.");
     void loadCore();
   }
 
@@ -2479,14 +2496,14 @@ export function GestionExternosPage() {
                   </CardTitle>
                   <CardDescription
                     className="line-clamp-1 text-xs leading-snug"
-                    title="Por defecto no se listan trabajos «Recibido». Usa «Ver Histórico» para incluirlos. Cambia el estado desde la tabla al instante; el lápiz abre el panel para proveedor, acabado, fecha prevista y notas. Al pasar a «Enviado» se registra la fecha de envío. Tras «Preparar Envío» (correo), las OT pasan a «Muelle Minerva»."
+                    title="Por defecto no se listan trabajos «Recibido». Usa «Ver Histórico» para incluirlos. Cambia el estado desde la tabla al instante; el lápiz abre el panel para proveedor, acabado, fecha prevista y notas. Al pasar a «Enviado» se registra la fecha de envío. Tras abrir Gmail desde «Preparar Envío», confirma el envío para pasar las OT a «Muelle Minerva»."
                   >
                     Por defecto no se listan trabajos «Recibido». Usa «Ver
                     Histórico» para incluirlos. Cambia el estado desde la tabla
                     al instante; el lápiz abre el panel para proveedor, acabado,
                     fecha prevista y notas. Al pasar a «Enviado» se registra la
-                    fecha de envío. Tras «Preparar Envío» (correo), las OT pasan a
-                    «Muelle Minerva».
+                    fecha de envío. Tras abrir Gmail desde «Preparar Envío»,
+                    confirma el envío para pasar las OT a «Muelle Minerva».
                   </CardDescription>
                 </div>
                 <ToggleGroup
@@ -4975,89 +4992,138 @@ export function GestionExternosPage() {
           <Card
             role="dialog"
             aria-modal="true"
-            aria-labelledby={comunicacionDialogTitleId}
-            aria-describedby={comunicacionDialogDescId}
+            aria-labelledby={
+              comunicacionStep === "preview"
+                ? comunicacionDialogTitleId
+                : comunicacionConfirmTitleId
+            }
+            aria-describedby={
+              comunicacionStep === "preview"
+                ? comunicacionDialogDescId
+                : comunicacionConfirmDescId
+            }
             className="relative z-10 flex max-h-[min(92vh,760px)] w-full max-w-lg flex-col overflow-hidden border-slate-200/90 bg-white shadow-xl sm:max-w-xl"
           >
-            <CardHeader className="shrink-0 space-y-1 border-b border-slate-200/80 bg-slate-50/90 pb-4">
-              <CardTitle
-                id={comunicacionDialogTitleId}
-                className="text-lg font-semibold text-[#002147]"
-              >
-                Preparar envío (Comunicación Pro)
-              </CardTitle>
-              <CardDescription id={comunicacionDialogDescId}>
-                Revisa destinatario, asunto y cuerpo. Al finalizar se actualizarán
-                las OTs, se registrará el historial y se abrirá Gmail.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
-              <div className="grid gap-1.5 text-sm">
-                <span className="font-medium text-[#002147]">Destinatario</span>
-                <p className="rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-800">
-                  {comunicacionPreview.prov?.email?.trim()
-                    ? comunicacionPreview.prov.email.trim()
-                    : "— (sin email en el proveedor)"}
-                </p>
-              </div>
-              <div className="grid gap-1.5 text-sm">
-                <span className="font-medium text-[#002147]">Asunto</span>
-                <p className="rounded-md border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-800 break-words">
-                  {comunicacionPreview.subject}
-                </p>
-              </div>
-              <div className="grid min-h-0 flex-1 gap-1.5 text-sm">
-                <div className="flex items-start justify-between gap-2">
-                  <span className="min-w-0 font-medium text-[#002147]">
-                    Cuerpo (vista previa)
-                  </span>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 shrink-0 px-0 text-slate-600 hover:text-slate-800"
-                        aria-label="Copiar texto para albarán"
-                        onClick={() => void handleCopyText()}
-                      >
-                        {comunicacionBodyCopied ? (
-                          <Check
-                            className="size-3.5 text-emerald-600"
-                            aria-hidden
-                          />
-                        ) : (
-                          <Copy className="size-3.5" aria-hidden />
-                        )}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">
-                      Copiar texto para albarán
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <pre className="max-h-[min(42vh,22rem)] overflow-auto whitespace-pre-wrap break-words rounded-md border border-slate-200 bg-slate-50/90 px-3 py-2 font-sans text-xs text-slate-800">
-                  {comunicacionPreview.body}
-                </pre>
-              </div>
-            </CardContent>
-            <CardFooter className="shrink-0 flex-col gap-2 border-t border-slate-200/80 bg-white/95 px-4 py-3 sm:flex-row sm:justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setComunicacionModalOpen(false)}
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="button"
-                disabled={saving}
-                className="bg-[#C69C2B] font-semibold text-[#002147] shadow-sm hover:bg-[#b58d26] hover:text-[#002147]"
-                onClick={() => void handleComunicacionFinalizar()}
-              >
-                Abrir Gmail y finalizar
-              </Button>
-            </CardFooter>
+            {comunicacionStep === "preview" ? (
+              <>
+                <CardHeader className="shrink-0 space-y-1 border-b border-slate-200/80 bg-slate-50/90 pb-4">
+                  <CardTitle
+                    id={comunicacionDialogTitleId}
+                    className="text-lg font-semibold text-[#002147]"
+                  >
+                    Preparar envío (Comunicación Pro)
+                  </CardTitle>
+                  <CardDescription id={comunicacionDialogDescId}>
+                    Revisa destinatario, asunto y cuerpo. Pulsa «Abrir Gmail» para
+                    redactar el mensaje en una pestaña nueva; el estado de las OTs
+                    solo cambiará cuando confirmes el envío aquí.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
+                  <div className="grid gap-1.5 text-sm">
+                    <span className="font-medium text-[#002147]">
+                      Destinatario
+                    </span>
+                    <p className="rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-800">
+                      {comunicacionPreview.prov?.email?.trim()
+                        ? comunicacionPreview.prov.email.trim()
+                        : "— (sin email en el proveedor)"}
+                    </p>
+                  </div>
+                  <div className="grid gap-1.5 text-sm">
+                    <span className="font-medium text-[#002147]">Asunto</span>
+                    <p className="rounded-md border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-800 break-words">
+                      {comunicacionPreview.subject}
+                    </p>
+                  </div>
+                  <div className="grid min-h-0 flex-1 gap-1.5 text-sm">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="min-w-0 font-medium text-[#002147]">
+                        Cuerpo (vista previa)
+                      </span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 shrink-0 px-0 text-slate-600 hover:text-slate-800"
+                            aria-label="Copiar texto para albarán"
+                            onClick={() => void handleCopyText()}
+                          >
+                            {comunicacionBodyCopied ? (
+                              <Check
+                                className="size-3.5 text-emerald-600"
+                                aria-hidden
+                              />
+                            ) : (
+                              <Copy className="size-3.5" aria-hidden />
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          Copiar texto para albarán
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                    <pre className="max-h-[min(42vh,22rem)] overflow-auto whitespace-pre-wrap break-words rounded-md border border-slate-200 bg-slate-50/90 px-3 py-2 font-sans text-xs text-slate-800">
+                      {comunicacionPreview.body}
+                    </pre>
+                  </div>
+                </CardContent>
+                <CardFooter className="shrink-0 flex-col gap-2 border-t border-slate-200/80 bg-white/95 px-4 py-3 sm:flex-row sm:justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setComunicacionModalOpen(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={saving}
+                    className="bg-[#C69C2B] font-semibold text-[#002147] shadow-sm hover:bg-[#b58d26] hover:text-[#002147]"
+                    onClick={() => handleComunicacionAbrirGmail()}
+                  >
+                    Abrir Gmail
+                  </Button>
+                </CardFooter>
+              </>
+            ) : (
+              <>
+                <CardHeader className="shrink-0 space-y-2 border-b border-slate-200/80 bg-slate-50/90 pb-4">
+                  <CardTitle
+                    id={comunicacionConfirmTitleId}
+                    className="text-lg font-semibold text-[#002147]"
+                  >
+                    ¿Confirmar envío de correo?
+                  </CardTitle>
+                  <CardDescription
+                    id={comunicacionConfirmDescId}
+                    className="text-sm leading-relaxed text-slate-700"
+                  >
+                    Si ya has enviado el mail, confirma para actualizar el estado.
+                  </CardDescription>
+                </CardHeader>
+                <CardFooter className="shrink-0 flex-col gap-2 border-t border-slate-200/80 bg-white/95 px-4 py-4 sm:flex-row sm:justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setComunicacionModalOpen(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={saving}
+                    className="bg-emerald-600 font-semibold text-white shadow-sm hover:bg-emerald-700 hover:text-white"
+                    onClick={() => void handleComunicacionConfirmarEnvio()}
+                  >
+                    Sí, confirmar envío
+                  </Button>
+                </CardFooter>
+              </>
+            )}
           </Card>
         </div>
       ) : null}

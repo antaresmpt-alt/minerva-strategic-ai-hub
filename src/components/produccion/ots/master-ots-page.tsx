@@ -1240,7 +1240,7 @@ ${otsContextJson}
 
       <div className="overflow-hidden rounded-lg border border-slate-200/90 bg-white shadow-sm">
         <div className="max-h-[min(70vh,720px)] overflow-auto">
-          <Table className="table-fixed min-w-[1360px] text-xs">
+          <Table className="table-fixed min-w-[1480px] text-xs">
             <TableHeader className="bg-slate-50/95 sticky top-0 z-20 shadow-[0_1px_0_0_rgb(226_232_240)]">
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id} className="hover:bg-transparent">

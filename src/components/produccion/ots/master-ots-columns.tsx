@@ -184,6 +184,7 @@ export function createMasterOtsColumns(
           {row.original.cantidad ?? "—"}
         </div>
       ),
+      size: 75,
     },
     {
       accessorKey: "titulo",
@@ -197,6 +198,8 @@ export function createMasterOtsColumns(
           {row.original.titulo ?? "—"}
         </div>
       ),
+      minSize: 350,
+      size: 520,
     },
     {
       accessorKey: "fecha_apertura",
@@ -249,6 +252,7 @@ export function createMasterOtsColumns(
           {row.original.prueba_color?.trim() ? row.original.prueba_color : "—"}
         </div>
       ),
+      size: 60,
     },
     {
       accessorKey: "pdf_ok",
@@ -262,6 +266,7 @@ export function createMasterOtsColumns(
           {row.original.pdf_ok?.trim() ? row.original.pdf_ok : "—"}
         </div>
       ),
+      size: 60,
     },
     {
       accessorKey: "muestra_ok",
@@ -275,6 +280,7 @@ export function createMasterOtsColumns(
           {row.original.muestra_ok?.trim() ? row.original.muestra_ok : "—"}
         </div>
       ),
+      size: 60,
     },
     {
       id: "edit",
