@@ -61,6 +61,13 @@ import {
   normalizeCompraEstado,
 } from "@/lib/compras-material-estados";
 import { esPrioridadStockAmarilla } from "@/lib/compras-material-prioridad";
+import {
+  buildComprasMaterialSolicitudEmail,
+  buildGmailComposeUrl,
+  DEFAULT_EMAIL_PLANTILLA_COMPRAS,
+  fetchEmailPlantillasProduccion,
+  type EmailPlantillaBloques,
+} from "@/lib/email-plantillas-produccion";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import { resolveRecepcionFotoPublicUrls } from "@/lib/recepcion-fotos-url";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -197,39 +204,29 @@ function findTipoPapelCartonId(
 
 function abrirGmailSolicitudMaterialBulk(
   rows: ComprasMaterialTableRow[],
-  proveedorEmail: string
+  proveedorEmail: string,
+  nombreProveedor: string,
+  plantilla: EmailPlantillaBloques
 ): void {
-  const ots = [...new Set(rows.map((r) => r.ot_numero))].join(", ");
-  const asunto = `Solicitud de Material (${rows.length} línea${rows.length > 1 ? "s" : ""}) — OT ${ots}`;
-  const lineas = rows
-    .map((row, i) => {
-      const fechaPrevista = formatFechaEsCorta(row.fecha_prevista_recepcion);
-      return `--- ${i + 1}. OT ${row.ot_numero} · ${row.num_compra} ---
-Material: ${row.material?.trim() || "—"}
-Gramaje: ${gramajeTextoMail(row.gramaje)}g
-Formato: ${row.tamano_hoja?.trim() || "—"}
-Cantidad (Brutas): ${row.num_hojas_brutas != null ? String(row.num_hojas_brutas) : "—"} hojas
-Fecha deseada de entrega: ${fechaPrevista}`;
-    })
-    .join("\n\n");
-  const cuerpo = `Estimados,
-
-Por la presente les solicitamos presupuesto y confirmación de plazo para el siguiente material:
-
-${lineas}
-
-Quedamos a la espera de su confirmación para proceder con el pedido.
-
-Saludos cordiales.`;
-
-  const to = proveedorEmail.trim();
-  const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
-  window.open(gmailUrl, "_blank", "noopener,noreferrer");
+  const { subject, body } = buildComprasMaterialSolicitudEmail(
+    rows,
+    nombreProveedor,
+    plantilla
+  );
+  window.open(
+    buildGmailComposeUrl(proveedorEmail, subject, body),
+    "_blank",
+    "noopener,noreferrer"
+  );
 }
 
 export function ComprasMaterialPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const { umbrales: umbralesOtsCompras } = useSysParametrosOtsCompras();
+  const [plantillaEmailCompras, setPlantillaEmailCompras] =
+    useState<EmailPlantillaBloques>(() => ({
+      ...DEFAULT_EMAIL_PLANTILLA_COMPRAS,
+    }));
   const [rows, setRows] = useState<ComprasMaterialTableRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
@@ -306,6 +303,17 @@ export function ComprasMaterialPage() {
   useEffect(() => {
     void loadProveedoresPapelCarton();
   }, [loadProveedoresPapelCarton]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { compras } = await fetchEmailPlantillasProduccion(supabase);
+        setPlantillaEmailCompras(compras);
+      } catch {
+        /* plantilla por defecto */
+      }
+    })();
+  }, [supabase]);
 
   const loadRows = useCallback(async () => {
     setLoading(true);
@@ -943,7 +951,17 @@ export function ComprasMaterialPage() {
         (provMail as { email?: string | null } | null)?.email ?? ""
       ).trim();
 
-      abrirGmailSolicitudMaterialBulk(selectedRows, emailProveedor);
+      const nombreProveedor =
+        proveedoresPapelCarton.find((p) => p.id === provTarget)?.nombre?.trim() ||
+        selectedRows[0]?.proveedor_nombre?.trim() ||
+        "Proveedor";
+
+      abrirGmailSolicitudMaterialBulk(
+        selectedRows,
+        emailProveedor,
+        nombreProveedor,
+        plantillaEmailCompras
+      );
       setPendingCompraCorreo({ ids, ots, proveedorId: provTarget });
       setSolicitarOpen(false);
       setSobreStockConfirmOpen(false);
@@ -960,7 +978,13 @@ export function ComprasMaterialPage() {
     } finally {
       setSolicitarSaving(false);
     }
-  }, [proveedorSeleccionado, selectedRows, supabase]);
+  }, [
+    plantillaEmailCompras,
+    proveedorSeleccionado,
+    proveedoresPapelCarton,
+    selectedRows,
+    supabase,
+  ]);
 
   const confirmarEnvioCorreoCompras = useCallback(async () => {
     if (!pendingCompraCorreo) return;

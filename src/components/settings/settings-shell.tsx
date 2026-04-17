@@ -6,11 +6,12 @@ import { ArrowLeft } from "lucide-react";
 import { GlobalModelSelector } from "@/components/layout/header";
 import { IngestKnowledgeTab } from "@/components/settings/ingest-knowledge-tab";
 import { UsersManagementPanel } from "@/components/settings/users-management-panel";
+import { EmailPlantillasTab } from "@/components/settings/email-plantillas-tab";
 import { VariablesSistemaTab } from "@/components/settings/variables-sistema-tab";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type SettingsShellProps = {
-  defaultTab: "ingest" | "users" | "variables";
+  defaultTab: "ingest" | "users" | "variables" | "email";
 };
 
 export function SettingsShell({ defaultTab }: SettingsShellProps) {
@@ -30,8 +31,8 @@ export function SettingsShell({ defaultTab }: SettingsShellProps) {
               Configuración
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Ingesta de conocimiento, gestión de usuarios y variables de sistema
-              (admin / gerencia).
+              Ingesta de conocimiento, usuarios, variables de sistema y plantillas
+              de correo producción (admin / gerencia).
             </p>
           </div>
           <GlobalModelSelector layout="row" className="shrink-0" />
@@ -42,6 +43,7 @@ export function SettingsShell({ defaultTab }: SettingsShellProps) {
             <TabsTrigger value="ingest">Ingesta de conocimiento</TabsTrigger>
             <TabsTrigger value="users">Gestión de usuarios</TabsTrigger>
             <TabsTrigger value="variables">Variables Sistema</TabsTrigger>
+            <TabsTrigger value="email">Plantillas email</TabsTrigger>
           </TabsList>
           <TabsContent value="ingest" className="mt-6 outline-none">
             <IngestKnowledgeTab />
@@ -51,6 +53,9 @@ export function SettingsShell({ defaultTab }: SettingsShellProps) {
           </TabsContent>
           <TabsContent value="variables" className="mt-6 outline-none">
             <VariablesSistemaTab />
+          </TabsContent>
+          <TabsContent value="email" className="mt-6 outline-none">
+            <EmailPlantillasTab />
           </TabsContent>
         </Tabs>
       </div>

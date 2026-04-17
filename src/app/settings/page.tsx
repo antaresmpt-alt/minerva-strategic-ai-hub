@@ -21,7 +21,9 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       ? "users"
       : tabStr === "variables"
         ? "variables"
-        : "ingest";
+        : tabStr === "email"
+          ? "email"
+          : "ingest";
 
   return <SettingsShell defaultTab={defaultTab} />;
 }

@@ -114,6 +114,13 @@ import {
   fuzzyMatchIdByIncludes,
 } from "@/lib/externos-fuzzy-match";
 import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
+import {
+  buildExternosComunicacionEmail,
+  buildGmailComposeUrl,
+  DEFAULT_EMAIL_PLANTILLA_EXTERNOS,
+  fetchEmailPlantillasProduccion,
+  type EmailPlantillaBloques,
+} from "@/lib/email-plantillas-produccion";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import { useHubStore } from "@/lib/store";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -325,34 +332,6 @@ type ComunicacionLogRow = {
   cuerpo: string;
   id_pedidos: number[];
 };
-
-function buildComunicacionEmailBody(
-  rows: SeguimientoRow[],
-  acabadoNombreById: Map<string, string>,
-  nombreProveedor: string
-): string {
-  const sorted = [...rows].sort(compareSeguimientoRows);
-  const listaOts = sorted
-    .map((row) => {
-      const tipo = acabadoNombreById.get(row.acabado_id) ?? "—";
-      const notas = (row.notas_logistica ?? "").trim() || "—";
-      const fp = formatFechaEsCorta(row.fecha_prevista);
-      const ud = row.unidades != null ? String(row.unidades) : "—";
-      const pr = (row.prioridad ?? "").trim() || "—";
-      const pl = row.palets != null ? String(row.palets) : "—";
-      return `OT: ${getOtDisplay(row)}\nTrabajo: ${row.trabajo_titulo}\nUnidades: ${ud} | Prioridad: ${pr} | Palets: ${pl}\nTipo: ${tipo}\nNotas: ${notas}\nEntrega prevista: ${fp}`;
-    })
-    .join("\n\n");
-
-  const nombre = nombreProveedor.trim();
-  const saludo = nombre ? `Hola ${nombre},` : "Hola,";
-  const intro =
-    "Te adjunto los detalles de los nuevos trabajos que te enviamos para gestionar. Por favor, confírmanos la recepción de este correo y las fechas previstas de entrega para cada uno:";
-  const cierre =
-    "Quedamos a la espera de tus noticias para organizar la logística. Muchas gracias.\nSaludos cordiales,";
-
-  return `${saludo}\n\n${intro}\n\n${listaOts}\n\n${cierre}\n\n`;
-}
 
 function dateInputToTimestamptz(yyyyMmDd: string): string {
   const [y, m, d] = yyyyMmDd.split("-").map(Number);
@@ -910,6 +889,10 @@ function formatPostgrestError(err: unknown): string {
 export function GestionExternosPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const { umbrales: umbralesOtsCompras } = useSysParametrosOtsCompras();
+  const [plantillaEmailExternos, setPlantillaEmailExternos] =
+    useState<EmailPlantillaBloques>(() => ({
+      ...DEFAULT_EMAIL_PLANTILLA_EXTERNOS,
+    }));
 
   const [tab, setTab] = useState("seguimiento");
 
@@ -1258,19 +1241,17 @@ export function GestionExternosPage() {
     }
     const rows = [...seleccionSeguimientoRows].sort(compareSeguimientoRows);
     const prov = proveedores.find((p) => p.id === rows[0].proveedor_id);
-    const body = buildComunicacionEmailBody(
+    const { subject, body } = buildExternosComunicacionEmail(
       rows,
-      acabadoNombreById,
-      prov?.nombre ?? ""
+      prov?.nombre ?? "",
+      plantillaEmailExternos
     );
-    const ots = rows.map((r) => r.id_pedido);
-    const subject = `Envío de trabajos Minerva - OTs: ${ots.join(", ")}`;
     return { rows, prov, body, subject };
   }, [
     prepararEnvioEnabled,
     seleccionSeguimientoRows,
     proveedores,
-    acabadoNombreById,
+    plantillaEmailExternos,
   ]);
 
   const handleCopyText = useCallback(async () => {
@@ -1529,6 +1510,17 @@ export function GestionExternosPage() {
   useEffect(() => {
     void loadCore();
   }, [loadCore]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { externos } = await fetchEmailPlantillasProduccion(supabase);
+        setPlantillaEmailExternos(externos);
+      } catch {
+        /* mantener plantilla por defecto */
+      }
+    })();
+  }, [supabase]);
 
   useEffect(() => {
     if (!seguimientoSheetOpen || !seguimientoEditing) {
@@ -2363,7 +2355,11 @@ export function GestionExternosPage() {
     if (!prepararEnvioEnabled || seleccionSeguimientoRows.length === 0) return;
     if (!comunicacionPreview) return;
     const email = comunicacionPreview.prov?.email?.trim() ?? "";
-    const url = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}&su=${encodeURIComponent(comunicacionPreview.subject)}&body=${encodeURIComponent(comunicacionPreview.body)}`;
+    const url = buildGmailComposeUrl(
+      email,
+      comunicacionPreview.subject,
+      comunicacionPreview.body
+    );
     window.open(url, "_blank", "noopener,noreferrer");
     setComunicacionStep("confirm");
     toast.message("Gmail abierto en una pestaña nueva", {
@@ -2376,10 +2372,10 @@ export function GestionExternosPage() {
     if (!prepararEnvioEnabled || seleccionSeguimientoRows.length === 0) return;
     const rows = [...seleccionSeguimientoRows].sort(compareSeguimientoRows);
     const prov = proveedores.find((p) => p.id === rows[0].proveedor_id);
-    const body = buildComunicacionEmailBody(
+    const { body } = buildExternosComunicacionEmail(
       rows,
-      acabadoNombreById,
-      prov?.nombre ?? ""
+      prov?.nombre ?? "",
+      plantillaEmailExternos
     );
     const ots = rows.map((r) => r.id_pedido);
     const now = new Date().toISOString();
