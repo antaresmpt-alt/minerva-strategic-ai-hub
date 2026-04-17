@@ -91,6 +91,8 @@ type MuelleCardRow = {
 type MuelleExternoCardRow = {
   id: string;
   ot_numero: string;
+  /** Cantidad pedida (`prod_seguimiento_externos.unidades`). */
+  unidades: number | null;
   cliente_nombre: string;
   trabajo_titulo: string;
   estado: string;
@@ -180,6 +182,7 @@ export function MuelleRecepcionPage() {
 
   const [externoAlbaran, setExternoAlbaran] = useState("");
   const [externoNotas, setExternoNotas] = useState("");
+  const [externoCantidadRecibida, setExternoCantidadRecibida] = useState("");
   const [externoSaving, setExternoSaving] = useState(false);
 
   const [albaran, setAlbaran] = useState("");
@@ -284,7 +287,7 @@ export function MuelleRecepcionPage() {
       const { data: seg, error: sErr } = await supabase
         .from(TABLE_SEGUIMIENTO_EXTERNOS)
         .select(
-          "id, OT, id_pedido, cliente_nombre, trabajo_titulo, estado, proveedor_id, acabado_id, fecha_prevista, f_entrega_ot, notas_logistica, updated_at, created_at"
+          "id, OT, id_pedido, cliente_nombre, trabajo_titulo, estado, proveedor_id, acabado_id, fecha_prevista, f_entrega_ot, notas_logistica, unidades, updated_at, created_at"
         )
         .in("estado", [...MUELLE_EXTERNO_ESTADOS])
         .order("updated_at", { ascending: false })
@@ -334,9 +337,22 @@ export function MuelleRecepcionPage() {
       const merged: MuelleExternoCardRow[] = list.map((raw) => {
         const pid = raw.proveedor_id as string | null;
         const aid = raw.acabado_id as string | null;
+        const uRaw = raw.unidades;
+        const unidadesParsed =
+          typeof uRaw === "number"
+            ? Number.isFinite(uRaw)
+              ? Math.trunc(uRaw)
+              : null
+            : uRaw != null && uRaw !== ""
+              ? (() => {
+                  const n = Number(uRaw);
+                  return Number.isFinite(n) ? Math.trunc(n) : null;
+                })()
+              : null;
         return {
           id: String(raw.id ?? ""),
           ot_numero: otDisplayFromSeguimientoRaw(raw),
+          unidades: unidadesParsed,
           cliente_nombre: String(raw.cliente_nombre ?? "").trim() || "—",
           trabajo_titulo: String(raw.trabajo_titulo ?? "").trim() || "—",
           estado: String(raw.estado ?? "").trim() || "—",
@@ -388,6 +404,7 @@ export function MuelleRecepcionPage() {
     clearForm();
     setExternoAlbaran("");
     setExternoNotas("");
+    setExternoCantidadRecibida("");
     setActiveMaterial(row);
     setActiveExterno(null);
     setSheetKind("material");
@@ -397,6 +414,7 @@ export function MuelleRecepcionPage() {
     clearForm();
     setExternoAlbaran("");
     setExternoNotas("");
+    setExternoCantidadRecibida("");
     setActiveExterno(row);
     setActiveMaterial(null);
     setSheetKind("externo");
@@ -410,6 +428,7 @@ export function MuelleRecepcionPage() {
       setSheetKind("none");
       setExternoAlbaran("");
       setExternoNotas("");
+      setExternoCantidadRecibida("");
     }
   };
 
@@ -450,15 +469,28 @@ export function MuelleRecepcionPage() {
     return hojasRecNum < hojasEsperadas;
   }, [albaran, hojasRecNum, hojasEsperadas]);
 
-  const puedeExternoParcial = useMemo(
-    () => externoAlbaran.trim().length > 0 || externoNotas.trim().length > 0,
-    [externoAlbaran, externoNotas]
-  );
+  const externoCantEsperada = activeExterno?.unidades ?? null;
+  const externoCantRecNum = useMemo(() => {
+    const t = externoCantidadRecibida.trim();
+    if (!t) return null;
+    const n = Number(t.replace(",", "."));
+    return Number.isFinite(n) ? Math.trunc(n) : null;
+  }, [externoCantidadRecibida]);
 
-  const puedeExternoFinalizar = useMemo(
-    () => externoAlbaran.trim().length > 0,
-    [externoAlbaran]
-  );
+  /** Parcial: albarán + cantidad recibida &gt; 0 y menor que la pedida (si hay pedido). */
+  const puedeExternoParcial = useMemo(() => {
+    if (!externoAlbaran.trim()) return false;
+    if (externoCantRecNum === null || externoCantRecNum <= 0) return false;
+    if (externoCantEsperada == null) return true;
+    return externoCantRecNum < externoCantEsperada;
+  }, [externoAlbaran, externoCantRecNum, externoCantEsperada]);
+
+  /** Finalizar: albarán + cantidad recibida informada (≥ 0); cierre manual sin exigir cuadrar. */
+  const puedeExternoFinalizar = useMemo(() => {
+    if (!externoAlbaran.trim()) return false;
+    if (externoCantRecNum === null || externoCantRecNum < 0) return false;
+    return true;
+  }, [externoAlbaran, externoCantRecNum]);
 
   const esExternoEnParcial = useMemo(
     () => activeExterno != null && activeExterno.estado === "Parcial",
@@ -627,10 +659,13 @@ export function MuelleRecepcionPage() {
 
   const guardarRecepcionExternoParcial = async () => {
     if (!activeExterno) return;
-    if (!externoAlbaran.trim() && !externoNotas.trim()) {
-      toast.error("Indica albarán y/o notas para registrar la recepción parcial.");
+    if (!puedeExternoParcial) {
+      toast.error(
+        "Recepción parcial: indica albarán y cantidad recibida (mayor que 0 y menor que la esperada si hay cantidad pedida)."
+      );
       return;
     }
+    const rec = externoCantRecNum!;
     setExternoSaving(true);
     try {
       const alb = externoAlbaran.trim();
@@ -639,6 +674,12 @@ export function MuelleRecepcionPage() {
       const bloques: string[] = [];
       if (prev) bloques.push(prev);
       if (alb) bloques.push(`[Muelle parcial] Albarán: ${alb}`);
+      const esp = activeExterno.unidades;
+      bloques.push(
+        esp != null && Number.isFinite(esp)
+          ? `[Muelle parcial] Cant. recibida: ${rec} uds (pedidas: ${esp})`
+          : `[Muelle parcial] Cant. recibida: ${rec} uds`
+      );
       if (extra) bloques.push(`[Muelle parcial] ${extra}`);
       const notas_logistica = bloques.length > 0 ? bloques.join("\n") : null;
       const now = new Date().toISOString();
@@ -666,10 +707,13 @@ export function MuelleRecepcionPage() {
 
   const guardarRecepcionExternoFinalizar = async () => {
     if (!activeExterno) return;
-    if (!externoAlbaran.trim()) {
-      toast.error("Indica el nº de albarán para finalizar la recepción.");
+    if (!puedeExternoFinalizar) {
+      toast.error(
+        "Para finalizar indica albarán y cantidad recibida (número entero ≥ 0)."
+      );
       return;
     }
+    const rec = externoCantRecNum!;
     setExternoSaving(true);
     try {
       const alb = externoAlbaran.trim();
@@ -678,6 +722,7 @@ export function MuelleRecepcionPage() {
       const bloques: string[] = [];
       if (prev) bloques.push(prev);
       bloques.push(`[Muelle] Albarán: ${alb}`);
+      bloques.push(`[Muelle] Cant. recibida: ${rec} uds`);
       if (activeExterno.estado === "Parcial") {
         bloques.push(
           extra ? `[Cierre final]: ${extra}` : "[Cierre final]: "
@@ -858,11 +903,21 @@ export function MuelleRecepcionPage() {
                   <Card className="h-full min-h-[11rem] border-slate-200/90 bg-white shadow-sm">
                     <CardHeader className="space-y-3 pb-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <OtNumeroSemaforoBadge
-                          otNumero={row.ot_numero}
-                          fechaEntregaIso={row.f_entrega_ot}
-                          umbrales={umbralesOtsCompras}
-                        />
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                          <OtNumeroSemaforoBadge
+                            otNumero={row.ot_numero}
+                            fechaEntregaIso={row.f_entrega_ot}
+                            umbrales={umbralesOtsCompras}
+                          />
+                          <span
+                            className="shrink-0 rounded-md border border-slate-200/90 bg-white px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[#002147]"
+                            title="Cantidad pedida"
+                          >
+                            {row.unidades != null && Number.isFinite(row.unidades)
+                              ? `${row.unidades} uds`
+                              : "Sin cant."}
+                          </span>
+                        </div>
                         <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-600">
                           {row.estado?.trim() || "—"}
                         </span>
@@ -1124,21 +1179,42 @@ export function MuelleRecepcionPage() {
                   {activeExterno.cliente_nombre?.trim() || "—"}
                 </SheetDescription>
               </SheetHeader>
+
+              <div
+                className="mx-1 mt-3 rounded-lg border border-[#002147]/20 bg-[#002147]/[0.04] px-3 py-2.5 text-sm leading-snug text-[#002147] shadow-inner"
+                role="region"
+                aria-label="Cantidad pedida"
+              >
+                <span className="font-semibold">Cantidad esperada:</span>{" "}
+                <span className="tabular-nums">
+                  {activeExterno.unidades != null &&
+                  Number.isFinite(activeExterno.unidades)
+                    ? `${activeExterno.unidades} unidades`
+                    : "— (sin dato en sistema)"}
+                </span>
+              </div>
+
               <div className="flex flex-col gap-4 px-1 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="muelle-ext-alb">
-                    Nº albarán{" "}
-                    <span className="font-normal text-muted-foreground">
-                      (obligatorio al finalizar)
-                    </span>
-                  </Label>
+                  <Label htmlFor="muelle-ext-alb">Nº albarán proveedor</Label>
                   <Input
                     id="muelle-ext-alb"
                     value={externoAlbaran}
                     onChange={(e) => setExternoAlbaran(e.target.value)}
-                    placeholder="Ej. albarán proveedor"
+                    placeholder="Obligatorio"
                     autoComplete="off"
                     className="text-base"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="muelle-ext-cant">Cantidad recibida</Label>
+                  <Input
+                    id="muelle-ext-cant"
+                    inputMode="numeric"
+                    value={externoCantidadRecibida}
+                    onChange={(e) => setExternoCantidadRecibida(e.target.value)}
+                    placeholder="0"
+                    className="tabular-nums text-base"
                   />
                 </div>
                 <div className="space-y-2 rounded-lg border-2 border-[#002147]/20 bg-slate-50/80 p-3 ring-1 ring-slate-200/80">
@@ -1155,15 +1231,26 @@ export function MuelleRecepcionPage() {
                     placeholder={
                       esExternoEnParcial
                         ? "Al finalizar desde Parcial se antepondrá [Cierre final]: a lo que escribas."
-                        : "Ej. 2 palets de 5 recibidos, incidencias…"
+                        : "Incidencias, bultos, observaciones… (recomendado en parciales)"
                     }
                     rows={5}
                     className="resize-y border-slate-300 bg-white text-base shadow-inner"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Parcial: basta albarán o notas. Finalizar: albarán obligatorio;
-                    si venías de Parcial, el cierre añade el prefijo [Cierre final]:.
-                  </p>
+                  {activeExterno.unidades != null &&
+                  Number.isFinite(activeExterno.unidades) &&
+                  externoCantRecNum !== null &&
+                  externoCantRecNum < activeExterno.unidades ? (
+                    <p className="text-xs text-amber-800">
+                      Cantidad por debajo de la pedida: usa «Recepción parcial», o
+                      «Finalizar recepción» si cierras el trabajo aunque no cuadre
+                      con el total.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      «Finalizar recepción» pasa a Recibido aunque la cantidad no
+                      coincida con la pedida (cierre manual).
+                    </p>
+                  )}
                 </div>
               </div>
               <SheetFooter className="flex-col gap-2 border-t border-slate-100 pt-4 sm:flex-col">
