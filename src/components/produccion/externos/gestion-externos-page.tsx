@@ -413,7 +413,7 @@ function InlineFechaSeguimientoCell({
   );
 }
 
-/** Celda seguimiento: prefijo (X) + selector fecha en una sola fila. */
+/** Celda seguimiento: solo selector de fecha (días → columna «Días OT»). */
 function FEntregaOtTableCell({
   row,
   saving,
@@ -428,19 +428,8 @@ function FEntregaOtTableCell({
   inputClassName?: string;
   inputId?: string;
 }) {
-  const d = computeDiasHastaFEntregaOt(row.f_entrega_ot);
   return (
-    <div className="flex w-full min-w-[8.25rem] max-w-full flex-row items-center gap-2">
-      {d !== null ? (
-        <span
-          className={cn(
-            "shrink-0 text-[11px] tabular-nums leading-none",
-            fEntregaOtParenClass(d)
-          )}
-        >
-          ({d})
-        </span>
-      ) : null}
+    <div className="flex w-full min-w-0 max-w-full items-center justify-center">
       <InlineFechaSeguimientoCell
         id={inputId}
         rowId={row.id}
@@ -449,7 +438,7 @@ function FEntregaOtTableCell({
         ariaLabel={`F. entrega OT ${getOtDisplay(row)}`}
         onCommit={onCommit}
         inputClassName={cn(
-          "min-w-[6.75rem] max-w-[8rem] flex-1 px-0.5 sm:px-1",
+          "min-w-[6.75rem] max-w-[8rem] px-0.5 sm:px-1",
           inputClassName
         )}
       />
@@ -457,7 +446,37 @@ function FEntregaOtTableCell({
   );
 }
 
-/** Modal / alta manual: `value` en yyyy-mm-dd; prefijo (X) a la izquierda del input. */
+function DiasHastaFEntregaOtTableCell({
+  fEntregaOtIso,
+  className,
+}: {
+  fEntregaOtIso: string | null | undefined;
+  className?: string;
+}) {
+  const d = computeDiasHastaFEntregaOt(fEntregaOtIso);
+  const title =
+    d == null
+      ? "Sin fecha de entrega OT"
+      : d === 0
+        ? "Entrega hoy"
+        : d < 0
+          ? `Vencido: ${d} día(s) respecto a hoy`
+          : `Faltan ${d} día(s) para la entrega OT`;
+  return (
+    <span
+      title={title}
+      className={cn(
+        "inline-block w-full text-center font-mono text-[11px] tabular-nums leading-none",
+        d != null ? fEntregaOtDiasUrgencyTextClass(d) : "text-muted-foreground",
+        className
+      )}
+    >
+      {d != null ? d : "—"}
+    </span>
+  );
+}
+
+/** Modal / alta manual: `value` en yyyy-mm-dd; días en mono coloreado junto al input. */
 function FEntregaOtYmdInputWithUrgencyPrefix({
   id,
   value,
@@ -480,11 +499,12 @@ function FEntregaOtYmdInputWithUrgencyPrefix({
       {d !== null ? (
         <span
           className={cn(
-            "shrink-0 text-[11px] tabular-nums leading-none",
-            fEntregaOtParenClass(d)
+            "w-10 shrink-0 text-center font-mono text-[11px] tabular-nums leading-none",
+            fEntregaOtDiasUrgencyTextClass(d)
           )}
+          title="Días hasta entrega OT (negativo = vencido)"
         >
-          ({d})
+          {d}
         </span>
       ) : null}
       <Input
@@ -595,9 +615,9 @@ function computeDiasHastaFEntregaOt(
   );
 }
 
-/** Estilo del paréntesis (X) según urgencia (>7 días: verde). */
-function fEntregaOtParenClass(d: number): string {
-  if (d <= 3) return "font-normal text-red-600 dark:text-red-400";
+/** Color del texto «días hasta F. entrega OT» según urgencia (>7 días: verde). */
+function fEntregaOtDiasUrgencyTextClass(d: number): string {
+  if (d <= 3) return "text-red-600 dark:text-red-400";
   if (d <= 7) return "text-orange-600 dark:text-orange-400";
   return "text-green-700 dark:text-green-500";
 }
@@ -2077,6 +2097,7 @@ export function GestionExternosPage() {
         "F. entrega OT": r.f_entrega_ot
           ? formatFechaEsCorta(r.f_entrega_ot)
           : "",
+        "Días OT": computeDiasHastaFEntregaOt(r.f_entrega_ot) ?? "",
         "Pedido cliente": r.pedido_cliente,
         Proveedor: proveedorNombreById.get(r.proveedor_id) ?? "",
         Acabado: acabadoNombreById.get(r.acabado_id) ?? "",
@@ -2732,7 +2753,7 @@ export function GestionExternosPage() {
                 {seguimientoVista === "lista" ? (
                 <>
                 <div className="hidden max-h-[min(78vh,56rem)] w-full min-w-0 max-w-full overflow-x-auto rounded-lg border border-slate-200/80 sm:rounded-xl md:block">
-                  <table className="hidden w-full min-w-[144rem] caption-bottom border-collapse text-xs md:table">
+                  <table className="hidden w-full min-w-[148rem] caption-bottom border-collapse text-xs md:table">
                     <thead>
                       <tr className="border-b border-slate-200">
                         <th className="sticky top-0 z-30 w-8 bg-slate-50/95 px-0.5 py-1 text-center font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
@@ -2779,10 +2800,16 @@ export function GestionExternosPage() {
                           Trabajo
                         </th>
                         <th
-                          className="sticky top-0 z-30 w-[9rem] min-w-[8.5rem] max-w-[10rem] bg-slate-50/95 py-1 pr-4 pl-0.5 text-center font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95"
+                          className="sticky top-0 z-30 w-[9rem] min-w-[8.5rem] max-w-[10rem] bg-slate-50/95 py-1 pr-2 pl-0.5 text-center font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95"
                           title="Fecha entrega final pactada (OT)"
                         >
                           F. ent. OT
+                        </th>
+                        <th
+                          className="sticky top-0 z-30 w-12 min-w-[3rem] max-w-[3.25rem] bg-slate-50/95 px-0.5 py-1 text-center font-medium tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95"
+                          title="Días naturales hasta la fecha de entrega OT (negativo = vencido)"
+                        >
+                          Días OT
                         </th>
                         <th className="sticky top-0 z-30 min-w-[7.5rem] max-w-[9rem] bg-slate-50/95 px-1 py-1 pl-3 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Prov.
@@ -2907,7 +2934,7 @@ export function GestionExternosPage() {
                                 {row.trabajo_titulo}
                               </span>
                             </td>
-                            <td className="w-[9rem] min-w-[8.5rem] max-w-[10rem] py-0.5 pr-4 pl-0.5 align-middle">
+                            <td className="w-[9rem] min-w-[8.5rem] max-w-[10rem] py-0.5 pr-2 pl-0.5 align-middle">
                               <FEntregaOtTableCell
                                 row={row}
                                 saving={saving}
@@ -2918,6 +2945,11 @@ export function GestionExternosPage() {
                                     ymd
                                   )
                                 }
+                              />
+                            </td>
+                            <td className="w-12 min-w-[3rem] max-w-[3.25rem] px-0.5 py-0.5 text-center align-middle">
+                              <DiasHastaFEntregaOtTableCell
+                                fEntregaOtIso={row.f_entrega_ot}
                               />
                             </td>
                             <td className="max-w-[8.5rem] min-w-[7.5rem] truncate py-0.5 pl-2">
@@ -3154,26 +3186,39 @@ export function GestionExternosPage() {
                                 inputClassName="min-h-12 w-full max-w-none text-base"
                               />
                             </div>
-                            <div className="space-y-2 pr-3 min-[680px]:pr-2">
-                              <Label
-                                htmlFor={`fe-ot-${row.id}`}
-                                className="text-xs font-medium text-[#002147]"
-                              >
-                                F. entrega OT
-                              </Label>
-                              <FEntregaOtTableCell
-                                row={row}
-                                saving={saving}
-                                inputId={`fe-ot-${row.id}`}
-                                inputClassName="min-h-12 h-12 w-full max-w-none text-base px-1.5"
-                                onCommit={(ymd) =>
-                                  void updateSeguimientoFecha(
-                                    row,
-                                    "f_entrega_ot",
-                                    ymd
-                                  )
-                                }
-                              />
+                            <div className="flex min-w-0 gap-3 pr-3 min-[680px]:pr-2">
+                              <div className="w-12 shrink-0 space-y-2">
+                                <span className="block text-xs font-medium text-[#002147]">
+                                  Días OT
+                                </span>
+                                <div className="flex min-h-12 items-center justify-center">
+                                  <DiasHastaFEntregaOtTableCell
+                                    fEntregaOtIso={row.f_entrega_ot}
+                                    className="text-sm"
+                                  />
+                                </div>
+                              </div>
+                              <div className="min-w-0 flex-1 space-y-2">
+                                <Label
+                                  htmlFor={`fe-ot-${row.id}`}
+                                  className="text-xs font-medium text-[#002147]"
+                                >
+                                  F. entrega OT
+                                </Label>
+                                <FEntregaOtTableCell
+                                  row={row}
+                                  saving={saving}
+                                  inputId={`fe-ot-${row.id}`}
+                                  inputClassName="min-h-12 h-12 w-full max-w-none text-base px-1.5"
+                                  onCommit={(ymd) =>
+                                    void updateSeguimientoFecha(
+                                      row,
+                                      "f_entrega_ot",
+                                      ymd
+                                    )
+                                  }
+                                />
+                              </div>
                             </div>
                             <div className="space-y-2 min-[480px]:col-span-2 min-[680px]:col-span-1 pl-1 min-[680px]:pl-2">
                               <Label
@@ -3456,8 +3501,11 @@ export function GestionExternosPage() {
                   <th className="border border-[#002147] px-1 py-1.5 text-left font-semibold">
                     Trabajo
                   </th>
-                  <th className="border border-[#002147] py-1.5 pr-4 pl-1 text-left font-semibold whitespace-nowrap">
+                  <th className="border border-[#002147] py-1.5 pr-2 pl-1 text-left font-semibold whitespace-nowrap">
                     F. ent. OT
+                  </th>
+                  <th className="border border-[#002147] px-1 py-1.5 text-center font-semibold tabular-nums">
+                    Días OT
                   </th>
                   <th className="border border-[#002147] px-1 py-1.5 pl-3 text-left font-semibold">
                     Prov.
@@ -3531,26 +3579,22 @@ export function GestionExternosPage() {
                       <td className="border border-slate-200 px-1 py-1">
                         {row.trabajo_titulo}
                       </td>
-                      <td className="border border-slate-200 py-1 pr-4 pl-1 whitespace-nowrap">
-                        {row.f_entrega_ot ? (
-                          <span className="inline-flex items-center gap-2">
-                            {diasFentOt != null ? (
-                              <span
-                                className={cn(
-                                  "shrink-0 text-[8pt] tabular-nums leading-none",
-                                  fEntregaOtParenClass(diasFentOt)
-                                )}
-                              >
-                                ({diasFentOt})
-                              </span>
-                            ) : null}
-                            <span className="text-[8.5pt] tabular-nums">
-                              {formatFechaEsCorta(row.f_entrega_ot)}
-                            </span>
-                          </span>
-                        ) : (
-                          "—"
-                        )}
+                      <td className="border border-slate-200 py-1 pr-2 pl-1 whitespace-nowrap">
+                        {row.f_entrega_ot
+                          ? formatFechaEsCorta(row.f_entrega_ot)
+                          : "—"}
+                      </td>
+                      <td className="border border-slate-200 px-1 py-1 text-center align-middle">
+                        <span
+                          className={cn(
+                            "font-mono text-[8.5pt] tabular-nums leading-none",
+                            diasFentOt != null
+                              ? fEntregaOtDiasUrgencyTextClass(diasFentOt)
+                              : "text-slate-500"
+                          )}
+                        >
+                          {diasFentOt != null ? diasFentOt : "—"}
+                        </span>
                       </td>
                       <td className="border border-slate-200 py-1 pr-1 pl-3">
                         {proveedorNombreById.get(row.proveedor_id) ?? "—"}
