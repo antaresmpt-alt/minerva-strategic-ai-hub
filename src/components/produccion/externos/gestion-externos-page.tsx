@@ -2800,17 +2800,29 @@ export function GestionExternosPage() {
                         <th className="sticky top-0 z-30 w-10 bg-slate-50/95 px-0.5 py-1 text-center font-medium tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Ud.
                         </th>
-                        <th className="sticky top-0 z-30 w-16 bg-slate-50/95 px-0.5 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
-                          Prio.
-                        </th>
-                        <th className="sticky top-0 z-30 w-8 bg-slate-50/95 px-0.5 py-1 text-center font-medium tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
-                          Días
-                        </th>
                         <th className="sticky top-0 z-30 w-[7.5rem] min-w-[6rem] max-w-[8rem] bg-slate-50/95 px-1 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Cliente
                         </th>
                         <th className="sticky top-0 z-30 w-[10rem] min-w-[8rem] max-w-[11rem] bg-slate-50/95 px-1 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Trabajo
+                        </th>
+                        <th className="sticky top-0 z-30 min-w-[7.5rem] max-w-[9rem] bg-slate-50/95 px-1 py-1 pl-3 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Prov.
+                        </th>
+                        <th className="sticky top-0 z-30 min-w-[6.5rem] bg-slate-50/95 px-1 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Acab.
+                        </th>
+                        <th className="sticky top-0 z-30 w-24 min-w-24 max-w-24 bg-slate-50/95 px-0.5 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Estado
+                        </th>
+                        <th className="sticky top-0 z-30 w-16 bg-slate-50/95 px-0.5 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Prio.
+                        </th>
+                        <th className="sticky top-0 z-30 w-[7rem] min-w-[6.5rem] max-w-[7.5rem] bg-slate-50/95 px-0.5 py-1 text-center font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Env.
+                        </th>
+                        <th className="sticky top-0 z-30 w-[7rem] min-w-[6.5rem] max-w-[7.5rem] bg-slate-50/95 px-0.5 py-1 text-center font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Prev.
                         </th>
                         <th
                           className="sticky top-0 z-30 w-[9rem] min-w-[8.5rem] max-w-[10rem] bg-slate-50/95 py-1 pr-2 pl-0.5 text-center font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95"
@@ -2824,21 +2836,6 @@ export function GestionExternosPage() {
                         >
                           Días OT
                         </th>
-                        <th className="sticky top-0 z-30 min-w-[7.5rem] max-w-[9rem] bg-slate-50/95 px-1 py-1 pl-3 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
-                          Prov.
-                        </th>
-                        <th className="sticky top-0 z-30 min-w-[6.5rem] bg-slate-50/95 px-1 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
-                          Acab.
-                        </th>
-                        <th className="sticky top-0 z-30 w-24 min-w-24 max-w-24 bg-slate-50/95 px-0.5 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
-                          Estado
-                        </th>
-                        <th className="sticky top-0 z-30 w-[7rem] min-w-[6.5rem] max-w-[7.5rem] bg-slate-50/95 px-0.5 py-1 text-center font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
-                          Env.
-                        </th>
-                        <th className="sticky top-0 z-30 w-[7rem] min-w-[6.5rem] max-w-[7.5rem] bg-slate-50/95 px-0.5 py-1 text-center font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
-                          Prev.
-                        </th>
                         <th
                           className="sticky top-0 z-30 w-7 bg-slate-50/95 px-0.5 py-1 text-center font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95"
                           title="Material (compra)"
@@ -2847,6 +2844,9 @@ export function GestionExternosPage() {
                         </th>
                         <th className="sticky top-0 z-30 w-8 bg-slate-50/95 px-0.5 py-1 text-center font-medium tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Pal.
+                        </th>
+                        <th className="sticky top-0 z-30 w-8 bg-slate-50/95 px-0.5 py-1 text-center font-medium tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Días
                         </th>
                         <th className="sticky top-0 z-30 min-w-[12rem] max-w-[16rem] bg-slate-50/95 px-1 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Notas log.
@@ -2927,14 +2927,6 @@ export function GestionExternosPage() {
                             <td className="w-10 px-0.5 py-0.5 text-center tabular-nums">
                               {row.unidades != null ? row.unidades : "—"}
                             </td>
-                            <td className="w-16 truncate px-0.5 py-0.5">
-                              {row.prioridad?.trim()
-                                ? row.prioridad
-                                : "—"}
-                            </td>
-                            <td className="w-8 px-0.5 py-0.5 text-center tabular-nums text-foreground">
-                              {diasUi != null ? diasUi : "—"}
-                            </td>
                             <td className="w-[7.5rem] min-w-[6rem] max-w-[8rem] truncate px-1 py-0.5 leading-tight">
                               {row.cliente_nombre}
                             </td>
@@ -2945,24 +2937,6 @@ export function GestionExternosPage() {
                               >
                                 {row.trabajo_titulo}
                               </span>
-                            </td>
-                            <td className="w-[9rem] min-w-[8.5rem] max-w-[10rem] py-0.5 pr-2 pl-0.5 align-middle">
-                              <FEntregaOtTableCell
-                                row={row}
-                                saving={saving}
-                                onCommit={(ymd) =>
-                                  void updateSeguimientoFecha(
-                                    row,
-                                    "f_entrega_ot",
-                                    ymd
-                                  )
-                                }
-                              />
-                            </td>
-                            <td className="w-12 min-w-[3rem] max-w-[3.25rem] px-0.5 py-0.5 text-center align-middle">
-                              <DiasHastaFEntregaOtTableCell
-                                fEntregaOtIso={row.f_entrega_ot}
-                              />
                             </td>
                             <td className="max-w-[8.5rem] min-w-[7.5rem] truncate py-0.5 pl-2">
                               {proveedorNombreById.get(row.proveedor_id) ?? "—"}
@@ -2982,6 +2956,11 @@ export function GestionExternosPage() {
                                 className="h-7 min-h-7 w-24 min-w-0 max-w-24 shrink-0 px-0.5 py-0 text-[10px] leading-tight"
                                 aria-label={`Estado OT ${getOtDisplay(row)}`}
                               />
+                            </td>
+                            <td className="w-16 truncate px-0.5 py-0.5">
+                              {row.prioridad?.trim()
+                                ? row.prioridad
+                                : "—"}
                             </td>
                             <td className="w-[7rem] min-w-[6.5rem] max-w-[7.5rem] px-0.5 py-0.5 align-middle">
                               <InlineFechaSeguimientoCell
@@ -3013,6 +2992,24 @@ export function GestionExternosPage() {
                                 }
                               />
                             </td>
+                            <td className="w-[9rem] min-w-[8.5rem] max-w-[10rem] py-0.5 pr-2 pl-0.5 align-middle">
+                              <FEntregaOtTableCell
+                                row={row}
+                                saving={saving}
+                                onCommit={(ymd) =>
+                                  void updateSeguimientoFecha(
+                                    row,
+                                    "f_entrega_ot",
+                                    ymd
+                                  )
+                                }
+                              />
+                            </td>
+                            <td className="w-12 min-w-[3rem] max-w-[3.25rem] px-0.5 py-0.5 text-center align-middle">
+                              <DiasHastaFEntregaOtTableCell
+                                fEntregaOtIso={row.f_entrega_ot}
+                              />
+                            </td>
                             <td className="w-7 px-0.5 py-0.5 text-center align-middle">
                               <MaterialCompraColumnCell
                                 info={lookupCompraMaterialStatus(compraMaterialByOt, getOtDisplay(row))}
@@ -3021,6 +3018,9 @@ export function GestionExternosPage() {
                             </td>
                             <td className="w-8 px-0.5 py-0.5 text-center tabular-nums">
                               {row.palets != null ? row.palets : "—"}
+                            </td>
+                            <td className="w-8 px-0.5 py-0.5 text-center tabular-nums text-foreground">
+                              {diasUi != null ? diasUi : "—"}
                             </td>
                             <td className="min-w-[12rem] max-w-[16rem] py-0.5 align-top text-muted-foreground">
                               <NotasTablaCelda texto={row.notas_logistica} />
@@ -3512,12 +3512,6 @@ export function GestionExternosPage() {
                   <th className="border border-[#002147] px-1 py-1.5 text-left font-semibold">
                     Trabajo
                   </th>
-                  <th className="border border-[#002147] py-1.5 pr-2 pl-1 text-left font-semibold whitespace-nowrap">
-                    F. ent. OT
-                  </th>
-                  <th className="border border-[#002147] px-1 py-1.5 text-center font-semibold tabular-nums">
-                    Días OT
-                  </th>
                   <th className="border border-[#002147] px-1 py-1.5 pl-3 text-left font-semibold">
                     Prov.
                   </th>
@@ -3528,16 +3522,28 @@ export function GestionExternosPage() {
                     Est.
                   </th>
                   <th className="border border-[#002147] px-1 py-1.5 text-left font-semibold">
+                    Prio.
+                  </th>
+                  <th className="border border-[#002147] px-1 py-1.5 text-left font-semibold">
                     Envío
                   </th>
                   <th className="border border-[#002147] px-1 py-1.5 text-left font-semibold">
                     Prev.
+                  </th>
+                  <th className="border border-[#002147] py-1.5 pr-2 pl-1 text-left font-semibold whitespace-nowrap">
+                    F. ent. OT
+                  </th>
+                  <th className="border border-[#002147] px-1 py-1.5 text-center font-semibold tabular-nums">
+                    Días OT
                   </th>
                   <th className="border border-[#002147] px-1 py-1.5 text-center font-semibold">
                     M
                   </th>
                   <th className="border border-[#002147] px-1 py-1.5 text-left font-semibold">
                     Pal.
+                  </th>
+                  <th className="border border-[#002147] px-1 py-1.5 text-center font-semibold tabular-nums">
+                    Días
                   </th>
                   <th className="border border-[#002147] px-1 py-1.5 text-left font-semibold">
                     Notas log.
@@ -3557,6 +3563,10 @@ export function GestionExternosPage() {
                 {seguimientosFiltrados.map((row) => {
                   const sem = computeSemaforo(row);
                   const diasFentOt = computeDiasHastaFEntregaOt(row.f_entrega_ot);
+                  const diasUiPrint = computeDiasEnExternoUi(
+                    row.fecha_envio,
+                    row.fecha_prevista
+                  );
                   const compraSem = lookupCompraMaterialStatus(
                     compraMaterialByOt,
                     getOtDisplay(row)
@@ -3589,6 +3599,24 @@ export function GestionExternosPage() {
                       <td className="border border-slate-200 px-1 py-1">
                         {row.trabajo_titulo}
                       </td>
+                      <td className="border border-slate-200 py-1 pr-1 pl-3">
+                        {proveedorNombreById.get(row.proveedor_id) ?? "—"}
+                      </td>
+                      <td className="border border-slate-200 px-1 py-1">
+                        {acabadoNombreById.get(row.acabado_id) ?? "—"}
+                      </td>
+                      <td className="border border-slate-200 px-1 py-1">
+                        {row.estado}
+                      </td>
+                      <td className="border border-slate-200 px-1 py-1">
+                        {row.prioridad?.trim() ? row.prioridad : "—"}
+                      </td>
+                      <td className="border border-slate-200 px-1 py-1 whitespace-nowrap">
+                        {formatFechaEsCorta(row.fecha_envio)}
+                      </td>
+                      <td className="border border-slate-200 px-1 py-1 whitespace-nowrap">
+                        {formatFechaEsCorta(row.fecha_prevista)}
+                      </td>
                       <td className="border border-slate-200 py-1 pr-2 pl-1 whitespace-nowrap">
                         {row.f_entrega_ot
                           ? formatFechaEsCorta(row.f_entrega_ot)
@@ -3605,21 +3633,6 @@ export function GestionExternosPage() {
                         >
                           {diasFentOt != null ? diasFentOt : "—"}
                         </span>
-                      </td>
-                      <td className="border border-slate-200 py-1 pr-1 pl-3">
-                        {proveedorNombreById.get(row.proveedor_id) ?? "—"}
-                      </td>
-                      <td className="border border-slate-200 px-1 py-1">
-                        {acabadoNombreById.get(row.acabado_id) ?? "—"}
-                      </td>
-                      <td className="border border-slate-200 px-1 py-1">
-                        {row.estado}
-                      </td>
-                      <td className="border border-slate-200 px-1 py-1 whitespace-nowrap">
-                        {formatFechaEsCorta(row.fecha_envio)}
-                      </td>
-                      <td className="border border-slate-200 px-1 py-1 whitespace-nowrap">
-                        {formatFechaEsCorta(row.fecha_prevista)}
                       </td>
                       <td className="border border-slate-200 px-1 py-1 text-center align-middle">
                         <span
@@ -3642,6 +3655,9 @@ export function GestionExternosPage() {
                       </td>
                       <td className="border border-slate-200 px-1 py-1 tabular-nums">
                         {row.palets ?? "—"}
+                      </td>
+                      <td className="border border-slate-200 px-1 py-1 text-center tabular-nums">
+                        {diasUiPrint != null ? diasUiPrint : "—"}
                       </td>
                       <td className="border border-slate-200 px-1 py-1 align-top text-[7.5pt]">
                         {row.notas_logistica?.trim()
