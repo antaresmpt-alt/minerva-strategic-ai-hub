@@ -9,23 +9,33 @@ import {
 import autoTable from "jspdf-autotable";
 import { jsPDF } from "jspdf";
 import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   Download,
   FileSpreadsheet,
   FilePlus2,
   History,
+  LayoutGrid,
+  List,
   Loader2,
   Mail,
   Printer,
 } from "lucide-react";
+import { addDays, addWeeks, format, startOfDay, startOfWeek } from "date-fns";
+import { es as esLocale } from "date-fns/locale";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
+import { ComprasMaterialDailyGrid } from "@/components/produccion/ots/compras-material-daily-grid";
+import { ComprasMaterialWeeklyBoard } from "@/components/produccion/ots/compras-material-weekly-board";
 import { createComprasMaterialColumns } from "@/components/produccion/ots/compras-material-columns";
 import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Toggle } from "@/components/ui/toggle";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Dialog,
   DialogContent,
@@ -128,6 +138,22 @@ function toDateInputValue(iso: string | null | undefined): string {
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return "";
   return d.toISOString().slice(0, 10);
+}
+
+/** fecha_prevista_recepcion → medianoche local (agrupación tablero / día) */
+function fechaRecepcionToLocalDate(
+  iso: string | null | undefined
+): Date | null {
+  if (!iso?.trim()) return null;
+  const s = String(iso).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    const [y, m, d] = s.slice(0, 10).split("-").map(Number);
+    const dt = new Date(y, m - 1, d, 0, 0, 0, 0);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
 }
 
 function parseGramaje(raw: unknown): number | null {
@@ -256,6 +282,11 @@ export function ComprasMaterialPage() {
   const [filtroEstado, setFiltroEstado] = useState("");
   /** `false`: ocultar compras en estado «Recibido» (vista limpia). `true`: ver todo el histórico. */
   const [verHistorial, setVerHistorial] = useState(false);
+
+  const [viewMode, setViewMode] = useState<"lista" | "semanal" | "diaria">(
+    "lista"
+  );
+  const [planCursor, setPlanCursor] = useState(() => startOfDay(new Date()));
 
   const [editOpen, setEditOpen] = useState(false);
   const [editRow, setEditRow] = useState<ComprasMaterialTableRow | null>(null);
@@ -637,6 +668,20 @@ export function ComprasMaterialPage() {
     }
     return m;
   }, [rowsFiltradas]);
+
+  const weekMondayForBoard = useMemo(
+    () => startOfWeek(planCursor, { weekStartsOn: 1 }),
+    [planCursor]
+  );
+
+  const dailyRowsForGrid = useMemo(() => {
+    const day = startOfDay(planCursor);
+    return rowsFiltradas.filter((row) => {
+      const d = fechaRecepcionToLocalDate(row.fecha_prevista_recepcion);
+      if (!d) return false;
+      return d.getTime() === day.getTime();
+    });
+  }, [planCursor, rowsFiltradas]);
 
   useEffect(() => {
     const allowed = new Set(rowsFiltradas.map((r) => r.id));
@@ -1405,6 +1450,55 @@ export function ComprasMaterialPage() {
         </p>
       </div>
 
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+        <ToggleGroup
+          variant="outline"
+          size="sm"
+          spacing={0}
+          className="w-full shrink-0 justify-stretch sm:w-auto sm:justify-end"
+          value={
+            viewMode === "lista"
+              ? ["lista"]
+              : viewMode === "semanal"
+                ? ["semanal"]
+                : ["diaria"]
+          }
+          onValueChange={(v) => {
+            const next = v[0];
+            if (
+              next == null ||
+              (next !== "lista" &&
+                next !== "semanal" &&
+                next !== "diaria")
+            ) {
+              return;
+            }
+            setViewMode((prev) => {
+              if (next === "diaria" && prev !== "diaria") {
+                setPlanCursor(startOfDay(new Date()));
+              } else if (next === "semanal" && prev !== "semanal") {
+                setPlanCursor(startOfWeek(new Date(), { weekStartsOn: 1 }));
+              }
+              return next;
+            });
+          }}
+          aria-label="Vista de compras de material"
+        >
+          <ToggleGroupItem value="lista" className="gap-1 px-2.5">
+            <List className="size-3.5 opacity-80" aria-hidden />
+            Lista
+          </ToggleGroupItem>
+          <ToggleGroupItem value="semanal" className="gap-1 px-2.5">
+            <CalendarDays className="size-3.5 opacity-80" aria-hidden />
+            Tablero semanal
+          </ToggleGroupItem>
+          <ToggleGroupItem value="diaria" className="gap-1 px-2.5">
+            <LayoutGrid className="size-3.5 opacity-80" aria-hidden />
+            Cuadrícula diaria
+          </ToggleGroupItem>
+        </ToggleGroup>
+      </div>
+
       <div className="rounded-lg border border-slate-200/90 bg-slate-50/40 p-3 shadow-sm">
         <div className="hidden flex-col gap-3 md:flex">
           <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5">
@@ -1705,80 +1799,203 @@ export function ComprasMaterialPage() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-slate-200/90 bg-white shadow-sm">
-        <div className="max-h-[min(70vh,720px)] overflow-auto">
-          <Table className="table-fixed min-w-[1524px] text-xs">
-            <TableHeader className="bg-slate-50/95 sticky top-0 z-20 shadow-[0_1px_0_0_rgb(226_232_240)]">
-              {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id} className="hover:bg-transparent">
-                  {headerGroup.headers.map((header) => (
-                    <TableHead
-                      key={header.id}
-                      className="sticky top-0 z-20 bg-slate-50/95 px-0.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600"
-                      style={{ width: header.getSize() }}
-                    >
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              ))}
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={columns.length}
-                    className="py-10 text-center"
-                  >
-                    <Loader2 className="mx-auto size-6 animate-spin text-slate-400" />
-                  </TableCell>
-                </TableRow>
-              ) : rows.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={columns.length}
-                    className="text-muted-foreground py-8 text-center text-sm"
-                  >
-                    No hay compras de material registradas.
-                  </TableCell>
-                </TableRow>
-              ) : rowsFiltradas.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={columns.length}
-                    className="text-muted-foreground py-8 text-center text-sm"
-                  >
-                    Ningún resultado con los filtros actuales. Ajusta búsqueda,
-                    proveedor o estado.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                table.getRowModel().rows.map((row) => (
-                  <TableRow
-                    key={row.id}
-                    className="hover:bg-slate-50/80"
-                    data-state={row.getIsSelected() ? "selected" : undefined}
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id} className="p-0 align-middle">
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext()
-                        )}
-                      </TableCell>
+      {viewMode === "lista" ? (
+        <div className="overflow-hidden rounded-lg border border-slate-200/90 bg-white shadow-sm">
+          <div className="max-h-[min(70vh,720px)] overflow-auto">
+            <Table className="table-fixed min-w-[1524px] text-xs">
+              <TableHeader className="bg-slate-50/95 sticky top-0 z-20 shadow-[0_1px_0_0_rgb(226_232_240)]">
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <TableRow key={headerGroup.id} className="hover:bg-transparent">
+                    {headerGroup.headers.map((header) => (
+                      <TableHead
+                        key={header.id}
+                        className="sticky top-0 z-20 bg-slate-50/95 px-0.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600"
+                        style={{ width: header.getSize() }}
+                      >
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(
+                              header.column.columnDef.header,
+                              header.getContext()
+                            )}
+                      </TableHead>
                     ))}
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ))}
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={columns.length}
+                      className="py-10 text-center"
+                    >
+                      <Loader2 className="mx-auto size-6 animate-spin text-slate-400" />
+                    </TableCell>
+                  </TableRow>
+                ) : rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={columns.length}
+                      className="text-muted-foreground py-8 text-center text-sm"
+                    >
+                      No hay compras de material registradas.
+                    </TableCell>
+                  </TableRow>
+                ) : rowsFiltradas.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={columns.length}
+                      className="text-muted-foreground py-8 text-center text-sm"
+                    >
+                      Ningún resultado con los filtros actuales. Ajusta búsqueda,
+                      proveedor o estado.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  table.getRowModel().rows.map((row) => (
+                    <TableRow
+                      key={row.id}
+                      className="hover:bg-slate-50/80"
+                      data-state={row.getIsSelected() ? "selected" : undefined}
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell key={cell.id} className="p-0 align-middle">
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext()
+                          )}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-slate-200/90 bg-white shadow-sm">
+          <div className="p-4 sm:p-5">
+            {loading ? (
+              <div className="flex justify-center py-16">
+                <Loader2 className="size-8 animate-spin text-slate-400" />
+              </div>
+            ) : (
+              <>
+                <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p
+                    className="text-sm font-medium capitalize text-[#002147]"
+                    aria-live="polite"
+                  >
+                    {viewMode === "semanal"
+                      ? format(weekMondayForBoard, "MMMM yyyy", {
+                          locale: esLocale,
+                        })
+                      : format(planCursor, "MMMM yyyy", {
+                          locale: esLocale,
+                        })}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
+                    {viewMode === "semanal" ? (
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 gap-0.5 px-2"
+                          onClick={() => setPlanCursor((c) => addWeeks(c, -1))}
+                          aria-label="Semana anterior"
+                        >
+                          <ChevronLeft className="size-4" aria-hidden />
+                          Semana anterior
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8"
+                          onClick={() =>
+                            setPlanCursor(
+                              startOfWeek(new Date(), { weekStartsOn: 1 })
+                            )
+                          }
+                        >
+                          Hoy
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 gap-0.5 px-2"
+                          onClick={() => setPlanCursor((c) => addWeeks(c, 1))}
+                          aria-label="Semana siguiente"
+                        >
+                          Semana siguiente
+                          <ChevronRight className="size-4" aria-hidden />
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 gap-0.5 px-2"
+                          onClick={() =>
+                            setPlanCursor((c) => addDays(startOfDay(c), -1))
+                          }
+                          aria-label="Día anterior"
+                        >
+                          <ChevronLeft className="size-4" aria-hidden />
+                          Día anterior
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8"
+                          onClick={() =>
+                            setPlanCursor(startOfDay(new Date()))
+                          }
+                        >
+                          Hoy
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 gap-0.5 px-2"
+                          onClick={() =>
+                            setPlanCursor((c) => addDays(startOfDay(c), 1))
+                          }
+                          aria-label="Día siguiente"
+                        >
+                          Día siguiente
+                          <ChevronRight className="size-4" aria-hidden />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+                {viewMode === "semanal" ? (
+                  <ComprasMaterialWeeklyBoard
+                    weekMonday={weekMondayForBoard}
+                    rows={rowsFiltradas}
+                    onCardClick={openEdit}
+                  />
+                ) : (
+                  <ComprasMaterialDailyGrid
+                    day={startOfDay(planCursor)}
+                    rows={dailyRowsForGrid}
+                    onCardClick={openEdit}
+                  />
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       <Dialog
         open={editOpen}
