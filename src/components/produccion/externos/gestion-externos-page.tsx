@@ -937,6 +937,7 @@ export function GestionExternosPage() {
   const [envProveedorId, setEnvProveedorId] = useState("");
   const [envAcabadoId, setEnvAcabadoId] = useState("");
   const [envFecha, setEnvFecha] = useState("");
+  const [envFechaEnvio, setEnvFechaEnvio] = useState("");
   const [envFechaEntregaOt, setEnvFechaEntregaOt] = useState("");
   const [envNotas, setEnvNotas] = useState("");
   const [envUnidades, setEnvUnidades] = useState("");
@@ -1736,6 +1737,10 @@ export function GestionExternosPage() {
       envFechaEntregaOt.trim().length === 10
         ? dateInputToTimestamptz(envFechaEntregaOt.trim())
         : null;
+    const fechaEnvioIso =
+      envFechaEnvio.trim().length === 10
+        ? dateInputToTimestamptz(envFechaEnvio.trim())
+        : null;
     const { error } = await supabase.from("prod_seguimiento_externos").insert({
       id_pedido,
       OT: otRaw,
@@ -1749,6 +1754,7 @@ export function GestionExternosPage() {
       f_entrega_ot: fEntIso,
       dias_a_fEntOT:
         fEntIso != null ? computeDiasHastaFEntregaOt(fEntIso) : null,
+      fecha_envio: fechaEnvioIso,
       fecha_prevista: dateInputToTimestamptz(envFecha),
       notas_logistica: envNotas.trim() || null,
       unidades:
@@ -1776,6 +1782,7 @@ export function GestionExternosPage() {
     setEnvPedidoCliente("");
     setEnvProveedorId("");
     setEnvAcabadoId("");
+    setEnvFechaEnvio("");
     setEnvFecha("");
     setEnvFechaEntregaOt("");
     setEnvNotas("");
@@ -4179,9 +4186,39 @@ export function GestionExternosPage() {
                     />
                   </div>
                 </div>
-                {/* Fila 5: F. entrega OT (cliente) y fecha prevista (proveedor) + estado */}
+                {/* Fila 5: Fecha envío + Fecha prevista (50/50) */}
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:items-end sm:gap-3">
+                  <div className="grid min-w-0 content-start gap-1.5">
+                    <Label htmlFor="env-fecha-envio" className="text-xs leading-none">
+                      Fecha envío
+                    </Label>
+                    <Input
+                      id="env-fecha-envio"
+                      type="date"
+                      value={envFechaEnvio}
+                      onChange={(e) => setEnvFechaEnvio(e.target.value)}
+                      disabled={!proveedores.length}
+                      className="h-9 w-full min-w-0"
+                    />
+                  </div>
+                  <div className="grid min-w-0 content-start gap-1.5">
+                    <Label htmlFor="fp" className="text-xs leading-none">
+                      Fecha prevista
+                    </Label>
+                    <Input
+                      id="fp"
+                      type="date"
+                      value={envFecha}
+                      onChange={(e) => setEnvFecha(e.target.value)}
+                      disabled={!proveedores.length}
+                      className="h-9 w-full min-w-0"
+                    />
+                  </div>
+                </div>
+
+                {/* Fila 6: F. entrega OT + estado */}
                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-12 sm:items-end sm:gap-3">
-                  <div className="grid min-w-0 content-start gap-1.5 sm:col-span-4">
+                  <div className="grid min-w-0 content-start gap-1.5 sm:col-span-6">
                     <Label
                       htmlFor="env-f-entrega-ot"
                       className="text-xs leading-none"
@@ -4196,20 +4233,7 @@ export function GestionExternosPage() {
                       inputHeightClass="h-9 min-h-9"
                     />
                   </div>
-                  <div className="grid min-w-0 content-start gap-1.5 sm:col-span-4">
-                    <Label htmlFor="fp" className="text-xs leading-none">
-                      Fecha prevista
-                    </Label>
-                    <Input
-                      id="fp"
-                      type="date"
-                      value={envFecha}
-                      onChange={(e) => setEnvFecha(e.target.value)}
-                      disabled={!proveedores.length}
-                      className="h-9 w-full min-w-0"
-                    />
-                  </div>
-                  <div className="grid min-w-0 content-start gap-1.5 sm:col-span-4">
+                  <div className="grid min-w-0 content-start gap-1.5 sm:col-span-6">
                     <Label htmlFor="env-estado" className="text-xs leading-none">
                       Estado
                     </Label>
