@@ -513,6 +513,7 @@ export function OtsDespachadasPage({
           gramaje: row.gramaje,
           tamano_hoja: row.tamano_hoja?.trim() || null,
           num_hojas_brutas: row.num_hojas_brutas,
+          num_hojas_netas: row.num_hojas_netas,
         };
         const { error: insertError } = await supabase
           .from(TABLE_COMPRA_MATERIAL)

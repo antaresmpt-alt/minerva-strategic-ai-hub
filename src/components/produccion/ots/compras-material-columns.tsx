@@ -1,7 +1,7 @@
 "use client";
 
-import type { ColumnDef } from "@tanstack/react-table";
-import { Camera, Pencil, Trash2 } from "lucide-react";
+import type { Column, ColumnDef } from "@tanstack/react-table";
+import { ArrowDown, ArrowUp, ArrowUpDown, Camera, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,40 @@ import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import type { OtsComprasUmbralesParametros } from "@/lib/sys-parametros-ots-compras";
 import type { ComprasMaterialTableRow } from "@/types/prod-compra-material";
 import { cn } from "@/lib/utils";
+
+function ComprasSortHeader({
+  column,
+  label,
+  title,
+}: {
+  column: Column<ComprasMaterialTableRow, unknown>;
+  label: string;
+  title?: string;
+}) {
+  const sorted = column.getIsSorted();
+  return (
+    <button
+      type="button"
+      title={title ?? `Ordenar por ${label}`}
+      className={cn(
+        "-mx-0.5 inline-flex max-w-full min-w-0 items-center gap-0.5 rounded px-0.5 py-0.5 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-600 hover:bg-slate-100/90 hover:text-slate-800",
+        sorted && "text-[#002147]"
+      )}
+      onClick={column.getToggleSortingHandler()}
+    >
+      <span className="min-w-0 shrink truncate">{label}</span>
+      <span className="inline-flex size-3 shrink-0 items-center justify-center" aria-hidden>
+        {sorted === "asc" ? (
+          <ArrowUp className="size-3 text-[#002147]" strokeWidth={2.25} />
+        ) : sorted === "desc" ? (
+          <ArrowDown className="size-3 text-[#002147]" strokeWidth={2.25} />
+        ) : (
+          <ArrowUpDown className="size-3 text-slate-300" strokeWidth={2} />
+        )}
+      </span>
+    </button>
+  );
+}
 
 function formatGramajeCell(g: number | null | undefined): string {
   if (g == null || !Number.isFinite(g)) return "—";
@@ -113,6 +147,26 @@ export function createComprasMaterialColumns(
       },
     },
     {
+      id: "acciones_edit",
+      size: 44,
+      enableSorting: false,
+      header: () => <span className="sr-only">Editar</span>,
+      cell: ({ row }) => (
+        <div className="flex justify-center px-0.5 py-0.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="size-7 shrink-0"
+            onClick={() => ctx.onEdit(row.original)}
+            aria-label={`Editar compra ${row.original.num_compra}`}
+          >
+            <Pencil className="size-3.5 text-[#002147]" aria-hidden />
+          </Button>
+        </div>
+      ),
+    },
+    {
       id: "stock",
       size: 56,
       enableSorting: false,
@@ -174,10 +228,16 @@ export function createComprasMaterialColumns(
     },
     {
       accessorKey: "ot_numero",
-      header: () => (
-        <span className="text-[10px] font-semibold uppercase tracking-wide">
-          OT
-        </span>
+      sortingFn: (a, b) => {
+        const na = Number(String(a.original.ot_numero ?? "").replace(/\D/g, ""));
+        const nb = Number(String(b.original.ot_numero ?? "").replace(/\D/g, ""));
+        if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+        return String(a.original.ot_numero ?? "").localeCompare(
+          String(b.original.ot_numero ?? ""), "es", { numeric: true }
+        );
+      },
+      header: ({ column }) => (
+        <ComprasSortHeader column={column} label="OT" title="Ordenar por número de OT" />
       ),
       cell: ({ row }) => (
         <div className="truncate px-1 py-0.5 font-mono text-[11px]">
@@ -337,10 +397,10 @@ export function createComprasMaterialColumns(
     },
     {
       id: "fecha_prevista",
-      header: () => (
-        <span className="text-[10px] font-semibold uppercase tracking-wide">
-          Fecha prevista
-        </span>
+      accessorFn: (row) => row.fecha_prevista_recepcion ?? "",
+      sortingFn: "alphanumeric",
+      header: ({ column }) => (
+        <ComprasSortHeader column={column} label="Fecha prevista" title="Ordenar por fecha prevista de recepción" />
       ),
       cell: ({ row }) => (
         <div className="flex justify-center px-0.5 py-0.5">
@@ -451,26 +511,6 @@ export function createComprasMaterialColumns(
           </div>
         );
       },
-    },
-    {
-      id: "acciones",
-      size: 44,
-      enableSorting: false,
-      header: () => <span className="sr-only">Acciones</span>,
-      cell: ({ row }) => (
-        <div className="flex justify-center px-0.5 py-0.5">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="size-7 shrink-0"
-            onClick={() => ctx.onEdit(row.original)}
-            aria-label={`Editar compra ${row.original.num_compra}`}
-          >
-            <Pencil className="size-3.5 text-[#002147]" aria-hidden />
-          </Button>
-        </div>
-      ),
     },
     {
       id: "eliminar",

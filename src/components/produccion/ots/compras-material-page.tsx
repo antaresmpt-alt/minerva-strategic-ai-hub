@@ -3,8 +3,10 @@
 import {
   flexRender,
   getCoreRowModel,
+  getSortedRowModel,
   useReactTable,
   type RowSelectionState,
+  type SortingState,
 } from "@tanstack/react-table";
 import autoTable from "jspdf-autotable";
 import { jsPDF } from "jspdf";
@@ -93,12 +95,25 @@ const TABLE_PROVEEDORES = "prod_proveedores";
 const TABLE_TIPOS_PROVEEDOR = "prod_cat_tipos_proveedor";
 const TABLE_RECEPCION = "prod_recepciones_material";
 const TABLE_RECEPCION_FOTOS = "prod_recepciones_fotos";
+const TABLE_COMPRAS_COMUNICACION = "prod_compras_material_comunicacion";
 const PAGE_SIZE = 500;
 
 type PendingCompraCorreoEnvio = {
   ids: string[];
   ots: string[];
   proveedorId: string;
+  asunto: string;
+  cuerpo: string;
+};
+
+type CompraComunicacionLogRow = {
+  id: string;
+  compra_ids: string[] | null;
+  proveedor_id: string | null;
+  asunto: string | null;
+  cuerpo: string | null;
+  enviado_por: string | null;
+  created_at: string;
 };
 
 const RECEPCION_FOTOS_MODAL_INITIAL = {
@@ -248,7 +263,7 @@ function abrirGmailSolicitudMaterialBulk(
   proveedorEmail: string,
   nombreProveedor: string,
   plantilla: EmailPlantillaBloques
-): void {
+): { subject: string; body: string } {
   const { subject, body } = buildComprasMaterialSolicitudEmail(
     rows,
     nombreProveedor,
@@ -259,6 +274,7 @@ function abrirGmailSolicitudMaterialBulk(
     "_blank",
     "noopener,noreferrer"
   );
+  return { subject, body };
 }
 
 export function ComprasMaterialPage() {
@@ -271,6 +287,7 @@ export function ComprasMaterialPage() {
   const [rows, setRows] = useState<ComprasMaterialTableRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [sorting, setSorting] = useState<SortingState>([]);
   const [savingById, setSavingById] = useState<Record<string, boolean>>({});
 
   const [proveedoresPapelCarton, setProveedoresPapelCarton] = useState<
@@ -300,6 +317,11 @@ export function ComprasMaterialPage() {
   const [editFecha, setEditFecha] = useState("");
   const [editAlbaran, setEditAlbaran] = useState("");
   const [editSaving, setEditSaving] = useState(false);
+  const [editComunicacionLogs, setEditComunicacionLogs] = useState<
+    CompraComunicacionLogRow[]
+  >([]);
+  const [editComunicacionLogsLoading, setEditComunicacionLogsLoading] =
+    useState(false);
 
   const [solicitarOpen, setSolicitarOpen] = useState(false);
   const [solicitarSaving, setSolicitarSaving] = useState(false);
@@ -373,6 +395,34 @@ export function ComprasMaterialPage() {
       }
     })();
   }, [supabase]);
+
+  useEffect(() => {
+    if (!editOpen || !editRow) {
+      setEditComunicacionLogs([]);
+      setEditComunicacionLogsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      setEditComunicacionLogsLoading(true);
+      const { data, error } = await supabase
+        .from(TABLE_COMPRAS_COMUNICACION)
+        .select("*")
+        .contains("compra_ids", [editRow.id])
+        .order("created_at", { ascending: false });
+      if (cancelled) return;
+      setEditComunicacionLogsLoading(false);
+      if (error) {
+        console.error("[prod_compras_material_comunicacion]", error);
+        setEditComunicacionLogs([]);
+        return;
+      }
+      setEditComunicacionLogs((data ?? []) as CompraComunicacionLogRow[]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [editOpen, editRow, supabase]);
 
   const loadRows = useCallback(async () => {
     setLoading(true);
@@ -529,7 +579,7 @@ export function ComprasMaterialPage() {
             ? tamanoCompra.trim()
             : d?.tamano_hoja ?? null,
           num_hojas_netas:
-            rawNumHojas(r.num_hojas_netas) ?? d?.num_hojas_netas ?? null,
+            (rawNumHojas(r.num_hojas_netas) || null) ?? d?.num_hojas_netas ?? null,
           num_hojas_brutas:
             nbCompra != null ? nbCompra : d?.num_hojas_brutas ?? null,
           proveedor_id: pid ?? null,
@@ -976,10 +1026,13 @@ export function ComprasMaterialPage() {
     data: rowsFiltradas,
     columns,
     getRowId: (row) => row.id,
-    state: { rowSelection },
+    state: { rowSelection, sorting },
     onRowSelectionChange: setRowSelection,
+    onSortingChange: setSorting,
     enableMultiRowSelection: true,
+    enableMultiSort: false,
     getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
   });
 
   const guardarEdicion = useCallback(async () => {
@@ -1068,13 +1121,19 @@ export function ComprasMaterialPage() {
         selectedRows[0]?.proveedor_nombre?.trim() ||
         "Proveedor";
 
-      abrirGmailSolicitudMaterialBulk(
+      const { subject, body } = abrirGmailSolicitudMaterialBulk(
         selectedRows,
         emailProveedor,
         nombreProveedor,
         plantillaEmailCompras
       );
-      setPendingCompraCorreo({ ids, ots, proveedorId: provTarget });
+      setPendingCompraCorreo({
+        ids,
+        ots,
+        proveedorId: provTarget,
+        asunto: subject,
+        cuerpo: body,
+      });
       setSolicitarOpen(false);
       setSobreStockConfirmOpen(false);
       setCorreoComprasConfirmOpen(true);
@@ -1103,7 +1162,8 @@ export function ComprasMaterialPage() {
     setSolicitarSaving(true);
     try {
       const now = new Date().toISOString();
-      const { ids, ots, proveedorId: provTarget } = pendingCompraCorreo;
+      const { ids, ots, proveedorId: provTarget, asunto, cuerpo } =
+        pendingCompraCorreo;
 
       const { error: u1 } = await supabase
         .from(TABLE_COMPRA)
@@ -1121,6 +1181,30 @@ export function ComprasMaterialPage() {
           .update({ estado_material: "Orden compra generada" })
           .eq("ot_numero", ot);
         if (u2) throw u2;
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const enviadoPor =
+        typeof user?.id === "string" && user.id.trim().length > 0
+          ? user.id.trim()
+          : null;
+
+      const { error: logErr } = await supabase
+        .from(TABLE_COMPRAS_COMUNICACION)
+        .insert({
+          compra_ids: ids,
+          proveedor_id: provTarget || null,
+          asunto,
+          cuerpo,
+          enviado_por: enviadoPor,
+        });
+      if (logErr) {
+        console.error("[prod_compras_material_comunicacion]", logErr);
+        toast.warning(
+          `Solicitud enviada, pero no se guardó el historial: ${logErr.message}`
+        );
       }
 
       toast.success(
@@ -2108,6 +2192,41 @@ export function ComprasMaterialPage() {
                   />
                 </div>
               </div>
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Historial de comunicación
+              </p>
+              {editComunicacionLogsLoading ? (
+                <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  Cargando historial...
+                </div>
+              ) : editComunicacionLogs.length === 0 ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Sin logs para esta compra.
+                </p>
+              ) : (
+                <div className="mt-2 space-y-2">
+                  {editComunicacionLogs.map((log) => (
+                    <div
+                      key={log.id}
+                      className="rounded-md border border-slate-200 bg-slate-50/70 p-2"
+                    >
+                      <p className="text-[11px] font-medium text-[#002147]">
+                        {log.asunto?.trim() || "Sin asunto"}
+                      </p>
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">
+                        {formatFechaEsCorta(log.created_at)} ·{" "}
+                        {log.enviado_por?.trim() || "usuario no identificado"}
+                      </p>
+                      <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-[11px] text-slate-700">
+                        {log.cuerpo?.trim() || "Sin cuerpo"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter className="gap-2 border-t border-slate-100 px-4 py-3 sm:flex-row">

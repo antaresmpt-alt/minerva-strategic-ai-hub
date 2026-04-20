@@ -1,6 +1,9 @@
 "use client";
 
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -962,6 +965,10 @@ export function GestionExternosPage() {
   const [seguimientoVista, setSeguimientoVista] = useState<
     "lista" | "semanal" | "diaria"
   >("lista");
+  const [tablaSorting, setTablaSorting] = useState<{
+    col: "OT" | "fecha_envio" | "fecha_prevista" | "f_entrega_ot";
+    dir: "asc" | "desc";
+  } | null>(null);
   const [planCursor, setPlanCursor] = useState(() => startOfDay(new Date()));
   const [seguimientoSheetOpen, setSeguimientoSheetOpen] = useState(false);
   const [seguimientoEditing, setSeguimientoEditing] =
@@ -1211,6 +1218,39 @@ export function GestionExternosPage() {
     filtroProveedorId,
     busquedaSeguimiento,
   ]);
+
+  function toggleTablaSort(
+    col: "OT" | "fecha_envio" | "fecha_prevista" | "f_entrega_ot"
+  ) {
+    setTablaSorting((prev) => {
+      if (!prev || prev.col !== col) return { col, dir: "asc" };
+      if (prev.dir === "asc") return { col, dir: "desc" };
+      return null;
+    });
+  }
+
+  const seguimientosTablaOrdenados = useMemo(() => {
+    if (!tablaSorting) return seguimientosFiltrados;
+    const { col, dir } = tablaSorting;
+    const mult = dir === "asc" ? 1 : -1;
+    return [...seguimientosFiltrados].sort((a, b) => {
+      if (col === "OT") {
+        const na = Number(String(getOtDisplay(a)).replace(/\D/g, ""));
+        const nb = Number(String(getOtDisplay(b)).replace(/\D/g, ""));
+        const aOk = Number.isFinite(na) && na > 0;
+        const bOk = Number.isFinite(nb) && nb > 0;
+        if (aOk && bOk && na !== nb) return (na - nb) * mult;
+        if (aOk !== bOk) return (aOk ? -1 : 1) * mult;
+        return getOtDisplay(a).localeCompare(getOtDisplay(b), "es", { numeric: true }) * mult;
+      }
+      const va = (a[col] ?? "") as string;
+      const vb = (b[col] ?? "") as string;
+      if (!va && !vb) return 0;
+      if (!va) return 1 * mult;
+      if (!vb) return -1 * mult;
+      return va.localeCompare(vb) * mult;
+    });
+  }, [seguimientosFiltrados, tablaSorting]);
 
   const weekMondayForBoard = useMemo(
     () => startOfWeek(planCursor, { weekStartsOn: 1 }),
@@ -2799,7 +2839,17 @@ export function GestionExternosPage() {
                           Sem.
                         </th>
                         <th className="sticky top-0 z-30 w-12 min-w-0 max-w-[6rem] bg-slate-50/95 px-1 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
-                          OT
+                          <button
+                            type="button"
+                            onClick={() => toggleTablaSort("OT")}
+                            className={cn("inline-flex min-w-0 items-center gap-0.5 rounded px-0.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide hover:bg-slate-100/90 hover:text-slate-800", tablaSorting?.col === "OT" ? "text-[#002147]" : "text-muted-foreground")}
+                            title="Ordenar por OT"
+                          >
+                            OT
+                            <span className="inline-flex size-3 shrink-0 items-center justify-center" aria-hidden>
+                              {tablaSorting?.col === "OT" && tablaSorting.dir === "asc" ? <ArrowUp className="size-3 text-[#002147]" strokeWidth={2.25} /> : tablaSorting?.col === "OT" && tablaSorting.dir === "desc" ? <ArrowDown className="size-3 text-[#002147]" strokeWidth={2.25} /> : <ArrowUpDown className="size-3 text-slate-300" strokeWidth={2} />}
+                            </span>
+                          </button>
                         </th>
                         <th className="sticky top-0 z-30 w-8 bg-slate-50/95 px-0.5 py-1 text-center font-medium tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Op
@@ -2826,16 +2876,46 @@ export function GestionExternosPage() {
                           Prio.
                         </th>
                         <th className="sticky top-0 z-30 w-[7rem] min-w-[6.5rem] max-w-[7.5rem] bg-slate-50/95 px-0.5 py-1 text-center font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
-                          Env.
+                          <button
+                            type="button"
+                            onClick={() => toggleTablaSort("fecha_envio")}
+                            className={cn("inline-flex min-w-0 items-center gap-0.5 rounded px-0.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide hover:bg-slate-100/90 hover:text-slate-800", tablaSorting?.col === "fecha_envio" ? "text-[#002147]" : "text-muted-foreground")}
+                            title="Ordenar por fecha de envío"
+                          >
+                            Env.
+                            <span className="inline-flex size-3 shrink-0 items-center justify-center" aria-hidden>
+                              {tablaSorting?.col === "fecha_envio" && tablaSorting.dir === "asc" ? <ArrowUp className="size-3 text-[#002147]" strokeWidth={2.25} /> : tablaSorting?.col === "fecha_envio" && tablaSorting.dir === "desc" ? <ArrowDown className="size-3 text-[#002147]" strokeWidth={2.25} /> : <ArrowUpDown className="size-3 text-slate-300" strokeWidth={2} />}
+                            </span>
+                          </button>
                         </th>
                         <th className="sticky top-0 z-30 w-[7rem] min-w-[6.5rem] max-w-[7.5rem] bg-slate-50/95 px-0.5 py-1 text-center font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
-                          Prev.
+                          <button
+                            type="button"
+                            onClick={() => toggleTablaSort("fecha_prevista")}
+                            className={cn("inline-flex min-w-0 items-center gap-0.5 rounded px-0.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide hover:bg-slate-100/90 hover:text-slate-800", tablaSorting?.col === "fecha_prevista" ? "text-[#002147]" : "text-muted-foreground")}
+                            title="Ordenar por fecha prevista de vuelta"
+                          >
+                            Prev.
+                            <span className="inline-flex size-3 shrink-0 items-center justify-center" aria-hidden>
+                              {tablaSorting?.col === "fecha_prevista" && tablaSorting.dir === "asc" ? <ArrowUp className="size-3 text-[#002147]" strokeWidth={2.25} /> : tablaSorting?.col === "fecha_prevista" && tablaSorting.dir === "desc" ? <ArrowDown className="size-3 text-[#002147]" strokeWidth={2.25} /> : <ArrowUpDown className="size-3 text-slate-300" strokeWidth={2} />}
+                            </span>
+                          </button>
                         </th>
                         <th
                           className="sticky top-0 z-30 w-[9rem] min-w-[8.5rem] max-w-[10rem] bg-slate-50/95 py-1 pr-2 pl-0.5 text-center font-medium whitespace-nowrap text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95"
                           title="Fecha entrega final pactada (OT)"
                         >
-                          F. ent. OT
+                          <button
+                            type="button"
+                            onClick={() => toggleTablaSort("f_entrega_ot")}
+                            className={cn("inline-flex min-w-0 items-center gap-0.5 rounded px-0.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide hover:bg-slate-100/90 hover:text-slate-800", tablaSorting?.col === "f_entrega_ot" ? "text-[#002147]" : "text-muted-foreground")}
+                            title="Ordenar por F. entrega OT"
+                          >
+                            F. ent. OT
+                            <span className="inline-flex size-3 shrink-0 items-center justify-center" aria-hidden>
+                              {tablaSorting?.col === "f_entrega_ot" && tablaSorting.dir === "asc" ? <ArrowUp className="size-3 text-[#002147]" strokeWidth={2.25} /> : tablaSorting?.col === "f_entrega_ot" && tablaSorting.dir === "desc" ? <ArrowDown className="size-3 text-[#002147]" strokeWidth={2.25} /> : <ArrowUpDown className="size-3 text-slate-300" strokeWidth={2} />}
+                            </span>
+                          </button>
                         </th>
                         <th
                           className="sticky top-0 z-30 w-12 min-w-[3rem] max-w-[3.25rem] bg-slate-50/95 px-0.5 py-1 text-center font-medium tabular-nums text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95"
@@ -2870,7 +2950,7 @@ export function GestionExternosPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {seguimientosFiltrados.map((row) => {
+                      {seguimientosTablaOrdenados.map((row) => {
                         const retraso = isEnvioRetrasado(
                           row.fecha_prevista,
                           row.estado
