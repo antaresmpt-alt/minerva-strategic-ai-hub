@@ -750,26 +750,50 @@ export function MasterOtsPage() {
         warnings.slice(0, 5).forEach((w) => toast.message(w));
       }
       if (!rows.length) {
-        toast.error(
-          omitidasPorFiltroEstado > 0
-            ? `No se importó ninguna OT (${omitidasPorFiltroEstado} omitidas por filtro de estado).`
-            : "No se importó ninguna fila válida."
-        );
+        toast.error("No se importó ninguna fila válida.");
         setOptimusImportOpen(false);
         return;
       }
-      const chunk = 120;
-      for (let i = 0; i < rows.length; i += chunk) {
-        const slice = rows.slice(i, i + chunk);
-        const { error } = await supabase.from(TABLE).upsert(slice, {
-          onConflict: "num_pedido",
-        });
+
+      // Importación incremental: solo altas nuevas; jamás actualiza OTs existentes.
+      const pedidosExcel = [
+        ...new Set(
+          rows
+            .map((r) => String(r.num_pedido ?? "").trim())
+            .filter((v) => v.length > 0)
+        ),
+      ];
+      const existentes = new Set<string>();
+      const checkChunk = 200;
+      for (let i = 0; i < pedidosExcel.length; i += checkChunk) {
+        const ids = pedidosExcel.slice(i, i + checkChunk);
+        const { data, error } = await supabase
+          .from(TABLE)
+          .select("num_pedido")
+          .in("num_pedido", ids);
         if (error) throw error;
+        for (const x of data ?? []) {
+          const n = String((x as { num_pedido?: string | null }).num_pedido ?? "").trim();
+          if (n) existentes.add(n);
+        }
       }
+
+      const nuevas = rows.filter(
+        (r) => !existentes.has(String(r.num_pedido ?? "").trim())
+      );
+      const omitidasPorExistir = rows.length - nuevas.length;
+
+      const insertChunk = 150;
+      let creadas = 0;
+      for (let i = 0; i < nuevas.length; i += insertChunk) {
+        const slice = nuevas.slice(i, i + insertChunk);
+        const { error } = await supabase.from(TABLE).insert(slice);
+        if (error) throw error;
+        creadas += slice.length;
+      }
+
       toast.success(
-        omitidasPorFiltroEstado > 0
-          ? `Importadas ${rows.length} OTs. ${omitidasPorFiltroEstado} omitidas por filtro de estado.`
-          : `Importadas ${rows.length} OTs.`
+        `Importación finalizada: ${creadas} nuevas OTs añadidas. ${omitidasPorExistir} OTs omitidas por ya existir en el sistema. ${omitidasPorFiltroEstado} omitidas por filtro de estado.`
       );
       setOptimusImportOpen(false);
       setPage(0);
