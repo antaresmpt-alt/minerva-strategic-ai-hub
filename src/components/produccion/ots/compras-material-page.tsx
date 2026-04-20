@@ -11,6 +11,7 @@ import { jsPDF } from "jspdf";
 import {
   Download,
   FileSpreadsheet,
+  FilePlus2,
   History,
   Loader2,
   Mail,
@@ -23,6 +24,7 @@ import * as XLSX from "xlsx";
 import { createComprasMaterialColumns } from "@/components/produccion/ots/compras-material-columns";
 import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Toggle } from "@/components/ui/toggle";
 import {
   Dialog,
@@ -71,6 +73,7 @@ import {
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import { resolveRecepcionFotoPublicUrls } from "@/lib/recepcion-fotos-url";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { cn } from "@/lib/utils";
 import type { ComprasMaterialTableRow } from "@/types/prod-compra-material";
 
 const TABLE_COMPRA = "prod_compra_material";
@@ -178,6 +181,18 @@ function parseOptionalIntInput(s: string): number | null {
   return Math.trunc(n);
 }
 
+function normalizeOtNumeroInput(raw: string): string {
+  const t = raw.trim();
+  if (!t) return "";
+  return t.replace(/^ocm-/i, "").replace(/[^\d]/g, "").trim();
+}
+
+function buildNumCompraFromOt(otNumero: string): string {
+  const ot = normalizeOtNumeroInput(otNumero);
+  if (!ot) return "";
+  return `OCM-${ot}`;
+}
+
 function slugTipoNombre(s: string): string {
   return s
     .trim()
@@ -263,6 +278,19 @@ export function ComprasMaterialPage() {
     useState(false);
   const [pendingCompraCorreo, setPendingCompraCorreo] =
     useState<PendingCompraCorreoEnvio | null>(null);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualSaving, setManualSaving] = useState(false);
+  const [manualKeepOpen, setManualKeepOpen] = useState(true);
+  const [manualOt, setManualOt] = useState("");
+  const [manualPosicion, setManualPosicion] = useState("1");
+  const [manualProveedorId, setManualProveedorId] = useState("");
+  const [manualMaterial, setManualMaterial] = useState("");
+  const [manualGramaje, setManualGramaje] = useState("");
+  const [manualFormato, setManualFormato] = useState("");
+  const [manualHojasNetas, setManualHojasNetas] = useState("");
+  const [manualHojasBrutas, setManualHojasBrutas] = useState("");
+  const [manualCliente, setManualCliente] = useState("");
+  const [manualTitulo, setManualTitulo] = useState("");
 
   const loadProveedoresPapelCarton = useCallback(async () => {
     try {
@@ -450,9 +478,17 @@ export function ComprasMaterialPage() {
         return {
           id: String(r.id ?? ""),
           ot_numero: ot,
-          num_compra: String(r.num_compra ?? ""),
-          cliente: m?.cliente ?? null,
-          titulo: m?.titulo ?? null,
+          num_compra:
+            String(r.num_compra ?? "").trim() || buildNumCompraFromOt(ot),
+          posicion: rawNumHojas(r.posicion) ?? 1,
+          cliente:
+            String((r.cliente_nombre as string | null | undefined) ?? "").trim() ||
+            m?.cliente ||
+            null,
+          titulo:
+            String((r.trabajo_titulo as string | null | undefined) ?? "").trim() ||
+            m?.titulo ||
+            null,
           material: materialCompra?.trim()
             ? materialCompra.trim()
             : d?.material ?? null,
@@ -461,7 +497,8 @@ export function ComprasMaterialPage() {
           tamano_hoja: tamanoCompra?.trim()
             ? tamanoCompra.trim()
             : d?.tamano_hoja ?? null,
-          num_hojas_netas: d?.num_hojas_netas ?? null,
+          num_hojas_netas:
+            rawNumHojas(r.num_hojas_netas) ?? d?.num_hojas_netas ?? null,
           num_hojas_brutas:
             nbCompra != null ? nbCompra : d?.num_hojas_brutas ?? null,
           proveedor_id: pid ?? null,
@@ -838,6 +875,34 @@ export function ComprasMaterialPage() {
     () =>
       createComprasMaterialColumns({
         onEdit: openEdit,
+        onDelete: async (row) => {
+          const ok = window.confirm(
+            `¿Eliminar la compra OT ${row.ot_numero} / P${row.posicion ?? 1}?`
+          );
+          if (!ok) return;
+          setSavingById((s) => ({ ...s, [row.id]: true }));
+          try {
+            const { error } = await supabase
+              .from(TABLE_COMPRA)
+              .delete()
+              .eq("id", row.id);
+            if (error) throw error;
+            setRows((prev) => prev.filter((r) => r.id !== row.id));
+            toast.success("Línea eliminada.");
+          } catch (e) {
+            console.error(e);
+            toast.error(
+              e instanceof Error ? e.message : "No se pudo eliminar la línea."
+            );
+            void loadRows();
+          } finally {
+            setSavingById((s) => {
+              const n = { ...s };
+              delete n[row.id];
+              return n;
+            });
+          }
+        },
         onOpenRecepcionFotos: openRecepcionFotos,
         proveedoresPapelCarton,
         isRowCheckboxDisabled,
@@ -850,12 +915,14 @@ export function ComprasMaterialPage() {
     [
       isRowCheckboxDisabled,
       isSavingRow,
+      loadRows,
       onEstadoChange,
       onFechaPrevistaCommit,
       onProveedorChange,
       openEdit,
       openRecepcionFotos,
       proveedoresPapelCarton,
+      supabase,
       umbralesOtsCompras,
     ]
   );
@@ -1076,7 +1143,8 @@ export function ComprasMaterialPage() {
   const exportComprasMaterialExcel = useCallback(() => {
     const data = rowsFiltradas.map((r) => ({
       OT: r.ot_numero,
-      "Nº compra": r.num_compra,
+      "Nº compra": r.num_compra?.trim() || buildNumCompraFromOt(r.ot_numero),
+      P: r.posicion ?? 1,
       Cliente: r.cliente?.trim() ?? "",
       Título: r.titulo?.trim() ?? "",
       Material: r.material?.trim() ?? "",
@@ -1123,8 +1191,12 @@ export function ComprasMaterialPage() {
       [
         "OT",
         "Nº compra",
+        "P",
         "Cliente",
         "Material",
+        "Gramaje",
+        "Formato",
+        "Hojas brutas",
         "Proveedor",
         "Estado",
         "F. prev.",
@@ -1135,9 +1207,13 @@ export function ComprasMaterialPage() {
       String(v ?? "").trim() || "—";
     const body = rowsFiltradas.map((r) => [
       cell(r.ot_numero),
-      cell(r.num_compra),
+      cell(r.num_compra?.trim() || buildNumCompraFromOt(r.ot_numero)),
+      cell(r.posicion ?? 1),
       cell(r.cliente),
       cell(r.material),
+      formatGramajeResumen(r.gramaje),
+      cell(r.tamano_hoja),
+      cell(r.num_hojas_brutas),
       cell(r.proveedor_nombre),
       cell(r.estado),
       r.fecha_prevista_recepcion
@@ -1154,14 +1230,18 @@ export function ComprasMaterialPage() {
       styles: { fontSize: 7, cellPadding: 1.2, overflow: "linebreak" },
       headStyles: { fontSize: 7, fillColor: [0, 33, 71], textColor: 255 },
       columnStyles: {
-        0: { cellWidth: 18 },
-        1: { cellWidth: 22 },
-        2: { cellWidth: 38 },
-        3: { cellWidth: 42 },
-        4: { cellWidth: 36 },
-        5: { cellWidth: 24 },
-        6: { cellWidth: 22 },
-        7: { cellWidth: 22 },
+        0: { cellWidth: 16 },
+        1: { cellWidth: 26 },
+        2: { cellWidth: 10 },
+        3: { cellWidth: 30 },
+        4: { cellWidth: 30 },
+        5: { cellWidth: 16 },
+        6: { cellWidth: 20 },
+        7: { cellWidth: 18 },
+        8: { cellWidth: 26 },
+        9: { cellWidth: 18 },
+        10: { cellWidth: 16 },
+        11: { cellWidth: 16 },
       },
       margin: { left: 10, right: 10 },
     });
@@ -1169,6 +1249,125 @@ export function ComprasMaterialPage() {
     doc.save(`compras-material-${stamp}.pdf`);
     toast.success("PDF descargado (vista filtrada actual).");
   }, [rowsFiltradas]);
+
+  const resetManualForm = useCallback(() => {
+    setManualOt("");
+    setManualPosicion("1");
+    setManualProveedorId("");
+    setManualMaterial("");
+    setManualGramaje("");
+    setManualFormato("");
+    setManualHojasNetas("");
+    setManualHojasBrutas("");
+    setManualCliente("");
+    setManualTitulo("");
+  }, []);
+
+  const manualOtNumero = normalizeOtNumeroInput(manualOt);
+  const manualNumCompra = buildNumCompraFromOt(manualOtNumero);
+  const manualPosicionTrim = manualPosicion.trim();
+  const manualPosicionParsed = /^\d+$/.test(manualPosicionTrim)
+    ? Number(manualPosicionTrim)
+    : Number.NaN;
+  const manualPosicionValid =
+    manualPosicionTrim !== "" &&
+    Number.isInteger(manualPosicionParsed) &&
+    manualPosicionParsed >= 1;
+
+  const guardarManualCompra = useCallback(async () => {
+    const ot = normalizeOtNumeroInput(manualOt);
+    const numCompra = buildNumCompraFromOt(ot);
+    const proveedorId = manualProveedorId.trim();
+    const material = manualMaterial.trim();
+    const clienteNombre = manualCliente.trim();
+    const trabajoTitulo = manualTitulo.trim();
+    if (!manualPosicionValid) {
+      toast.error("Posición debe ser un entero mayor o igual que 1.");
+      return;
+    }
+    if (!ot || !numCompra || !proveedorId || !material) {
+      toast.error("Completa OT, Nº compra, proveedor y material.");
+      return;
+    }
+
+    const gramaje = parseOptionalDecimalInput(manualGramaje);
+    const tamanoHoja = manualFormato.trim() || null;
+    const numHojasNetas = parseOptionalIntInput(manualHojasNetas);
+    const numHojasBrutas = parseOptionalIntInput(manualHojasBrutas);
+
+    setManualSaving(true);
+    try {
+      const { error: insertErr } = await supabase.from(TABLE_COMPRA).insert({
+        ot_numero: ot,
+        num_compra: numCompra,
+        posicion: manualPosicionParsed,
+        cliente_nombre: clienteNombre || null,
+        trabajo_titulo: trabajoTitulo || null,
+        proveedor_id: proveedorId,
+        material,
+        gramaje,
+        tamano_hoja: tamanoHoja,
+        num_hojas_netas: numHojasNetas,
+        num_hojas_brutas: numHojasBrutas,
+        estado: "Generada",
+      });
+      if (insertErr) throw insertErr;
+
+      const { error: updDespErr } = await supabase
+        .from(TABLE_DESPACHADAS)
+        .update({
+          material,
+          gramaje,
+          tamano_hoja: tamanoHoja,
+          num_hojas_netas: numHojasNetas,
+          num_hojas_brutas: numHojasBrutas,
+        })
+        .eq("ot_numero", ot);
+      if (updDespErr) throw updDespErr;
+
+      toast.success("Material guardado en compras con estado «Generada».");
+      void loadRows();
+
+      if (manualKeepOpen) {
+        setManualMaterial("");
+        setManualGramaje("");
+        setManualFormato("");
+        setManualHojasNetas("");
+        setManualHojasBrutas("");
+        setManualPosicion(String(manualPosicionParsed + 1));
+      } else {
+        setManualOpen(false);
+        resetManualForm();
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "No se pudo guardar la solicitud de material."
+      );
+    } finally {
+      setManualSaving(false);
+    }
+  }, [
+    loadRows,
+    manualFormato,
+    manualGramaje,
+    manualHojasBrutas,
+    manualHojasNetas,
+    manualKeepOpen,
+    manualMaterial,
+    manualPosicionParsed,
+    manualPosicionValid,
+    manualNumCompra,
+    manualPosicion,
+    manualOt,
+    manualCliente,
+    manualProveedorId,
+    manualTitulo,
+    resetManualForm,
+    supabase,
+  ]);
 
   const solicitarButton = (
     <Button
@@ -1299,6 +1498,16 @@ export function ComprasMaterialPage() {
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setManualOpen(true)}
+              >
+                <FilePlus2 className="size-4 text-[#002147]/80" aria-hidden />
+                Entrada Compra Manual
+              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -1435,6 +1644,16 @@ export function ComprasMaterialPage() {
               ))}
           </div>
           <div className="flex flex-wrap gap-2 pt-0.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setManualOpen(true)}
+            >
+              <FilePlus2 className="size-4 text-[#002147]/80" aria-hidden />
+              Entrada Compra Manual
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -1695,6 +1914,222 @@ export function ComprasMaterialPage() {
                 "Guardar"
               )}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={manualOpen}
+        onOpenChange={(open) => {
+          setManualOpen(open);
+          if (!open) {
+            resetManualForm();
+          }
+        }}
+      >
+        <DialogContent className="max-h-[min(92vh,700px)] max-w-3xl gap-0 overflow-hidden p-0 sm:max-w-3xl">
+          <DialogHeader className="border-b border-slate-100 px-4 py-3">
+            <DialogTitle className="text-base">Solicitar material</DialogTitle>
+            <DialogDescription className="text-xs">
+              Alta manual en <span className="font-mono">{TABLE_COMPRA}</span> con
+              lógica multi-línea por OT, Nº compra y posición.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid max-h-[min(62vh,560px)] gap-3 overflow-y-auto px-4 py-3 sm:grid-cols-2">
+            <div className="grid gap-1">
+              <Label htmlFor="manual-ot" className="text-xs">
+                OT
+              </Label>
+              <Input
+                id="manual-ot"
+                value={manualOt}
+                onChange={(e) =>
+                  setManualOt(normalizeOtNumeroInput(e.target.value))
+                }
+                onBlur={(e) =>
+                  setManualOt(normalizeOtNumeroInput(e.target.value))
+                }
+                placeholder="Ej. 38514"
+                inputMode="numeric"
+                className="h-8 text-xs"
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="manual-num-compra" className="text-xs">
+                Nº compra
+              </Label>
+              <Input
+                id="manual-num-compra"
+                readOnly
+                type="text"
+                value={manualNumCompra}
+                placeholder="OCM-XXXXX"
+                tabIndex={-1}
+                aria-readonly
+                className="h-8 cursor-not-allowed bg-slate-100 font-mono text-xs text-slate-600 selection:bg-transparent"
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="manual-posicion" className="text-xs">
+                P
+              </Label>
+              <Input
+                id="manual-posicion"
+                type="number"
+                min={1}
+                step={1}
+                inputMode="numeric"
+                value={manualPosicion}
+                onChange={(e) => setManualPosicion(e.target.value)}
+                onKeyDown={(e) => {
+                  if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
+                    e.preventDefault();
+                  }
+                }}
+                placeholder="1"
+                className={cn(
+                  "h-8 text-xs",
+                  !manualPosicionValid && "border-red-500 focus-visible:ring-red-500"
+                )}
+              />
+            </div>
+            <div className="grid gap-1">
+              <NativeSelect
+                label="Proveedor"
+                options={[
+                  { value: "", label: "Seleccionar proveedor" },
+                  ...proveedoresPapelCarton.map((p) => ({
+                    value: p.id,
+                    label: p.nombre,
+                  })),
+                ]}
+                value={manualProveedorId}
+                onChange={(e) => setManualProveedorId(e.target.value)}
+                className="h-8 text-xs"
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="manual-material" className="text-xs">
+                Material
+              </Label>
+              <Input
+                id="manual-material"
+                value={manualMaterial}
+                onChange={(e) => setManualMaterial(e.target.value)}
+                placeholder="Ej. Estucado mate"
+                className="h-8 text-xs"
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="manual-gramaje" className="text-xs">
+                Gramaje
+              </Label>
+              <Input
+                id="manual-gramaje"
+                type="number"
+                step="any"
+                value={manualGramaje}
+                onChange={(e) => setManualGramaje(e.target.value)}
+                placeholder="Ej. 350"
+                className="h-8 text-xs"
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="manual-formato" className="text-xs">
+                Formato
+              </Label>
+              <Input
+                id="manual-formato"
+                value={manualFormato}
+                onChange={(e) => setManualFormato(e.target.value)}
+                placeholder="Ej. 70x100"
+                className="h-8 text-xs"
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="manual-hojas-netas" className="text-xs">
+                Hojas netas
+              </Label>
+              <Input
+                id="manual-hojas-netas"
+                type="number"
+                inputMode="numeric"
+                value={manualHojasNetas}
+                onChange={(e) => setManualHojasNetas(e.target.value)}
+                placeholder="Ej. 1000"
+                className="h-8 text-xs"
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="manual-hojas-brutas" className="text-xs">
+                Hojas brutas
+              </Label>
+              <Input
+                id="manual-hojas-brutas"
+                type="number"
+                inputMode="numeric"
+                value={manualHojasBrutas}
+                onChange={(e) => setManualHojasBrutas(e.target.value)}
+                placeholder="Ej. 1200"
+                className="h-8 text-xs"
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="manual-cliente" className="text-xs">
+                Cliente
+              </Label>
+              <Input
+                id="manual-cliente"
+                value={manualCliente}
+                onChange={(e) => setManualCliente(e.target.value)}
+                placeholder="Cliente"
+                className="h-8 text-xs"
+              />
+            </div>
+            <div className="grid gap-1 sm:col-span-2">
+              <Label htmlFor="manual-titulo" className="text-xs">
+                Título del trabajo
+              </Label>
+              <Input
+                id="manual-titulo"
+                value={manualTitulo}
+                onChange={(e) => setManualTitulo(e.target.value)}
+                placeholder="Título del trabajo"
+                className="h-8 text-xs"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 border-t border-slate-100 px-4 py-3 sm:flex-row sm:justify-between">
+            <label className="inline-flex items-center gap-2 text-xs text-slate-700">
+              <Checkbox
+                checked={manualKeepOpen}
+                onCheckedChange={(v) => setManualKeepOpen(v === true)}
+                aria-label="Mantener abierto para entrada múltiple"
+              />
+              Entrada múltiple (mantener abierto)
+            </label>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setManualOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={manualSaving || !manualPosicionValid || !manualNumCompra}
+                onClick={() => void guardarManualCompra()}
+              >
+                {manualSaving ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  "Guardar material"
+                )}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

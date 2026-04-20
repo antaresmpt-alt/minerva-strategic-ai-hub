@@ -3,6 +3,7 @@ export type ComprasMaterialTableRow = {
   id: string;
   ot_numero: string;
   num_compra: string;
+  posicion: number | null;
   cliente: string | null;
   titulo: string | null;
   material: string | null;

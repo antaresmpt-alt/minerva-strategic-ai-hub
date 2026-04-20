@@ -1,7 +1,7 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import { Camera, Pencil } from "lucide-react";
+import { Camera, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { OtNumeroSemaforoBadge } from "@/components/produccion/ots/ot-numero-semaforo-badge";
 import { COMPRAS_MATERIAL_ESTADOS } from "@/lib/compras-material-estados";
 import { diasDesdeHastaFecha } from "@/lib/compras-material-prioridad";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
@@ -24,6 +23,13 @@ function formatGramajeCell(g: number | null | undefined): string {
   const n = Number(g);
   const s = Number.isInteger(n) ? String(Math.trunc(n)) : String(n);
   return `${s}g`;
+}
+
+function formatNumCompraCell(numCompra: string | null | undefined, ot: string): string {
+  const nc = String(numCompra ?? "").trim();
+  if (nc) return nc;
+  const otTrim = String(ot ?? "").trim().replace(/^ocm-/i, "");
+  return otTrim ? `OCM-${otTrim}` : "—";
 }
 
 function toDateInputValue(iso: string | null | undefined): string {
@@ -72,6 +78,7 @@ function InlineFechaPrevistaCompraCell({
 
 export type ComprasMaterialColumnsContext = {
   onEdit: (row: ComprasMaterialTableRow) => void;
+  onDelete: (row: ComprasMaterialTableRow) => void;
   onOpenRecepcionFotos: (row: ComprasMaterialTableRow) => void;
   proveedoresPapelCarton: { id: string; nombre: string }[];
   isRowCheckboxDisabled: (row: ComprasMaterialTableRow) => boolean;
@@ -173,12 +180,8 @@ export function createComprasMaterialColumns(
         </span>
       ),
       cell: ({ row }) => (
-        <div className="flex min-h-6 min-w-0 items-center px-0.5 py-0">
-          <OtNumeroSemaforoBadge
-            otNumero={row.original.ot_numero}
-            fechaEntregaIso={row.original.fecha_entrega_maestro}
-            umbrales={ctx.umbralesOtsCompras}
-          />
+        <div className="truncate px-1 py-0.5 font-mono text-[11px]">
+          {row.original.ot_numero?.trim() || "—"}
         </div>
       ),
       size: 96,
@@ -192,10 +195,24 @@ export function createComprasMaterialColumns(
       ),
       cell: ({ row }) => (
         <div className="truncate px-1 py-0.5 font-mono text-[11px]">
-          {row.original.num_compra || "—"}
+          {formatNumCompraCell(row.original.num_compra, row.original.ot_numero)}
         </div>
       ),
       size: 120,
+    },
+    {
+      id: "posicion",
+      header: () => (
+        <span className="text-[10px] font-semibold uppercase tracking-wide">
+          P
+        </span>
+      ),
+      cell: ({ row }) => (
+        <div className="truncate px-1 py-0.5 text-center font-mono text-[11px]">
+          {row.original.posicion ?? "1"}
+        </div>
+      ),
+      size: 42,
     },
     {
       accessorKey: "material",
@@ -338,54 +355,6 @@ export function createComprasMaterialColumns(
       size: 108,
     },
     {
-      accessorKey: "albaran_proveedor",
-      header: () => (
-        <span className="text-[10px] font-semibold uppercase tracking-wide">
-          Albarán
-        </span>
-      ),
-      cell: ({ row }) => (
-        <div className="truncate px-1 py-0.5 font-mono text-[11px]">
-          {row.original.albaran_proveedor?.trim()
-            ? row.original.albaran_proveedor
-            : "—"}
-        </div>
-      ),
-      size: 120,
-    },
-    {
-      id: "fotos_recepcion",
-      size: 44,
-      enableSorting: false,
-      header: () => (
-        <span className="text-[10px] font-normal uppercase tracking-wide text-slate-600">
-          Fotos
-        </span>
-      ),
-      cell: ({ row }) => {
-        const urls = row.original.recepcion_foto_urls;
-        if (!urls?.length) return <div className="h-6 min-h-6 w-full" />;
-        return (
-          <div className="flex min-h-6 items-center justify-center px-0.5 py-0">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="size-8 shrink-0 text-blue-800 hover:bg-blue-50 hover:text-blue-900"
-              onClick={(e) => {
-                e.stopPropagation();
-                ctx.onOpenRecepcionFotos(row.original);
-              }}
-              aria-label={`Ver ${urls.length} foto${urls.length === 1 ? "" : "s"} de recepción, compra ${row.original.num_compra}`}
-              title="Fotos de recepción en muelle"
-            >
-              <Camera className="size-4" strokeWidth={1.75} aria-hidden />
-            </Button>
-          </div>
-        );
-      },
-    },
-    {
       id: "estado",
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
@@ -436,6 +405,54 @@ export function createComprasMaterialColumns(
       size: 132,
     },
     {
+      accessorKey: "albaran_proveedor",
+      header: () => (
+        <span className="text-[10px] font-semibold uppercase tracking-wide">
+          Albarán
+        </span>
+      ),
+      cell: ({ row }) => (
+        <div className="truncate px-1 py-0.5 font-mono text-[11px]">
+          {row.original.albaran_proveedor?.trim()
+            ? row.original.albaran_proveedor
+            : "—"}
+        </div>
+      ),
+      size: 120,
+    },
+    {
+      id: "fotos_recepcion",
+      size: 44,
+      enableSorting: false,
+      header: () => (
+        <span className="text-[10px] font-normal uppercase tracking-wide text-slate-600">
+          Fotos
+        </span>
+      ),
+      cell: ({ row }) => {
+        const urls = row.original.recepcion_foto_urls;
+        if (!urls?.length) return <div className="h-6 min-h-6 w-full" />;
+        return (
+          <div className="flex min-h-6 items-center justify-center px-0.5 py-0">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="size-8 shrink-0 text-blue-800 hover:bg-blue-50 hover:text-blue-900"
+              onClick={(e) => {
+                e.stopPropagation();
+                ctx.onOpenRecepcionFotos(row.original);
+              }}
+              aria-label={`Ver ${urls.length} foto${urls.length === 1 ? "" : "s"} de recepción, compra ${row.original.num_compra}`}
+              title="Fotos de recepción en muelle"
+            >
+              <Camera className="size-4" strokeWidth={1.75} aria-hidden />
+            </Button>
+          </div>
+        );
+      },
+    },
+    {
       id: "acciones",
       size: 44,
       enableSorting: false,
@@ -451,6 +468,27 @@ export function createComprasMaterialColumns(
             aria-label={`Editar compra ${row.original.num_compra}`}
           >
             <Pencil className="size-3.5 text-[#002147]" aria-hidden />
+          </Button>
+        </div>
+      ),
+    },
+    {
+      id: "eliminar",
+      size: 44,
+      enableSorting: false,
+      header: () => <span className="sr-only">Eliminar</span>,
+      cell: ({ row }) => (
+        <div className="flex justify-center px-0.5 py-0.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="size-7 shrink-0 text-red-600 hover:bg-red-50 hover:text-red-700"
+            onClick={() => ctx.onDelete(row.original)}
+            aria-label={`Eliminar compra ${row.original.num_compra}`}
+            title="Eliminar línea de compra"
+          >
+            <Trash2 className="size-3.5" aria-hidden />
           </Button>
         </div>
       ),
