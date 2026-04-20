@@ -1,6 +1,13 @@
 "use client";
 
-import { Camera, Loader2, Package } from "lucide-react";
+import {
+  getCoreRowModel,
+  getFilteredRowModel,
+  useReactTable,
+  type ColumnDef,
+  type FilterFn,
+} from "@tanstack/react-table";
+import { Camera, Loader2, Package, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -84,6 +91,8 @@ type MuelleCardRow = {
   num_hojas_brutas: number | null;
   proveedor_id: string | null;
   proveedor_nombre: string | null;
+  /** Cliente de la OT (`prod_ots_general.cliente`). */
+  cliente_nombre: string | null;
   estado: string | null;
   fecha_entrega_maestro: string | null;
 };
@@ -156,6 +165,61 @@ function extFromFile(f: File): string {
   return "jpg";
 }
 
+const muelleMaterialesGlobalFilterFn: FilterFn<MuelleCardRow> = (
+  row,
+  _columnId,
+  filterValue
+) => {
+  const q = String(filterValue ?? "").trim().toLowerCase();
+  if (!q) return true;
+  const r = row.original;
+  const parts = [r.ot_numero, r.proveedor_nombre, r.material, r.cliente_nombre].map(
+    (x) => String(x ?? "").toLowerCase()
+  );
+  return parts.some((s) => s.includes(q));
+};
+
+function MuelleSearchField({
+  id,
+  value,
+  onChange,
+  placeholder,
+}: {
+  id: string;
+  value: string;
+  onChange: (next: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <div className="relative mb-4 max-w-md">
+      <span
+        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 select-none text-muted-foreground"
+        aria-hidden
+      >
+        🔍
+      </span>
+      <Input
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="h-10 pr-10 pl-9"
+        autoComplete="off"
+      />
+      {value.trim() ? (
+        <button
+          type="button"
+          className="absolute top-1/2 right-2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-slate-100 hover:text-foreground"
+          onClick={() => onChange("")}
+          aria-label="Limpiar búsqueda"
+        >
+          <X className="size-4 shrink-0" aria-hidden />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export function MuelleRecepcionPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const { umbrales: umbralesOtsCompras } = useSysParametrosOtsCompras();
@@ -168,6 +232,8 @@ export function MuelleRecepcionPage() {
   );
   const [externoRows, setExternoRows] = useState<MuelleExternoCardRow[]>([]);
   const [loadingExternos, setLoadingExternos] = useState(false);
+  const [materialesGlobalFilter, setMaterialesGlobalFilter] = useState("");
+  const [globalSearchTerm, setGlobalSearchTerm] = useState("");
 
   const [sheetKind, setSheetKind] = useState<"none" | "material" | "externo">(
     "none"
@@ -215,17 +281,28 @@ export function MuelleRecepcionPage() {
             .filter(Boolean)
         ),
       ];
-      const masterByOt = new Map<string, { fecha_entrega: string | null }>();
+      const masterByOt = new Map<
+        string,
+        { fecha_entrega: string | null; cliente: string | null }
+      >();
       if (otKeys.length > 0) {
         const { data: masters, error: mErr } = await supabase
           .from(TABLE_MASTER)
-          .select("num_pedido, fecha_entrega")
+          .select("num_pedido, fecha_entrega, cliente")
           .in("num_pedido", otKeys);
         if (mErr) throw mErr;
         for (const m of masters ?? []) {
-          const row = m as { num_pedido: string | null; fecha_entrega: string | null };
+          const row = m as {
+            num_pedido: string | null;
+            fecha_entrega: string | null;
+            cliente: string | null;
+          };
           const k = String(row.num_pedido ?? "").trim();
-          if (k) masterByOt.set(k, { fecha_entrega: row.fecha_entrega ?? null });
+          if (k)
+            masterByOt.set(k, {
+              fecha_entrega: row.fecha_entrega ?? null,
+              cliente: row.cliente ?? null,
+            });
         }
       }
 
@@ -253,6 +330,11 @@ export function MuelleRecepcionPage() {
         const ot = String(raw.ot_numero ?? "").trim();
         const pid = raw.proveedor_id as string | null;
         const m = masterByOt.get(ot);
+        const clienteRaw = m?.cliente;
+        const clienteTrim =
+          clienteRaw != null && String(clienteRaw).trim() !== ""
+            ? String(clienteRaw).trim()
+            : null;
         return {
           id: String(raw.id ?? ""),
           ot_numero: ot,
@@ -264,6 +346,7 @@ export function MuelleRecepcionPage() {
           proveedor_id: pid,
           proveedor_nombre:
             pid && provById.has(pid) ? provById.get(pid)! : null,
+          cliente_nombre: clienteTrim,
           estado: (raw.estado as string | null) ?? null,
           fecha_entrega_maestro: m?.fecha_entrega ?? null,
         };
@@ -757,6 +840,37 @@ export function MuelleRecepcionPage() {
   const tabTriggerClass =
     "rounded-md px-3 py-1.5 text-sm data-active:bg-[#C69C2B]/20 data-active:font-semibold data-active:text-[#002147] data-active:shadow-sm";
 
+  const materialesColumns = useMemo<ColumnDef<MuelleCardRow>[]>(
+    () => [{ accessorKey: "ot_numero", header: "OT" }],
+    []
+  );
+
+  const materialesTable = useReactTable({
+    data: rows,
+    columns: materialesColumns,
+    state: { globalFilter: materialesGlobalFilter },
+    onGlobalFilterChange: setMaterialesGlobalFilter,
+    globalFilterFn: muelleMaterialesGlobalFilterFn,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+  });
+
+  const materialesFilteredRows = materialesTable.getRowModel().rows;
+
+  const externoRowsFiltered = useMemo(() => {
+    const q = globalSearchTerm.trim().toLowerCase();
+    if (!q) return externoRows;
+    return externoRows.filter((row) => {
+      const parts = [
+        row.ot_numero,
+        row.cliente_nombre,
+        row.proveedor_nombre,
+        row.trabajo_titulo,
+      ].map((x) => String(x ?? "").toLowerCase());
+      return parts.some((s) => s.includes(q));
+    });
+  }, [externoRows, globalSearchTerm]);
+
   return (
     <div className="mx-auto w-full max-w-6xl space-y-4 px-3 py-4 sm:px-4 md:py-6">
       <header className="space-y-1">
@@ -798,77 +912,93 @@ export function MuelleRecepcionPage() {
               No hay líneas pendientes de recepción con los estados configurados.
             </div>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
-              {rows.map((row) => {
-                const techLine = gramajeFormatoResumenLine(
-                  row.gramaje,
-                  row.tamano_hoja
-                );
-                return (
-                <button
-                  key={row.id}
-                  type="button"
-                  onClick={() => openMaterialSheet(row)}
-                  className={cn(
-                    "text-left transition hover:ring-2 hover:ring-[#C69C2B]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#002147]/30"
-                  )}
-                >
-                  <Card className="h-full min-h-[11rem] border-slate-200/90 bg-white shadow-sm">
-                    <CardHeader className="space-y-3 pb-2">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <OtNumeroSemaforoBadge
-                          otNumero={row.ot_numero}
-                          fechaEntregaIso={row.fecha_entrega_maestro}
-                          umbrales={umbralesOtsCompras}
-                        />
-                        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-600">
-                          {row.estado?.trim() || "—"}
-                        </span>
-                      </div>
-                      <CardTitle className="text-base leading-snug text-[#002147] md:text-lg">
-                        {row.material?.trim() || "Material sin descripción"}
-                      </CardTitle>
-                      {techLine ? (
-                        <p className="text-xs font-medium tabular-nums tracking-tight text-slate-700">
-                          {techLine}
-                        </p>
-                      ) : null}
-                      <CardDescription className="text-xs sm:text-sm">
-                        Nº compra{" "}
-                        <span className="font-mono font-medium text-foreground">
-                          {row.num_compra || "—"}
-                        </span>
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm">
-                      <div className="flex items-baseline justify-between gap-2 border-t border-slate-100 pt-3">
-                        <span className="text-muted-foreground">
-                          Hojas esperadas
-                        </span>
-                        <span className="text-lg font-semibold tabular-nums text-[#002147]">
-                          {row.num_hojas_brutas != null
-                            ? row.num_hojas_brutas
-                            : "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-muted-foreground shrink-0">
-                          Proveedor
-                        </span>
-                        <span className="min-w-0 text-right font-medium leading-snug text-foreground">
-                          {row.proveedor_nombre?.trim() || "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
-                        <Package className="size-3.5 shrink-0" aria-hidden />
-                        Toca para recepcionar
-                      </div>
-                    </CardContent>
-                  </Card>
-                </button>
-                );
-              })}
-            </div>
+            <>
+              <MuelleSearchField
+                id="muelle-materiales-buscar"
+                value={materialesGlobalFilter}
+                onChange={setMaterialesGlobalFilter}
+                placeholder="Buscar por OT, proveedor, material o cliente…"
+              />
+              {materialesFilteredRows.length === 0 ? (
+                <div className="rounded-xl border border-slate-200/90 bg-white p-8 text-center text-sm text-muted-foreground shadow-sm">
+                  Ningún resultado coincide con la búsqueda. Prueba con otro
+                  término o limpia el filtro.
+                </div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
+                  {materialesFilteredRows.map((tr) => {
+                    const row = tr.original;
+                    const techLine = gramajeFormatoResumenLine(
+                      row.gramaje,
+                      row.tamano_hoja
+                    );
+                    return (
+                      <button
+                        key={row.id}
+                        type="button"
+                        onClick={() => openMaterialSheet(row)}
+                        className={cn(
+                          "text-left transition hover:ring-2 hover:ring-[#C69C2B]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#002147]/30"
+                        )}
+                      >
+                        <Card className="h-full min-h-[11rem] border-slate-200/90 bg-white shadow-sm">
+                          <CardHeader className="space-y-3 pb-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <OtNumeroSemaforoBadge
+                                otNumero={row.ot_numero}
+                                fechaEntregaIso={row.fecha_entrega_maestro}
+                                umbrales={umbralesOtsCompras}
+                              />
+                              <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-600">
+                                {row.estado?.trim() || "—"}
+                              </span>
+                            </div>
+                            <CardTitle className="text-base leading-snug text-[#002147] md:text-lg">
+                              {row.material?.trim() || "Material sin descripción"}
+                            </CardTitle>
+                            {techLine ? (
+                              <p className="text-xs font-medium tabular-nums tracking-tight text-slate-700">
+                                {techLine}
+                              </p>
+                            ) : null}
+                            <CardDescription className="text-xs sm:text-sm">
+                              Nº compra{" "}
+                              <span className="font-mono font-medium text-foreground">
+                                {row.num_compra || "—"}
+                              </span>
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent className="space-y-2 text-sm">
+                            <div className="flex items-baseline justify-between gap-2 border-t border-slate-100 pt-3">
+                              <span className="text-muted-foreground">
+                                Hojas esperadas
+                              </span>
+                              <span className="text-lg font-semibold tabular-nums text-[#002147]">
+                                {row.num_hojas_brutas != null
+                                  ? row.num_hojas_brutas
+                                  : "—"}
+                              </span>
+                            </div>
+                            <div className="flex items-start justify-between gap-2">
+                              <span className="text-muted-foreground shrink-0">
+                                Proveedor
+                              </span>
+                              <span className="min-w-0 text-right font-medium leading-snug text-foreground">
+                                {row.proveedor_nombre?.trim() || "—"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+                              <Package className="size-3.5 shrink-0" aria-hidden />
+                              Toca para recepcionar
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
         </TabsContent>
 
@@ -890,82 +1020,98 @@ export function MuelleRecepcionPage() {
               indicados.
             </div>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
-              {externoRows.map((row) => (
-                <button
-                  key={row.id}
-                  type="button"
-                  onClick={() => openExternoSheet(row)}
-                  className={cn(
-                    "text-left transition hover:ring-2 hover:ring-[#C69C2B]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#002147]/30"
-                  )}
-                >
-                  <Card className="h-full min-h-[11rem] border-slate-200/90 bg-white shadow-sm">
-                    <CardHeader className="space-y-3 pb-2">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                          <OtNumeroSemaforoBadge
-                            otNumero={row.ot_numero}
-                            fechaEntregaIso={row.f_entrega_ot}
-                            umbrales={umbralesOtsCompras}
-                          />
-                          <span
-                            className="shrink-0 rounded-md border border-slate-200/90 bg-white px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[#002147]"
-                            title="Cantidad pedida"
-                          >
-                            {row.unidades != null && Number.isFinite(row.unidades)
-                              ? `${row.unidades} uds`
-                              : "Sin cant."}
-                          </span>
-                        </div>
-                        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-600">
-                          {row.estado?.trim() || "—"}
-                        </span>
-                      </div>
-                      <CardTitle className="text-base leading-snug text-[#002147] md:text-lg">
-                        {row.trabajo_titulo?.trim() || "Sin título"}
-                      </CardTitle>
-                      <CardDescription className="text-xs sm:text-sm">
-                        Cliente{" "}
-                        <span className="font-medium text-foreground">
-                          {row.cliente_nombre?.trim() || "—"}
-                        </span>
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm">
-                      <div className="flex items-baseline justify-between gap-2 border-t border-slate-100 pt-3">
-                        <span className="text-muted-foreground">
-                          F. prevista
-                        </span>
-                        <span className="text-right font-semibold tabular-nums text-[#002147]">
-                          {row.fecha_prevista
-                            ? formatFechaEsCorta(row.fecha_prevista)
-                            : "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-muted-foreground shrink-0">
-                          Proveedor
-                        </span>
-                        <span className="min-w-0 text-right font-medium leading-snug text-foreground">
-                          {row.proveedor_nombre?.trim() || "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-start justify-between gap-2 text-xs text-muted-foreground">
-                        <span className="shrink-0">Acabado</span>
-                        <span className="min-w-0 text-right text-foreground">
-                          {row.acabado_nombre?.trim() || "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
-                        <Package className="size-3.5 shrink-0" aria-hidden />
-                        Toca para recepcionar
-                      </div>
-                    </CardContent>
-                  </Card>
-                </button>
-              ))}
-            </div>
+            <>
+              <MuelleSearchField
+                id="muelle-externos-buscar"
+                value={globalSearchTerm}
+                onChange={setGlobalSearchTerm}
+                placeholder="Buscar por OT, cliente, taller o descripción…"
+              />
+              {externoRowsFiltered.length === 0 ? (
+                <div className="rounded-xl border border-slate-200/90 bg-white p-8 text-center text-sm text-muted-foreground shadow-sm">
+                  Ningún resultado coincide con la búsqueda. Prueba con otro
+                  término o limpia el filtro.
+                </div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
+                  {externoRowsFiltered.map((row) => (
+                    <button
+                      key={row.id}
+                      type="button"
+                      onClick={() => openExternoSheet(row)}
+                      className={cn(
+                        "text-left transition hover:ring-2 hover:ring-[#C69C2B]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#002147]/30"
+                      )}
+                    >
+                      <Card className="h-full min-h-[11rem] border-slate-200/90 bg-white shadow-sm">
+                        <CardHeader className="space-y-3 pb-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                              <OtNumeroSemaforoBadge
+                                otNumero={row.ot_numero}
+                                fechaEntregaIso={row.f_entrega_ot}
+                                umbrales={umbralesOtsCompras}
+                              />
+                              <span
+                                className="shrink-0 rounded-md border border-slate-200/90 bg-white px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[#002147]"
+                                title="Cantidad pedida"
+                              >
+                                {row.unidades != null &&
+                                Number.isFinite(row.unidades)
+                                  ? `${row.unidades} uds`
+                                  : "Sin cant."}
+                              </span>
+                            </div>
+                            <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-600">
+                              {row.estado?.trim() || "—"}
+                            </span>
+                          </div>
+                          <CardTitle className="text-base leading-snug text-[#002147] md:text-lg">
+                            {row.trabajo_titulo?.trim() || "Sin título"}
+                          </CardTitle>
+                          <CardDescription className="text-xs sm:text-sm">
+                            Cliente{" "}
+                            <span className="font-medium text-foreground">
+                              {row.cliente_nombre?.trim() || "—"}
+                            </span>
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-2 text-sm">
+                          <div className="flex items-baseline justify-between gap-2 border-t border-slate-100 pt-3">
+                            <span className="text-muted-foreground">
+                              F. prevista
+                            </span>
+                            <span className="text-right font-semibold tabular-nums text-[#002147]">
+                              {row.fecha_prevista
+                                ? formatFechaEsCorta(row.fecha_prevista)
+                                : "—"}
+                            </span>
+                          </div>
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="text-muted-foreground shrink-0">
+                              Proveedor
+                            </span>
+                            <span className="min-w-0 text-right font-medium leading-snug text-foreground">
+                              {row.proveedor_nombre?.trim() || "—"}
+                            </span>
+                          </div>
+                          <div className="flex items-start justify-between gap-2 text-xs text-muted-foreground">
+                            <span className="shrink-0">Acabado</span>
+                            <span className="min-w-0 text-right text-foreground">
+                              {row.acabado_nombre?.trim() || "—"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+                            <Package className="size-3.5 shrink-0" aria-hidden />
+                            Toca para recepcionar
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </TabsContent>
       </Tabs>
