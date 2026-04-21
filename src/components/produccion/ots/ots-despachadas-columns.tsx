@@ -1,7 +1,7 @@
 "use client";
 
-import type { ColumnDef } from "@tanstack/react-table";
-import { Eye, Info, Pencil } from "lucide-react";
+import type { Column, ColumnDef } from "@tanstack/react-table";
+import { ArrowDown, ArrowUp, ArrowUpDown, Eye, Info, Pencil } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -141,6 +141,40 @@ function formatHorasEt(
   return `${fmt(entrada)} / ${fmt(tiraje)}`;
 }
 
+function OtsDespachadasSortHeader({
+  column,
+  label,
+  title,
+}: {
+  column: Column<OtsDespachadasTableRow, unknown>;
+  label: string;
+  title?: string;
+}) {
+  const sorted = column.getIsSorted();
+  return (
+    <button
+      type="button"
+      title={title ?? `Ordenar por ${label}`}
+      className={cn(
+        "-mx-0.5 inline-flex max-w-full min-w-0 items-center gap-0.5 rounded px-0.5 py-0.5 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-600 hover:bg-slate-100/90 hover:text-slate-800",
+        sorted && "text-[#002147]"
+      )}
+      onClick={column.getToggleSortingHandler()}
+    >
+      <span className="min-w-0 shrink truncate">{label}</span>
+      <span className="inline-flex size-3 shrink-0 items-center justify-center" aria-hidden>
+        {sorted === "asc" ? (
+          <ArrowUp className="size-3 text-[#002147]" strokeWidth={2.25} />
+        ) : sorted === "desc" ? (
+          <ArrowDown className="size-3 text-[#002147]" strokeWidth={2.25} />
+        ) : (
+          <ArrowUpDown className="size-3 text-slate-300" strokeWidth={2} />
+        )}
+      </span>
+    </button>
+  );
+}
+
 export type OtsDespachadasColumnsContext = {
   onVerCompra: (row: OtsDespachadasTableRow) => void;
   onEditarDespacho: (row: OtsDespachadasTableRow) => void;
@@ -184,11 +218,13 @@ export function createOtsDespachadasColumns(
     {
       accessorKey: "ot_numero",
       size: 96,
-      header: () => (
-        <span className="text-[10px] font-semibold uppercase tracking-wide">
-          OT
-        </span>
-      ),
+      sortingFn: (rowA, rowB) =>
+        String(rowA.original.ot_numero ?? "").localeCompare(
+          String(rowB.original.ot_numero ?? ""),
+          "es",
+          { numeric: true, sensitivity: "base" }
+        ),
+      header: ({ column }) => <OtsDespachadasSortHeader column={column} label="OT" />,
       cell: ({ row }) => (
         <div className="flex min-h-6 min-w-0 max-w-[9rem] items-center px-0.5 py-0">
           <OtNumeroSemaforoBadge
@@ -383,14 +419,46 @@ export function createOtsDespachadasColumns(
     {
       accessorKey: "fecha_entrega_prevista",
       size: 86,
-      header: () => (
-        <span className="text-[10px] font-semibold uppercase tracking-wide">
-          Entrega prev.
-        </span>
+      sortingFn: (rowA, rowB) => {
+        const av = rowA.original.fecha_entrega_prevista;
+        const bv = rowB.original.fecha_entrega_prevista;
+        const at = av ? new Date(av).getTime() : Number.NEGATIVE_INFINITY;
+        const bt = bv ? new Date(bv).getTime() : Number.NEGATIVE_INFINITY;
+        return at - bt;
+      },
+      header: ({ column }) => (
+        <OtsDespachadasSortHeader
+          column={column}
+          label="Entrega prev."
+          title="Ordenar por fecha de entrega prevista"
+        />
       ),
       cell: ({ row }) => (
         <div className="w-fit min-w-[4.5rem] whitespace-nowrap px-0.5 py-0.5 text-center text-[11px] tabular-nums text-slate-700">
           {formatDateDDMMYY(row.original.fecha_entrega_prevista)}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "despachado_at",
+      size: 86,
+      sortingFn: (rowA, rowB) => {
+        const av = rowA.original.despachado_at;
+        const bv = rowB.original.despachado_at;
+        const at = av ? new Date(av).getTime() : Number.NEGATIVE_INFINITY;
+        const bt = bv ? new Date(bv).getTime() : Number.NEGATIVE_INFINITY;
+        return at - bt;
+      },
+      header: ({ column }) => (
+        <OtsDespachadasSortHeader
+          column={column}
+          label="Despacho"
+          title="Ordenar por fecha de despacho"
+        />
+      ),
+      cell: ({ row }) => (
+        <div className="w-fit min-w-[4.5rem] whitespace-nowrap px-0.5 py-0.5 text-center text-[11px] tabular-nums text-slate-700">
+          {formatDateDDMMYY(row.original.despachado_at)}
         </div>
       ),
     },

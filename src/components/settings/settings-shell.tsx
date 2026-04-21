@@ -7,11 +7,12 @@ import { GlobalModelSelector } from "@/components/layout/header";
 import { IngestKnowledgeTab } from "@/components/settings/ingest-knowledge-tab";
 import { UsersManagementPanel } from "@/components/settings/users-management-panel";
 import { EmailPlantillasTab } from "@/components/settings/email-plantillas-tab";
+import { LogsTab } from "@/components/settings/logs-tab";
 import { VariablesSistemaTab } from "@/components/settings/variables-sistema-tab";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type SettingsShellProps = {
-  defaultTab: "ingest" | "users" | "variables" | "email";
+  defaultTab: "ingest" | "users" | "variables" | "email" | "logs";
 };
 
 export function SettingsShell({ defaultTab }: SettingsShellProps) {
@@ -44,6 +45,7 @@ export function SettingsShell({ defaultTab }: SettingsShellProps) {
             <TabsTrigger value="users">Gestión de usuarios</TabsTrigger>
             <TabsTrigger value="variables">Variables Sistema</TabsTrigger>
             <TabsTrigger value="email">Plantillas email</TabsTrigger>
+            <TabsTrigger value="logs">Logs</TabsTrigger>
           </TabsList>
           <TabsContent value="ingest" className="mt-6 outline-none">
             <IngestKnowledgeTab />
@@ -56,6 +58,9 @@ export function SettingsShell({ defaultTab }: SettingsShellProps) {
           </TabsContent>
           <TabsContent value="email" className="mt-6 outline-none">
             <EmailPlantillasTab />
+          </TabsContent>
+          <TabsContent value="logs" className="mt-6 outline-none">
+            <LogsTab />
           </TabsContent>
         </Tabs>
       </div>

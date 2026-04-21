@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { NativeSelect, type Option } from "@/components/ui/select-native";
 import {
   Select,
@@ -96,6 +97,7 @@ const TABLE_TIPOS_PROVEEDOR = "prod_cat_tipos_proveedor";
 const TABLE_RECEPCION = "prod_recepciones_material";
 const TABLE_RECEPCION_FOTOS = "prod_recepciones_fotos";
 const TABLE_COMPRAS_COMUNICACION = "prod_compras_material_comunicacion";
+const TABLE_LOGS_AUDITORIA = "prod_logs_auditoria";
 const PAGE_SIZE = 500;
 
 type PendingCompraCorreoEnvio = {
@@ -222,6 +224,23 @@ function parseOptionalIntInput(s: string): number | null {
   return Math.trunc(n);
 }
 
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === "object") {
+    const e = err as {
+      message?: string;
+      details?: string;
+      hint?: string;
+      code?: string;
+    };
+    const msg = [e.message, e.details, e.hint, e.code ? `(${e.code})` : ""]
+      .filter((x) => x != null && String(x).trim().length > 0)
+      .join(" · ");
+    return msg || JSON.stringify(err);
+  }
+  return String(err);
+}
+
 function normalizeOtNumeroInput(raw: string): string {
   const t = raw.trim();
   if (!t) return "";
@@ -316,6 +335,7 @@ export function ComprasMaterialPage() {
   const [editBrutas, setEditBrutas] = useState("");
   const [editFecha, setEditFecha] = useState("");
   const [editAlbaran, setEditAlbaran] = useState("");
+  const [editNotasCompra, setEditNotasCompra] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editComunicacionLogs, setEditComunicacionLogs] = useState<
     CompraComunicacionLogRow[]
@@ -344,6 +364,7 @@ export function ComprasMaterialPage() {
   const [manualHojasBrutas, setManualHojasBrutas] = useState("");
   const [manualCliente, setManualCliente] = useState("");
   const [manualTitulo, setManualTitulo] = useState("");
+  const [manualNotasCompra, setManualNotasCompra] = useState("");
 
   const loadProveedoresPapelCarton = useCallback(async () => {
     try {
@@ -590,25 +611,70 @@ export function ComprasMaterialPage() {
             (r.fecha_prevista_recepcion as string | null) ?? null,
           albaran_proveedor: (r.albaran_proveedor as string | null) ?? null,
           estado: (r.estado as string | null) ?? null,
+          notas:
+            String((r.notas as string | null | undefined) ?? "").trim() || null,
+          ultima_recepcion_nota: null,
+          ultima_recepcion_fecha: null,
+          ultima_recepcion_por: null,
+          ultima_recepcion_por_email: null,
+          ultima_recepcion_por_nombre: null,
           recepcion_foto_urls: [] as string[],
         };
       });
 
       const fotosByCompra = new Map<string, string[]>();
+      const ultimaRecepcionByCompra = new Map<
+        string,
+        {
+          notas: string;
+          fecha: string | null;
+          por: string | null;
+          porEmail: string | null;
+          porNombre: string | null;
+        }
+      >();
       const compraIds = mergedBase.map((r) => r.id).filter((id) => id.length > 0);
       if (compraIds.length > 0) {
         const { data: receps, error: recErr } = await supabase
           .from(TABLE_RECEPCION)
-          .select("id, compra_id")
+          .select(
+            "id, compra_id, fecha_recepcion, notas, recepcionado_por, recepcionado_por_email, recepcionado_por_nombre"
+          )
           .in("compra_id", compraIds);
         if (recErr) throw recErr;
         const recepToCompra = new Map<string, string>();
         const recepIds: string[] = [];
         for (const row of receps ?? []) {
-          const rec = row as { id: string; compra_id: string };
+          const rec = row as {
+            id: string;
+            compra_id: string;
+            fecha_recepcion: string | null;
+            notas: string | null;
+            recepcionado_por: string | null;
+            recepcionado_por_email: string | null;
+            recepcionado_por_nombre: string | null;
+          };
           if (!rec.id || !rec.compra_id) continue;
           recepToCompra.set(rec.id, rec.compra_id);
           recepIds.push(rec.id);
+          const nota = String(rec.notas ?? "").trim();
+          if (!nota) continue;
+          const prev = ultimaRecepcionByCompra.get(rec.compra_id);
+          const nextTs = rec.fecha_recepcion ?? "";
+          const prevTs = prev?.fecha ?? "";
+          if (!prev || nextTs > prevTs) {
+            ultimaRecepcionByCompra.set(rec.compra_id, {
+              notas: nota,
+              fecha: rec.fecha_recepcion ?? null,
+              por:
+                rec.recepcionado_por_email ??
+                rec.recepcionado_por_nombre ??
+                rec.recepcionado_por ??
+                null,
+              porEmail: rec.recepcionado_por_email ?? null,
+              porNombre: rec.recepcionado_por_nombre ?? null,
+            });
+          }
         }
         if (recepIds.length > 0) {
           const { data: fotos, error: fErr } = await supabase
@@ -630,6 +696,13 @@ export function ComprasMaterialPage() {
 
       const merged = mergedBase.map((r) => ({
         ...r,
+        ultima_recepcion_nota: ultimaRecepcionByCompra.get(r.id)?.notas ?? null,
+        ultima_recepcion_fecha: ultimaRecepcionByCompra.get(r.id)?.fecha ?? null,
+        ultima_recepcion_por: ultimaRecepcionByCompra.get(r.id)?.por ?? null,
+        ultima_recepcion_por_email:
+          ultimaRecepcionByCompra.get(r.id)?.porEmail ?? null,
+        ultima_recepcion_por_nombre:
+          ultimaRecepcionByCompra.get(r.id)?.porNombre ?? null,
         recepcion_foto_urls: fotosByCompra.get(r.id) ?? [],
       }));
 
@@ -840,6 +913,7 @@ export function ComprasMaterialPage() {
     setEditBrutas(numStr(row.num_hojas_brutas));
     setEditFecha(toDateInputValue(row.fecha_prevista_recepcion));
     setEditAlbaran(row.albaran_proveedor?.trim() ?? "");
+    setEditNotasCompra(row.notas?.trim() ?? "");
     setEditOpen(true);
   }, []);
 
@@ -977,18 +1051,78 @@ export function ComprasMaterialPage() {
           if (!ok) return;
           setSavingById((s) => ({ ...s, [row.id]: true }));
           try {
-            const { error } = await supabase
+            const { data: recs, error: recErr } = await supabase
+              .from(TABLE_RECEPCION)
+              .select("id")
+              .eq("compra_id", row.id);
+            if (recErr) throw recErr;
+
+            const recepIds = (recs ?? [])
+              .map((r) => String((r as { id?: string }).id ?? "").trim())
+              .filter(Boolean);
+
+            if (recepIds.length > 0) {
+              const hardDeleteOk = window.confirm(
+                "Esta compra tiene recepciones registradas en muelle. ¿Seguro que quieres borrar todo (recepciones + compra)? Esta acción no se puede deshacer."
+              );
+              if (!hardDeleteOk) return;
+
+              const { error: fotosErr } = await supabase
+                .from(TABLE_RECEPCION_FOTOS)
+                .delete()
+                .in("recepcion_id", recepIds);
+              if (fotosErr) throw fotosErr;
+
+              const { error: delRecepErr } = await supabase
+                .from(TABLE_RECEPCION)
+                .delete()
+                .eq("compra_id", row.id);
+              if (delRecepErr) throw delRecepErr;
+            }
+
+            const { error: delCompraErr } = await supabase
               .from(TABLE_COMPRA)
               .delete()
               .eq("id", row.id);
-            if (error) throw error;
+            if (delCompraErr) throw delCompraErr;
+
+            const {
+              data: { user },
+            } = await supabase.auth.getUser();
+            const actorId =
+              typeof user?.id === "string" && user.id.trim().length > 0
+                ? user.id.trim()
+                : null;
+            const actorEmail =
+              typeof user?.email === "string" && user.email.trim().length > 0
+                ? user.email.trim()
+                : null;
+            const detalle =
+              recepIds.length > 0
+                ? `Borrado completo de compra OT ${row.ot_numero} (${row.num_compra || "sin num_compra"}) con ${recepIds.length} recepción(es) vinculada(s).`
+                : `Borrado de compra OT ${row.ot_numero} (${row.num_compra || "sin num_compra"}) sin recepciones vinculadas.`;
+            const { error: logErr } = await supabase
+              .from(TABLE_LOGS_AUDITORIA)
+              .insert({
+                tabla_afectada: TABLE_COMPRA,
+                accion: "BORRADO",
+                registro_id: row.id,
+                detalle,
+                actor_id: actorId,
+                actor_email: actorEmail,
+              });
+            if (logErr) {
+              console.error("[prod_logs_auditoria]", logErr);
+            }
             setRows((prev) => prev.filter((r) => r.id !== row.id));
-            toast.success("Línea eliminada.");
-          } catch (e) {
-            console.error(e);
-            toast.error(
-              e instanceof Error ? e.message : "No se pudo eliminar la línea."
+            toast.success(
+              recepIds.length > 0
+                ? "Compra y recepciones vinculadas eliminadas."
+                : "Línea eliminada."
             );
+          } catch (e) {
+            console.error("[Compras delete]", e);
+            toast.error(getErrorMessage(e) || "No se pudo eliminar la línea.");
             void loadRows();
           } finally {
             setSavingById((s) => {
@@ -1045,6 +1179,7 @@ export function ComprasMaterialPage() {
     const num_hojas_brutas = parseOptionalIntInput(editBrutas);
     const fecha = editFecha.trim() === "" ? null : editFecha.trim();
     const albaran = editAlbaran.trim() === "" ? null : editAlbaran.trim();
+    const notas = editNotasCompra.trim() || null;
 
     const payloadTecnico = {
       material,
@@ -1066,6 +1201,7 @@ export function ComprasMaterialPage() {
           ...payloadTecnico,
           fecha_prevista_recepcion: fecha,
           albaran_proveedor: albaran,
+          notas,
         })
         .eq("id", editRow.id);
       if (errCompra) throw errCompra;
@@ -1088,6 +1224,7 @@ export function ComprasMaterialPage() {
     editFecha,
     editGramaje,
     editMaterial,
+    editNotasCompra,
     editRow,
     editTamano,
     loadRows,
@@ -1390,6 +1527,7 @@ export function ComprasMaterialPage() {
     setManualHojasBrutas("");
     setManualCliente("");
     setManualTitulo("");
+    setManualNotasCompra("");
   }, []);
 
   const manualOtNumero = normalizeOtNumeroInput(manualOt);
@@ -1410,6 +1548,7 @@ export function ComprasMaterialPage() {
     const material = manualMaterial.trim();
     const clienteNombre = manualCliente.trim();
     const trabajoTitulo = manualTitulo.trim();
+    const notasCompra = manualNotasCompra.trim();
     if (!manualPosicionValid) {
       toast.error("Posición debe ser un entero mayor o igual que 1.");
       return;
@@ -1438,7 +1577,8 @@ export function ComprasMaterialPage() {
         tamano_hoja: tamanoHoja,
         num_hojas_netas: numHojasNetas,
         num_hojas_brutas: numHojasBrutas,
-        estado: "Generada",
+        notas: notasCompra || null,
+        estado: "Pendiente",
       });
       if (insertErr) throw insertErr;
 
@@ -1454,7 +1594,7 @@ export function ComprasMaterialPage() {
         .eq("ot_numero", ot);
       if (updDespErr) throw updDespErr;
 
-      toast.success("Material guardado en compras con estado «Generada».");
+      toast.success("Material guardado en compras con estado «Pendiente».");
       void loadRows();
 
       if (manualKeepOpen) {
@@ -1463,6 +1603,7 @@ export function ComprasMaterialPage() {
         setManualFormato("");
         setManualHojasNetas("");
         setManualHojasBrutas("");
+        setManualNotasCompra("");
         setManualPosicion(String(manualPosicionParsed + 1));
       } else {
         setManualOpen(false);
@@ -1486,6 +1627,7 @@ export function ComprasMaterialPage() {
     manualHojasNetas,
     manualKeepOpen,
     manualMaterial,
+    manualNotasCompra,
     manualPosicionParsed,
     manualPosicionValid,
     manualNumCompra,
@@ -2192,6 +2334,19 @@ export function ComprasMaterialPage() {
                   />
                 </div>
               </div>
+              <div className="mt-3 grid gap-1">
+                <Label htmlFor="edit-notas-compra" className="text-xs">
+                  Notas compra (Jordi)
+                </Label>
+                <Textarea
+                  id="edit-notas-compra"
+                  rows={3}
+                  value={editNotasCompra}
+                  onChange={(e) => setEditNotasCompra(e.target.value)}
+                  placeholder="Instrucciones o comentarios para muelle"
+                  className="resize-y text-xs leading-snug"
+                />
+              </div>
             </div>
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -2432,6 +2587,19 @@ export function ComprasMaterialPage() {
                 onChange={(e) => setManualTitulo(e.target.value)}
                 placeholder="Título del trabajo"
                 className="h-8 text-xs"
+              />
+            </div>
+            <div className="grid gap-1 sm:col-span-2">
+              <Label htmlFor="manual-notas-compra" className="text-xs">
+                Notas compra (Jordi)
+              </Label>
+              <Textarea
+                id="manual-notas-compra"
+                rows={3}
+                value={manualNotasCompra}
+                onChange={(e) => setManualNotasCompra(e.target.value)}
+                placeholder="Instrucciones para recepción (opcional)"
+                className="resize-y text-xs leading-snug"
               />
             </div>
           </div>

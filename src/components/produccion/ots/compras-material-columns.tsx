@@ -1,7 +1,16 @@
 "use client";
 
 import type { Column, ColumnDef } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ArrowUpDown, Camera, Pencil, Trash2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Camera,
+  Package,
+  StickyNote,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -479,6 +488,75 @@ export function createComprasMaterialColumns(
         </div>
       ),
       size: 120,
+    },
+    {
+      id: "notas",
+      size: 62,
+      enableSorting: false,
+      header: () => (
+        <span className="text-[10px] font-normal uppercase tracking-wide text-slate-600">
+          Notas
+        </span>
+      ),
+      cell: ({ row }) => {
+        const notaCompra = row.original.notas?.trim() ?? "";
+        const notaMuelle = row.original.ultima_recepcion_nota?.trim() ?? "";
+        const fechaMuelle = row.original.ultima_recepcion_fecha;
+        const porMuelle =
+          row.original.ultima_recepcion_por_email?.trim() ||
+          row.original.ultima_recepcion_por_nombre?.trim() ||
+          row.original.ultima_recepcion_por?.trim() ||
+          "";
+        if (!notaCompra && !notaMuelle) {
+          return <div className="h-6 min-h-6 w-full" />;
+        }
+        return (
+          <div className="flex min-h-6 items-center justify-center gap-0.5 px-0.5 py-0">
+            {notaCompra ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-amber-200/80 bg-amber-50 text-amber-800"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Nota de compra en ${row.original.num_compra}`}
+                  >
+                    <StickyNote className="size-3.5" aria-hidden />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-sm text-xs">
+                  <p className="font-medium text-[#002147]">Nota compra</p>
+                  <p className="mt-1 whitespace-pre-wrap">{notaCompra}</p>
+                </TooltipContent>
+              </Tooltip>
+            ) : null}
+            {notaMuelle ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-blue-200/80 bg-blue-50 text-blue-800"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Nota de recepción en ${row.original.num_compra}`}
+                  >
+                    <Package className="size-3.5" aria-hidden />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-sm text-xs">
+                  <p className="font-medium text-[#002147]">
+                    Recibido por{" "}
+                    <span className="font-mono">
+                      {porMuelle || "usuario no identificado"}
+                    </span>
+                    {fechaMuelle ? ` el ${formatFechaEsCorta(fechaMuelle)}` : ""}
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap">{notaMuelle}</p>
+                </TooltipContent>
+              </Tooltip>
+            ) : null}
+          </div>
+        );
+      },
     },
     {
       id: "fotos_recepcion",

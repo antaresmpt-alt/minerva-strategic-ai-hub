@@ -95,6 +95,8 @@ type MuelleCardRow = {
   cliente_nombre: string | null;
   estado: string | null;
   fecha_entrega_maestro: string | null;
+  /** Notas de compra (Jordi), visibles al recepcionar. */
+  notas: string | null;
 };
 
 type MuelleExternoCardRow = {
@@ -264,7 +266,7 @@ export function MuelleRecepcionPage() {
       const { data: compras, error: cErr } = await supabase
         .from(TABLE_COMPRA)
         .select(
-          "id, ot_numero, num_compra, material, gramaje, tamano_hoja, num_hojas_brutas, proveedor_id, estado"
+          "id, ot_numero, num_compra, material, gramaje, tamano_hoja, num_hojas_brutas, proveedor_id, estado, notas"
         )
         .order("created_at", { ascending: false })
         .limit(800);
@@ -349,6 +351,7 @@ export function MuelleRecepcionPage() {
           cliente_nombre: clienteTrim,
           estado: (raw.estado as string | null) ?? null,
           fecha_entrega_maestro: m?.fecha_entrega ?? null,
+          notas: String((raw.notas as string | null | undefined) ?? "").trim() || null,
         };
       });
 
@@ -636,6 +639,18 @@ export function MuelleRecepcionPage() {
         typeof user?.id === "string" && /^[0-9a-f-]{36}$/i.test(user.id.trim())
           ? user.id.trim()
           : null;
+      const recepcionadoPorEmail =
+        typeof user?.email === "string" && user.email.trim().length > 0
+          ? user.email.trim()
+          : null;
+      const recepcionadoPorNombre =
+        typeof user?.user_metadata?.full_name === "string" &&
+        user.user_metadata.full_name.trim().length > 0
+          ? user.user_metadata.full_name.trim()
+          : typeof user?.user_metadata?.name === "string" &&
+              user.user_metadata.name.trim().length > 0
+            ? user.user_metadata.name.trim()
+            : null;
 
       const hojasInt = Math.trunc(Number(hojasRecNum));
       const paletsInt = Math.trunc(Number(paletsNum));
@@ -663,6 +678,8 @@ export function MuelleRecepcionPage() {
         estado_recepcion: estadoRecepcion,
         notas: notasPayload,
         recepcionado_por: recepcionadoPorUuid,
+        recepcionado_por_email: recepcionadoPorEmail,
+        recepcionado_por_nombre: recepcionadoPorNombre,
       };
 
       // 1) Insertar fila de recepción (obtiene `recepcion_id` para fotos).
@@ -1172,6 +1189,18 @@ export function MuelleRecepcionPage() {
                   {activeMaterial.tamano_hoja?.trim() || "—"}
                 </span>
               </div>
+              {activeMaterial.notas?.trim() ? (
+                <div
+                  className="mx-1 mt-2 rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-2 text-sm leading-snug text-amber-950 shadow-inner"
+                  role="region"
+                  aria-label="Notas de compra"
+                >
+                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-900">
+                    Notas compra (Jordi)
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap">{activeMaterial.notas}</p>
+                </div>
+              ) : null}
 
               <div className="flex flex-col gap-4 px-1 py-4">
                 <div className="space-y-2">

@@ -2,6 +2,8 @@
 export type OtsDespachadasTableRow = {
   id: string;
   ot_numero: string;
+  /** Fecha/hora de despacho desde `produccion_ot_despachadas.despachado_at`. */
+  despachado_at: string | null;
   material: string | null;
   /** g/m² en `produccion_ot_despachadas`. */
   gramaje: number | null;

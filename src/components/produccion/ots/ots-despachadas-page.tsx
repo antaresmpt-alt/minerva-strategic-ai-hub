@@ -3,8 +3,10 @@
 import {
   flexRender,
   getCoreRowModel,
+  getSortedRowModel,
   useReactTable,
   type RowSelectionState,
+  type SortingState,
 } from "@tanstack/react-table";
 import { Layers, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -27,6 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect, type Option } from "@/components/ui/select-native";
 import {
   Table,
   TableBody,
@@ -49,6 +52,9 @@ const TABLE_MASTER = "prod_ots_general";
 const TABLE_COMPRA_MATERIAL = "prod_compra_material";
 const TABLE_PROVEEDORES = "prod_proveedores";
 const PAGE_SIZE = 500;
+const OTS_DESPACHADAS_DEFAULT_SORTING: SortingState = [
+  { id: "despachado_at", desc: true },
+];
 
 /**
  * Normaliza `estado_material` para comparaciones laxas (mayúsculas, espacios,
@@ -224,6 +230,11 @@ export function OtsDespachadasPage({
   const [loading, setLoading] = useState(true);
   const [comprando, setComprando] = useState(false);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [sorting, setSorting] = useState<SortingState>(
+    OTS_DESPACHADAS_DEFAULT_SORTING
+  );
+  const [filtroBusqueda, setFiltroBusqueda] = useState("");
+  const [filtroEstadoMaterial, setFiltroEstadoMaterial] = useState("");
 
   const [compraOpen, setCompraOpen] = useState(false);
   const [compraOt, setCompraOt] = useState("");
@@ -407,6 +418,7 @@ export function OtsDespachadasPage({
         return {
           id: String(d.id ?? ""),
           ot_numero: ot,
+          despachado_at: (d.despachado_at as string | null) ?? null,
           material: (d.material as string | null) ?? null,
           gramaje: num(d.gramaje),
           tamano_hoja: (d.tamano_hoja as string | null) ?? null,
@@ -463,25 +475,71 @@ export function OtsDespachadasPage({
     void loadRows();
   }, [loadRows]);
 
+  const estadoMaterialFiltroOptions = useMemo<Option[]>(() => {
+    const uniques = [...new Set(rows.map((r) => String(r.estado_material ?? "").trim()))]
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+    return [
+      { value: "", label: "Todos los estados" },
+      ...uniques.map((e) => ({ value: e, label: e })),
+    ];
+  }, [rows]);
+
+  const rowsFiltradas = useMemo(() => {
+    let list = rows;
+    if (filtroEstadoMaterial) {
+      const estadoFiltroNorm = normalizeEstadoMaterialParaMatch(filtroEstadoMaterial);
+      list = list.filter(
+        (r) =>
+          normalizeEstadoMaterialParaMatch(r.estado_material) === estadoFiltroNorm
+      );
+    }
+    const q = filtroBusqueda.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((r) => {
+      const bloques = [
+        r.ot_numero,
+        r.cliente,
+        r.titulo,
+        r.material,
+        r.tamano_hoja,
+      ].map((x) => String(x ?? "").toLowerCase());
+      return bloques.some((s) => s.includes(q));
+    });
+  }, [filtroBusqueda, filtroEstadoMaterial, rows]);
+
+  useEffect(() => {
+    const allowed = new Set(rowsFiltradas.map((r) => r.id));
+    setRowSelection((prev) => {
+      const next: RowSelectionState = {};
+      for (const id of allowed) {
+        if (prev[id]) next[id] = true;
+      }
+      return next;
+    });
+  }, [rowsFiltradas]);
+
   const table = useReactTable({
-    data: rows,
+    data: rowsFiltradas,
     columns,
     getRowId: (row) => row.id,
-    state: { rowSelection },
+    state: { rowSelection, sorting },
     onRowSelectionChange: setRowSelection,
+    onSortingChange: setSorting,
     enableMultiRowSelection: true,
     getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
   });
 
   const selectedRows = useMemo(() => {
     const keys = Object.keys(rowSelection).filter((k) => rowSelection[k]);
     const out: OtsDespachadasTableRow[] = [];
     for (const k of keys) {
-      const r = rows.find((x) => x.id === k);
+      const r = rowsFiltradas.find((x) => x.id === k);
       if (r) out.push(r);
     }
     return out;
-  }, [rowSelection, rows]);
+  }, [rowSelection, rowsFiltradas]);
 
   const handleGenerarComprasLote = useCallback(async () => {
     if (selectedRows.length === 0) return;
@@ -878,9 +936,35 @@ export function OtsDespachadasPage({
         </Button>
       </div>
 
+      <div className="rounded-lg border border-slate-200/90 bg-slate-50/40 p-3 shadow-sm">
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid min-w-0 gap-1 md:col-span-2">
+            <Label htmlFor="busq-ots-despachadas" className="text-xs font-medium">
+              Buscar
+            </Label>
+            <Input
+              id="busq-ots-despachadas"
+              placeholder="OT, cliente, título, material o formato..."
+              value={filtroBusqueda}
+              onChange={(e) => setFiltroBusqueda(e.target.value)}
+              className="h-8 text-xs"
+            />
+          </div>
+          <div className="grid min-w-0 gap-1">
+            <NativeSelect
+              label="Estado"
+              options={estadoMaterialFiltroOptions}
+              value={filtroEstadoMaterial}
+              onChange={(e) => setFiltroEstadoMaterial(e.target.value)}
+              className="h-8 text-xs"
+            />
+          </div>
+        </div>
+      </div>
+
       <div className="overflow-hidden rounded-lg border border-slate-200/90 bg-white shadow-sm">
         <div className="max-h-[min(70vh,720px)] overflow-auto">
-          <Table className="table-fixed min-w-[1160px] text-xs">
+          <Table className="table-fixed min-w-[1240px] text-xs">
             <TableHeader className="bg-slate-50/95 sticky top-0 z-20 shadow-[0_1px_0_0_rgb(226_232_240)]">
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id} className="hover:bg-transparent">
@@ -921,6 +1005,15 @@ export function OtsDespachadasPage({
                     className="text-muted-foreground py-8 text-center text-sm"
                   >
                     No hay OTs despachadas registradas.
+                  </TableCell>
+                </TableRow>
+              ) : rowsFiltradas.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={columns.length}
+                    className="text-muted-foreground py-8 text-center text-sm"
+                  >
+                    Ningún resultado con los filtros actuales.
                   </TableCell>
                 </TableRow>
               ) : (
