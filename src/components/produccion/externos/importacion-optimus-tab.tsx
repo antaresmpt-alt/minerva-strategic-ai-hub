@@ -205,26 +205,26 @@ function extractRowsWithRules(fileText: string, rules: OptimusRegexRules): Extra
   const observaciones = `OC-${oc || "00000"} | Comprador: ${comprador || "N/D"} | ${
     acabadoAlias || "N/D"
   }`;
-  return refs
-    .map((r) => {
-      const split = splitOptimusReferencia5Plus2(r);
-      if (!split) return null;
-      return {
-        referencia: r,
-        ot_raw: split.ot,
-        id_pedido: split.idPedido,
-        num_operacion: split.numOperacion,
-        proveedor_nombre_detectado: proveedorNombre,
-        trabajo_titulo: trabajo,
-        unidades,
-        fecha_envio: envio,
-        fecha_prevista: prevista,
-        observaciones,
-        raw_text: text,
-        prioridad_sugerida: prioridadSugeridaDesdeTexto(text),
-      };
-    })
-    .filter((x): x is ExtractedRow => x != null);
+  const out: ExtractedRow[] = [];
+  for (const r of refs) {
+    const split = splitOptimusReferencia5Plus2(r);
+    if (!split) continue;
+    out.push({
+      referencia: r,
+      ot_raw: split.ot,
+      id_pedido: split.idPedido,
+      num_operacion: split.numOperacion,
+      proveedor_nombre_detectado: proveedorNombre,
+      trabajo_titulo: trabajo,
+      unidades,
+      fecha_envio: envio,
+      fecha_prevista: prevista,
+      observaciones,
+      raw_text: text,
+      prioridad_sugerida: prioridadSugeridaDesdeTexto(text),
+    });
+  }
+  return out;
 }
 
 export function ImportacionOptimusTab() {
