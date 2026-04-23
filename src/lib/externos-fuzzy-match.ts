@@ -5,6 +5,85 @@
 
 export type FuzzyNamed = { id: string; nombre: string };
 
+const STOPWORDS = new Set([
+  "sl",
+  "sa",
+  "s",
+  "l",
+  "sociedad",
+  "anonima",
+  "limitada",
+  "del",
+  "de",
+  "la",
+  "el",
+]);
+
+const SYNONYMS: Record<string, string> = {
+  polipropileno: "pp",
+  plastificado: "plast",
+  brillo: "brillo",
+  mate: "mate",
+  llobregat: "llobregat",
+};
+
+function normalizeText(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\b(s\.?\s*l\.?|s\.?\s*a\.?)\b/g, " ")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeTokens(s: string): string[] {
+  const tokens = normalizeText(s)
+    .split(" ")
+    .map((t) => SYNONYMS[t] ?? t)
+    .filter((t) => t.length > 0 && !STOPWORDS.has(t));
+  return [...new Set(tokens)];
+}
+
+function tokenOverlapScore(a: string[], b: string[]): number {
+  if (a.length === 0 || b.length === 0) return 0;
+  const bs = new Set(b);
+  const common = a.filter((x) => bs.has(x)).length;
+  return common / Math.max(a.length, b.length);
+}
+
+export function fuzzyMatchBestIdByScore(
+  input: string,
+  catalog: FuzzyNamed[]
+): { id: string; score: number } {
+  const rawNeedle = normalizeText(input);
+  const needleTokens = normalizeTokens(input);
+  if (!rawNeedle) return { id: "", score: 0 };
+  let best: { id: string; score: number } = { id: "", score: 0 };
+  for (const row of catalog) {
+    const hayRaw = normalizeText(row.nombre);
+    const hayTokens = normalizeTokens(row.nombre);
+    let score = 0;
+    if (hayRaw === rawNeedle) {
+      score = 1;
+    } else if (hayRaw.includes(rawNeedle) || rawNeedle.includes(hayRaw)) {
+      score = 0.85;
+    } else {
+      score = tokenOverlapScore(needleTokens, hayTokens);
+      const prefixBonus =
+        needleTokens.some((t) => hayTokens.some((h) => h.startsWith(t) || t.startsWith(h)))
+          ? 0.08
+          : 0;
+      score = Math.min(0.99, score + prefixBonus);
+    }
+    if (score > best.score) {
+      best = { id: row.id, score };
+    }
+  }
+  return best;
+}
+
 export function fuzzyMatchIdByIncludes(
   excelFragment: string,
   catalog: FuzzyNamed[]

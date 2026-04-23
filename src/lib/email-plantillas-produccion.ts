@@ -14,6 +14,11 @@ export const TEMPLATE_COMPRAS_SUBJECT = "template_compras_subject";
 export const TEMPLATE_COMPRAS_HEADER = "template_compras_header";
 export const TEMPLATE_COMPRAS_DETAIL = "template_compras_detail";
 export const TEMPLATE_COMPRAS_FOOTER = "template_compras_footer";
+export const TEMPLATE_OPTIMUS_IMPORT_PROMPT =
+  "produccion_externos_optimus_import_prompt";
+export const TEMPLATE_OPTIMUS_REGEX_RULES = "optimus_regex_rules";
+export const TEMPLATE_OPTIMUS_EXTRACTION_MODE_DEFAULT =
+  "optimus_extraction_mode_default";
 
 const EXTERNO_KEYS = [
   TEMPLATE_EXTERNOS_SUBJECT,
@@ -33,6 +38,72 @@ export const ALL_EMAIL_TEMPLATE_KEYS = [
   ...EXTERNO_KEYS,
   ...COMPRAS_KEYS,
 ] as const;
+
+export const DEFAULT_OPTIMUS_IMPORT_PROMPT = `Eres el extractor oficial de albaranes Optimus para Minerva Packaging & Print.
+
+RESPONDE SOLO JSON válido (sin markdown, sin texto extra) con este formato:
+{
+  "rows": [
+    {
+      "referencia": "3517201",
+      "proveedor_nombre": "PLASTIFICADOS DEL LLOBREGAT, S.L.",
+      "trabajo_titulo": "EXPOS 6 TONICO GLOW HIDRAMILK 150 ML",
+      "unidades": 800,
+      "prioridad": "Urgente",
+      "fecha_envio": "2026-04-21",
+      "fecha_prevista": "2026-04-21",
+      "observaciones": "OC-94961 | Comprador: Jordi Gaya | Plastificado Polipropileno Brillo",
+      "raw_text": "fragmento breve relevante"
+    }
+  ]
+}
+
+REGLAS DE EXTRACCION (OBLIGATORIAS)
+
+1) referencia (OT)
+- Prioridad de fuentes: "O/T:" > "Referència:" > "Nuestra OT"/"NUESTRA OT".
+- Conserva solo dígitos.
+- Acepta referencias de 5 o 7 dígitos.
+- Si aparecen varias referencias en una línea (ej: "34484 / 34485"), crea una fila por cada referencia.
+- No uses "Ref.Compra" como OT si ya existe OT en las fuentes anteriores. Solo úsala si no hay ninguna otra referencia.
+
+2) proveedor_nombre
+- Toma el proveedor del encabezado del documento (primeras líneas).
+
+3) trabajo_titulo
+- Prioriza texto entre paréntesis junto a "O/T:".
+- Si el paréntesis contiene términos de presupuesto ("presupuesto", "núm", "num", "según su presupuesto"), IGNÓRALO como título principal.
+- Si no hay título útil en paréntesis, usa la descripción principal del cuerpo (líneas de producto/trabajo).
+
+4) unidades
+- Devuelve entero sin separadores de miles.
+- Ejemplos: "10.000" -> 10000, "1.300" -> 1300.
+
+5) prioridad
+- "Urgente" si aparece "***" o palabras como "URGENTE", "RUSH", "ASAP".
+- Si no, "Normal".
+
+6) fecha_envio
+- Usa "Data:" de cabecera.
+- Convierte a YYYY-MM-DD.
+
+7) fecha_prevista
+- Usa "Data entrega" del cuerpo cuando exista.
+- Si no existe, usa la misma fecha que fecha_envio.
+- Nunca devuelvas fecha_prevista vacía.
+
+8) observaciones
+- Formato obligatorio exacto:
+  "OC-[numero] | Comprador: [Nombre] | [Descripción técnica]"
+- OC sale de "Ordre de Compra".
+- Comprador sale de "Comprador:".
+- Descripción técnica: proceso/material/nota técnica principal (plastificado, contracolado, forrado, etc).
+
+REGLAS DE CALIDAD
+- No inventes datos.
+- Si falta un campo de texto, usa "".
+- Si falta unidades, usa null.
+- Si no hay filas válidas, devuelve: {"rows":[]}.`;
 
 export type EmailPlantillaBloques = {
   subject: string;
@@ -125,6 +196,24 @@ export async function fetchEmailPlantillasProduccion(
     externos: mergePlantillaExternos(map),
     compras: mergePlantillaCompras(map),
   };
+}
+
+export async function fetchOptimusImportPromptProduccion(
+  supabase: SupabaseClient
+): Promise<string> {
+  try {
+    const { data, error } = await supabase
+      .from(TABLE_PROD_CONFIGURACION)
+      .select("valor")
+      .eq("clave", TEMPLATE_OPTIMUS_IMPORT_PROMPT)
+      .maybeSingle();
+    if (error) throw error;
+    const value = (data as { valor?: string | null } | null)?.valor ?? "";
+    const trimmed = String(value).trim();
+    return trimmed || DEFAULT_OPTIMUS_IMPORT_PROMPT;
+  } catch {
+    return DEFAULT_OPTIMUS_IMPORT_PROMPT;
+  }
 }
 
 export type ExternosFilaParaMail = {

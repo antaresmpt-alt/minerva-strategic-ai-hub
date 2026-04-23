@@ -52,6 +52,7 @@ import {
   ExternosWeeklyBoard,
   type ExternosWeeklyBoardRow,
 } from "@/components/produccion/externos/externos-weekly-board";
+import { ImportacionOptimusTab } from "@/components/produccion/externos/importacion-optimus-tab";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -2495,6 +2496,10 @@ export function GestionExternosPage() {
               <FileOutput className="size-4 shrink-0 opacity-90" aria-hidden />
               Generar Envío OT
             </TabsTrigger>
+            <TabsTrigger value="importacion-optimus" className={tabTriggerClass}>
+              <Upload className="size-4 shrink-0 opacity-90" aria-hidden />
+              Importación Optimus
+            </TabsTrigger>
             <TabsTrigger value="proveedores" className={tabTriggerClass}>
               <Factory className="size-4 shrink-0 opacity-90" aria-hidden />
               Proveedores
@@ -4401,6 +4406,13 @@ export function GestionExternosPage() {
               </form>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent
+          value="importacion-optimus"
+          className="mt-0 space-y-3 outline-none"
+        >
+          <ImportacionOptimusTab />
         </TabsContent>
 
         <TabsContent value="proveedores" className="mt-0 space-y-3 outline-none">

@@ -33,7 +33,7 @@ export function SettingsShell({ defaultTab }: SettingsShellProps) {
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
               Ingesta de conocimiento, usuarios, variables de sistema y plantillas
-              de correo producción (admin / gerencia).
+              y prompts de producción (admin / gerencia).
             </p>
           </div>
           <GlobalModelSelector layout="row" className="shrink-0" />
@@ -44,7 +44,7 @@ export function SettingsShell({ defaultTab }: SettingsShellProps) {
             <TabsTrigger value="ingest">Ingesta de conocimiento</TabsTrigger>
             <TabsTrigger value="users">Gestión de usuarios</TabsTrigger>
             <TabsTrigger value="variables">Variables Sistema</TabsTrigger>
-            <TabsTrigger value="email">Plantillas email</TabsTrigger>
+            <TabsTrigger value="email">Plantillas y Prompt</TabsTrigger>
             <TabsTrigger value="logs">Logs</TabsTrigger>
           </TabsList>
           <TabsContent value="ingest" className="mt-6 outline-none">
