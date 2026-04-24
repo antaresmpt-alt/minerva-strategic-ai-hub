@@ -30,6 +30,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, type Option } from "@/components/ui/select-native";
+import { Toggle } from "@/components/ui/toggle";
 import {
   Table,
   TableBody,
@@ -81,6 +82,18 @@ function estadoMaterialPermiteNuevaCompra(
   const n = normalizeEstadoMaterialParaMatch(estado);
   if (!n) return true;
   return n.includes("sin");
+}
+
+function estadoMaterialEsGestionCerrada(
+  estado: string | null | undefined
+): boolean {
+  const n = normalizeEstadoMaterialParaMatch(estado);
+  if (!n) return false;
+  return (
+    n === "material recibido" ||
+    n === "cancelado" ||
+    n === "recepcionada"
+  );
 }
 
 async function fetchTroquelExcelMap(
@@ -235,6 +248,7 @@ export function OtsDespachadasPage({
   );
   const [filtroBusqueda, setFiltroBusqueda] = useState("");
   const [filtroEstadoMaterial, setFiltroEstadoMaterial] = useState("");
+  const [ocultarEstadosCerrados, setOcultarEstadosCerrados] = useState(true);
 
   const [compraOpen, setCompraOpen] = useState(false);
   const [compraOt, setCompraOt] = useState("");
@@ -487,6 +501,9 @@ export function OtsDespachadasPage({
 
   const rowsFiltradas = useMemo(() => {
     let list = rows;
+    if (ocultarEstadosCerrados) {
+      list = list.filter((r) => !estadoMaterialEsGestionCerrada(r.estado_material));
+    }
     if (filtroEstadoMaterial) {
       const estadoFiltroNorm = normalizeEstadoMaterialParaMatch(filtroEstadoMaterial);
       list = list.filter(
@@ -506,7 +523,7 @@ export function OtsDespachadasPage({
       ].map((x) => String(x ?? "").toLowerCase());
       return bloques.some((s) => s.includes(q));
     });
-  }, [filtroBusqueda, filtroEstadoMaterial, rows]);
+  }, [filtroBusqueda, filtroEstadoMaterial, ocultarEstadosCerrados, rows]);
 
   useEffect(() => {
     const allowed = new Set(rowsFiltradas.map((r) => r.id));
@@ -958,6 +975,16 @@ export function OtsDespachadasPage({
               onChange={(e) => setFiltroEstadoMaterial(e.target.value)}
               className="h-8 text-xs"
             />
+            <Toggle
+              variant="outline"
+              size="sm"
+              pressed={ocultarEstadosCerrados}
+              onPressedChange={setOcultarEstadosCerrados}
+              className="h-8 w-full justify-start gap-2 px-2 text-[11px]"
+              aria-label="Ocultar OTs con material recibido o cancelado"
+            >
+              Ocultar recibidas/canceladas
+            </Toggle>
           </div>
         </div>
       </div>
