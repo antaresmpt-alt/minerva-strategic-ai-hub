@@ -39,7 +39,11 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 type ProveedorRow = { id: string; nombre: string };
 type AcabadoRow = { id: string; nombre: string };
-type OtGeneralRow = { num_pedido: string; cliente: string | null };
+type OtGeneralRow = {
+  num_pedido: string;
+  cliente: string | null;
+  fecha_entrega?: string | null;
+};
 type ExtractedRow = {
   referencia: string;
   ot_raw: string;
@@ -668,11 +672,31 @@ export function ImportacionOptimusTab() {
     }
     setSaving(true);
     try {
+      const otKeys = [...new Set(selected.map((r) => r.ot_raw.trim()).filter(Boolean))];
+      let entregaByOt = new Map<string, string | null>();
+      if (otKeys.length > 0) {
+        const { data: otsData, error: otErr } = await supabase
+          .from("prod_ots_general")
+          .select("num_pedido,fecha_entrega")
+          .in("num_pedido", otKeys);
+        if (otErr) throw otErr;
+        entregaByOt = new Map(
+          ((otsData ?? []) as OtGeneralRow[]).map((r) => {
+            const raw = String(r.fecha_entrega ?? "").trim();
+            const ymd = /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : "";
+            return [
+              String(r.num_pedido ?? "").trim(),
+              ymd.length === 10 ? dateInputToTimestamptz(ymd) : null,
+            ] as const;
+          })
+        );
+      }
       const payload = selected.map((r) => {
         const unidadesN = Number(r.unidades.trim().replace(",", "."));
+        const ot = r.ot_raw.trim();
         return {
           id_pedido: r.id_pedido,
-          OT: r.ot_raw.trim(),
+          OT: ot,
           num_operacion: Math.trunc(r.num_operacion),
           cliente_nombre: r.cliente_nombre.trim() || null,
           trabajo_titulo: r.trabajo_titulo.trim(),
@@ -683,7 +707,8 @@ export function ImportacionOptimusTab() {
           fecha_prevista: dateInputToTimestamptz(r.fecha_prevista),
           prioridad: r.prioridad.trim() || PRIORIDAD_NORMAL,
           observaciones: r.observaciones.trim() || null,
-          estado: "Pendiente",
+          estado: "Muelle Minerva",
+          f_entrega_ot: entregaByOt.get(ot) ?? null,
         };
       });
       const { error } = await supabase.from("prod_seguimiento_externos").insert(payload);

@@ -2,7 +2,7 @@ export const PRIORIDAD_NORMAL = "Normal";
 export const PRIORIDAD_URGENTE = "Urgente";
 
 const URGENCIA_REGEX =
-  /(\*{1,}|urgente|urgencia|asap|prioridad\s*alta|rush|inmediat[oa]|hoy|ya\b)/i;
+  /(\*{1,}|urgente|urgencia|asap|prioridad\s*alta|rush|inmediat[oa]s?|\bhoy\b)/i;
 
 export type OptimusRefSplit = {
   ot: string;

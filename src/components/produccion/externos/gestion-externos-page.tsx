@@ -21,6 +21,7 @@ import {
   PackageSearch,
   Pencil,
   Printer,
+  RefreshCw,
   Settings2,
   Sparkles,
   Trash2,
@@ -2703,6 +2704,18 @@ export function GestionExternosPage() {
                   >
                     <Sparkles className="size-4 text-[#002147]/80" aria-hidden />
                   </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-sm"
+                    className="shrink-0 border-[#002147]/15"
+                    disabled={loading}
+                    title="Refrescar tabla"
+                    aria-label="Refrescar tabla de seguimiento"
+                    onClick={() => void loadCore()}
+                  >
+                    <RefreshCw className="size-4 text-[#002147]/80" aria-hidden />
+                  </Button>
                 </div>
               </div>
               <div className="flex min-w-0 flex-col gap-2 md:hidden">
@@ -2800,6 +2813,18 @@ export function GestionExternosPage() {
                     }}
                   >
                     <Sparkles className="size-4 text-[#002147]/80" aria-hidden />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-sm"
+                    className="shrink-0 border-[#002147]/15"
+                    disabled={loading}
+                    title="Refrescar tabla"
+                    aria-label="Refrescar tabla de seguimiento"
+                    onClick={() => void loadCore()}
+                  >
+                    <RefreshCw className="size-4 text-[#002147]/80" aria-hidden />
                   </Button>
                 </div>
               </div>
