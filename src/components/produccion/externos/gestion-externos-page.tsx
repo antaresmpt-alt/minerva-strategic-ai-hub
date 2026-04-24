@@ -270,6 +270,14 @@ type SeguimientoRow = {
   orden_diario?: number | null;
 };
 
+type OtGeneralLookupRow = {
+  num_pedido: string;
+  cliente: string | null;
+  pedido_cliente: string | null;
+  titulo: string | null;
+  fecha_entrega: string | null;
+};
+
 function getOtDisplay(row: SeguimientoRow): string {
   const o = row.OT != null && String(row.OT).trim() !== "" ? String(row.OT).trim() : "";
   if (o) return o;
@@ -350,6 +358,13 @@ function isoToDateInput(iso: string | null | undefined): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function maestroFechaEntregaToYmd(raw: string | null | undefined): string {
+  const s = String(raw ?? "").trim();
+  if (!s) return "";
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  return isoToDateInput(s);
 }
 
 /** Fecha en celda de tabla: edición compacta; persiste en `onBlur` si cambió. */
@@ -912,6 +927,7 @@ export function GestionExternosPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [provNombre, setProvNombre] = useState("");
   const [provTipoId, setProvTipoId] = useState("");
@@ -1496,6 +1512,86 @@ export function GestionExternosPage() {
     }
   }, [supabase]);
 
+  const syncMissingFEntregaOtFromMaster = useCallback(async (): Promise<number> => {
+    const candidates = seguimientos.filter(
+      (r) => !String(r.f_entrega_ot ?? "").trim()
+    );
+    if (candidates.length === 0) return 0;
+    const otKeys = [
+      ...new Set(
+        candidates
+          .map((r) => normalizeOtRawToString(getOtDisplay(r)))
+          .filter((ot) => /^\d{5}$/.test(ot))
+      ),
+    ];
+    if (otKeys.length === 0) return 0;
+    const { data: masterRows, error: masterErr } = await supabase
+      .from("prod_ots_general")
+      .select("num_pedido,fecha_entrega")
+      .in("num_pedido", otKeys);
+    if (masterErr) throw masterErr;
+    const ymdByOt = new Map<string, string>();
+    for (const row of (masterRows ?? []) as Array<{
+      num_pedido: string;
+      fecha_entrega: string | null;
+    }>) {
+      const ot = normalizeOtRawToString(row.num_pedido);
+      const ymd = maestroFechaEntregaToYmd(row.fecha_entrega);
+      if (ot && ymd) ymdByOt.set(ot, ymd);
+    }
+    const updates = candidates
+      .map((r) => {
+        const ot = normalizeOtRawToString(getOtDisplay(r));
+        const ymd = ymdByOt.get(ot) ?? "";
+        if (!ymd) return null;
+        const fEntIso = dateInputToTimestamptz(ymd);
+        return {
+          id: r.id,
+          f_entrega_ot: fEntIso,
+          dias_a_fEntOT: computeDiasHastaFEntregaOt(fEntIso),
+        };
+      })
+      .filter((u): u is { id: string; f_entrega_ot: string; dias_a_fEntOT: number | null } => u != null);
+    if (updates.length === 0) return 0;
+    const results = await Promise.all(
+      updates.map((u) =>
+        supabase
+          .from("prod_seguimiento_externos")
+          .update({
+            f_entrega_ot: u.f_entrega_ot,
+            dias_a_fEntOT: u.dias_a_fEntOT,
+          })
+          .eq("id", u.id)
+      )
+    );
+    const firstErr = results.find((r) => r.error);
+    if (firstErr?.error) throw firstErr.error;
+    return updates.length;
+  }, [seguimientos, supabase]);
+
+  const handleRefreshSeguimiento = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const synced = await syncMissingFEntregaOtFromMaster();
+      await loadCore();
+      if (synced > 0) {
+        toast.success(
+          `Tabla refrescada. Se completaron ${synced} fecha(s) de entrega OT desde maestro.`
+        );
+      } else {
+        toast.success("Tabla refrescada.");
+      }
+    } catch (e) {
+      toast.error(
+        formatPostgrestError(e) ||
+          "No se pudo refrescar y sincronizar fechas de entrega OT."
+      );
+      await loadCore();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadCore, syncMissingFEntregaOtFromMaster]);
+
   const handleDailyReorder = useCallback(
     async (orderedIds: string[]) => {
       setSeguimientos((prev) =>
@@ -1553,6 +1649,36 @@ export function GestionExternosPage() {
   useEffect(() => {
     void loadCore();
   }, [loadCore]);
+
+  useEffect(() => {
+    const ot = normalizeOtRawToString(envIdPedido);
+    if (!/^\d{5}$/.test(ot)) return;
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase
+        .from("prod_ots_general")
+        .select("num_pedido,cliente,pedido_cliente,titulo,fecha_entrega")
+        .eq("num_pedido", ot)
+        .maybeSingle();
+      if (cancelled || error || !data) return;
+      const master = data as OtGeneralLookupRow;
+      const cliente = String(master.cliente ?? "").trim();
+      const pedidoCliente = String(master.pedido_cliente ?? "").trim();
+      const titulo = String(master.titulo ?? "").trim();
+      const fEntrega = maestroFechaEntregaToYmd(master.fecha_entrega);
+      if (cliente) setEnvCliente((prev) => (prev.trim() ? prev : cliente));
+      if (pedidoCliente) {
+        setEnvPedidoCliente((prev) => (prev.trim() ? prev : pedidoCliente));
+      }
+      if (titulo) setEnvTrabajo((prev) => (prev.trim() ? prev : titulo));
+      if (fEntrega) {
+        setEnvFechaEntregaOt((prev) => (prev.trim() ? prev : fEntrega));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [envIdPedido, supabase]);
 
   useEffect(() => {
     void (async () => {
@@ -2709,12 +2835,18 @@ export function GestionExternosPage() {
                     variant="outline"
                     size="icon-sm"
                     className="shrink-0 border-[#002147]/15"
-                    disabled={loading}
+                    disabled={loading || refreshing}
                     title="Refrescar tabla"
                     aria-label="Refrescar tabla de seguimiento"
-                    onClick={() => void loadCore()}
+                    onClick={() => void handleRefreshSeguimiento()}
                   >
-                    <RefreshCw className="size-4 text-[#002147]/80" aria-hidden />
+                    <RefreshCw
+                      className={cn(
+                        "size-4 text-[#002147]/80",
+                        refreshing ? "animate-spin" : ""
+                      )}
+                      aria-hidden
+                    />
                   </Button>
                 </div>
               </div>
@@ -2819,12 +2951,18 @@ export function GestionExternosPage() {
                     variant="outline"
                     size="icon-sm"
                     className="shrink-0 border-[#002147]/15"
-                    disabled={loading}
+                    disabled={loading || refreshing}
                     title="Refrescar tabla"
                     aria-label="Refrescar tabla de seguimiento"
-                    onClick={() => void loadCore()}
+                    onClick={() => void handleRefreshSeguimiento()}
                   >
-                    <RefreshCw className="size-4 text-[#002147]/80" aria-hidden />
+                    <RefreshCw
+                      className={cn(
+                        "size-4 text-[#002147]/80",
+                        refreshing ? "animate-spin" : ""
+                      )}
+                      aria-hidden
+                    />
                   </Button>
                 </div>
               </div>
