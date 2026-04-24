@@ -954,7 +954,7 @@ export function OtsDespachadasPage({
       </div>
 
       <div className="rounded-lg border border-slate-200/90 bg-slate-50/40 p-3 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-4">
           <div className="grid min-w-0 gap-1 md:col-span-2">
             <Label htmlFor="busq-ots-despachadas" className="text-xs font-medium">
               Buscar
@@ -967,7 +967,7 @@ export function OtsDespachadasPage({
               className="h-8 text-xs"
             />
           </div>
-          <div className="grid min-w-0 gap-1">
+          <div className="grid min-w-0 gap-1 md:col-span-1">
             <NativeSelect
               label="Estado"
               options={estadoMaterialFiltroOptions}
@@ -975,6 +975,9 @@ export function OtsDespachadasPage({
               onChange={(e) => setFiltroEstadoMaterial(e.target.value)}
               className="h-8 text-xs"
             />
+          </div>
+          <div className="grid min-w-0 gap-1 md:col-span-1">
+            <Label className="text-xs font-medium">Visibilidad</Label>
             <Toggle
               variant="outline"
               size="sm"
