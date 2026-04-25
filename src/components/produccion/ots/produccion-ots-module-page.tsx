@@ -3,10 +3,14 @@
 import {
   LayoutGrid,
   PackageCheck,
+  Printer,
+  Rows3,
   ShoppingBag,
 } from "lucide-react";
 import { useState } from "react";
 
+import { OtsImpresasPage } from "@/components/produccion/planificacion/ots-impresas-page";
+import { PlanificacionOtsPage } from "@/components/produccion/planificacion/planificacion-ots-page";
 import { ComprasMaterialPage } from "@/components/produccion/ots/compras-material-page";
 import { MasterOtsPage } from "@/components/produccion/ots/master-ots-page";
 import { OtsDespachadasPage } from "@/components/produccion/ots/ots-despachadas-page";
@@ -30,7 +34,7 @@ export function ProduccionOtsModulePage() {
           OTs
         </h1>
         <p className="mt-0.5 max-w-full truncate text-xs text-slate-600 sm:max-w-3xl">
-          Listado maestro, despachos y compras de material ·{" "}
+          Listado maestro, despachos, compras y planificación ·{" "}
           <span className="font-medium text-[#002147]">Producción</span>
         </p>
       </header>
@@ -54,6 +58,14 @@ export function ProduccionOtsModulePage() {
               <ShoppingBag className="size-4 shrink-0 opacity-90" aria-hidden />
               Compras de Material
             </TabsTrigger>
+            <TabsTrigger value="planificacion" className={TAB_TRIGGER_CLASS}>
+              <Rows3 className="size-4 shrink-0 opacity-90" aria-hidden />
+              Planificación OT&apos;s
+            </TabsTrigger>
+            <TabsTrigger value="impresas" className={TAB_TRIGGER_CLASS}>
+              <Printer className="size-4 shrink-0 opacity-90" aria-hidden />
+              OT&apos;s Impresas
+            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -69,6 +81,17 @@ export function ProduccionOtsModulePage() {
 
         <TabsContent value="compras" className="mt-0 space-y-3 outline-none">
           <ComprasMaterialPage />
+        </TabsContent>
+
+        <TabsContent
+          value="planificacion"
+          className="mt-0 space-y-3 outline-none"
+        >
+          <PlanificacionOtsPage />
+        </TabsContent>
+
+        <TabsContent value="impresas" className="mt-0 space-y-3 outline-none">
+          <OtsImpresasPage />
         </TabsContent>
       </Tabs>
     </div>
