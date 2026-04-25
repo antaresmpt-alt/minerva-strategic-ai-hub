@@ -182,6 +182,10 @@ function parseGramaje(raw: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function buildRecepcionAdminNotas(): string {
+  return "Alta automatica desde Compras (sin datos de muelle)";
+}
+
 function rawNumHojas(v: unknown): number | null {
   if (typeof v === "number") return Number.isFinite(v) ? Math.trunc(v) : null;
   if (v != null && v !== "") {
@@ -609,6 +613,7 @@ export function ComprasMaterialPage() {
           fecha_entrega_maestro: m?.fecha_entrega_maestro ?? null,
           fecha_prevista_recepcion:
             (r.fecha_prevista_recepcion as string | null) ?? null,
+          fecha_recepcion: (r.fecha_recepcion as string | null) ?? null,
           albaran_proveedor: (r.albaran_proveedor as string | null) ?? null,
           estado: (r.estado as string | null) ?? null,
           notas:
@@ -972,12 +977,20 @@ export function ComprasMaterialPage() {
     async (rowId: string, estado: string) => {
       setSavingById((s) => ({ ...s, [rowId]: true }));
       try {
+        const row = rows.find((r) => r.id === rowId) ?? null;
+        const esRecibido = normalizeCompraEstado(estado) === "recibido";
+        const ahoraIso = new Date().toISOString();
+        const payloadCompra: Record<string, unknown> = { estado };
+        if (esRecibido && !row?.fecha_recepcion) {
+          payloadCompra.fecha_recepcion = ahoraIso;
+        }
+
         const { error } = await supabase
           .from(TABLE_COMPRA)
-          .update({ estado })
+          .update(payloadCompra)
           .eq("id", rowId);
         if (error) throw error;
-        const ot = rows.find((r) => r.id === rowId)?.ot_numero;
+        const ot = row?.ot_numero;
         const mat = estadoMaterialDesdeEstadoCompra(estado);
         if (ot && mat) {
           const { error: dErr } = await supabase
@@ -986,8 +999,51 @@ export function ComprasMaterialPage() {
             .eq("ot_numero", ot);
           if (dErr) console.warn(dErr);
         }
+        if (esRecibido && row) {
+          const { data: existente, error: exErr } = await supabase
+            .from(TABLE_RECEPCION)
+            .select("id")
+            .eq("compra_id", rowId)
+            .limit(1);
+          if (exErr) throw exErr;
+          if (!existente || existente.length === 0) {
+            const {
+              data: { user },
+            } = await supabase.auth.getUser();
+            const recepcionadoPorUuid =
+              typeof user?.id === "string" && /^[0-9a-f-]{36}$/i.test(user.id.trim())
+                ? user.id.trim()
+                : null;
+            const albaranCompra = row.albaran_proveedor?.trim() ?? "";
+            const { error: recErr } = await supabase.from(TABLE_RECEPCION).insert({
+              compra_id: rowId,
+              fecha_recepcion:
+                row.fecha_recepcion?.trim() && row.fecha_recepcion.trim().length > 0
+                  ? row.fecha_recepcion
+                  : ahoraIso,
+              albaran_proveedor: albaranCompra.length > 0 ? albaranCompra : "-",
+              hojas_recibidas: row.num_hojas_brutas ?? 0,
+              palets_recibidos: 0,
+              estado_recepcion: "Total",
+              notas: buildRecepcionAdminNotas(),
+              recepcionado_por: recepcionadoPorUuid,
+              recepcionado_por_email: "compras@minervaglobal.es",
+              recepcionado_por_nombre: "Dpto. Compras",
+            });
+            if (recErr) throw recErr;
+          }
+        }
         setRows((prev) =>
-          prev.map((r) => (r.id === rowId ? { ...r, estado } : r))
+          prev.map((r) =>
+            r.id === rowId
+              ? {
+                  ...r,
+                  estado,
+                  fecha_recepcion:
+                    esRecibido && !r.fecha_recepcion ? ahoraIso : r.fecha_recepcion,
+                }
+              : r
+          )
         );
         toast.success("Estado actualizado.");
       } catch (e) {

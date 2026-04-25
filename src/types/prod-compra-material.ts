@@ -17,6 +17,7 @@ export type ComprasMaterialTableRow = {
   /** Fecha límite OT (`prod_ots_general.fecha_entrega`). Urgencia vs hoy. */
   fecha_entrega_maestro: string | null;
   fecha_prevista_recepcion: string | null;
+  fecha_recepcion: string | null;
   albaran_proveedor: string | null;
   estado: string | null;
   /** Notas internas de compra (Jordi). */
