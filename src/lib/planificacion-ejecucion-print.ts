@@ -37,6 +37,7 @@ function estadoLabel(value: string): string {
 }
 
 export function printParteEjecuciones(
+  targetWindow: Window,
   rows: MesaEjecucion[],
   filters: PrintFilters,
 ): void {
@@ -121,9 +122,7 @@ export function printParteEjecuciones(
     </body>
   </html>`;
 
-  const w = window.open("", "_blank", "noopener,noreferrer,width=1200,height=800");
-  if (!w) throw new Error("El navegador bloqueó la ventana de impresión.");
-  w.document.open();
-  w.document.write(doc);
-  w.document.close();
+  targetWindow.document.open();
+  targetWindow.document.write(doc);
+  targetWindow.document.close();
 }

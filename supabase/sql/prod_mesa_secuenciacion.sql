@@ -39,6 +39,13 @@ alter table public.prod_mesa_planificacion_trabajos
   add constraint prod_mesa_planificacion_trabajos_turno_check
   check (turno is null or turno in ('manana', 'tarde'));
 
+alter table public.prod_mesa_planificacion_trabajos
+  drop constraint if exists prod_mesa_planificacion_trabajos_estado_mesa_check;
+
+alter table public.prod_mesa_planificacion_trabajos
+  add constraint prod_mesa_planificacion_trabajos_estado_mesa_check
+  check (estado_mesa in ('borrador', 'confirmado', 'en_ejecucion', 'finalizada'));
+
 create index if not exists prod_mesa_planificacion_trabajos_fecha_turno_idx
   on public.prod_mesa_planificacion_trabajos (fecha_planificada, turno);
 

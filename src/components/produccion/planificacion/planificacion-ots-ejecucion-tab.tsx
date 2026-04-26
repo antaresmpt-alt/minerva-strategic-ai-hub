@@ -2,7 +2,15 @@
 
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { CheckCircle2, Loader2, Pause, Play, Printer, RefreshCcw } from "lucide-react";
+import {
+  CheckCircle2,
+  FileSpreadsheet,
+  FileText,
+  Loader2,
+  Pause,
+  Play,
+  RefreshCcw,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -16,7 +24,10 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { printParteEjecuciones } from "@/lib/planificacion-ejecucion-print";
+import {
+  exportEjecucionesExcel,
+  exportEjecucionesPdf,
+} from "@/lib/planificacion-ejecucion-export";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
 import type {
@@ -184,14 +195,25 @@ export function PlanificacionOtsEjecucionTab() {
     return estadoLabel(estado);
   }, [estado]);
 
-  const handlePrint = useCallback(() => {
+  const handleExportExcel = useCallback(() => {
     try {
-      printParteEjecuciones(filtered, {
+      exportEjecucionesExcel(filtered, {
         maquina: selectedMaquinaLabel,
         estado: estadoLabelFiltro,
       });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo abrir la impresión.");
+      toast.error(e instanceof Error ? e.message : "No se pudo exportar Excel.");
+    }
+  }, [filtered, selectedMaquinaLabel, estadoLabelFiltro]);
+
+  const handleExportPdf = useCallback(() => {
+    try {
+      exportEjecucionesPdf(filtered, {
+        maquina: selectedMaquinaLabel,
+        estado: estadoLabelFiltro,
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo exportar PDF.");
     }
   }, [filtered, selectedMaquinaLabel, estadoLabelFiltro]);
 
@@ -206,9 +228,13 @@ export function PlanificacionOtsEjecucionTab() {
             </CardDescription>
           </div>
           <div className="flex gap-1.5">
-            <Button type="button" variant="outline" size="sm" onClick={handlePrint} disabled={loading}>
-              <Printer className="mr-1 size-4" />
-              Imprimir
+            <Button type="button" variant="outline" size="sm" onClick={handleExportExcel} disabled={loading}>
+              <FileSpreadsheet className="mr-1 size-4" />
+              Excel
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={handleExportPdf} disabled={loading}>
+              <FileText className="mr-1 size-4" />
+              PDF
             </Button>
             <Button type="button" variant="outline" size="sm" onClick={() => void loadData()} disabled={loading}>
               <RefreshCcw className={cn("mr-1 size-4", loading && "animate-spin")} />
