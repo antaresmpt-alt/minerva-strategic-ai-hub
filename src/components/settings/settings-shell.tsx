@@ -8,6 +8,7 @@ import { IngestKnowledgeTab } from "@/components/settings/ingest-knowledge-tab";
 import { UsersManagementPanel } from "@/components/settings/users-management-panel";
 import { EmailPlantillasTab } from "@/components/settings/email-plantillas-tab";
 import { LogsTab } from "@/components/settings/logs-tab";
+import { PlanificacionIaSettingsTab } from "@/components/settings/planificacion-ia-settings-tab";
 import { RecursosProduccionTab } from "@/components/settings/recursos-produccion-tab";
 import { VariablesSistemaTab } from "@/components/settings/variables-sistema-tab";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,6 +18,7 @@ type SettingsShellProps = {
     | "ingest"
     | "users"
     | "variables"
+    | "plan-ia"
     | "email"
     | "recursos"
     | "logs";
@@ -51,6 +53,7 @@ export function SettingsShell({ defaultTab }: SettingsShellProps) {
             <TabsTrigger value="ingest">Ingesta de conocimiento</TabsTrigger>
             <TabsTrigger value="users">Gestión de usuarios</TabsTrigger>
             <TabsTrigger value="variables">Variables Sistema</TabsTrigger>
+            <TabsTrigger value="plan-ia">Planificación IA</TabsTrigger>
             <TabsTrigger value="email">Plantillas y Prompt</TabsTrigger>
             <TabsTrigger value="recursos">Recursos Producción</TabsTrigger>
             <TabsTrigger value="logs">Logs</TabsTrigger>
@@ -63,6 +66,9 @@ export function SettingsShell({ defaultTab }: SettingsShellProps) {
           </TabsContent>
           <TabsContent value="variables" className="mt-6 outline-none">
             <VariablesSistemaTab />
+          </TabsContent>
+          <TabsContent value="plan-ia" className="mt-6 outline-none">
+            <PlanificacionIaSettingsTab />
           </TabsContent>
           <TabsContent value="email" className="mt-6 outline-none">
             <EmailPlantillasTab />

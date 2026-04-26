@@ -73,6 +73,52 @@ export interface CapacidadTurno {
   motivoAjuste: string | null;
 }
 
+export type EstadoEjecucionMesa =
+  | "en_curso"
+  | "pausada"
+  | "finalizada"
+  | "cancelada";
+
+/** Registro operativo manual de una OT iniciada en máquina. */
+export interface MesaEjecucion {
+  id: string;
+  mesaTrabajoId: string | null;
+  ot: string;
+  maquinaId: string;
+  maquinaNombre: string;
+  fechaPlanificada: DayKey | null;
+  turno: TurnoKey | null;
+  slotOrden: number | null;
+  inicioRealAt: string;
+  finRealAt: string | null;
+  estadoEjecucion: EstadoEjecucionMesa;
+  horasPlanificadasSnapshot: number | null;
+  horasReales: number | null;
+  incidencia: string | null;
+  accionCorrectiva: string | null;
+  maquinista: string | null;
+  densidadesJson: Record<string, unknown> | null;
+  observaciones: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlanificacionIaSettings {
+  pesoTintas: number;
+  pesoCmyk: number;
+  pesoBarniz: number;
+  pesoPapel: number;
+  pesoFechaEntrega: number;
+  pesoBalanceCarga: number;
+  promptBase: string;
+}
+
+export type PlanificacionIaScope =
+  | "turno"
+  | "dia"
+  | "dias_contiguos"
+  | "semana";
+
 /** Estado completo del tablero (lo que se renderiza). */
 export interface BoardState {
   /** Trabajos por slot, ya ordenados por slot_orden. */

@@ -24,6 +24,7 @@ import {
   Printer,
   RefreshCcw,
   Send,
+  Sparkles,
   TriangleAlert,
 } from "lucide-react";
 import {
@@ -46,6 +47,11 @@ import {
   type PlanificacionCardData,
 } from "@/components/produccion/planificacion/mesa/planificacion-card";
 import {
+  PlanificacionIaProgressDialog,
+  type PlanificacionIaDialogState,
+  type PlanificacionIaMode,
+} from "@/components/produccion/planificacion/mesa/planificacion-ia-progress-dialog";
+import {
   PublicandoOverlay,
 } from "@/components/produccion/planificacion/mesa/publicando-overlay";
 import {
@@ -67,6 +73,7 @@ import {
   buildCapacityMap,
   buildMesaFromPool,
   cardHeightPx,
+  DEFAULT_PLANIFICACION_IA_SETTINGS,
   deserializeDraft,
   flattenBoard,
   getDraftStorageKey,
@@ -78,6 +85,13 @@ import {
   slotKey,
   toDayKey,
 } from "@/lib/planificacion-mesa";
+import { reorderBoardWithIaRules } from "@/lib/planificacion-ia-reorder";
+import { mapRowsToIaSettings } from "@/lib/planificacion-ia-settings";
+import {
+  validateAndApplyIaProposal,
+  type PlanificacionIaProposalItem,
+} from "@/lib/planificacion-ia-validate";
+import { useHubStore } from "@/lib/store";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
 import type {
@@ -86,6 +100,8 @@ import type {
   DraftBoardState,
   MaterialStatus,
   MesaTrabajo,
+  PlanificacionIaSettings,
+  PlanificacionIaScope,
   PoolOT,
   SlotKey,
   TroquelStatus,
@@ -101,9 +117,16 @@ const TABLE_POOL = "prod_planificacion_pool";
 const TABLE_MESA = "prod_mesa_planificacion_trabajos";
 const TABLE_CAPACIDAD = "prod_mesa_capacidad_turnos";
 const TABLE_MAQUINAS = "prod_maquinas";
+const TABLE_EJECUCIONES = "prod_mesa_ejecuciones";
+const TABLE_SYS_PARAMETROS = "sys_parametros";
 
-// Estados de la mesa que se consideran "vivos" (no históricos).
-const ACTIVE_MESA_ESTADOS = ["borrador", "confirmado", "en_ejecucion"] as const;
+// Estados visibles en la Mesa. `finalizada` queda como trazabilidad operativa.
+const ACTIVE_MESA_ESTADOS = [
+  "borrador",
+  "confirmado",
+  "en_ejecucion",
+  "finalizada",
+] as const;
 const EDITABLE_PLAN_ESTADOS = ["borrador", "confirmado"] as const;
 
 // ---------------------------------------------------------------------------
@@ -192,6 +215,43 @@ function boardHasItems(bySlot: Record<SlotKey, MesaTrabajo[]>): boolean {
   return Object.values(bySlot).some((items) => items.length > 0);
 }
 
+function isMesaTrabajoLocked(it: MesaTrabajo): boolean {
+  return it.estadoMesa === "en_ejecucion" || it.estadoMesa === "finalizada";
+}
+
+function waitForUi(ms = 120): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function buildIaInsights(bySlot: Record<SlotKey, MesaTrabajo[]>): string[] {
+  const all = Object.values(bySlot).flat();
+  const total = all.length;
+  const locked = all.filter((it) => it.estadoMesa === "en_ejecucion").length;
+  const barnices = new Set(
+    all
+      .map((it) => (it.barnizSnapshot || it.acabadoPralSnapshot || "").trim().toLowerCase())
+      .filter(Boolean),
+  ).size;
+  const papeles = new Set(all.map((it) => (it.papelSnapshot || "").trim().toLowerCase()).filter(Boolean)).size;
+  const tintas = new Set(all.map((it) => (it.tintasSnapshot || "").trim().toLowerCase()).filter(Boolean)).size;
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  const urgent = all.filter((it) => {
+    if (!it.fechaEntrega) return false;
+    const d = new Date(`${it.fechaEntrega}T00:00:00`);
+    return Number.isFinite(d.getTime()) && d <= tomorrow;
+  }).length;
+  return [
+    `OTs analizadas: ${total}`,
+    `OTs en ejecución bloqueadas: ${locked}`,
+    `Acabados/Barnices detectados: ${barnices}`,
+    `Papeles/formatos detectados: ${papeles}`,
+    `Esquemas de tintas detectados: ${tintas}`,
+    `OTs críticas (hoy/mañana): ${urgent}`,
+  ];
+}
+
 type TipoMaquina = "impresion" | "troquelado" | "engomado";
 type MaquinaOption = {
   id: string;
@@ -252,6 +312,7 @@ function containerToSlotKey(containerId: string): SlotKey | null {
 // ---------------------------------------------------------------------------
 export function PlanificacionMesaSecuenciacionTab() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const globalModel = useHubStore((s) => s.globalModel);
 
   // ---- Identidad
   const [userId, setUserId] = useState<string | null>(null);
@@ -324,6 +385,32 @@ export function PlanificacionMesaSecuenciacionTab() {
   > | null>(null);
   const [draftHydrated, setDraftHydrated] = useState(false);
   const [draftUpdatedAt, setDraftUpdatedAt] = useState<string | null>(null);
+  const [iaSettings, setIaSettings] = useState<PlanificacionIaSettings>(
+    DEFAULT_PLANIFICACION_IA_SETTINGS,
+  );
+  const [iaScope, setIaScope] = useState<PlanificacionIaScope>("turno");
+  const [iaOrdering, setIaOrdering] = useState(false);
+  const [iaResult, setIaResult] = useState<{
+    movedCount: number;
+    reasons: string[];
+    warnings: string[];
+    mode: "rules" | "advanced" | "mixed";
+    scope: PlanificacionIaScope;
+    modelUsed?: string;
+    didFallback?: boolean;
+  } | null>(null);
+  const [iaDialog, setIaDialog] = useState<PlanificacionIaDialogState>({
+    open: false,
+    status: "idle",
+    mode: "rules",
+    scope: "turno",
+    stepIndex: 0,
+    movedCount: null,
+    reasons: [],
+    warnings: [],
+    error: null,
+    insights: [],
+  });
 
   // ---- DnD
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -351,6 +438,7 @@ export function PlanificacionMesaSecuenciacionTab() {
   // ---- Saving / publishing
   const [savingChanges, setSavingChanges] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [startingExecutionId, setStartingExecutionId] = useState<string | null>(null);
 
   // ---- Búsqueda en el sidebar (controlada desde el tab para preservarla
   // entre re-renders y cambios de semana).
@@ -639,6 +727,31 @@ export function PlanificacionMesaSecuenciacionTab() {
   }, [reload]);
 
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from(TABLE_SYS_PARAMETROS)
+        .select("clave, valor_num, valor_text")
+        .eq("seccion", "planificacion_ia");
+      if (cancelled || error) return;
+      setIaSettings(
+        mapRowsToIaSettings(
+          (data ?? []) as Array<{
+            clave: string;
+            valor_num: number | string | null;
+            valor_text: string | null;
+          }>,
+        ),
+      );
+    })().catch(() => {
+      // Mantener defaults si falla la carga de parámetros.
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     try {
       const raw = window.localStorage.getItem(machineUiStorageKey);
@@ -712,10 +825,11 @@ export function PlanificacionMesaSecuenciacionTab() {
     return out;
   }, [mesaItems, visibleSlotKeys]);
 
-  const planStatus = useMemo<"vacio" | "borrador" | "confirmado" | "en_ejecucion">(() => {
+  const planStatus = useMemo<"vacio" | "borrador" | "confirmado" | "en_ejecucion" | "finalizada">(() => {
     if (mesaItems.some((it) => it.estadoMesa === "en_ejecucion")) return "en_ejecucion";
     if (mesaItems.some((it) => it.estadoMesa === "borrador")) return "borrador";
     if (mesaItems.some((it) => it.estadoMesa === "confirmado")) return "confirmado";
+    if (mesaItems.some((it) => it.estadoMesa === "finalizada")) return "finalizada";
     return "vacio";
   }, [mesaItems]);
 
@@ -723,14 +837,21 @@ export function PlanificacionMesaSecuenciacionTab() {
 
   const simulationBaseBySlot = useMemo(() => {
     const hasConfirmedPlan = mesaItems.some(
-      (it) => it.estadoMesa === "confirmado" || it.estadoMesa === "en_ejecucion",
+      (it) =>
+        it.estadoMesa === "confirmado" ||
+        it.estadoMesa === "en_ejecucion" ||
+        it.estadoMesa === "finalizada",
     );
     if (!hasConfirmedPlan) return realBySlot;
 
     const out: Record<SlotKey, MesaTrabajo[]> = {};
     for (const sk of visibleSlotKeys) out[sk] = [];
     for (const it of mesaItems) {
-      if (it.estadoMesa !== "confirmado" && it.estadoMesa !== "en_ejecucion") {
+      if (
+        it.estadoMesa !== "confirmado" &&
+        it.estadoMesa !== "en_ejecucion" &&
+        it.estadoMesa !== "finalizada"
+      ) {
         continue;
       }
       const sk = slotKey(it.fechaPlanificada, it.turno);
@@ -894,14 +1015,15 @@ export function PlanificacionMesaSecuenciacionTab() {
         .in("estado_mesa", EDITABLE_PLAN_ESTADOS as unknown as string[]);
       if (delErr) throw delErr;
 
-      if (items.length === 0) return;
+      const editableItems = items.filter((it) => !isMesaTrabajoLocked(it));
+      if (editableItems.length === 0) return;
 
-      const fullInserts = items.map((it, idx) => ({
+      const fullInserts = editableItems.map((it) => ({
         ot_numero: it.ot,
         fecha_planificada: fecha,
         turno,
         maquina_id: selectedMaquinaId,
-        slot_orden: idx + 1,
+        slot_orden: it.slotOrden,
         maquina: null,
         estado_mesa: "borrador",
         prioridad_snapshot: null,
@@ -925,12 +1047,12 @@ export function PlanificacionMesaSecuenciacionTab() {
 
       // Fallback temporal para entornos donde aún no existen campos snapshot.
       if (!isMissingColumnError(insErrFull)) throw insErrFull;
-      const legacyInserts = items.map((it, idx) => ({
+      const legacyInserts = editableItems.map((it) => ({
         ot_numero: it.ot,
         fecha_planificada: fecha,
         turno,
         maquina_id: selectedMaquinaId,
-        slot_orden: idx + 1,
+        slot_orden: it.slotOrden,
         maquina: null,
         estado_mesa: "borrador",
         prioridad_snapshot: null,
@@ -1018,6 +1140,53 @@ export function PlanificacionMesaSecuenciacionTab() {
     reload,
   ]);
 
+  const startExecution = useCallback(
+    async (trabajo: MesaTrabajo) => {
+      if (!selectedMaquinaId) {
+        toast.error("Selecciona una máquina para iniciar la OT.");
+        return;
+      }
+      if (trabajo.estadoMesa !== "confirmado") {
+        toast.error("Solo se pueden iniciar OTs confirmadas.");
+        return;
+      }
+      setStartingExecutionId(trabajo.id);
+      try {
+        const { error: insErr } = await supabase.from(TABLE_EJECUCIONES).insert({
+          mesa_trabajo_id: trabajo.id,
+          ot_numero: trabajo.ot,
+          maquina_id: selectedMaquinaId,
+          fecha_planificada: trabajo.fechaPlanificada,
+          turno: trabajo.turno,
+          slot_orden: trabajo.slotOrden,
+          inicio_real_at: new Date().toISOString(),
+          estado_ejecucion: "en_curso",
+          horas_planificadas_snapshot: trabajo.horasPlanificadasSnapshot,
+          created_by: userId,
+          created_by_email: userEmail,
+        });
+        if (insErr) throw insErr;
+
+        const { error: updErr } = await supabase
+          .from(TABLE_MESA)
+          .update({ estado_mesa: "en_ejecucion" })
+          .eq("id", trabajo.id);
+        if (updErr) throw updErr;
+
+        toast.success(`OT ${trabajo.ot} iniciada.`);
+        await reload();
+      } catch (e) {
+        const msg = getErrorMessage(e, "No se pudo iniciar la OT.");
+        console.error("[Mesa] startExecution", { msg, error: toDebugError(e), trabajo });
+        toast.error(msg);
+        await reload();
+      } finally {
+        setStartingExecutionId(null);
+      }
+    },
+    [selectedMaquinaId, supabase, userId, userEmail, reload],
+  );
+
   // ===== DnD ================================================================
 
   /** Aplica una transición de estado y devuelve los slots afectados. */
@@ -1098,6 +1267,7 @@ export function PlanificacionMesaSecuenciacionTab() {
         const list = next[sk] ?? [];
         const idx = list.findIndex((x) => x.id === itemId);
         if (idx < 0) return null;
+        if (list[idx] && isMesaTrabajoLocked(list[idx]!)) return null;
         list.splice(idx, 1);
         next[sk] = recomputeSlotOrden(list);
         affected.add(sk);
@@ -1121,6 +1291,7 @@ export function PlanificacionMesaSecuenciacionTab() {
         if (fromIdx < 0) return null;
         const moving = fromList[fromIdx];
         if (!moving) return null;
+        if (isMesaTrabajoLocked(moving)) return null;
 
         if (fromSk === toSk) {
           // Reorder
@@ -1424,6 +1595,201 @@ export function PlanificacionMesaSecuenciacionTab() {
     clearDraft,
   ]);
 
+  const orderDraftWithIa = useCallback(async (mode: PlanificacionIaMode) => {
+    const base = draftBySlot ?? simulationBaseBySlot;
+    const insights = buildIaInsights(base);
+    setIaOrdering(true);
+    const advance = async (stepIndex: number) => {
+      setIaDialog((prev) => ({ ...prev, stepIndex }));
+      await waitForUi();
+    };
+    setIaDialog({
+      open: true,
+      status: "running",
+      mode,
+      scope: iaScope,
+      stepIndex: 0,
+      movedCount: null,
+      reasons: [],
+      warnings: [],
+      error: null,
+      insights,
+    });
+    try {
+      await advance(0);
+      await advance(1);
+      await advance(2);
+      await advance(3);
+      const ruleResult = reorderBoardWithIaRules(base, iaSettings, iaScope, capacityBySlot);
+
+      if (mode === "rules") {
+        await advance(5);
+        const validatedRules = validateAndApplyIaProposal({
+          currentBySlot: base,
+          proposalItems: Object.entries(ruleResult.nextBySlot).flatMap(([slotKey, items]) =>
+            items.map((it) => ({
+              id: it.id,
+              ot: it.ot,
+              slotKey: slotKey as SlotKey,
+              slotOrden: it.slotOrden,
+            })),
+          ),
+          capacityBySlot,
+          scope: iaScope,
+        });
+        await advance(6);
+        setDraftBySlot(validatedRules.nextBySlot);
+        setDraftUpdatedAt(new Date().toISOString());
+        setIaResult({
+          movedCount: validatedRules.movedCount,
+          reasons: ruleResult.reasons,
+          warnings: [...ruleResult.warnings, ...validatedRules.warnings],
+          mode,
+          scope: iaScope,
+        });
+        setIaDialog((prev) => ({
+          ...prev,
+          status: "success",
+          stepIndex: 6,
+          movedCount: validatedRules.movedCount,
+          reasons: ruleResult.reasons,
+          warnings: [...ruleResult.warnings, ...validatedRules.warnings],
+          insights: prev.insights,
+        }));
+        toast.success(`Ordenación por reglas aplicada (${validatedRules.movedCount} movimientos).`);
+        return;
+      }
+
+      const modelBase = mode === "mixed" ? ruleResult.nextBySlot : base;
+      await advance(4);
+      const res = await fetch("/api/produccion/planificacion-ia-reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: globalModel,
+          mode: mode === "mixed" ? "mixed" : "advanced",
+          scope: iaScope,
+          settings: iaSettings,
+          promptBase: iaSettings.promptBase,
+          slots: modelBase,
+          capacityBySlot,
+        }),
+      });
+      const data = (await res.json()) as {
+        items?: PlanificacionIaProposalItem[];
+        reasons?: string[];
+        warnings?: string[];
+        modelUsed?: string;
+        didFallback?: boolean;
+        error?: string;
+      };
+      if (!res.ok || !Array.isArray(data.items)) {
+        if (mode === "mixed") {
+          await advance(6);
+          setDraftBySlot(ruleResult.nextBySlot);
+          setDraftUpdatedAt(new Date().toISOString());
+          const warnings = [
+            ...(ruleResult.warnings ?? []),
+            data.error ?? "El modelo no pudo refinar; se conserva la propuesta por reglas.",
+          ];
+          setIaResult({
+            movedCount: ruleResult.movedCount,
+            reasons: ruleResult.reasons,
+            warnings,
+            mode: "mixed",
+            scope: iaScope,
+          });
+          setIaDialog((prev) => ({
+            ...prev,
+            status: "success",
+            stepIndex: 6,
+            movedCount: ruleResult.movedCount,
+            reasons: ruleResult.reasons,
+            warnings,
+            insights: prev.insights,
+          }));
+          toast.warning("IA avanzada no disponible. Se aplicó la propuesta por reglas.");
+          return;
+        }
+        throw new Error(data.error ?? "El modelo no devolvió una propuesta válida.");
+      }
+
+      await advance(5);
+      const validated = validateAndApplyIaProposal({
+        currentBySlot: base,
+        proposalItems: data.items,
+        capacityBySlot,
+        scope: iaScope,
+      });
+      await advance(6);
+      setDraftBySlot(validated.nextBySlot);
+      setDraftUpdatedAt(new Date().toISOString());
+      const warnings = [...(data.warnings ?? []), ...validated.warnings];
+      setIaResult({
+        movedCount: validated.movedCount,
+        reasons: data.reasons?.length ? data.reasons : ruleResult.reasons,
+        warnings,
+        mode,
+        scope: iaScope,
+        modelUsed: data.modelUsed,
+        didFallback: data.didFallback,
+      });
+      setIaDialog((prev) => ({
+        ...prev,
+        status: "success",
+        stepIndex: 6,
+        movedCount: validated.movedCount,
+        reasons: data.reasons?.length ? data.reasons : ruleResult.reasons,
+        warnings,
+        modelUsed: data.modelUsed,
+        didFallback: data.didFallback,
+        insights: prev.insights,
+      }));
+      toast.success(
+        `${mode === "mixed" ? "Ordenación mixta" : "IA avanzada"} aplicada (${validated.movedCount} movimientos).`,
+      );
+    } catch (e) {
+      if (mode === "mixed") {
+        const fallback = reorderBoardWithIaRules(base, iaSettings, iaScope, capacityBySlot);
+        setDraftBySlot(fallback.nextBySlot);
+        setDraftUpdatedAt(new Date().toISOString());
+        const warnings = [
+          ...fallback.warnings,
+          getErrorMessage(e, "El modelo no pudo refinar; se conserva la propuesta por reglas."),
+        ];
+        setIaResult({
+          movedCount: fallback.movedCount,
+          reasons: fallback.reasons,
+          warnings,
+          mode: "mixed",
+          scope: iaScope,
+        });
+        setIaDialog((prev) => ({
+          ...prev,
+          status: "success",
+          stepIndex: 6,
+          movedCount: fallback.movedCount,
+          reasons: fallback.reasons,
+          warnings,
+          insights: prev.insights,
+        }));
+        toast.warning("IA avanzada no disponible. Se aplicó la propuesta por reglas.");
+        return;
+      }
+      const msg = getErrorMessage(e, "No se pudo ordenar con IA.");
+      setIaDialog((prev) => ({
+        ...prev,
+        status: "error",
+        error: msg,
+        warnings: prev.warnings,
+        insights: prev.insights,
+      }));
+      toast.error(msg);
+    } finally {
+      setIaOrdering(false);
+    }
+  }, [draftBySlot, simulationBaseBySlot, iaSettings, iaScope, globalModel, capacityBySlot]);
+
   // ===== EDICIÓN DE CAPACIDAD ==============================================
 
   const openCapacityDialog = (day: DayKey, turno: TurnoKey) => {
@@ -1505,6 +1871,7 @@ export function PlanificacionMesaSecuenciacionTab() {
   const planStatusLabel = useMemo(() => {
     if (planStatus === "confirmado") return "Plan confirmado";
     if (planStatus === "en_ejecucion") return "Plan en ejecución";
+    if (planStatus === "finalizada") return "Plan finalizado";
     if (planStatus === "borrador") return "Plan en borrador";
     return "Sin plan";
   }, [planStatus]);
@@ -1659,6 +2026,8 @@ export function PlanificacionMesaSecuenciacionTab() {
                 "inline-flex items-center rounded-md border px-2 py-1 text-[11px] font-semibold",
                 planStatus === "confirmado" || planStatus === "en_ejecucion"
                   ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                  : planStatus === "finalizada"
+                    ? "border-slate-300 bg-slate-100 text-slate-700"
                   : planStatus === "borrador"
                     ? "border-amber-200 bg-amber-50 text-amber-800"
                     : "border-slate-200 bg-slate-50 text-slate-600",
@@ -1738,6 +2107,67 @@ export function PlanificacionMesaSecuenciacionTab() {
               >
                 Cargar plan real en simulación
               </Button>
+              <label className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700">
+                Alcance IA
+                <select
+                  className="h-7 rounded-md border border-slate-300 bg-white px-1.5 text-xs"
+                  value={iaScope}
+                  disabled={publishing || iaOrdering}
+                  onChange={(e) => setIaScope(e.target.value as PlanificacionIaScope)}
+                  title={
+                    iaScope === "semana"
+                      ? "Reordena toda la semana visible; revisar antes de aplicar"
+                      : iaScope === "dias_contiguos"
+                        ? "Optimiza por días adyacentes"
+                        : iaScope === "dia"
+                          ? "Puede mover entre mañana/tarde del mismo día"
+                          : "Solo reordena dentro de cada turno"
+                  }
+                >
+                  <option value="turno">Turno</option>
+                  <option value="dia">Día</option>
+                  <option value="dias_contiguos">Días contiguos</option>
+                  <option value="semana">Semana completa</option>
+                </select>
+              </label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void orderDraftWithIa("rules")}
+                disabled={publishing || iaOrdering || !draftHydrated || !hasImpresionMachine}
+                title={iaSettings.promptBase}
+              >
+                {iaOrdering ? (
+                  <Loader2 className="mr-1 size-4 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-1 size-4 text-[#C69C2B]" />
+                )}
+                Ordenar con reglas
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void orderDraftWithIa("advanced")}
+                disabled={publishing || iaOrdering || !draftHydrated || !hasImpresionMachine}
+                title={`Usa el modelo global: ${globalModel}`}
+              >
+                <Sparkles className="mr-1 size-4 text-[#C69C2B]" />
+                IA avanzada
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="border-[#C69C2B]/60 bg-[#C69C2B]/10 text-[#002147] hover:bg-[#C69C2B]/20"
+                onClick={() => void orderDraftWithIa("mixed")}
+                disabled={publishing || iaOrdering || !draftHydrated || !hasImpresionMachine}
+                title={`Reglas + refinado con ${globalModel}`}
+              >
+                <Sparkles className="mr-1 size-4 text-[#C69C2B]" />
+                Ordenar mixto
+              </Button>
               <Button
                 type="button"
                 size="sm"
@@ -1754,20 +2184,38 @@ export function PlanificacionMesaSecuenciacionTab() {
               </Button>
             </div>
           ) : (
-            <Button
-              type="button"
-              size="sm"
-              className="bg-[#002147] text-white hover:bg-[#001735]"
-              disabled={confirmDisabled}
-              onClick={() => void confirmPlanificacion()}
-            >
-              {savingChanges ? (
-                <Loader2 className="mr-1 size-4 animate-spin" />
-              ) : (
-                <Send className="mr-1 size-4" />
-              )}
-              Confirmar planificación
-            </Button>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!hasImpresionMachine || loading}
+                onClick={() => {
+                  setSimulationOn(true);
+                  setDraftBySlot(simulationBaseBySlot);
+                  setDraftUpdatedAt(new Date().toISOString());
+                  setIaResult(null);
+                  toast.message("Simulación activada. Puedes usar reglas, IA avanzada o modo mixto.");
+                }}
+              >
+                <Sparkles className="mr-1 size-4 text-[#C69C2B]" />
+                IA sobre simulación
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="bg-[#002147] text-white hover:bg-[#001735]"
+                disabled={confirmDisabled}
+                onClick={() => void confirmPlanificacion()}
+              >
+                {savingChanges ? (
+                  <Loader2 className="mr-1 size-4 animate-spin" />
+                ) : (
+                  <Send className="mr-1 size-4" />
+                )}
+                Confirmar planificación
+              </Button>
+            </div>
           )}
         </div>
 
@@ -1788,6 +2236,34 @@ export function PlanificacionMesaSecuenciacionTab() {
                 · Draft: <strong>{draftUpdatedAtLabel}</strong>
               </span>
             </p>
+          </div>
+        ) : null}
+
+        {simulationOn && iaResult ? (
+          <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+            <strong>
+              {iaResult.mode === "rules"
+                ? "Ordenación por reglas"
+                : iaResult.mode === "mixed"
+                  ? "Ordenación mixta"
+                  : "Ordenación IA avanzada"}
+              :
+            </strong>{" "}
+            {iaResult.movedCount} movimientos
+            {iaResult.modelUsed ? (
+              <span>
+                {" "}
+                · Modelo: <strong>{iaResult.modelUsed}</strong>
+                {iaResult.didFallback ? " (fallback)" : ""}
+              </span>
+            ) : null}
+            {" "}· Alcance: <strong>{iaResult.scope}</strong>.{" "}
+            {iaResult.reasons.slice(0, 3).join(" ")}
+            {iaResult.warnings.length > 0 ? (
+              <span className="mt-1 block text-amber-800">
+                Avisos: {iaResult.warnings.join(" · ")}
+              </span>
+            ) : null}
           </div>
         ) : null}
 
@@ -1882,6 +2358,8 @@ export function PlanificacionMesaSecuenciacionTab() {
                           maquinaSeleccionada?.capacidad_horas_default_tarde ?? 8
                         }
                         onEditCapacity={openCapacityDialog}
+                        onStartExecution={startExecution}
+                        startingExecutionId={startingExecutionId}
                         disabled={publishing || !hasImpresionMachine}
                       />
                     );
@@ -1927,6 +2405,10 @@ export function PlanificacionMesaSecuenciacionTab() {
       )}
 
       <PublicandoOverlay open={publishing} />
+      <PlanificacionIaProgressDialog
+        state={iaDialog}
+        onClose={() => setIaDialog((prev) => ({ ...prev, open: false }))}
+      />
     </Card>
   );
 }
@@ -1942,6 +2424,8 @@ function DayCard({
   defaultHorasManana,
   defaultHorasTarde,
   onEditCapacity,
+  onStartExecution,
+  startingExecutionId,
   disabled,
 }: {
   date: Date;
@@ -1951,6 +2435,8 @@ function DayCard({
   defaultHorasManana: number;
   defaultHorasTarde: number;
   onEditCapacity: (day: DayKey, turno: TurnoKey) => void;
+  onStartExecution: (trabajo: MesaTrabajo) => void;
+  startingExecutionId: string | null;
   disabled?: boolean;
 }) {
   const dayKey = toDayKey(date);
@@ -2018,6 +2504,8 @@ function DayCard({
         items={bySlot[skManana] ?? []}
         capacityHoras={capManana}
         onEditCapacity={() => onEditCapacity(dayKey, "manana")}
+        onStartExecution={onStartExecution}
+        startingExecutionId={startingExecutionId}
         disabled={disabled}
       />
       {motivoManana ? (
@@ -2035,6 +2523,8 @@ function DayCard({
         items={bySlot[skTarde] ?? []}
         capacityHoras={capTarde}
         onEditCapacity={() => onEditCapacity(dayKey, "tarde")}
+        onStartExecution={onStartExecution}
+        startingExecutionId={startingExecutionId}
         disabled={disabled}
       />
       {motivoTarde ? (

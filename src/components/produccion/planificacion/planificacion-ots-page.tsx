@@ -1,10 +1,10 @@
 "use client";
 
-import { Bot, Rows3, Table2 } from "lucide-react";
+import { PlayCircle, Rows3, Table2 } from "lucide-react";
 import { useState } from "react";
 
 import { PlanificacionMesaSecuenciacionTab } from "@/components/produccion/planificacion/planificacion-mesa-secuenciacion-tab";
-import { PlanificacionOptimizadorIaTab } from "@/components/produccion/planificacion/planificacion-optimizador-ia-tab";
+import { PlanificacionOtsEjecucionTab } from "@/components/produccion/planificacion/planificacion-ots-ejecucion-tab";
 import { PlanificacionPoolOtsTab } from "@/components/produccion/planificacion/planificacion-pool-ots-tab-v2";
 import {
   Tabs,
@@ -41,9 +41,9 @@ export function PlanificacionOtsPage() {
             <Rows3 className="size-4 shrink-0 opacity-90" aria-hidden />
             Mesa de Secuenciación
           </TabsTrigger>
-          <TabsTrigger value="ia" className={SUBTAB_TRIGGER_CLASS}>
-            <Bot className="size-4 shrink-0 opacity-90" aria-hidden />
-            Optimizador IA
+          <TabsTrigger value="ejecucion" className={SUBTAB_TRIGGER_CLASS}>
+            <PlayCircle className="size-4 shrink-0 opacity-90" aria-hidden />
+            OTs en ejecución
           </TabsTrigger>
         </TabsList>
 
@@ -55,8 +55,8 @@ export function PlanificacionOtsPage() {
           <PlanificacionMesaSecuenciacionTab />
         </TabsContent>
 
-        <TabsContent value="ia" className="mt-0 space-y-3 outline-none">
-          <PlanificacionOptimizadorIaTab />
+        <TabsContent value="ejecucion" className="mt-0 space-y-3 outline-none">
+          <PlanificacionOtsEjecucionTab />
         </TabsContent>
       </Tabs>
     </section>

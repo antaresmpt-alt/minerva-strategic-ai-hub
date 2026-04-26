@@ -21,6 +21,8 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       ? "users"
       : tabStr === "variables"
         ? "variables"
+        : tabStr === "plan-ia"
+          ? "plan-ia"
         : tabStr === "email"
           ? "email"
           : tabStr === "recursos"

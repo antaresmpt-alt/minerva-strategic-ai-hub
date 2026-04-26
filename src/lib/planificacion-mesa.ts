@@ -221,3 +221,14 @@ export function flattenBoard(
   }
   return out;
 }
+
+export const DEFAULT_PLANIFICACION_IA_SETTINGS = {
+  pesoTintas: 80,
+  pesoCmyk: 55,
+  pesoBarniz: 70,
+  pesoPapel: 65,
+  pesoFechaEntrega: 50,
+  pesoBalanceCarga: 35,
+  promptBase:
+    "Prioriza minimizar cambios de tintas/Pantones, barnices/acabados y papel; respeta OTs en ejecución; conserva capacidad de turno y fecha de entrega.",
+};

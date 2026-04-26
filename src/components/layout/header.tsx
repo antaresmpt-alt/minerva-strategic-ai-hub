@@ -19,8 +19,8 @@ import { useHubStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 const MODEL_OPTIONS: { value: GlobalModelId; label: string }[] = [
-  { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash (⚡)" },
-  { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro (📑)" },
+  { value: "gemini-1.5-flash", label: "Gemini 2.5 Flash (⚡)" },
+  { value: "gemini-1.5-pro", label: "Gemini 2.5 Pro (📑)" },
   { value: "claude-3-5-sonnet", label: "Claude 3.5 Sonnet (🧠)" },
   { value: "gpt-4o", label: "GPT-4o (🤖)" },
 ];

@@ -7,7 +7,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Pencil, Sun, Sunrise } from "lucide-react";
+import { Loader2, Pencil, PlayCircle, Sun, Sunrise } from "lucide-react";
 import { useMemo } from "react";
 
 import {
@@ -42,6 +42,8 @@ interface TurnoColumnProps {
   items: MesaTrabajo[];
   capacityHoras: number;
   onEditCapacity: () => void;
+  onStartExecution: (trabajo: MesaTrabajo) => void;
+  startingExecutionId: string | null;
   disabled?: boolean;
 }
 
@@ -59,13 +61,19 @@ function turnoIcon(t: TurnoKey) {
 function SortableMesaCard({
   trabajo,
   linkedToNext,
+  onStartExecution,
+  startingExecutionId,
   disabled,
 }: {
   trabajo: MesaTrabajo;
   linkedToNext: boolean;
+  onStartExecution: (trabajo: MesaTrabajo) => void;
+  startingExecutionId: string | null;
   disabled?: boolean;
 }) {
   const sortableId = itemIdForMesa(trabajo.id);
+  const isRunning = trabajo.estadoMesa === "en_ejecucion";
+  const isFinished = trabajo.estadoMesa === "finalizada";
   const {
     setNodeRef,
     attributes,
@@ -73,7 +81,7 @@ function SortableMesaCard({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: sortableId, disabled });
+  } = useSortable({ id: sortableId, disabled: disabled || isRunning || isFinished });
 
   const data: PlanificacionCardData = {
     ot: trabajo.ot,
@@ -105,10 +113,49 @@ function SortableMesaCard({
         data={data}
         linkedToNext={linkedToNext}
         isDragging={isDragging}
+        className={cn(
+          isRunning && "border-emerald-500 bg-emerald-50/80 ring-2 ring-emerald-300",
+          isFinished && "border-slate-300 bg-slate-50/90 ring-1 ring-slate-300",
+        )}
         badgeStart={
           <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-[#002147]/10 text-[9px] font-bold text-[#002147] tabular-nums">
             {trabajo.slotOrden}
           </span>
+        }
+        footerSlot={
+          <div className="mt-1 flex items-center justify-between gap-1">
+            {isRunning ? (
+              <span className="inline-flex items-center rounded-full bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                En marcha
+              </span>
+            ) : isFinished ? (
+              <span className="inline-flex items-center rounded-full bg-slate-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                Terminada
+              </span>
+            ) : trabajo.estadoMesa === "confirmado" ? (
+              <button
+                type="button"
+                className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 hover:bg-emerald-100"
+                disabled={disabled || startingExecutionId === trabajo.id}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStartExecution(trabajo);
+                }}
+              >
+                {startingExecutionId === trabajo.id ? (
+                  <Loader2 className="mr-1 size-3 animate-spin" />
+                ) : (
+                  <PlayCircle className="mr-1 size-3" />
+                )}
+                Iniciar OT
+              </button>
+            ) : (
+              <span className="text-[9px] font-medium uppercase tracking-wide text-amber-700">
+                Borrador
+              </span>
+            )}
+          </div>
         }
       />
     </div>
@@ -121,6 +168,8 @@ export function TurnoColumn({
   items,
   capacityHoras,
   onEditCapacity,
+  onStartExecution,
+  startingExecutionId,
   disabled,
 }: TurnoColumnProps) {
   const containerId = containerIdForSlot(day, turno);
@@ -209,6 +258,8 @@ export function TurnoColumn({
                 key={trabajo.id}
                 trabajo={trabajo}
                 linkedToNext={!!links[idx]}
+                onStartExecution={onStartExecution}
+                startingExecutionId={startingExecutionId}
                 disabled={disabled}
               />
             ))

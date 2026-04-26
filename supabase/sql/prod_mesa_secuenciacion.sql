@@ -263,7 +263,7 @@ on public.prod_mesa_planificacion_trabajos (
   coalesce(maquina_id::text, ''),
   slot_orden
 )
-where estado_mesa in ('borrador', 'confirmado', 'en_ejecucion');
+where estado_mesa in ('borrador', 'confirmado', 'en_ejecucion', 'finalizada');
 
 -- ---------------------------------------------------------------------------
 -- 5) Compatibilidad troquel_status
@@ -287,3 +287,127 @@ alter table public.prod_planificacion_pool
     troquel_status is null
     or troquel_status in ('ok', 'falta', 'no_aplica', 'desconocido', 'sin_informar')
   );
+
+-- ---------------------------------------------------------------------------
+-- 6) Ejecución manual de OTs en máquina (sin integración Optimus)
+-- ---------------------------------------------------------------------------
+create table if not exists public.prod_mesa_ejecuciones (
+  id uuid primary key default gen_random_uuid(),
+  mesa_trabajo_id uuid null references public.prod_mesa_planificacion_trabajos(id) on delete set null,
+  ot_numero text not null,
+  maquina_id uuid not null references public.prod_maquinas(id),
+  fecha_planificada date null,
+  turno text null check (turno in ('manana','tarde')),
+  slot_orden integer null,
+  inicio_real_at timestamptz not null default timezone('utc'::text, now()),
+  fin_real_at timestamptz null,
+  estado_ejecucion text not null default 'en_curso'
+    check (estado_ejecucion in ('en_curso','pausada','finalizada','cancelada')),
+  horas_planificadas_snapshot numeric null,
+  horas_reales numeric null,
+  incidencia text null,
+  accion_correctiva text null,
+  maquinista text null,
+  densidades_json jsonb null,
+  observaciones text null,
+  created_at timestamptz not null default timezone('utc'::text, now()),
+  updated_at timestamptz not null default timezone('utc'::text, now()),
+  created_by uuid null,
+  created_by_email text null,
+  updated_by uuid null,
+  updated_by_email text null
+);
+
+create index if not exists prod_mesa_ejecuciones_maquina_estado_inicio_idx
+  on public.prod_mesa_ejecuciones (maquina_id, estado_ejecucion, inicio_real_at desc);
+
+create index if not exists prod_mesa_ejecuciones_ot_maquina_inicio_idx
+  on public.prod_mesa_ejecuciones (ot_numero, maquina_id, inicio_real_at desc);
+
+create unique index if not exists ux_prod_mesa_ejecuciones_ot_maquina_activa
+  on public.prod_mesa_ejecuciones (ot_numero, maquina_id)
+  where estado_ejecucion in ('en_curso','pausada');
+
+alter table public.prod_mesa_ejecuciones enable row level security;
+
+drop policy if exists prod_mesa_ejecuciones_select on public.prod_mesa_ejecuciones;
+drop policy if exists prod_mesa_ejecuciones_insert on public.prod_mesa_ejecuciones;
+drop policy if exists prod_mesa_ejecuciones_update on public.prod_mesa_ejecuciones;
+drop policy if exists prod_mesa_ejecuciones_delete on public.prod_mesa_ejecuciones;
+
+create policy prod_mesa_ejecuciones_select
+  on public.prod_mesa_ejecuciones for select
+  to authenticated
+  using (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['admin','gerencia','produccion'])
+    )
+  );
+
+create policy prod_mesa_ejecuciones_insert
+  on public.prod_mesa_ejecuciones for insert
+  to authenticated
+  with check (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['admin','gerencia','produccion'])
+    )
+  );
+
+create policy prod_mesa_ejecuciones_update
+  on public.prod_mesa_ejecuciones for update
+  to authenticated
+  using (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['admin','gerencia','produccion'])
+    )
+  )
+  with check (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['admin','gerencia','produccion'])
+    )
+  );
+
+create policy prod_mesa_ejecuciones_delete
+  on public.prod_mesa_ejecuciones for delete
+  to authenticated
+  using (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['admin','gerencia'])
+    )
+  );
+
+comment on table public.prod_mesa_ejecuciones is
+  'Registro operativo manual de OTs iniciadas/finalizadas desde la Mesa APS de impresión.';
+
+-- ---------------------------------------------------------------------------
+-- 7) Parámetros IA para ordenación de simulación
+-- ---------------------------------------------------------------------------
+alter table public.sys_parametros
+  add column if not exists valor_text text;
+
+insert into public.sys_parametros (seccion, clave, valor_num, valor_text, descripcion)
+values
+  ('planificacion_ia', 'planificacion_ia_peso_tintas', 80, null, 'Peso para agrupar tintas/Pantones similares en secuenciación IA.'),
+  ('planificacion_ia', 'planificacion_ia_peso_cmyk', 55, null, 'Peso para agrupar trabajos CMYK.'),
+  ('planificacion_ia', 'planificacion_ia_peso_barniz', 70, null, 'Peso para minimizar cambios de barniz/acabado.'),
+  ('planificacion_ia', 'planificacion_ia_peso_papel', 65, null, 'Peso para agrupar por papel/formato/material.'),
+  ('planificacion_ia', 'planificacion_ia_peso_fecha_entrega', 50, null, 'Peso para priorizar fecha de entrega.'),
+  ('planificacion_ia', 'planificacion_ia_peso_balance_carga', 35, null, 'Peso para mantener balance de carga por turno.'),
+  ('planificacion_ia', 'planificacion_ia_prompt_base', null, 'Prioriza minimizar cambios de tintas/Pantones, barnices/acabados y papel; respeta OTs en ejecución; conserva capacidad de turno y fecha de entrega.', 'Prompt base editable para explicar reglas de ordenación IA en la Mesa de Secuenciación.')
+on conflict (clave) do update
+set
+  seccion = excluded.seccion,
+  descripcion = excluded.descripcion,
+  valor_num = coalesce(public.sys_parametros.valor_num, excluded.valor_num),
+  valor_text = coalesce(public.sys_parametros.valor_text, excluded.valor_text),
+  updated_at = timezone('utc'::text, now());
