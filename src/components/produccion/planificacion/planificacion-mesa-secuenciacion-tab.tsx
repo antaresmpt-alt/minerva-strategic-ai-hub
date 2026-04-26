@@ -1368,6 +1368,10 @@ export function PlanificacionMesaSecuenciacionTab() {
       const { active, over } = event;
       if (!over) return;
       const aId = String(active.id);
+      // Para arrastres desde Pool evitamos pre-aplicar en onDragOver:
+      // así no queda anclada en el primer slot tocado (p.ej. lunes mañana).
+      // El destino final se resuelve en onDragEnd.
+      if (aId.startsWith("pool::")) return;
       const oId = String(over.id);
       if (aId === oId) return;
 
@@ -1415,9 +1419,24 @@ export function PlanificacionMesaSecuenciacionTab() {
       if (!hasImpresionMachine) return;
       const { active, over } = event;
       setActiveId(null);
+      const isPoolDrag = String(active.id).startsWith("pool::");
+      const poolOt = isPoolDrag ? String(active.id).slice("pool::".length) : "";
+      const boardHasOt = (bySlot: Record<SlotKey, MesaTrabajo[]>, ot: string): boolean =>
+        Object.values(bySlot).some((items) => items.some((it) => it.ot === ot));
+
       if (!over) {
         // Si en simulación habíamos pre-aplicado un cross-container move en
         // `onDragOver`, revertimos al snapshot inicial.
+        if (
+          simulationOn &&
+          isPoolDrag &&
+          poolOt &&
+          draftBySlot &&
+          boardHasOt(draftBySlot, poolOt)
+        ) {
+          setDragStartDraftSnapshot(null);
+          return;
+        }
         if (simulationOn && dragStartDraftSnapshot) {
           setDraftBySlot(dragStartDraftSnapshot);
         }
@@ -1444,7 +1463,18 @@ export function PlanificacionMesaSecuenciacionTab() {
         visibleSlotKeys,
         poolOtsSet,
       );
-      if (!fromContainer || !toContainer) return;
+      if (!fromContainer || !toContainer) {
+        if (
+          simulationOn &&
+          isPoolDrag &&
+          poolOt &&
+          boardHasOt(current, poolOt)
+        ) {
+          setDragStartDraftSnapshot(null);
+          return;
+        }
+        return;
+      }
 
       const t = applyTransition(
         fromContainer,
@@ -1455,6 +1485,15 @@ export function PlanificacionMesaSecuenciacionTab() {
       );
       if (!t) {
         // Sin transición: si hubo pre-aplicación visual en simulación, revertir.
+        if (
+          simulationOn &&
+          isPoolDrag &&
+          poolOt &&
+          boardHasOt(current, poolOt)
+        ) {
+          setDragStartDraftSnapshot(null);
+          return;
+        }
         if (simulationOn && dragStartDraftSnapshot) {
           setDraftBySlot(dragStartDraftSnapshot);
         }
