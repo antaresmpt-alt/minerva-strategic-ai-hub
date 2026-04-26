@@ -23,6 +23,8 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         ? "variables"
         : tabStr === "email"
           ? "email"
+          : tabStr === "recursos"
+            ? "recursos"
           : tabStr === "logs"
             ? "logs"
           : "ingest";
