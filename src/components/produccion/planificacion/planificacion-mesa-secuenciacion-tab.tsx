@@ -1372,12 +1372,14 @@ export function PlanificacionMesaSecuenciacionTab() {
       if (aId === oId) return;
 
       const current = draftBySlot ?? realBySlot;
-      const fromContainer = findContainerOf(
-        aId,
-        current,
-        visibleSlotKeys,
-        poolOtsSet,
-      );
+      const fromContainer = aId.startsWith("pool::")
+        ? POOL_CONTAINER_ID
+        : findContainerOf(
+            aId,
+            current,
+            visibleSlotKeys,
+            poolOtsSet,
+          );
       const toContainer = findContainerOf(
         oId,
         current,
@@ -1428,12 +1430,14 @@ export function PlanificacionMesaSecuenciacionTab() {
       const current = simulationOn
         ? (draftBySlot ?? realBySlot)
         : realBySlot;
-      const fromContainer = findContainerOf(
-        aId,
-        current,
-        visibleSlotKeys,
-        poolOtsSet,
-      );
+      const fromContainer = aId.startsWith("pool::")
+        ? POOL_CONTAINER_ID
+        : findContainerOf(
+            aId,
+            current,
+            visibleSlotKeys,
+            poolOtsSet,
+          );
       const toContainer = findContainerOf(
         oId,
         current,
