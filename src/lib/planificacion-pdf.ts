@@ -5,7 +5,7 @@
  * Usa jspdf + jspdf-autotable (ya instalados en el proyecto).
  *
  * Exporta:
- *  - exportPlanificacionPdf(payload, qrDataUrl?)
+ *  - exportPlanificacionPdf(payload)
  */
 
 import { jsPDF } from "jspdf";
@@ -55,7 +55,6 @@ function drawHeader(
   doc: jsPDF,
   meta: PrintPayload["meta"],
   isBorrador: boolean,
-  qrDataUrl: string | null,
 ) {
   const w = pageW(doc);
 
@@ -101,7 +100,7 @@ function drawHeader(
   doc.setLineWidth(0.4);
   doc.line(MARGIN, 27, w - MARGIN, 27);
 
-  // Plan ID + QR
+  // Plan ID
   let cursor = 30;
 
   doc.setTextColor(0, 0, 0);
@@ -109,17 +108,7 @@ function drawHeader(
   doc.setFontSize(7.5);
   doc.text(`Plan ID: ${meta.planId}`, MARGIN, cursor + 4);
 
-  // QR
-  if (qrDataUrl) {
-    try {
-      doc.addImage(qrDataUrl, "PNG", w - MARGIN - 20, cursor, 20, 20);
-    } catch {
-      // QR no disponible, ignorar
-    }
-    cursor += 22;
-  } else {
-    cursor += 8;
-  }
+  cursor += 8;
 
   // Watermark borrador
   if (isBorrador) {
@@ -356,12 +345,8 @@ function drawFooter(doc: jsPDF, payload: PrintPayload) {
  * Genera y descarga el PDF operativo de planificación.
  *
  * @param payload   Resultado de buildPrintPayload()
- * @param qrDataUrl Data-URL PNG del QR (de buildQrDataUrl) o null
  */
-export function exportPlanificacionPdf(
-  payload: PrintPayload,
-  qrDataUrl: string | null = null,
-): void {
+export function exportPlanificacionPdf(payload: PrintPayload): void {
   const { meta, blocks } = payload;
 
   const isBorrador =
@@ -377,7 +362,7 @@ export function exportPlanificacionPdf(
     format: "a4",
   });
 
-  let cursor = drawHeader(doc, meta, isBorrador, qrDataUrl);
+  let cursor = drawHeader(doc, meta, isBorrador);
 
   // Bloques de turnos
   for (const block of blocks) {

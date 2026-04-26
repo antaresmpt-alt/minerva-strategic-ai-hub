@@ -21,7 +21,6 @@ import {
 } from "@/lib/planificacion-export";
 import { exportPlanificacionExcel } from "@/lib/planificacion-excel";
 import { exportPlanificacionPdf } from "@/lib/planificacion-pdf";
-import { buildQrDataUrl, buildQrUrl } from "@/lib/planificacion-qr";
 import { cn } from "@/lib/utils";
 import type {
   CapacidadTurno,
@@ -161,16 +160,12 @@ function ExportDialogBody({
           return;
         }
 
-        // PDF: obtener QR antes de generar
-        const qrUrl = buildQrUrl(payload.meta);
-        const qrDataUrl = await buildQrDataUrl(qrUrl);
-
         if (preview) {
           // Vista previa: generamos en objeto URL temporal
           toast.info("Vista previa: la descarga en PDF se abrirá en una pestaña nueva (requiere soporte de jsPDF inline).");
         }
 
-        exportPlanificacionPdf(payload, qrDataUrl);
+        exportPlanificacionPdf(payload);
         toast.success("PDF descargado correctamente.");
         onClose();
       } catch (e) {

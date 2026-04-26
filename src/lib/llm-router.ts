@@ -42,6 +42,7 @@ type GenerateOpts = {
   user: string;
   maxOutputTokens?: number;
   temperature?: number;
+  jsonMode?: boolean;
   signal?: AbortSignal;
 };
 
@@ -72,6 +73,7 @@ async function generateGoogle(
       generationConfig: {
         maxOutputTokens: opts.maxOutputTokens ?? 8192,
         temperature: opts.temperature ?? 0.4,
+        ...(opts.jsonMode ? { responseMimeType: "application/json" } : {}),
       },
     },
     { signal: opts.signal }
@@ -128,6 +130,7 @@ async function generateOpenAI(opts: GenerateOpts): Promise<string> {
       messages,
       max_tokens: opts.maxOutputTokens ?? 8192,
       temperature: opts.temperature ?? 0.4,
+      ...(opts.jsonMode ? { response_format: { type: "json_object" } } : {}),
     },
     { signal: opts.signal }
   );

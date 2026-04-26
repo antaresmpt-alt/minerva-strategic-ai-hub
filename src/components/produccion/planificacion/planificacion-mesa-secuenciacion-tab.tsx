@@ -1517,13 +1517,14 @@ export function PlanificacionMesaSecuenciacionTab() {
         const fecha = parsed[0];
         const turno = parsed[1] as TurnoKey;
         if (!fecha || (turno !== "manana" && turno !== "tarde")) continue;
-        items.forEach((it, idx) => {
+        items.forEach((it) => {
+          if (isMesaTrabajoLocked(it)) return;
           inserts.push({
             ot_numero: it.ot,
             fecha_planificada: fecha,
             turno,
             maquina_id: selectedMaquinaId,
-            slot_orden: idx + 1,
+            slot_orden: it.slotOrden,
             maquina: null,
             estado_mesa: "confirmado",
             prioridad_snapshot: null,
@@ -1682,21 +1683,26 @@ export function PlanificacionMesaSecuenciacionTab() {
         modelUsed?: string;
         didFallback?: boolean;
         error?: string;
+        parseError?: string;
+        rawPreview?: string;
       };
       if (!res.ok || !Array.isArray(data.items)) {
-        if (mode === "mixed") {
+        if (mode === "mixed" || mode === "advanced") {
           await advance(6);
           setDraftBySlot(ruleResult.nextBySlot);
           setDraftUpdatedAt(new Date().toISOString());
           const warnings = [
             ...(ruleResult.warnings ?? []),
-            data.error ?? "El modelo no pudo refinar; se conserva la propuesta por reglas.",
+            [data.error, data.parseError, data.rawPreview?.slice(0, 500)]
+              .filter(Boolean)
+              .join(" · ") ||
+              "El modelo no pudo refinar; se conserva la propuesta por reglas.",
           ];
           setIaResult({
             movedCount: ruleResult.movedCount,
             reasons: ruleResult.reasons,
             warnings,
-            mode: "mixed",
+            mode,
             scope: iaScope,
           });
           setIaDialog((prev) => ({
@@ -1711,7 +1717,11 @@ export function PlanificacionMesaSecuenciacionTab() {
           toast.warning("IA avanzada no disponible. Se aplicó la propuesta por reglas.");
           return;
         }
-        throw new Error(data.error ?? "El modelo no devolvió una propuesta válida.");
+        throw new Error(
+          [data.error, data.parseError, data.rawPreview?.slice(0, 500)]
+            .filter(Boolean)
+            .join(" · ") || "El modelo no devolvió una propuesta válida.",
+        );
       }
 
       await advance(5);
@@ -1749,7 +1759,7 @@ export function PlanificacionMesaSecuenciacionTab() {
         `${mode === "mixed" ? "Ordenación mixta" : "IA avanzada"} aplicada (${validated.movedCount} movimientos).`,
       );
     } catch (e) {
-      if (mode === "mixed") {
+      if (mode === "mixed" || mode === "advanced") {
         const fallback = reorderBoardWithIaRules(base, iaSettings, iaScope, capacityBySlot);
         setDraftBySlot(fallback.nextBySlot);
         setDraftUpdatedAt(new Date().toISOString());
@@ -1761,7 +1771,7 @@ export function PlanificacionMesaSecuenciacionTab() {
           movedCount: fallback.movedCount,
           reasons: fallback.reasons,
           warnings,
-          mode: "mixed",
+          mode,
           scope: iaScope,
         });
         setIaDialog((prev) => ({
