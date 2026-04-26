@@ -37,9 +37,24 @@ function deviation(r: MesaEjecucion): number | null {
   return r.horasReales - r.horasPlanificadasSnapshot;
 }
 
+function durationHours(r: MesaEjecucion): number | null {
+  if (!r.inicioRealAt || !r.finRealAt) return null;
+  const start = new Date(r.inicioRealAt).getTime();
+  const end = new Date(r.finRealAt).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+  return (end - start) / (1000 * 60 * 60);
+}
+
+function completionPct(rows: MesaEjecucion[]): number {
+  if (!rows.length) return 0;
+  const finished = rows.filter((r) => r.estadoEjecucion === "finalizada").length;
+  return Math.round((finished / rows.length) * 100);
+}
+
 function exportRows(rows: MesaEjecucion[]): string[][] {
   return rows.map((r) => {
     const dev = deviation(r);
+    const dur = durationHours(r);
     return [
       r.ot,
       r.maquinaNombre,
@@ -47,6 +62,7 @@ function exportRows(rows: MesaEjecucion[]): string[][] {
       estadoLabel(r.estadoEjecucion),
       fmtDate(r.inicioRealAt),
       fmtDate(r.finRealAt),
+      dur == null ? "-" : fmtHours(dur),
       fmtHours(r.horasPlanificadasSnapshot),
       fmtHours(r.horasReales),
       dev == null ? "-" : fmtHours(dev),
@@ -69,6 +85,7 @@ export function exportEjecucionesExcel(
     "Estado",
     "Inicio real",
     "Fin real",
+    "Duración real (h)",
     "Horas plan",
     "Horas reales",
     "Desviación",
@@ -87,6 +104,7 @@ export function exportEjecucionesExcel(
     ["Máquina", filters.maquina],
     ["Estado", filters.estado],
     ["Registros", rows.length],
+    ["% finalizadas", `${completionPct(rows)}%`],
   ]);
   const detail = XLSX.utils.aoa_to_sheet([headers, ...data]);
   detail["!freeze"] = { xSplit: 0, ySplit: 1 };
@@ -107,6 +125,7 @@ export function exportEjecucionesPdf(
 ): void {
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   const generated = fmtDate(new Date().toISOString());
+  const finishedPct = completionPct(rows);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
@@ -118,9 +137,10 @@ export function exportEjecucionesPdf(
     10,
     16,
   );
+  doc.text(`OTs finalizadas: ${finishedPct}%`, 10, 21);
 
   autoTable(doc, {
-    startY: 20,
+    startY: 24,
     head: [[
       "OT",
       "Máquina",
@@ -128,6 +148,7 @@ export function exportEjecucionesPdf(
       "Estado",
       "Inicio",
       "Fin",
+      "Duración",
       "Plan",
       "Real",
       "Desv.",
