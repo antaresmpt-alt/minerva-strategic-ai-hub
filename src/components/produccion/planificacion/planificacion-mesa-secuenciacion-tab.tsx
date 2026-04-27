@@ -322,11 +322,7 @@ type MaquinaOption = {
 const IMPRESION_SCOPE: TipoMaquina = "impresion";
 const DRAFT_SCOPE = "impresion" as const;
 
-const dragOverlayPointerFix: Modifier = ({ transform }) => ({
-  ...transform,
-  x: transform.x + 8,
-  y: transform.y - 22,
-});
+const dragOverlayPointerFix: Modifier = ({ transform }) => transform;
 
 /**
  * Mapea un sortable id (mesa::X / pool::Y / slot::day::turno) a su contenedor
@@ -478,7 +474,7 @@ export function PlanificacionMesaSecuenciacionTab() {
     Record<SlotKey, MesaTrabajo[]> | null
   >(null);
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 2 } }),
   );
 
   // ---- Export dialog
