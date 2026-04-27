@@ -531,7 +531,7 @@ export function PlanificacionMesaSecuenciacionTab() {
         motivoAjuste: r.motivo_ajuste ?? null,
       });
     }
-    return dedupeMesaByOt(out);
+    return out;
   }, [supabase, weekStartKey, weekEndKey, selectedMaquinaId]);
 
   const loadMesa = useCallback(async () => {
@@ -623,7 +623,7 @@ export function PlanificacionMesaSecuenciacionTab() {
         horasPlanificadasSnapshot: horasMerged,
       });
     }
-    return out;
+    return dedupeMesaByOt(out);
   }, [supabase, weekStartKey, weekEndKey, selectedMaquinaId]);
 
   const loadPool = useCallback(async () => {
