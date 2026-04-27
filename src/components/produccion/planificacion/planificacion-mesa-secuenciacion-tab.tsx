@@ -80,7 +80,6 @@ import {
   getVisibleSlotKeys,
   getWeekDays,
   getWeekMonday,
-  recomputeSlotOrden,
   serializeDraft,
   slotKey,
   toDayKey,
@@ -205,6 +204,37 @@ function toDebugError(error: unknown): Record<string, unknown> {
   };
 }
 
+function mesaStateRank(state: string): number {
+  if (state === "en_ejecucion") return 4;
+  if (state === "finalizada") return 3;
+  if (state === "confirmado") return 2;
+  if (state === "borrador") return 1;
+  return 0;
+}
+
+function dedupeMesaByOt(items: MesaTrabajo[]): MesaTrabajo[] {
+  const byOt = new Map<string, MesaTrabajo>();
+  for (const it of items) {
+    const ot = String(it.ot ?? "").trim();
+    if (!ot) continue;
+    const prev = byOt.get(ot);
+    if (!prev) {
+      byOt.set(ot, it);
+      continue;
+    }
+    const prevRank = mesaStateRank(prev.estadoMesa);
+    const nextRank = mesaStateRank(it.estadoMesa);
+    if (nextRank > prevRank) {
+      byOt.set(ot, it);
+      continue;
+    }
+    if (nextRank === prevRank && it.slotOrden < prev.slotOrden) {
+      byOt.set(ot, it);
+    }
+  }
+  return Array.from(byOt.values());
+}
+
 function troquelStatusToDb(value: TroquelStatus): string {
   // La BD histórica usa `desconocido`; el frontend usa `sin_informar`.
   if (value === "sin_informar") return "desconocido";
@@ -217,6 +247,31 @@ function boardHasItems(bySlot: Record<SlotKey, MesaTrabajo[]>): boolean {
 
 function isMesaTrabajoLocked(it: MesaTrabajo): boolean {
   return it.estadoMesa === "en_ejecucion" || it.estadoMesa === "finalizada";
+}
+
+function getLockedSlotOrdens(items: MesaTrabajo[]): Set<number> {
+  const out = new Set<number>();
+  for (const it of items) {
+    if (!isMesaTrabajoLocked(it)) continue;
+    const slot = Math.trunc(Number(it.slotOrden));
+    if (Number.isFinite(slot) && slot > 0) out.add(slot);
+  }
+  return out;
+}
+
+function recomputeSlotOrdenPreservingLocked(
+  items: MesaTrabajo[],
+  reservedSlots = getLockedSlotOrdens(items),
+): MesaTrabajo[] {
+  let nextEditableSlot = 1;
+  const normalized = items.map((it) => {
+    if (isMesaTrabajoLocked(it)) return it;
+    while (reservedSlots.has(nextEditableSlot)) nextEditableSlot += 1;
+    const slotOrden = nextEditableSlot;
+    nextEditableSlot += 1;
+    return { ...it, slotOrden };
+  });
+  return [...normalized].sort((a, b) => a.slotOrden - b.slotOrden);
 }
 
 function waitForUi(ms = 120): Promise<void> {
@@ -480,7 +535,7 @@ export function PlanificacionMesaSecuenciacionTab() {
         motivoAjuste: r.motivo_ajuste ?? null,
       });
     }
-    return out;
+    return dedupeMesaByOt(out);
   }, [supabase, weekStartKey, weekEndKey, selectedMaquinaId]);
 
   const loadMesa = useCallback(async () => {
@@ -498,8 +553,42 @@ export function PlanificacionMesaSecuenciacionTab() {
     const { data, error: mesaErr } = await query;
     if (mesaErr) throw mesaErr;
     const rows = (data ?? []) as Array<Record<string, unknown>>;
+    const otsList = rows
+      .map((r) => String(r.ot_numero ?? "").trim())
+      .filter((ot) => ot.length > 0);
+    const fallbackByOt = new Map<string, { horas: number; numHojas: number }>();
+    if (otsList.length > 0) {
+      const { data: despData, error: despErr } = await supabase
+        .from(TABLE_DESPACHADAS)
+        .select("ot_numero, horas_entrada, horas_tiraje, num_hojas_brutas")
+        .in("ot_numero", otsList);
+      if (despErr) throw despErr;
+      for (const d of (despData ?? []) as Array<Record<string, unknown>>) {
+        const ot = String(d.ot_numero ?? "").trim();
+        if (!ot) continue;
+        const prev = fallbackByOt.get(ot) ?? { horas: 0, numHojas: 0 };
+        prev.horas += parseNum(d.horas_entrada) + parseNum(d.horas_tiraje);
+        prev.numHojas = Math.max(prev.numHojas, Math.trunc(parseNum(d.num_hojas_brutas)));
+        fallbackByOt.set(ot, prev);
+      }
+    }
     const out: MesaTrabajo[] = [];
     for (const r of rows) {
+      const ot = String(r.ot_numero ?? "").trim();
+      const fallback = fallbackByOt.get(ot);
+      const numHojasSnapshot = Math.trunc(parseNum(r.num_hojas_brutas_snapshot));
+      const horasSnapshot = parseNum(r.horas_planificadas_snapshot);
+      const estadoMesa = String(r.estado_mesa ?? "borrador");
+      const isLockedState =
+        estadoMesa === "en_ejecucion" || estadoMesa === "finalizada";
+      const numHojasLive = Math.max(0, Math.trunc(fallback?.numHojas ?? 0));
+      const horasLive = Math.max(0, fallback?.horas ?? 0);
+      const numHojasMerged = isLockedState
+        ? (numHojasSnapshot > 0 ? numHojasSnapshot : numHojasLive)
+        : (numHojasLive > 0 ? numHojasLive : numHojasSnapshot);
+      const horasMerged = isLockedState
+        ? (horasSnapshot > 0 ? horasSnapshot : horasLive)
+        : (horasLive > 0 ? horasLive : horasSnapshot);
       const turnoRaw = String(r.turno ?? "").trim();
       const turno: TurnoKey =
         turnoRaw === "manana" || turnoRaw === "tarde" ? turnoRaw : "manana";
@@ -521,11 +610,11 @@ export function PlanificacionMesaSecuenciacionTab() {
         id: String(r.id),
         maquinaId:
           (r.maquina_id as string | null) ?? selectedMaquinaId ?? null,
-        ot: String(r.ot_numero ?? "").trim(),
+        ot,
         fechaPlanificada: String(r.fecha_planificada ?? ""),
         turno,
         slotOrden: Math.trunc(parseNum(r.slot_orden)),
-        estadoMesa: String(r.estado_mesa ?? "borrador"),
+        estadoMesa,
         fechaEntrega: (r.fecha_entrega_snapshot as string | null) ?? null,
         materialStatus: matStatus,
         troquelStatus: troqStatus,
@@ -534,8 +623,8 @@ export function PlanificacionMesaSecuenciacionTab() {
         papelSnapshot: String(r.papel_snapshot ?? ""),
         tintasSnapshot: String(r.tintas_snapshot ?? ""),
         barnizSnapshot: (r.barniz_snapshot as string | null) ?? null,
-        numHojasBrutasSnapshot: Math.trunc(parseNum(r.num_hojas_brutas_snapshot)),
-        horasPlanificadasSnapshot: parseNum(r.horas_planificadas_snapshot),
+        numHojasBrutasSnapshot: numHojasMerged,
+        horasPlanificadasSnapshot: horasMerged,
       });
     }
     return out;
@@ -825,6 +914,29 @@ export function PlanificacionMesaSecuenciacionTab() {
     return out;
   }, [mesaItems, visibleSlotKeys]);
 
+  const normalizeBySlotPreservingLocked = useCallback(
+    (
+      bySlot: Record<SlotKey, MesaTrabajo[]>,
+      reserveRealSlots = false,
+    ): Record<SlotKey, MesaTrabajo[]> => {
+      const out: Record<SlotKey, MesaTrabajo[]> = {};
+      for (const sk of visibleSlotKeys) {
+        const reservedSlots = reserveRealSlots
+          ? new Set([
+              ...getLockedSlotOrdens(realBySlot[sk] ?? []),
+              ...getLockedSlotOrdens(bySlot[sk] ?? []),
+            ])
+          : undefined;
+        out[sk] = recomputeSlotOrdenPreservingLocked(
+          bySlot[sk] ?? [],
+          reservedSlots,
+        );
+      }
+      return out;
+    },
+    [realBySlot, visibleSlotKeys],
+  );
+
   const planStatus = useMemo<"vacio" | "borrador" | "confirmado" | "en_ejecucion" | "finalizada">(() => {
     if (mesaItems.some((it) => it.estadoMesa === "en_ejecucion")) return "en_ejecucion";
     if (mesaItems.some((it) => it.estadoMesa === "borrador")) return "borrador";
@@ -858,13 +970,8 @@ export function PlanificacionMesaSecuenciacionTab() {
       if (!out[sk]) out[sk] = [];
       out[sk].push(it);
     }
-    for (const sk of Object.keys(out)) {
-      out[sk] = recomputeSlotOrden(
-        [...(out[sk] ?? [])].sort((a, b) => a.slotOrden - b.slotOrden),
-      );
-    }
-    return out;
-  }, [mesaItems, realBySlot, visibleSlotKeys]);
+    return normalizeBySlotPreservingLocked(out);
+  }, [mesaItems, realBySlot, visibleSlotKeys, normalizeBySlotPreservingLocked]);
 
   /** bySlot efectivo: draft si simulación ON con draft, si no, real. */
   const effectiveBySlot = useMemo<Record<SlotKey, MesaTrabajo[]>>(() => {
@@ -928,7 +1035,7 @@ export function PlanificacionMesaSecuenciacionTab() {
           parsed.scope === DRAFT_SCOPE &&
           (!realBoardHasItems || boardHasItems(parsed.bySlot))
         ) {
-          setDraftBySlot(parsed.bySlot);
+          setDraftBySlot(normalizeBySlotPreservingLocked(parsed.bySlot, true));
           setDraftUpdatedAt(parsed.updatedAt);
           setDraftHydrated(true);
           return;
@@ -938,7 +1045,7 @@ export function PlanificacionMesaSecuenciacionTab() {
       // ignore
     }
     // Inicializar el draft con el plan vigente: confirmado si existe; si no, borrador.
-    setDraftBySlot(simulationBaseBySlot);
+    setDraftBySlot(normalizeBySlotPreservingLocked(simulationBaseBySlot, true));
     setDraftUpdatedAt(new Date().toISOString());
     setDraftHydrated(true);
   }, [
@@ -948,6 +1055,7 @@ export function PlanificacionMesaSecuenciacionTab() {
     selectedMaquinaId,
     simulationBaseBySlot,
     realBoardHasItems,
+    normalizeBySlotPreservingLocked,
   ]);
 
   // Persistir draft a localStorage (debounced)
@@ -1011,11 +1119,15 @@ export function PlanificacionMesaSecuenciacionTab() {
         .delete()
         .eq("fecha_planificada", fecha)
         .eq("turno", turno)
-        .eq("maquina_id", selectedMaquinaId)
+        .or(`maquina_id.eq.${selectedMaquinaId},maquina_id.is.null`)
         .in("estado_mesa", EDITABLE_PLAN_ESTADOS as unknown as string[]);
       if (delErr) throw delErr;
 
-      const editableItems = items.filter((it) => !isMesaTrabajoLocked(it));
+      const editableItems = dedupeMesaByOt(
+        recomputeSlotOrdenPreservingLocked(items).filter(
+          (it) => !isMesaTrabajoLocked(it),
+        ),
+      );
       if (editableItems.length === 0) return;
 
       const fullInserts = editableItems.map((it) => ({
@@ -1223,6 +1335,9 @@ export function PlanificacionMesaSecuenciacionTab() {
         const poolItem = poolByOt.get(ot);
         if (!poolItem) return null;
         if (otsEnMesa.has(ot)) return null;
+        if (Object.values(currentBySlot).some((items) => items.some((it) => it.ot === ot))) {
+          return null;
+        }
 
         const parsed = sk.split("::");
         const fecha = parsed[0];
@@ -1249,7 +1364,7 @@ export function PlanificacionMesaSecuenciacionTab() {
         }
         const newList = [...targetList];
         newList.splice(insertAt, 0, newItem);
-        next[sk] = recomputeSlotOrden(newList);
+        next[sk] = recomputeSlotOrdenPreservingLocked(newList);
         affected.add(sk);
         return { next, affected };
       }
@@ -1269,7 +1384,7 @@ export function PlanificacionMesaSecuenciacionTab() {
         if (idx < 0) return null;
         if (list[idx] && isMesaTrabajoLocked(list[idx]!)) return null;
         list.splice(idx, 1);
-        next[sk] = recomputeSlotOrden(list);
+        next[sk] = recomputeSlotOrdenPreservingLocked(list);
         affected.add(sk);
         return { next, affected };
       }
@@ -1302,7 +1417,7 @@ export function PlanificacionMesaSecuenciacionTab() {
               return { next, affected };
             }
             const newList = arrayMove(fromList, fromIdx, overIdx);
-            next[fromSk] = recomputeSlotOrden(newList);
+            next[fromSk] = recomputeSlotOrdenPreservingLocked(newList);
             affected.add(fromSk);
             return { next, affected };
           }
@@ -1312,7 +1427,7 @@ export function PlanificacionMesaSecuenciacionTab() {
 
         // Cross-slot move
         fromList.splice(fromIdx, 1);
-        next[fromSk] = recomputeSlotOrden(fromList);
+        next[fromSk] = recomputeSlotOrdenPreservingLocked(fromList);
         affected.add(fromSk);
 
         const parsed = toSk.split("::");
@@ -1333,7 +1448,7 @@ export function PlanificacionMesaSecuenciacionTab() {
         }
         const newList = [...toList];
         newList.splice(insertAt, 0, updatedMoving);
-        next[toSk] = recomputeSlotOrden(newList);
+        next[toSk] = recomputeSlotOrdenPreservingLocked(newList);
         affected.add(toSk);
         return { next, affected };
       }
@@ -1548,19 +1663,27 @@ export function PlanificacionMesaSecuenciacionTab() {
         .delete()
         .gte("fecha_planificada", weekStartKey)
         .lte("fecha_planificada", weekEndKey)
-        .eq("maquina_id", selectedMaquinaId)
+        .or(`maquina_id.eq.${selectedMaquinaId},maquina_id.is.null`)
         .in("estado_mesa", EDITABLE_PLAN_ESTADOS as unknown as string[]);
       if (delErr) throw delErr;
 
       // 2) INSERT del estado del draft.
       const inserts: Array<Record<string, unknown>> = [];
       for (const sk of visibleSlotKeys) {
-        const items = draftBySlot[sk] ?? [];
+        const reservedSlots = new Set([
+          ...getLockedSlotOrdens(realBySlot[sk] ?? []),
+          ...getLockedSlotOrdens(draftBySlot[sk] ?? []),
+        ]);
+        const items = recomputeSlotOrdenPreservingLocked(
+          draftBySlot[sk] ?? [],
+          reservedSlots,
+        );
+        const uniqueItems = dedupeMesaByOt(items);
         const parsed = sk.split("::");
         const fecha = parsed[0];
         const turno = parsed[1] as TurnoKey;
         if (!fecha || (turno !== "manana" && turno !== "tarde")) continue;
-        items.forEach((it) => {
+        uniqueItems.forEach((it) => {
           if (isMesaTrabajoLocked(it)) return;
           inserts.push({
             ot_numero: it.ot,
@@ -1633,6 +1756,7 @@ export function PlanificacionMesaSecuenciacionTab() {
     weekEndKey,
     selectedMaquinaId,
     visibleSlotKeys,
+    realBySlot,
     userId,
     userEmail,
     reload,

@@ -149,12 +149,6 @@ function parseNonNegative(v: string): number {
   return Math.max(0, n);
 }
 
-function toYmd(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
-}
-
 function entregaClass(fechaEntrega: string | null): string {
   if (!fechaEntrega) return "bg-slate-100 text-slate-700";
   const d = new Date(fechaEntrega);
@@ -1015,38 +1009,6 @@ export function PlanificacionPoolOtsTab() {
         typeof user?.email === "string" && user.email.trim().length > 0
           ? user.email.trim()
           : null;
-
-      const hoy = toYmd(new Date());
-      const { data: slotsData, error: slotsErr } = await supabase
-        .from(TABLE_MESA)
-        .select("slot_orden")
-        .eq("fecha_planificada", hoy)
-        .is("maquina", null);
-      if (slotsErr) throw slotsErr;
-      let nextSlot = ((slotsData ?? []) as Array<{ slot_orden: number | null }>).reduce(
-        (acc, x) => Math.max(acc, Math.trunc(parseNum(x.slot_orden))),
-        0
-      );
-
-      const insMesa = nuevos.map((r) => {
-        nextSlot += 1;
-        return {
-          ot_numero: r.ot,
-          fecha_planificada: hoy,
-          slot_orden: nextSlot,
-          maquina: null,
-          estado_mesa: "borrador",
-          prioridad_snapshot: null,
-          fecha_entrega_snapshot: r.fechaEntrega,
-          material_status: r.materialStatus,
-          troquel_status: r.troquelStatus,
-          acabado_pral_snapshot: r.acabadoPral || null,
-          created_by: actorId,
-          created_by_email: actorEmail,
-        };
-      });
-      const { error: insMesaErr } = await supabase.from(TABLE_MESA).insert(insMesa);
-      if (insMesaErr) throw insMesaErr;
 
       const { data: poolExist, error: poolErr } = await supabase
         .from(TABLE_POOL)
