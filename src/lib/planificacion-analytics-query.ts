@@ -176,8 +176,8 @@ export async function loadAnaliticaPlantaData(
         .select(
           "id, mesa_trabajo_id, ot_numero, maquina_id, fecha_planificada, turno, slot_orden, inicio_real_at, fin_real_at, estado_ejecucion, ha_estado_pausada, num_pausas, minutos_pausada_acum, horas_planificadas_snapshot, horas_reales, incidencia, accion_correctiva, maquinista, densidades_json, observaciones, created_at, updated_at, prod_maquinas(nombre), prod_mesa_planificacion_trabajos(cliente_snapshot)",
         )
-        .gte("inicio_real_at", filters.startIso)
         .lte("inicio_real_at", filters.endIso)
+        .or(`fin_real_at.gte.${filters.startIso},fin_real_at.is.null`)
         .order("inicio_real_at", { ascending: false });
 
       if (filters.maquinaId !== "all") {

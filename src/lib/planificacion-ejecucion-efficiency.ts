@@ -4,6 +4,12 @@ export type PausesByExecutionId = Record<string, MesaEjecucionPausa[]>;
 
 export type EfficiencyStatus = "productiva" | "atencion" | "critica";
 
+export type BuildEjecucionEfficiencyOptions = {
+  now?: Date;
+  periodStart?: Date | string | null;
+  periodEnd?: Date | string | null;
+};
+
 export interface PauseDetail {
   executionId: string;
   ot: string;
@@ -59,14 +65,6 @@ export interface EjecucionEfficiencyReport {
   worstPerformingRows: EficienciaPorOt[];
 }
 
-function diffMinutes(start: string | null, end: string | null, now: Date): number {
-  if (!start) return 0;
-  const startMs = new Date(start).getTime();
-  const endMs = end ? new Date(end).getTime() : now.getTime();
-  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return 0;
-  return Math.max(0, Math.round((endMs - startMs) / 60000));
-}
-
 function statusForEfficiency(pct: number): EjecucionEfficiencyReport["estadoMaquina"] {
   if (pct >= 85) {
     return { key: "productiva", label: "Productiva", color: [5, 150, 105], hex: "#059669" };
@@ -75,6 +73,42 @@ function statusForEfficiency(pct: number): EjecucionEfficiencyReport["estadoMaqu
     return { key: "atencion", label: "Atención", color: [217, 119, 6], hex: "#D97706" };
   }
   return { key: "critica", label: "Crítica", color: [220, 38, 38], hex: "#DC2626" };
+}
+
+function timeValue(value: Date | string | null | undefined): number | null {
+  if (!value) return null;
+  const ms = value instanceof Date ? value.getTime() : new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function resolveOptions(
+  input: Date | BuildEjecucionEfficiencyOptions,
+): Required<Pick<BuildEjecucionEfficiencyOptions, "now">> &
+  Pick<BuildEjecucionEfficiencyOptions, "periodStart" | "periodEnd"> {
+  if (input instanceof Date) return { now: input, periodStart: null, periodEnd: null };
+  return {
+    now: input.now ?? new Date(),
+    periodStart: input.periodStart ?? null,
+    periodEnd: input.periodEnd ?? null,
+  };
+}
+
+function overlapMinutes(
+  start: string | null,
+  end: string | null,
+  options: ReturnType<typeof resolveOptions>,
+): number {
+  const startMs = timeValue(start);
+  const endMs = timeValue(end) ?? options.now.getTime();
+  const periodStartMs = timeValue(options.periodStart);
+  const periodEndMs = timeValue(options.periodEnd);
+  if (startMs == null || !Number.isFinite(startMs) || !Number.isFinite(endMs)) return 0;
+  const clippedStart = Math.max(startMs, periodStartMs ?? Number.NEGATIVE_INFINITY);
+  const clippedEnd = Math.min(endMs, periodEndMs ?? Number.POSITIVE_INFINITY);
+  if (!Number.isFinite(clippedStart) || !Number.isFinite(clippedEnd) || clippedEnd <= clippedStart) {
+    return 0;
+  }
+  return Math.max(0, Math.round((clippedEnd - clippedStart) / 60000));
 }
 
 function executionEnd(row: MesaEjecucion, now: Date): string | null {
@@ -88,8 +122,9 @@ function executionEnd(row: MesaEjecucion, now: Date): string | null {
 export function buildEjecucionEfficiencyReport(
   rows: MesaEjecucion[],
   pausesByExecutionId: PausesByExecutionId = {},
-  now: Date = new Date(),
+  nowOrOptions: Date | BuildEjecucionEfficiencyOptions = new Date(),
 ): EjecucionEfficiencyReport {
+  const options = resolveOptions(nowOrOptions);
   const rowById = new Map(rows.map((r) => [r.id, r] as const));
   const metricsByExecution = new Map<
     string,
@@ -104,8 +139,8 @@ export function buildEjecucionEfficiencyReport(
     }
   >();
   const tiempoTotalMin = rows.reduce((acc, row) => {
-    const end = executionEnd(row, now);
-    const totalMin = end ? diffMinutes(row.inicioRealAt, end, now) : 0;
+    const end = executionEnd(row, options.now);
+    const totalMin = end ? overlapMinutes(row.inicioRealAt, end, options) : 0;
     metricsByExecution.set(row.id, {
       executionId: row.id,
       ot: row.ot,
@@ -126,9 +161,13 @@ export function buildEjecucionEfficiencyReport(
     const rowMetrics = metricsByExecution.get(row.id);
     for (const pause of pauses) {
       const duracionMin =
-        typeof pause.minutosPausa === "number" && pause.minutosPausa >= 0 && pause.resumedAt
+        !options.periodStart &&
+        !options.periodEnd &&
+        typeof pause.minutosPausa === "number" &&
+        pause.minutosPausa >= 0 &&
+        pause.resumedAt
           ? pause.minutosPausa
-          : diffMinutes(pause.pausedAt, pause.resumedAt, now);
+          : overlapMinutes(pause.pausedAt, pause.resumedAt, options);
       const detail: PauseDetail = {
         executionId: row.id,
         ot: row.ot,

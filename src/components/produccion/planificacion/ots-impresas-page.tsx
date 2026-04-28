@@ -6,6 +6,7 @@ import {
   BarChart3,
   CalendarDays,
   Clock,
+  FileText,
   PauseCircle,
   RefreshCcw,
 } from "lucide-react";
@@ -61,6 +62,7 @@ import {
   buildEjecucionEfficiencyReport,
   formatMinutesDuration,
 } from "@/lib/planificacion-ejecucion-efficiency";
+import { exportAnaliticaPlantaExecutivePdf } from "@/lib/planificacion-analytics-export";
 import {
   loadAnaliticaPlantaData,
   type AnaliticaEstadoFilter,
@@ -178,6 +180,17 @@ function pageTitle(
   return machine ? `${base} - ${machine.nombre}` : base;
 }
 
+function machineLabel(maquinaId: string | "all", maquinas: AnaliticaMaquina[]): string {
+  if (maquinaId === "all") return "Todas las máquinas";
+  return maquinas.find((m) => m.id === maquinaId)?.nombre ?? maquinaId;
+}
+
+function estadoFilterLabel(value: AnaliticaEstadoFilter): string {
+  if (value === "finalizadas") return "Finalizadas";
+  if (value === "activas") return "En curso / pausadas";
+  return "Todas";
+}
+
 function statusBadgeClass(key: string): string {
   if (key === "productiva") return "bg-emerald-500/15 text-emerald-800";
   if (key === "atencion") return "bg-amber-500/15 text-amber-900";
@@ -250,8 +263,12 @@ export function OtsImpresasPage() {
     [customEnd, customStart, datePreset],
   );
   const report = useMemo(
-    () => buildEjecucionEfficiencyReport(rows, pausesByExecutionId),
-    [pausesByExecutionId, rows],
+    () =>
+      buildEjecucionEfficiencyReport(rows, pausesByExecutionId, {
+        periodStart: dateRange.start,
+        periodEnd: dateRange.end,
+      }),
+    [dateRange.end, dateRange.start, pausesByExecutionId, rows],
   );
   const metricsByExecution = useMemo(
     () => new Map(report.eficienciaPorOt.map((m) => [m.executionId, m] as const)),
@@ -281,6 +298,9 @@ export function OtsImpresasPage() {
       .filter((item) => item.minutos > 0);
   }, [report.distribucionCategorias]);
   const title = pageTitle(proceso, maquinaId, maquinas);
+  const currentMachineLabel = machineLabel(maquinaId, maquinas);
+  const currentProcesoLabel = processTitle(proceso);
+  const currentEstadoLabel = estadoFilterLabel(estado);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -314,6 +334,16 @@ export function OtsImpresasPage() {
     ? `${report.causaPrincipal.motivo} · ${formatMinutesDuration(report.causaPrincipal.minutos)}`
     : "Sin pausas registradas";
 
+  const handleExportExecutivePdf = useCallback(() => {
+    exportAnaliticaPlantaExecutivePdf(rows, report, {
+      title,
+      dateRangeLabel: dateRange.label,
+      procesoLabel: currentProcesoLabel,
+      maquinaLabel: currentMachineLabel,
+      estadoLabel: currentEstadoLabel,
+    });
+  }, [currentEstadoLabel, currentMachineLabel, currentProcesoLabel, dateRange.label, report, rows, title]);
+
   return (
     <section className="space-y-3">
       <Card className="border-slate-200/80 bg-white/95 shadow-sm backdrop-blur-sm">
@@ -328,17 +358,30 @@ export function OtsImpresasPage() {
                 causas principales. Preparado para evolucionar a OEE completo.
               </CardDescription>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void loadData()}
-              disabled={loading}
-              className="w-full sm:w-fit"
-            >
-              <RefreshCcw className={cn("mr-1.5 size-4", loading && "animate-spin")} />
-              Actualizar
-            </Button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleExportExecutivePdf}
+                disabled={loading || rows.length === 0}
+                className="w-full sm:w-fit"
+              >
+                <FileText className="mr-1.5 size-4" aria-hidden />
+                Descargar Informe de Rendimiento (PDF)
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void loadData()}
+                disabled={loading}
+                className="w-full sm:w-fit"
+              >
+                <RefreshCcw className={cn("mr-1.5 size-4", loading && "animate-spin")} />
+                Actualizar
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -452,7 +495,7 @@ export function OtsImpresasPage() {
           <KpiCard
             title="Eficiencia operativa"
             value={`${report.eficienciaPct}%`}
-            detail="Tiempo de marcha / tiempo total de ocupación"
+              detail="Tiempo de marcha / ocupación solapada con el periodo"
             icon={Activity}
             accent={statusBadgeClass(report.estadoMaquina.key)}
           />
