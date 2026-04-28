@@ -15,6 +15,20 @@ export interface PauseDetail {
   observaciones: string | null;
 }
 
+export interface EficienciaPorOt {
+  executionId: string;
+  ot: string;
+  tiempoTotalMin: number;
+  tiempoPausaMin: number;
+  tiempoMarchaMin: number;
+  eficienciaPct: number;
+  causaPrincipal: {
+    motivo: string;
+    categoria: string;
+    minutos: number;
+  } | null;
+}
+
 export interface EjecucionEfficiencyReport {
   tiempoTotalMin: number;
   tiempoPausaMin: number;
@@ -32,6 +46,17 @@ export interface EjecucionEfficiencyReport {
     hex: string;
   };
   pauseDetails: PauseDetail[];
+  topMotivosPausa: Array<{
+    motivo: string;
+    categoria: string;
+    minutos: number;
+  }>;
+  distribucionCategorias: Array<{
+    categoria: string;
+    minutos: number;
+  }>;
+  eficienciaPorOt: EficienciaPorOt[];
+  worstPerformingRows: EficienciaPorOt[];
 }
 
 function diffMinutes(start: string | null, end: string | null, now: Date): number {
@@ -66,15 +91,39 @@ export function buildEjecucionEfficiencyReport(
   now: Date = new Date(),
 ): EjecucionEfficiencyReport {
   const rowById = new Map(rows.map((r) => [r.id, r] as const));
+  const metricsByExecution = new Map<
+    string,
+    {
+      executionId: string;
+      ot: string;
+      tiempoTotalMin: number;
+      tiempoPausaMin: number;
+      tiempoMarchaMin: number;
+      eficienciaPct: number;
+      causeMinutes: Map<string, { motivo: string; categoria: string; minutos: number }>;
+    }
+  >();
   const tiempoTotalMin = rows.reduce((acc, row) => {
     const end = executionEnd(row, now);
-    return end ? acc + diffMinutes(row.inicioRealAt, end, now) : acc;
+    const totalMin = end ? diffMinutes(row.inicioRealAt, end, now) : 0;
+    metricsByExecution.set(row.id, {
+      executionId: row.id,
+      ot: row.ot,
+      tiempoTotalMin: totalMin,
+      tiempoPausaMin: 0,
+      tiempoMarchaMin: totalMin,
+      eficienciaPct: totalMin > 0 ? 100 : 0,
+      causeMinutes: new Map(),
+    });
+    return acc + totalMin;
   }, 0);
   const pauseDetails: PauseDetail[] = [];
   const causeMinutes = new Map<string, { motivo: string; categoria: string; minutos: number }>();
+  const categoryMinutes = new Map<string, number>();
 
   for (const row of rows) {
     const pauses = pausesByExecutionId[row.id] ?? [];
+    const rowMetrics = metricsByExecution.get(row.id);
     for (const pause of pauses) {
       const duracionMin =
         typeof pause.minutosPausa === "number" && pause.minutosPausa >= 0 && pause.resumedAt
@@ -99,6 +148,17 @@ export function buildEjecucionEfficiencyReport(
       };
       prev.minutos += duracionMin;
       causeMinutes.set(key, prev);
+      categoryMinutes.set(detail.categoria, (categoryMinutes.get(detail.categoria) ?? 0) + duracionMin);
+      if (rowMetrics) {
+        rowMetrics.tiempoPausaMin += duracionMin;
+        const rowPrev = rowMetrics.causeMinutes.get(key) ?? {
+          motivo: detail.motivo,
+          categoria: detail.categoria,
+          minutos: 0,
+        };
+        rowPrev.minutos += duracionMin;
+        rowMetrics.causeMinutes.set(key, rowPrev);
+      }
     }
   }
 
@@ -108,6 +168,32 @@ export function buildEjecucionEfficiencyReport(
   const causaPrincipal = Array.from(causeMinutes.values()).sort(
     (a, b) => b.minutos - a.minutos,
   )[0] ?? null;
+  const topMotivosPausa = Array.from(causeMinutes.values()).sort(
+    (a, b) => b.minutos - a.minutos,
+  );
+  const distribucionCategorias = Array.from(categoryMinutes.entries())
+    .map(([categoria, minutos]) => ({ categoria, minutos }))
+    .sort((a, b) => b.minutos - a.minutos);
+  const eficienciaPorOt = Array.from(metricsByExecution.values()).map((m) => {
+    const rowMarchaMin = Math.max(0, m.tiempoTotalMin - m.tiempoPausaMin);
+    const rowEfficiency =
+      m.tiempoTotalMin > 0 ? Math.round((rowMarchaMin / m.tiempoTotalMin) * 100) : 0;
+    return {
+      executionId: m.executionId,
+      ot: m.ot,
+      tiempoTotalMin: m.tiempoTotalMin,
+      tiempoPausaMin: m.tiempoPausaMin,
+      tiempoMarchaMin: rowMarchaMin,
+      eficienciaPct: rowEfficiency,
+      causaPrincipal: Array.from(m.causeMinutes.values()).sort(
+        (a, b) => b.minutos - a.minutos,
+      )[0] ?? null,
+    };
+  });
+  const worstPerformingRows = [...eficienciaPorOt]
+    .filter((r) => r.tiempoTotalMin > 0)
+    .sort((a, b) => a.eficienciaPct - b.eficienciaPct)
+    .slice(0, 5);
 
   pauseDetails.sort((a, b) => {
     const rowA = rowById.get(a.executionId);
@@ -125,6 +211,10 @@ export function buildEjecucionEfficiencyReport(
     causaPrincipal,
     estadoMaquina: statusForEfficiency(eficienciaPct),
     pauseDetails,
+    topMotivosPausa,
+    distribucionCategorias,
+    eficienciaPorOt,
+    worstPerformingRows,
   };
 }
 

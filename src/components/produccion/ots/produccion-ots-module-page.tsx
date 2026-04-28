@@ -1,9 +1,9 @@
 "use client";
 
 import {
+  BarChart3,
   LayoutGrid,
   PackageCheck,
-  Printer,
   Rows3,
   ShoppingBag,
 } from "lucide-react";
@@ -63,8 +63,8 @@ export function ProduccionOtsModulePage() {
               Planificación OT&apos;s
             </TabsTrigger>
             <TabsTrigger value="impresas" className={TAB_TRIGGER_CLASS}>
-              <Printer className="size-4 shrink-0 opacity-90" aria-hidden />
-              OT&apos;s Impresas
+              <BarChart3 className="size-4 shrink-0 opacity-90" aria-hidden />
+              Analítica de Planta
             </TabsTrigger>
           </TabsList>
         </div>
