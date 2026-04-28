@@ -310,6 +310,9 @@ create table if not exists public.prod_mesa_ejecuciones (
   fin_real_at timestamptz null,
   estado_ejecucion text not null default 'en_curso'
     check (estado_ejecucion in ('en_curso','pausada','finalizada','cancelada')),
+  ha_estado_pausada boolean not null default false,
+  num_pausas integer not null default 0,
+  minutos_pausada_acum integer not null default 0,
   horas_planificadas_snapshot numeric null,
   horas_reales numeric null,
   incidencia text null,
@@ -324,6 +327,16 @@ create table if not exists public.prod_mesa_ejecuciones (
   updated_by uuid null,
   updated_by_email text null
 );
+
+alter table public.prod_mesa_ejecuciones
+  add column if not exists ha_estado_pausada boolean not null default false,
+  add column if not exists num_pausas integer not null default 0,
+  add column if not exists minutos_pausada_acum integer not null default 0;
+
+alter table public.prod_mesa_ejecuciones
+  drop column if exists pausada_at,
+  drop column if exists reanudada_at,
+  drop column if exists motivo_pausa;
 
 create index if not exists prod_mesa_ejecuciones_maquina_estado_inicio_idx
   on public.prod_mesa_ejecuciones (maquina_id, estado_ejecucion, inicio_real_at desc);
@@ -395,6 +408,222 @@ create policy prod_mesa_ejecuciones_delete
 
 comment on table public.prod_mesa_ejecuciones is
   'Registro operativo manual de OTs iniciadas/finalizadas desde la Mesa APS de impresión.';
+
+create table if not exists public.sys_motivos_pausa (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique,
+  label text not null,
+  categoria text not null check (categoria in ('operativos','suministros','calidad','tecnicos')),
+  color_hex text not null check (color_hex ~ '^#[0-9A-Fa-f]{6}$'),
+  activo boolean not null default true,
+  orden integer not null default 0,
+  created_at timestamptz not null default timezone('utc'::text, now()),
+  updated_at timestamptz not null default timezone('utc'::text, now())
+);
+
+create index if not exists sys_motivos_pausa_activo_categoria_orden_idx
+  on public.sys_motivos_pausa (activo, categoria, orden);
+
+insert into public.sys_motivos_pausa (slug, label, categoria, color_hex, activo, orden)
+values
+  ('CAMBIO_TURNO', 'Cambio de turno', 'operativos', '#6B7280', true, 10),
+  ('DESCANSO_COMIDA', 'Descanso / comida', 'operativos', '#6B7280', true, 20),
+  ('LIMPIEZA_MAQUINA', 'Limpieza de máquina', 'operativos', '#6B7280', true, 30),
+  ('FALTA_PAPEL_MATERIAL', 'Falta papel / material', 'suministros', '#2563EB', true, 110),
+  ('ESPERANDO_PLANCHAS', 'Esperando planchas', 'suministros', '#2563EB', true, 120),
+  ('FALTA_TINTAS_PANTONE', 'Falta tintas / Pantone', 'suministros', '#2563EB', true, 130),
+  ('AJUSTE_COLOR', 'Ajuste de color', 'calidad', '#7C3AED', true, 210),
+  ('AJUSTE_REGISTRO', 'Ajuste de registro', 'calidad', '#7C3AED', true, 220),
+  ('AJUSTE_BARNIZ', 'Ajuste de barniz', 'calidad', '#7C3AED', true, 230),
+  ('AVERIA_MECANICA', 'Avería mecánica', 'tecnicos', '#DC2626', true, 310),
+  ('FALLO_ELECTRONICO', 'Fallo electrónico', 'tecnicos', '#DC2626', true, 320),
+  ('REPINTE_SECADO', 'Repinte / secado', 'tecnicos', '#DC2626', true, 330),
+  ('OTROS', 'Otros', 'operativos', '#64748B', true, 900)
+on conflict (slug) do update
+set
+  label = excluded.label,
+  categoria = excluded.categoria,
+  color_hex = excluded.color_hex,
+  activo = excluded.activo,
+  orden = excluded.orden,
+  updated_at = timezone('utc'::text, now());
+
+alter table public.sys_motivos_pausa enable row level security;
+
+drop policy if exists sys_motivos_pausa_select on public.sys_motivos_pausa;
+drop policy if exists sys_motivos_pausa_insert on public.sys_motivos_pausa;
+drop policy if exists sys_motivos_pausa_update on public.sys_motivos_pausa;
+drop policy if exists sys_motivos_pausa_delete on public.sys_motivos_pausa;
+
+create policy sys_motivos_pausa_select
+  on public.sys_motivos_pausa for select
+  to authenticated
+  using (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['admin','gerencia','produccion'])
+    )
+  );
+
+create policy sys_motivos_pausa_insert
+  on public.sys_motivos_pausa for insert
+  to authenticated
+  with check (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['admin','gerencia'])
+    )
+  );
+
+create policy sys_motivos_pausa_update
+  on public.sys_motivos_pausa for update
+  to authenticated
+  using (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['admin','gerencia'])
+    )
+  )
+  with check (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['admin','gerencia'])
+    )
+  );
+
+create policy sys_motivos_pausa_delete
+  on public.sys_motivos_pausa for delete
+  to authenticated
+  using (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['admin','gerencia'])
+    )
+  );
+
+create table if not exists public.prod_mesa_ejecuciones_pausas (
+  id uuid primary key default gen_random_uuid(),
+  ejecucion_id uuid not null references public.prod_mesa_ejecuciones(id) on delete cascade,
+  paused_at timestamptz not null,
+  resumed_at timestamptz null,
+  motivo_id uuid not null references public.sys_motivos_pausa(id),
+  motivo text null,
+  observaciones_pausa text null,
+  minutos_pausa integer null,
+  created_at timestamptz not null default timezone('utc'::text, now()),
+  updated_at timestamptz not null default timezone('utc'::text, now()),
+  created_by uuid null,
+  created_by_email text null,
+  updated_by uuid null,
+  updated_by_email text null
+);
+
+alter table public.prod_mesa_ejecuciones_pausas
+  add column if not exists motivo_id uuid references public.sys_motivos_pausa(id),
+  add column if not exists observaciones_pausa text null;
+
+alter table public.prod_mesa_ejecuciones_pausas
+  alter column motivo drop not null;
+
+with resolved as (
+  select
+    p.id,
+    coalesce(m.id, otros.id) as motivo_id,
+    case
+      when m.id is null and nullif(trim(coalesce(p.motivo, '')), '') is not null
+        then coalesce(p.observaciones_pausa, p.motivo)
+      else p.observaciones_pausa
+    end as observaciones_pausa
+  from public.prod_mesa_ejecuciones_pausas p
+  cross join (select id from public.sys_motivos_pausa where slug = 'OTROS') otros
+  left join public.sys_motivos_pausa m
+    on upper(trim(coalesce(p.motivo, ''))) = m.slug
+    or upper(trim(coalesce(p.motivo, ''))) = upper(trim(m.label))
+  where p.motivo_id is null
+)
+update public.prod_mesa_ejecuciones_pausas p
+set
+  motivo_id = r.motivo_id,
+  observaciones_pausa = r.observaciones_pausa,
+  updated_at = timezone('utc'::text, now())
+from resolved r
+where p.id = r.id;
+
+alter table public.prod_mesa_ejecuciones_pausas
+  alter column motivo_id set not null;
+
+create index if not exists prod_mesa_ejecuciones_pausas_ejecucion_idx
+  on public.prod_mesa_ejecuciones_pausas (ejecucion_id, paused_at desc);
+
+create index if not exists prod_mesa_ejecuciones_pausas_motivo_idx
+  on public.prod_mesa_ejecuciones_pausas (motivo_id);
+
+create index if not exists prod_mesa_ejecuciones_pausas_abiertas_idx
+  on public.prod_mesa_ejecuciones_pausas (ejecucion_id)
+  where resumed_at is null;
+
+alter table public.prod_mesa_ejecuciones_pausas enable row level security;
+
+drop policy if exists prod_mesa_ejecuciones_pausas_select on public.prod_mesa_ejecuciones_pausas;
+drop policy if exists prod_mesa_ejecuciones_pausas_insert on public.prod_mesa_ejecuciones_pausas;
+drop policy if exists prod_mesa_ejecuciones_pausas_update on public.prod_mesa_ejecuciones_pausas;
+drop policy if exists prod_mesa_ejecuciones_pausas_delete on public.prod_mesa_ejecuciones_pausas;
+
+create policy prod_mesa_ejecuciones_pausas_select
+  on public.prod_mesa_ejecuciones_pausas for select
+  to authenticated
+  using (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['admin','gerencia','produccion'])
+    )
+  );
+
+create policy prod_mesa_ejecuciones_pausas_insert
+  on public.prod_mesa_ejecuciones_pausas for insert
+  to authenticated
+  with check (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['admin','gerencia','produccion'])
+    )
+  );
+
+create policy prod_mesa_ejecuciones_pausas_update
+  on public.prod_mesa_ejecuciones_pausas for update
+  to authenticated
+  using (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['admin','gerencia','produccion'])
+    )
+  )
+  with check (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['admin','gerencia','produccion'])
+    )
+  );
+
+create policy prod_mesa_ejecuciones_pausas_delete
+  on public.prod_mesa_ejecuciones_pausas for delete
+  to authenticated
+  using (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['admin','gerencia'])
+    )
+  );
 
 -- ---------------------------------------------------------------------------
 -- 7) Parámetros IA para ordenación de simulación

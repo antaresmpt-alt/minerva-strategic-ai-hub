@@ -74,6 +74,8 @@ function SortableMesaCard({
   const sortableId = itemIdForMesa(trabajo.id);
   const isRunning = trabajo.estadoMesa === "en_ejecucion";
   const isFinished = trabajo.estadoMesa === "finalizada";
+  const isPaused = trabajo.estadoEjecucionActual === "pausada";
+  const pausedMinutes = Math.max(0, Math.trunc(trabajo.minutosPausadaAcumActual ?? 0));
   const {
     setNodeRef,
     attributes,
@@ -114,7 +116,8 @@ function SortableMesaCard({
         linkedToNext={linkedToNext}
         isDragging={isDragging}
         className={cn(
-          isRunning && "border-emerald-500 bg-emerald-50/80 ring-2 ring-emerald-300",
+          isRunning && !isPaused && "border-emerald-500 bg-emerald-50/80 ring-2 ring-emerald-300",
+          isPaused && "border-amber-400 bg-amber-50/80 ring-2 ring-amber-300",
           isFinished && "border-slate-300 bg-slate-50/90 ring-1 ring-slate-300",
         )}
         badgeStart={
@@ -125,9 +128,15 @@ function SortableMesaCard({
         footerSlot={
           <div className="mt-1 flex items-center justify-between gap-1">
             {isRunning ? (
-              <span className="inline-flex items-center rounded-full bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
-                En marcha
-              </span>
+              isPaused ? (
+                <span className="inline-flex items-center rounded-full bg-amber-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                  Pausada · {pausedMinutes} min
+                </span>
+              ) : (
+                <span className="inline-flex items-center rounded-full bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                  En marcha
+                </span>
+              )
             ) : isFinished ? (
               <span className="inline-flex items-center rounded-full bg-slate-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
                 Terminada

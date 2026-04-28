@@ -33,9 +33,14 @@ import { cn } from "@/lib/utils";
 import type {
   EstadoEjecucionMesa,
   MesaEjecucion,
+  MesaEjecucionPausa,
+  MotivoPausa,
+  MotivoPausaCategoria,
 } from "@/types/planificacion-mesa";
 
 const TABLE_EJECUCIONES = "prod_mesa_ejecuciones";
+const TABLE_EJECUCIONES_PAUSAS = "prod_mesa_ejecuciones_pausas";
+const TABLE_MOTIVOS_PAUSA = "sys_motivos_pausa";
 const TABLE_MAQUINAS = "prod_maquinas";
 const TABLE_MESA = "prod_mesa_planificacion_trabajos";
 
@@ -51,6 +56,9 @@ type EjecucionRow = {
   inicio_real_at: string;
   fin_real_at: string | null;
   estado_ejecucion: EstadoEjecucionMesa;
+  ha_estado_pausada: boolean | null;
+  num_pausas: number | string | null;
+  minutos_pausada_acum: number | string | null;
   horas_planificadas_snapshot: number | string | null;
   horas_reales: number | string | null;
   incidencia: string | null;
@@ -62,12 +70,56 @@ type EjecucionRow = {
   updated_at: string;
 };
 
+type MotivoPausaRow = {
+  id: string;
+  slug: string;
+  label: string;
+  categoria: MotivoPausaCategoria;
+  color_hex: string;
+  activo: boolean;
+  orden: number | string | null;
+};
+
+type PausaRow = {
+  id: string;
+  ejecucion_id: string;
+  paused_at: string;
+  resumed_at: string | null;
+  motivo_id: string;
+  observaciones_pausa: string | null;
+  minutos_pausa: number | string | null;
+  created_at: string | null;
+  sys_motivos_pausa?: MotivoPausaRow | MotivoPausaRow[] | null;
+};
+
 function parseNum(v: unknown): number | null {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
 
-function mapRow(r: EjecucionRow): MesaEjecucion {
+function mapMotivoRow(row: MotivoPausaRow): MotivoPausa {
+  return {
+    id: row.id,
+    slug: row.slug,
+    label: row.label,
+    categoria: row.categoria,
+    colorHex: row.color_hex,
+    activo: Boolean(row.activo),
+    orden: Math.trunc(parseNum(row.orden) ?? 0),
+  };
+}
+
+function pickMotivoJoin(value: PausaRow["sys_motivos_pausa"]): MotivoPausaRow | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
+
+function mapRow(
+  r: EjecucionRow,
+  pausesByExecutionId: Map<string, MesaEjecucionPausa[]>,
+): MesaEjecucion {
+  const pauses = pausesByExecutionId.get(r.id) ?? [];
+  const openPause = pauses.find((p) => p.resumedAt == null) ?? null;
   return {
     id: r.id,
     mesaTrabajoId: r.mesa_trabajo_id,
@@ -80,6 +132,13 @@ function mapRow(r: EjecucionRow): MesaEjecucion {
     inicioRealAt: r.inicio_real_at,
     finRealAt: r.fin_real_at,
     estadoEjecucion: r.estado_ejecucion,
+    pausaActivaDesde: openPause?.pausedAt ?? null,
+    motivoPausaActiva: openPause?.motivoLabel ?? null,
+    motivoPausaCategoriaActiva: openPause?.motivoCategoria ?? null,
+    motivoPausaColorHexActiva: openPause?.motivoColorHex ?? null,
+    haEstadoPausada: Boolean(r.ha_estado_pausada) || pauses.length > 0,
+    numPausas: Math.max(0, Math.trunc(parseNum(r.num_pausas) ?? pauses.length)),
+    minutosPausadaAcum: Number(parseNum(r.minutos_pausada_acum) ?? 0),
     horasPlanificadasSnapshot: parseNum(r.horas_planificadas_snapshot),
     horasReales: parseNum(r.horas_reales),
     incidencia: r.incidencia,
@@ -102,6 +161,8 @@ function estadoLabel(e: EstadoEjecucionMesa): string {
 export function PlanificacionOtsEjecucionTab() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [rows, setRows] = useState<MesaEjecucion[]>([]);
+  const [pausesByExecutionId, setPausesByExecutionId] = useState<Record<string, MesaEjecucionPausa[]>>({});
+  const [motivosPausa, setMotivosPausa] = useState<MotivoPausa[]>([]);
   const [maquinas, setMaquinas] = useState<Array<{ id: string; nombre: string }>>([]);
   const [selectedMaquina, setSelectedMaquina] = useState<string>("all");
   const [estado, setEstado] = useState<"activas" | EstadoEjecucionMesa | "all">("activas");
@@ -111,7 +172,7 @@ export function PlanificacionOtsEjecucionTab() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [execRes, maqRes] = await Promise.all([
+      const [execRes, maqRes, motivosRes] = await Promise.all([
         supabase
           .from(TABLE_EJECUCIONES)
           .select("*, prod_maquinas(nombre)")
@@ -122,10 +183,55 @@ export function PlanificacionOtsEjecucionTab() {
           .eq("tipo_maquina", "impresion")
           .eq("activa", true)
           .order("nombre"),
+        supabase
+          .from(TABLE_MOTIVOS_PAUSA)
+          .select("id, slug, label, categoria, color_hex, activo, orden")
+          .eq("activo", true)
+          .order("categoria", { ascending: true })
+          .order("orden", { ascending: true }),
       ]);
       if (execRes.error) throw execRes.error;
       if (maqRes.error) throw maqRes.error;
-      setRows(((execRes.data ?? []) as unknown as EjecucionRow[]).map(mapRow));
+      if (motivosRes.error) throw motivosRes.error;
+      const motivos = ((motivosRes.data ?? []) as MotivoPausaRow[]).map(mapMotivoRow);
+      const execRows = ((execRes.data ?? []) as unknown as EjecucionRow[]);
+      const executionIds = execRows.map((r) => r.id);
+      const pauseMap = new Map<string, MesaEjecucionPausa[]>();
+      if (executionIds.length > 0) {
+        const { data: pauseData, error: pauseErr } = await supabase
+          .from(TABLE_EJECUCIONES_PAUSAS)
+          .select("id, ejecucion_id, paused_at, resumed_at, motivo_id, observaciones_pausa, minutos_pausa, created_at, sys_motivos_pausa(slug,label,categoria,color_hex)")
+          .in("ejecucion_id", executionIds)
+          .order("paused_at", { ascending: false });
+        if (pauseErr) throw pauseErr;
+        for (const p of (pauseData ?? []) as unknown as PausaRow[]) {
+          const executionId = String(p.ejecucion_id ?? "").trim();
+          if (!executionId) continue;
+          const motivo = pickMotivoJoin(p.sys_motivos_pausa);
+          const fallbackMotivo = motivos.find((m) => m.id === p.motivo_id);
+          const entry: MesaEjecucionPausa = {
+            id: String(p.id),
+            ejecucionId: executionId,
+            pausedAt: String(p.paused_at),
+            resumedAt: p.resumed_at ?? null,
+            motivoId: p.motivo_id,
+            motivoLabel: motivo?.label ?? fallbackMotivo?.label ?? "Sin motivo",
+            motivoCategoria: motivo?.categoria ?? fallbackMotivo?.categoria ?? "operativos",
+            motivoColorHex: motivo?.color_hex ?? fallbackMotivo?.colorHex ?? "#64748B",
+            observacionesPausa: p.observaciones_pausa ?? null,
+            minutosPausa: parseNum(p.minutos_pausa),
+            createdAt: String(p.created_at ?? ""),
+          };
+          const list = pauseMap.get(executionId) ?? [];
+          list.push(entry);
+          pauseMap.set(executionId, list);
+        }
+      }
+      setPausesByExecutionId(
+        Object.fromEntries(Array.from(pauseMap.entries()).map(([k, v]) => [k, v] as const)),
+      );
+      setRows(execRows.map((r) => mapRow(r, pauseMap)));
+      setMotivosPausa(motivos);
       setMaquinas(
         ((maqRes.data ?? []) as Array<{ id: string; nombre: string }>).map((m) => ({
           id: m.id,
@@ -157,15 +263,38 @@ export function PlanificacionOtsEjecucionTab() {
     async (row: MesaEjecucion, patch: Record<string, unknown>) => {
       setSavingId(row.id);
       try {
+        const nextPatch = { ...patch };
+        if (patch.estado_ejecucion === "finalizada" && row.estadoEjecucion === "pausada") {
+          const pauses = pausesByExecutionId[row.id] ?? [];
+          const openPause = pauses.find((p) => p.resumedAt == null);
+          if (openPause) {
+            const now = new Date();
+            const pausedAtMs = new Date(openPause.pausedAt).getTime();
+            const deltaMin = Number.isFinite(pausedAtMs)
+              ? Math.max(0, Math.round((now.getTime() - pausedAtMs) / 60000))
+              : 0;
+            const nowIso = now.toISOString();
+            const { error: pauseUpdErr } = await supabase
+              .from(TABLE_EJECUCIONES_PAUSAS)
+              .update({
+                resumed_at: nowIso,
+                minutos_pausa: deltaMin,
+                updated_at: nowIso,
+              })
+              .eq("id", openPause.id);
+            if (pauseUpdErr) throw pauseUpdErr;
+            nextPatch.minutos_pausada_acum = Math.max(0, row.minutosPausadaAcum) + deltaMin;
+          }
+        }
         const { error } = await supabase
           .from(TABLE_EJECUCIONES)
           .update({
-            ...patch,
+            ...nextPatch,
             updated_at: new Date().toISOString(),
           })
           .eq("id", row.id);
         if (error) throw error;
-        if (patch.estado_ejecucion === "finalizada" && row.mesaTrabajoId) {
+        if (nextPatch.estado_ejecucion === "finalizada" && row.mesaTrabajoId) {
           const { error: mesaError } = await supabase
             .from(TABLE_MESA)
             .update({ estado_mesa: "finalizada" })
@@ -176,6 +305,89 @@ export function PlanificacionOtsEjecucionTab() {
         await loadData();
       } catch (e) {
         const msg = e instanceof Error ? e.message : "No se pudo actualizar la ejecución.";
+        toast.error(msg);
+      } finally {
+        setSavingId(null);
+      }
+    },
+    [supabase, loadData, pausesByExecutionId],
+  );
+
+  const pauseExecution = useCallback(
+    async (row: MesaEjecucion, motivo: MotivoPausa | null) => {
+      if (!motivo) {
+        toast.warning("Selecciona un motivo antes de pausar la OT.");
+        return;
+      }
+      setSavingId(row.id);
+      try {
+        const nowIso = new Date().toISOString();
+        const { error: insErr } = await supabase.from(TABLE_EJECUCIONES_PAUSAS).insert({
+          ejecucion_id: row.id,
+          paused_at: nowIso,
+          motivo_id: motivo.id,
+          motivo: motivo.label,
+        });
+        if (insErr) throw insErr;
+        const { error: updErr } = await supabase
+          .from(TABLE_EJECUCIONES)
+          .update({
+            estado_ejecucion: "pausada",
+            ha_estado_pausada: true,
+            num_pausas: Math.max(0, row.numPausas) + 1,
+            updated_at: nowIso,
+          })
+          .eq("id", row.id);
+        if (updErr) throw updErr;
+        toast.success("OT pausada.");
+        await loadData();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "No se pudo pausar la OT.";
+        toast.error(msg);
+      } finally {
+        setSavingId(null);
+      }
+    },
+    [supabase, loadData],
+  );
+
+  const resumeExecution = useCallback(
+    async (row: MesaEjecucion, pauses: MesaEjecucionPausa[]) => {
+      const openPause = pauses.find((p) => p.resumedAt == null);
+      if (!openPause) {
+        toast.error("No se encontró una pausa activa para reanudar.");
+        return;
+      }
+      setSavingId(row.id);
+      try {
+        const now = new Date();
+        const pausedAtMs = new Date(openPause.pausedAt).getTime();
+        const deltaMin = Number.isFinite(pausedAtMs)
+          ? Math.max(0, Math.round((now.getTime() - pausedAtMs) / 60000))
+          : 0;
+        const nowIso = now.toISOString();
+        const { error: pauseUpdErr } = await supabase
+          .from(TABLE_EJECUCIONES_PAUSAS)
+          .update({
+            resumed_at: nowIso,
+            minutos_pausa: deltaMin,
+            updated_at: nowIso,
+          })
+          .eq("id", openPause.id);
+        if (pauseUpdErr) throw pauseUpdErr;
+        const { error: execUpdErr } = await supabase
+          .from(TABLE_EJECUCIONES)
+          .update({
+            estado_ejecucion: "en_curso",
+            minutos_pausada_acum: Math.max(0, row.minutosPausadaAcum) + deltaMin,
+            updated_at: nowIso,
+          })
+          .eq("id", row.id);
+        if (execUpdErr) throw execUpdErr;
+        toast.success("OT reanudada.");
+        await loadData();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "No se pudo reanudar la OT.";
         toast.error(msg);
       } finally {
         setSavingId(null);
@@ -200,22 +412,22 @@ export function PlanificacionOtsEjecucionTab() {
       exportEjecucionesExcel(filtered, {
         maquina: selectedMaquinaLabel,
         estado: estadoLabelFiltro,
-      });
+      }, pausesByExecutionId);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo exportar Excel.");
     }
-  }, [filtered, selectedMaquinaLabel, estadoLabelFiltro]);
+  }, [filtered, selectedMaquinaLabel, estadoLabelFiltro, pausesByExecutionId]);
 
   const handleExportPdf = useCallback(() => {
     try {
       exportEjecucionesPdf(filtered, {
         maquina: selectedMaquinaLabel,
         estado: estadoLabelFiltro,
-      });
+      }, pausesByExecutionId);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo exportar PDF.");
     }
-  }, [filtered, selectedMaquinaLabel, estadoLabelFiltro]);
+  }, [filtered, selectedMaquinaLabel, estadoLabelFiltro, pausesByExecutionId]);
 
   return (
     <Card className="border-slate-200/80 bg-white/95 shadow-sm backdrop-blur-sm">
@@ -288,11 +500,15 @@ export function PlanificacionOtsEjecucionTab() {
                 : null;
             return (
               <ExecutionCard
-                key={row.id}
+                key={`${row.id}-${row.updatedAt}`}
                 row={row}
+                pauses={pausesByExecutionId[row.id] ?? []}
+                motivosPausa={motivosPausa}
                 desviacion={desviacion}
                 saving={savingId === row.id}
                 onPatch={(patch) => void patchExecution(row, patch)}
+                onPause={(motivo) => void pauseExecution(row, motivo)}
+                onResume={(pauses) => void resumeExecution(row, pauses)}
               />
             );
           })}
@@ -304,20 +520,30 @@ export function PlanificacionOtsEjecucionTab() {
 
 function ExecutionCard({
   row,
+  pauses,
+  motivosPausa,
   desviacion,
   saving,
   onPatch,
+  onPause,
+  onResume,
 }: {
   row: MesaEjecucion;
+  pauses: MesaEjecucionPausa[];
+  motivosPausa: MotivoPausa[];
   desviacion: number | null;
   saving: boolean;
   onPatch: (patch: Record<string, unknown>) => void;
+  onPause: (motivo: MotivoPausa | null) => void;
+  onResume: (pauses: MesaEjecucionPausa[]) => void;
 }) {
   const [horas, setHoras] = useState(row.horasReales != null ? String(row.horasReales) : "");
   const [incidencia, setIncidencia] = useState(row.incidencia ?? "");
   const [accion, setAccion] = useState(row.accionCorrectiva ?? "");
   const [maquinista, setMaquinista] = useState(row.maquinista ?? "");
   const [observaciones, setObservaciones] = useState(row.observaciones ?? "");
+  const [pausePickerOpen, setPausePickerOpen] = useState(false);
+  const [selectedMotivoId, setSelectedMotivoId] = useState("");
 
   const canEdit = row.estadoEjecucion !== "finalizada" && row.estadoEjecucion !== "cancelada";
 
@@ -372,6 +598,122 @@ function ExecutionCard({
         <Input value={observaciones} onChange={(e) => setObservaciones(e.target.value)} disabled={!canEdit || saving} />
       </div>
 
+      {pausePickerOpen && row.estadoEjecucion === "en_curso" ? (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/70 p-2">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <Label className="text-xs font-semibold text-amber-900">
+              Selecciona motivo de pausa
+            </Label>
+            <button
+              type="button"
+              className="text-[11px] font-medium text-slate-500 hover:text-slate-800"
+              onClick={() => {
+                setPausePickerOpen(false);
+                setSelectedMotivoId("");
+              }}
+              disabled={saving}
+            >
+              Cancelar
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {motivosPausa.map((motivo) => {
+              const selected = selectedMotivoId === motivo.id;
+              return (
+                <button
+                  key={motivo.id}
+                  type="button"
+                  disabled={saving}
+                  onClick={() => setSelectedMotivoId(motivo.id)}
+                  className={cn(
+                    "min-h-14 rounded-lg border px-2 py-2 text-center text-[11px] font-bold uppercase tracking-wide text-white shadow-xs transition-transform",
+                    "hover:scale-[1.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#002147]",
+                    selected ? "border-[#002147] ring-2 ring-[#002147]" : "border-white/50",
+                  )}
+                  style={{ backgroundColor: motivo.colorHex }}
+                  title={`${motivo.label} · ${motivo.categoria}`}
+                >
+                  <span className="block leading-tight">{motivo.label}</span>
+                  <span className="mt-1 block text-[9px] font-semibold opacity-80">
+                    {motivo.categoria}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            className="mt-2 w-full bg-[#002147] text-white hover:bg-[#001735]"
+            disabled={saving || !selectedMotivoId}
+            onClick={() => {
+              const motivo = motivosPausa.find((m) => m.id === selectedMotivoId) ?? null;
+              onPause(motivo);
+              setPausePickerOpen(false);
+              setSelectedMotivoId("");
+            }}
+          >
+            Confirmar pausa
+          </Button>
+        </div>
+      ) : null}
+
+      {row.estadoEjecucion === "pausada" ? (
+        <p className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+          Pausada {row.pausaActivaDesde ? `desde ${format(new Date(row.pausaActivaDesde), "dd/MM/yyyy HH:mm", { locale: es })}` : ""}.
+          {row.motivoPausaActiva ? (
+            <>
+              {" Motivo: "}
+              <span
+                className="inline-flex rounded px-1 py-0.5 text-[10px] font-semibold text-white"
+                style={{ backgroundColor: row.motivoPausaColorHexActiva ?? "#64748B" }}
+              >
+                {row.motivoPausaActiva}
+              </span>
+              .
+            </>
+          ) : ""}
+          {row.minutosPausadaAcum > 0 ? ` Acumulado: ${row.minutosPausadaAcum} min.` : ""}
+        </p>
+      ) : null}
+      {row.haEstadoPausada && pauses.length > 0 ? (
+        <details className="mt-2 rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-700">
+          <summary className="cursor-pointer font-medium">
+            Historial pausas ({row.numPausas})
+          </summary>
+          <div className="mt-1 space-y-1">
+            {pauses.slice(0, 5).map((p) => (
+              <div key={p.id} className="rounded border border-slate-200 bg-white px-2 py-1">
+                <div>
+                  {format(new Date(p.pausedAt), "dd/MM HH:mm", { locale: es })}
+                  {" → "}
+                  {p.resumedAt
+                    ? format(new Date(p.resumedAt), "dd/MM HH:mm", { locale: es })
+                    : "abierta"}
+                  {typeof p.minutosPausa === "number" && p.minutosPausa >= 0
+                    ? ` · ${p.minutosPausa} min`
+                    : ""}
+                </div>
+                <div className="flex flex-wrap items-center gap-1 text-slate-600">
+                  <span
+                    className="inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
+                    style={{ backgroundColor: p.motivoColorHex }}
+                  >
+                    {p.motivoLabel}
+                  </span>
+                  <span className="text-[10px] uppercase text-slate-500">
+                    {p.motivoCategoria}
+                  </span>
+                  {p.observacionesPausa ? (
+                    <span className="text-slate-500">· {p.observacionesPausa}</span>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
+
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-slate-600">
           Plan: {row.horasPlanificadasSnapshot ?? "—"}h · Real: {row.horasReales ?? "—"}h
@@ -403,12 +745,30 @@ function ExecutionCard({
             </Button>
           ) : null}
           {row.estadoEjecucion === "en_curso" ? (
-            <Button type="button" size="sm" variant="outline" disabled={saving} onClick={() => onPatch({ estado_ejecucion: "pausada" })}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={saving}
+              onClick={() => {
+                setPausePickerOpen(true);
+              }}
+            >
               <Pause className="mr-1 size-4" /> Pausar
             </Button>
           ) : null}
           {row.estadoEjecucion === "pausada" ? (
-            <Button type="button" size="sm" variant="outline" disabled={saving} onClick={() => onPatch({ estado_ejecucion: "en_curso" })}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={saving}
+              onClick={() => {
+                onResume(pauses);
+                setPausePickerOpen(false);
+                setSelectedMotivoId("");
+              }}
+            >
               <Play className="mr-1 size-4" /> Reanudar
             </Button>
           ) : null}
@@ -418,8 +778,8 @@ function ExecutionCard({
               size="sm"
               className="bg-[#002147] text-white hover:bg-[#001735]"
               disabled={saving}
-              onClick={() =>
-                onPatch({
+              onClick={() => {
+                  onPatch({
                   estado_ejecucion: "finalizada",
                   fin_real_at: new Date().toISOString(),
                   horas_reales: Number(horas.replace(",", ".")) || null,
@@ -427,8 +787,8 @@ function ExecutionCard({
                   incidencia: incidencia.trim() || null,
                   accion_correctiva: accion.trim() || null,
                   observaciones: observaciones.trim() || null,
-                })
-              }
+                });
+              }}
             >
               <CheckCircle2 className="mr-1 size-4" /> Finalizar
             </Button>

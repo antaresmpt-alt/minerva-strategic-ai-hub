@@ -1,4 +1,10 @@
 import type { MesaEjecucion } from "@/types/planificacion-mesa";
+import {
+  buildEjecucionEfficiencyReport,
+  formatMinutesDuration,
+  type PauseDetail,
+  type PausesByExecutionId,
+} from "@/lib/planificacion-ejecucion-efficiency";
 
 type PrintFilters = {
   maquina: string;
@@ -28,6 +34,22 @@ function fmtHours(value: number | null): string {
   return `${value.toFixed(1).replace(/\.0$/, "")}h`;
 }
 
+function pauseDetailRows(details: PauseDetail[]): string {
+  return details
+    .map(
+      (p) => `<tr>
+        <td>${escapeHtml(p.ot)}</td>
+        <td>${escapeHtml(fmtDate(p.inicio))}</td>
+        <td>${escapeHtml(fmtDate(p.fin))}</td>
+        <td>${escapeHtml(p.motivo)}</td>
+        <td>${escapeHtml(p.categoria)}</td>
+        <td class="num">${escapeHtml(formatMinutesDuration(p.duracionMin))}</td>
+        <td>${escapeHtml(p.observaciones ?? "-")}</td>
+      </tr>`,
+    )
+    .join("");
+}
+
 function estadoLabel(value: string): string {
   if (value === "en_curso") return "En curso";
   if (value === "pausada") return "Pausada";
@@ -40,6 +62,7 @@ export function printParteEjecuciones(
   targetWindow: Window,
   rows: MesaEjecucion[],
   filters: PrintFilters,
+  pausesByExecutionId: PausesByExecutionId = {},
 ): void {
   const generatedAt = new Date();
   const title = `Parte operativo OTs en ejecución - ${new Intl.DateTimeFormat("es-ES", {
@@ -53,6 +76,11 @@ export function printParteEjecuciones(
   );
   const totalReal = rows.reduce((acc, r) => acc + (r.horasReales ?? 0), 0);
   const desviacion = totalReal - totalPlan;
+  const efficiency = buildEjecucionEfficiencyReport(rows, pausesByExecutionId);
+  const causeText = efficiency.causaPrincipal
+    ? `${efficiency.causaPrincipal.categoria} · ${efficiency.causaPrincipal.motivo} (${formatMinutesDuration(efficiency.causaPrincipal.minutos)})`
+    : "-";
+  const pauseRows = pauseDetailRows(efficiency.pauseDetails);
 
   const htmlRows = rows
     .map((r) => {
@@ -70,6 +98,11 @@ export function printParteEjecuciones(
         <td class="num">${escapeHtml(fmtHours(r.horasPlanificadasSnapshot))}</td>
         <td class="num">${escapeHtml(fmtHours(r.horasReales))}</td>
         <td class="num ${dev != null && dev > 0 ? "bad" : "ok"}">${escapeHtml(dev == null ? "-" : fmtHours(dev))}</td>
+        <td class="num">${escapeHtml(r.numPausas > 0 ? String(r.numPausas) : "-")}</td>
+        <td class="num">${escapeHtml(r.minutosPausadaAcum > 0 ? `${r.minutosPausadaAcum} min` : "-")}</td>
+        <td>${escapeHtml(fmtDate(r.pausaActivaDesde))}</td>
+        <td>${escapeHtml(r.motivoPausaActiva ?? "-")}</td>
+        <td>${escapeHtml(r.motivoPausaCategoriaActiva ?? "-")}</td>
         <td>${escapeHtml(r.maquinista ?? "-")}</td>
         <td>${escapeHtml(r.incidencia ?? "-")}</td>
         <td>${escapeHtml(r.accionCorrectiva ?? "-")}</td>
@@ -90,6 +123,14 @@ export function printParteEjecuciones(
         .meta { color: #475569; font-size: 11px; margin-bottom: 10px; }
         .summary { display: flex; gap: 10px; margin-bottom: 10px; font-size: 11px; }
         .summary span { border: 1px solid #cbd5e1; border-radius: 6px; padding: 5px 8px; }
+        .efficiency { border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px; margin-bottom: 10px; background: #f8fafc; font-size: 11px; }
+        .efficiency h2 { margin: 0 0 6px; color: #002147; font-size: 13px; }
+        .eff-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+        .eff-cell { border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px; background: #fff; }
+        .eff-label { display: block; color: #64748b; font-size: 9px; text-transform: uppercase; }
+        .eff-value { font-weight: 700; color: #0f172a; }
+        .machine-badge { display: inline-block; border-radius: 999px; padding: 3px 8px; color: white; font-weight: 700; }
+        h2.section { color: #002147; font-size: 13px; margin: 12px 0 6px; }
         table { width: 100%; border-collapse: collapse; font-size: 9px; }
         th, td { border: 1px solid #cbd5e1; padding: 4px; vertical-align: top; }
         th { background: #eef2f7; color: #002147; text-align: left; }
@@ -107,15 +148,33 @@ export function printParteEjecuciones(
         <span>Horas reales: <strong>${escapeHtml(fmtHours(totalReal))}</strong></span>
         <span>Desviación: <strong>${escapeHtml(fmtHours(desviacion))}</strong></span>
       </div>
+      <section class="efficiency">
+        <h2>Resumen de eficiencia del periodo filtrado</h2>
+        <div class="eff-grid">
+          <div class="eff-cell"><span class="eff-label">Tiempo de marcha</span><span class="eff-value">${escapeHtml(formatMinutesDuration(efficiency.tiempoMarchaMin))}</span></div>
+          <div class="eff-cell"><span class="eff-label">Tiempo de pausa</span><span class="eff-value">${escapeHtml(formatMinutesDuration(efficiency.tiempoPausaMin))}</span></div>
+          <div class="eff-cell"><span class="eff-label">Causa principal</span><span class="eff-value">${escapeHtml(causeText)}</span></div>
+          <div class="eff-cell"><span class="eff-label">Estado máquina</span><span class="machine-badge" style="background:${escapeHtml(efficiency.estadoMaquina.hex)}">${escapeHtml(efficiency.estadoMaquina.label)} · ${escapeHtml(`${efficiency.eficienciaPct}%`)}</span></div>
+        </div>
+      </section>
       <table>
         <thead>
           <tr>
             <th>OT</th><th>Máquina</th><th>Fecha/Turno</th><th>Estado</th>
-            <th>Inicio</th><th>Fin</th><th>Plan</th><th>Real</th><th>Desv.</th>
+            <th>Inicio</th><th>Fin</th><th>Plan</th><th>Real</th><th>Desv.</th><th>Nº pausas</th><th>Min pausa</th><th>Última pausa</th><th>Motivo pausa</th><th>Categoría pausa</th>
             <th>Maquinista</th><th>Incidencia</th><th>Acción correctiva</th><th>Observaciones</th>
           </tr>
         </thead>
-        <tbody>${htmlRows || `<tr><td colspan="13">Sin registros para los filtros actuales.</td></tr>`}</tbody>
+        <tbody>${htmlRows || `<tr><td colspan="18">Sin registros para los filtros actuales.</td></tr>`}</tbody>
+      </table>
+      <h2 class="section">Histórico Detallado de Pausas</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>OT</th><th>Inicio</th><th>Fin</th><th>Motivo</th><th>Categoría</th><th>Duración</th><th>Observaciones</th>
+          </tr>
+        </thead>
+        <tbody>${pauseRows || `<tr><td colspan="7">Sin pausas para los filtros actuales.</td></tr>`}</tbody>
       </table>
       <footer>Minerva AI Hub · Parte operativo generado automáticamente.</footer>
       <script>window.addEventListener("load", () => { window.print(); });</script>

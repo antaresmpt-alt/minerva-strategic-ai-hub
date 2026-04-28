@@ -14,6 +14,7 @@ import {
 import { Label } from "@/components/ui/label";
 import {
   buildPrintPayload,
+  type EstadoMesaExport,
   type ExportFormato,
   type ExportFuente,
   type ExportSalida,
@@ -100,6 +101,11 @@ function ExportDialogBody({
   const [salida, setSalida] = useState<ExportSalida>("pdf");
   const [turno, setTurno] = useState<ExportTurno>("ambos");
   const [fuente, setFuente] = useState<ExportFuente>("oficial");
+  const [estadosIncluidos, setEstadosIncluidos] = useState<EstadoMesaExport[]>([
+    "confirmado",
+    "en_ejecucion",
+    "finalizada",
+  ]);
   const [selectedDay, setSelectedDay] = useState<DayKey>(
     () => visibleDayKeys[0] ?? weekMondayKey,
   );
@@ -107,21 +113,50 @@ function ExportDialogBody({
 
   const dayKey = formato === "diario" ? selectedDay : null;
 
-  const totalRows = useMemo(() => {
-    const days = dayKey ? [dayKey] : visibleDayKeys;
-    const turnos = turno === "ambos" ? ["manana", "tarde"] : [turno];
-    let n = 0;
-    for (const d of days) {
-      for (const t of turnos) {
-        const sk: SlotKey = `${d}::${t}`;
-        const src = simulationOn && fuente === "visible_actual" && draftBySlot
-          ? draftBySlot
-          : realBySlot;
-        n += (src[sk] ?? []).length;
-      }
-    }
-    return n;
-  }, [dayKey, visibleDayKeys, turno, fuente, simulationOn, draftBySlot, realBySlot]);
+  const previewPayload = useMemo(
+    () =>
+      buildPrintPayload({
+        fuente,
+        estadosIncluidos,
+        formato,
+        turno,
+        dayKey,
+        weekMondayKey,
+        visibleDayKeys,
+        realBySlot,
+        draftBySlot,
+        simulationOn,
+        capacidades,
+        maquinaId,
+        maquinaNombre,
+        generadoPor: userEmail ?? "usuario",
+        trabajoByOt,
+        defaultCapacidad,
+      }),
+    [
+      fuente,
+      estadosIncluidos,
+      formato,
+      turno,
+      dayKey,
+      weekMondayKey,
+      visibleDayKeys,
+      realBySlot,
+      draftBySlot,
+      simulationOn,
+      capacidades,
+      maquinaId,
+      maquinaNombre,
+      userEmail,
+      trabajoByOt,
+      defaultCapacidad,
+    ],
+  );
+
+  const totalRows = useMemo(
+    () => previewPayload.blocks.reduce((acc, b) => acc + b.rows.length, 0),
+    [previewPayload],
+  );
 
   const handleGenerate = useCallback(
     async (preview = false) => {
@@ -129,6 +164,7 @@ function ExportDialogBody({
 
       const payload = buildPrintPayload({
         fuente,
+        estadosIncluidos,
         formato,
         turno,
         dayKey,
@@ -178,6 +214,7 @@ function ExportDialogBody({
     },
     [
       generating, fuente, formato, turno, dayKey, weekMondayKey, visibleDayKeys,
+      estadosIncluidos,
       realBySlot, draftBySlot, simulationOn, capacidades, maquinaId,
       maquinaNombre, userEmail, defaultCapacidad, salida, onClose,
       trabajoByOt,
@@ -292,13 +329,75 @@ function ExportDialogBody({
           </div>
           <p className="text-[10px] text-slate-500">
             {fuente === "oficial"
-              ? "Usa confirmados/en_ejecución. Si no hay, usa borrador como fallback."
+              ? "Usa confirmados/en_ejecución/finalizadas. Si no hay, usa borrador como fallback."
               : fuente === "borrador"
                 ? "Solo trabajos en estado borrador."
                 : simulationOn
                   ? "Incluye los cambios del modo simulación activo."
                   : "Vista sin simulación: igual que plan oficial."}
           </p>
+        </div>
+
+        {/* Estados */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-xs font-semibold text-slate-700">Estados a incluir</Label>
+            <div className="flex gap-1.5 text-[10px]">
+              <button
+                type="button"
+                className="rounded border border-slate-300 px-2 py-0.5 text-slate-600 hover:bg-slate-50"
+                onClick={() => setEstadosIncluidos(["confirmado", "en_ejecucion"])}
+              >
+                Operativo
+              </button>
+              <button
+                type="button"
+                className="rounded border border-slate-300 px-2 py-0.5 text-slate-600 hover:bg-slate-50"
+                onClick={() => setEstadosIncluidos(["confirmado", "en_ejecucion", "finalizada"])}
+              >
+                Completo
+              </button>
+              <button
+                type="button"
+                className="rounded border border-slate-300 px-2 py-0.5 text-slate-600 hover:bg-slate-50"
+                onClick={() => setEstadosIncluidos(["borrador", "confirmado", "en_ejecucion", "finalizada"])}
+              >
+                Todos
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { key: "borrador", label: "Borrador" },
+              { key: "confirmado", label: "Confirmada" },
+              { key: "en_ejecucion", label: "En ejecución" },
+              { key: "finalizada", label: "Finalizada" },
+            ].map((it) => {
+              const key = it.key as EstadoMesaExport;
+              const active = estadosIncluidos.includes(key);
+              return (
+                <OptionButton
+                  key={it.key}
+                  active={active}
+                  onClick={() =>
+                    setEstadosIncluidos((prev) =>
+                      active
+                        ? prev.filter((x) => x !== key)
+                        : [...prev, key],
+                    )
+                  }
+                  className="flex-none"
+                >
+                  {it.label}
+                </OptionButton>
+              );
+            })}
+          </div>
+          {estadosIncluidos.length === 0 ? (
+            <p className="text-[10px] text-amber-700">
+              Selecciona al menos un estado para poder exportar.
+            </p>
+          ) : null}
         </div>
 
         {/* Resumen */}

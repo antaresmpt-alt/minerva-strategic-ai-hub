@@ -23,6 +23,7 @@ const LIGHT_GRAY: [number, number, number] = [245, 246, 248];
 const MID_GRAY: [number, number, number] = [120, 120, 120];
 const WHITE: [number, number, number] = [255, 255, 255];
 const AMBER_TEXT: [number, number, number] = [146, 64, 14]; // amber-800
+const RUNNING_GREEN: [number, number, number] = [5, 150, 105]; // emerald-600
 
 const MARGIN = 12;
 
@@ -189,6 +190,7 @@ function drawBlock(
     "",
     "",
   ]);
+  const estadoByOt = new Map(block.rows.map((r) => [r.ot, r.estadoMesa] as const));
 
   autoTable(doc, {
     head,
@@ -223,6 +225,18 @@ function drawBlock(
           8: { cellWidth: 24 },
           9: { cellWidth: 24 },
         },
+    didParseCell: (hook) => {
+      if (hook.section !== "body") return;
+      if (hook.column.index !== 1) return; // columna OT
+      const ot = String(hook.cell.raw ?? "").trim();
+      const estado = estadoByOt.get(ot);
+      if (estado === "en_ejecucion") {
+        hook.cell.styles.textColor = RUNNING_GREEN;
+        hook.cell.styles.fontStyle = "bold";
+      } else if (estado === "finalizada") {
+        hook.cell.styles.textColor = MID_GRAY;
+      }
+    },
     didDrawPage: () => {
       // Repite cabecera en cada página extra
     },

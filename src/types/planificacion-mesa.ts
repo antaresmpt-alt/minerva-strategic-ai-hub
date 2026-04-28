@@ -63,6 +63,10 @@ export interface MesaTrabajo {
   barnizSnapshot: string | null;
   numHojasBrutasSnapshot: number;
   horasPlanificadasSnapshot: number;
+  /** Estado operativo real de ejecución (si existe registro activo en prod_mesa_ejecuciones). */
+  estadoEjecucionActual?: EstadoEjecucionMesa | null;
+  /** Minutos pausados acumulados (incluye tramo abierto si está en pausa). */
+  minutosPausadaAcumActual?: number;
 }
 
 /** Capacidad horaria por día y turno (config). */
@@ -79,6 +83,22 @@ export type EstadoEjecucionMesa =
   | "finalizada"
   | "cancelada";
 
+export type MotivoPausaCategoria =
+  | "operativos"
+  | "suministros"
+  | "calidad"
+  | "tecnicos";
+
+export interface MotivoPausa {
+  id: string;
+  slug: string;
+  label: string;
+  categoria: MotivoPausaCategoria;
+  colorHex: string;
+  activo: boolean;
+  orden: number;
+}
+
 /** Registro operativo manual de una OT iniciada en máquina. */
 export interface MesaEjecucion {
   id: string;
@@ -92,6 +112,13 @@ export interface MesaEjecucion {
   inicioRealAt: string;
   finRealAt: string | null;
   estadoEjecucion: EstadoEjecucionMesa;
+  pausaActivaDesde: string | null;
+  motivoPausaActiva: string | null;
+  motivoPausaCategoriaActiva: MotivoPausaCategoria | null;
+  motivoPausaColorHexActiva: string | null;
+  haEstadoPausada: boolean;
+  numPausas: number;
+  minutosPausadaAcum: number;
   horasPlanificadasSnapshot: number | null;
   horasReales: number | null;
   incidencia: string | null;
@@ -101,6 +128,20 @@ export interface MesaEjecucion {
   observaciones: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface MesaEjecucionPausa {
+  id: string;
+  ejecucionId: string;
+  pausedAt: string;
+  resumedAt: string | null;
+  motivoId: string;
+  motivoLabel: string;
+  motivoCategoria: MotivoPausaCategoria;
+  motivoColorHex: string;
+  observacionesPausa: string | null;
+  minutosPausa: number | null;
+  createdAt: string;
 }
 
 export interface PlanificacionIaSettings {

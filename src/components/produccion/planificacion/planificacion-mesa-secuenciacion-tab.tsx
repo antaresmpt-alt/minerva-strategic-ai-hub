@@ -549,9 +549,75 @@ export function PlanificacionMesaSecuenciacionTab() {
     const { data, error: mesaErr } = await query;
     if (mesaErr) throw mesaErr;
     const rows = (data ?? []) as Array<Record<string, unknown>>;
+    const mesaIds = rows
+      .map((r) => String(r.id ?? "").trim())
+      .filter((id) => id.length > 0);
     const otsList = rows
       .map((r) => String(r.ot_numero ?? "").trim())
       .filter((ot) => ot.length > 0);
+    const ejecByMesaId = new Map<
+      string,
+      { id: string; estado: string; minutosAcum: number; updatedAt: string }
+    >();
+    const ejecByOt = new Map<
+      string,
+      { id: string; estado: string; minutosAcum: number; updatedAt: string }
+    >();
+    if (mesaIds.length > 0 || otsList.length > 0) {
+      let ejecQuery = supabase
+        .from(TABLE_EJECUCIONES)
+        .select("id, mesa_trabajo_id, ot_numero, estado_ejecucion, minutos_pausada_acum, updated_at")
+        .in("estado_ejecucion", ["en_curso", "pausada"]);
+      if (selectedMaquinaId) {
+        ejecQuery = ejecQuery.eq("maquina_id", selectedMaquinaId);
+      }
+      const { data: ejecData, error: ejecErr } = await ejecQuery.order("updated_at", { ascending: false });
+      if (ejecErr) throw ejecErr;
+      for (const e of (ejecData ?? []) as Array<Record<string, unknown>>) {
+        const mesaTrabajoId = String(e.mesa_trabajo_id ?? "").trim();
+        const otNumero = String(e.ot_numero ?? "").trim();
+        const estado = String(e.estado_ejecucion ?? "").trim();
+        const updatedAt = String(e.updated_at ?? "");
+        const id = String(e.id ?? "");
+        const entry = {
+          id,
+          estado,
+          minutosAcum: Math.max(0, Math.trunc(parseNum(e.minutos_pausada_acum))),
+          updatedAt,
+        };
+        if (mesaTrabajoId && !ejecByMesaId.has(mesaTrabajoId)) {
+          ejecByMesaId.set(mesaTrabajoId, entry);
+        }
+        if (otNumero && !ejecByOt.has(otNumero)) {
+          ejecByOt.set(otNumero, entry);
+        }
+      }
+    }
+    const activeExecutionIds = Array.from(
+      new Set(
+        [...ejecByMesaId.values(), ...ejecByOt.values()]
+          .map((x) => x.id)
+          .filter((x) => x.length > 0),
+      ),
+    );
+    const openPauseByExecutionId = new Map<string, { pausedAt: string; motivo: string }>();
+    if (activeExecutionIds.length > 0) {
+      const { data: pauseData, error: pauseErr } = await supabase
+        .from("prod_mesa_ejecuciones_pausas")
+        .select("ejecucion_id, paused_at, motivo")
+        .in("ejecucion_id", activeExecutionIds)
+        .is("resumed_at", null)
+        .order("paused_at", { ascending: false });
+      if (pauseErr) throw pauseErr;
+      for (const p of (pauseData ?? []) as Array<Record<string, unknown>>) {
+        const executionId = String(p.ejecucion_id ?? "").trim();
+        if (!executionId || openPauseByExecutionId.has(executionId)) continue;
+        openPauseByExecutionId.set(executionId, {
+          pausedAt: String(p.paused_at ?? ""),
+          motivo: String(p.motivo ?? "").trim(),
+        });
+      }
+    }
     const fallbackByOt = new Map<string, { horas: number; numHojas: number }>();
     if (otsList.length > 0) {
       const { data: despData, error: despErr } = await supabase
@@ -575,6 +641,14 @@ export function PlanificacionMesaSecuenciacionTab() {
       const numHojasSnapshot = Math.trunc(parseNum(r.num_hojas_brutas_snapshot));
       const horasSnapshot = parseNum(r.horas_planificadas_snapshot);
       const estadoMesa = String(r.estado_mesa ?? "borrador");
+      const mesaId = String(r.id ?? "");
+      const ejec = ejecByMesaId.get(mesaId) ?? (ot ? ejecByOt.get(ot) : undefined);
+      const openPause = ejec ? openPauseByExecutionId.get(ejec.id) : undefined;
+      const pausadaAtMs = openPause?.pausedAt ? new Date(openPause.pausedAt).getTime() : Number.NaN;
+      const deltaMin = ejec?.estado === "pausada" && Number.isFinite(pausadaAtMs)
+        ? Math.max(0, Math.round((Date.now() - pausadaAtMs) / 60000))
+        : 0;
+      const minutosPausadaActual = Math.max(0, (ejec?.minutosAcum ?? 0) + deltaMin);
       const isLockedState =
         estadoMesa === "en_ejecucion" || estadoMesa === "finalizada";
       const numHojasLive = Math.max(0, Math.trunc(fallback?.numHojas ?? 0));
@@ -621,6 +695,11 @@ export function PlanificacionMesaSecuenciacionTab() {
         barnizSnapshot: (r.barniz_snapshot as string | null) ?? null,
         numHojasBrutasSnapshot: numHojasMerged,
         horasPlanificadasSnapshot: horasMerged,
+        estadoEjecucionActual:
+          ejec?.estado === "en_curso" || ejec?.estado === "pausada"
+            ? (ejec.estado as "en_curso" | "pausada")
+            : null,
+        minutosPausadaAcumActual: minutosPausadaActual,
       });
     }
     return dedupeMesaByOt(out);

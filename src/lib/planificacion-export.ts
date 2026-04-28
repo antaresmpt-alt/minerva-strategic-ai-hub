@@ -27,6 +27,11 @@ export type ExportFuente = "oficial" | "borrador" | "visible_actual";
 export type ExportFormato = "diario" | "semanal";
 export type ExportSalida = "pdf" | "excel";
 export type ExportTurno = "ambos" | "manana" | "tarde";
+export type EstadoMesaExport =
+  | "borrador"
+  | "confirmado"
+  | "en_ejecucion"
+  | "finalizada";
 
 export interface ExportMeta {
   maquinaNombre: string;
@@ -36,6 +41,7 @@ export interface ExportMeta {
   dayKey: DayKey | null;
   turno: ExportTurno;
   fuente: ExportFuente;
+  estadosIncluidos: EstadoMesaExport[];
   /** Si fuente=oficial pero no había confirmados, se usó borrador como fallback */
   fuenteFallback: boolean;
   generadoPor: string;
@@ -60,6 +66,7 @@ export interface PrintRow {
   horas: number;
   /** Capacidad del turno en horas */
   capacidad: number;
+  estadoMesa: EstadoMesaExport;
 }
 
 export interface PrintBlock {
@@ -156,6 +163,24 @@ function capacidadForSlot(
   return c?.capacidadHoras ?? defaultCap;
 }
 
+function defaultEstadosForFuente(fuente: ExportFuente): EstadoMesaExport[] {
+  if (fuente === "borrador") return ["borrador"];
+  if (fuente === "oficial") return ["confirmado", "en_ejecucion", "finalizada"];
+  return ["borrador", "confirmado", "en_ejecucion", "finalizada"];
+}
+
+function sanitizeEstados(
+  estadosIncluidos: EstadoMesaExport[] | null | undefined,
+  fuente: ExportFuente,
+): EstadoMesaExport[] {
+  const defaults = defaultEstadosForFuente(fuente);
+  const source = (estadosIncluidos ?? defaults)
+    .filter(Boolean)
+    .filter((v, i, arr) => arr.indexOf(v) === i);
+  if (source.length === 0) return defaults;
+  return source;
+}
+
 // ============================================================
 // Resolución de fuente
 // ============================================================
@@ -166,39 +191,65 @@ function capacidadForSlot(
  */
 export function resolveSource(opts: {
   fuente: ExportFuente;
+  estadosIncluidos?: EstadoMesaExport[];
   realBySlot: Record<SlotKey, MesaTrabajo[]>;
   draftBySlot: Record<SlotKey, MesaTrabajo[]> | null;
   simulationOn: boolean;
 }): { bySlot: Record<SlotKey, MesaTrabajo[]>; fuenteFallback: boolean } {
   const { fuente, realBySlot, draftBySlot, simulationOn } = opts;
+  const estadosIncluidos = sanitizeEstados(opts.estadosIncluidos, fuente);
 
   if (fuente === "visible_actual") {
     const src = simulationOn && draftBySlot ? draftBySlot : realBySlot;
-    return { bySlot: src, fuenteFallback: false };
+    const out: Record<SlotKey, MesaTrabajo[]> = {};
+    for (const [sk, items] of Object.entries(src)) {
+      out[sk] = items.filter((it) =>
+        estadosIncluidos.includes(it.estadoMesa as EstadoMesaExport),
+      );
+    }
+    return { bySlot: out, fuenteFallback: false };
   }
 
   if (fuente === "borrador") {
     const out: Record<SlotKey, MesaTrabajo[]> = {};
     for (const [sk, items] of Object.entries(realBySlot)) {
-      out[sk] = items.filter((it) => it.estadoMesa === "borrador");
+      out[sk] = items.filter(
+        (it) =>
+          it.estadoMesa === "borrador" &&
+          estadosIncluidos.includes(it.estadoMesa as EstadoMesaExport),
+      );
     }
     return { bySlot: out, fuenteFallback: false };
   }
 
-  // oficial: confirmado | en_ejecucion, con fallback a borrador
+  // oficial: confirmado | en_ejecucion | finalizada
+  // Si además se selecciona borrador, también se incluye (TODO = literal).
+  // Si no se selecciona borrador y no hay oficiales, fallback a borrador.
   const oficial: Record<SlotKey, MesaTrabajo[]> = {};
   const borrador: Record<SlotKey, MesaTrabajo[]> = {};
+  const merged: Record<SlotKey, MesaTrabajo[]> = {};
   let hasOficial = false;
+  const includesBorrador = estadosIncluidos.includes("borrador");
 
   for (const [sk, items] of Object.entries(realBySlot)) {
     oficial[sk] = items.filter(
-      (it) => it.estadoMesa === "confirmado" || it.estadoMesa === "en_ejecucion",
+      (it) =>
+        (it.estadoMesa === "confirmado" ||
+          it.estadoMesa === "en_ejecucion" ||
+          it.estadoMesa === "finalizada") &&
+        estadosIncluidos.includes(it.estadoMesa as EstadoMesaExport),
     );
-    borrador[sk] = items.filter((it) => it.estadoMesa === "borrador");
+    borrador[sk] = items.filter(
+      (it) =>
+        it.estadoMesa === "borrador" &&
+        estadosIncluidos.includes(it.estadoMesa as EstadoMesaExport),
+    );
+    merged[sk] = includesBorrador ? [...oficial[sk]!, ...borrador[sk]!] : [...oficial[sk]!];
     if (oficial[sk]!.length > 0) hasOficial = true;
   }
 
-  if (hasOficial) return { bySlot: oficial, fuenteFallback: false };
+  if (hasOficial) return { bySlot: merged, fuenteFallback: false };
+  if (includesBorrador) return { bySlot: merged, fuenteFallback: false };
   return { bySlot: borrador, fuenteFallback: true };
 }
 
@@ -212,6 +263,7 @@ export function resolveSource(opts: {
  */
 export function buildPrintPayload(opts: {
   fuente: ExportFuente;
+  estadosIncluidos?: EstadoMesaExport[];
   formato: ExportFormato;
   turno: ExportTurno;
   dayKey: DayKey | null;
@@ -229,12 +281,18 @@ export function buildPrintPayload(opts: {
 }): PrintPayload {
   const {
     fuente, formato, turno, dayKey, weekMondayKey, visibleDayKeys,
+    estadosIncluidos,
     realBySlot, draftBySlot, simulationOn, capacidades,
     maquinaId, maquinaNombre, generadoPor, trabajoByOt = {}, defaultCapacidad = 8,
   } = opts;
 
+  const estadosNormalizados = sanitizeEstados(estadosIncluidos, fuente);
   const { bySlot, fuenteFallback } = resolveSource({
-    fuente, realBySlot, draftBySlot, simulationOn,
+    fuente,
+    estadosIncluidos: estadosNormalizados,
+    realBySlot,
+    draftBySlot,
+    simulationOn,
   });
 
   // Fechas a incluir
@@ -259,6 +317,7 @@ export function buildPrintPayload(opts: {
     dayKey,
     turno,
     fuente,
+    estadosIncluidos: estadosNormalizados,
     fuenteFallback,
     generadoPor,
     generadoAt,
@@ -306,6 +365,7 @@ export function buildPrintPayload(opts: {
         hojas: Math.trunc(num(it.numHojasBrutasSnapshot)),
         horas: num(it.horasPlanificadasSnapshot),
         capacidad: cap,
+        estadoMesa: (it.estadoMesa as EstadoMesaExport) ?? "confirmado",
       }));
 
       const totalHoras = rows.reduce((s, r) => s + r.horas, 0);
