@@ -87,6 +87,7 @@ function SortableMesaCard({
   const sortableId = itemIdForMesa(trabajo.id);
   const isRunning = trabajo.estadoMesa === "en_ejecucion";
   const isFinished = trabajo.estadoMesa === "finalizada";
+  const isPendingStart = trabajo.estadoEjecucionActual === "pendiente_inicio";
   const isPaused = trabajo.estadoEjecucionActual === "pausada";
   const pausedMinutes = Math.max(0, Math.trunc(trabajo.minutosPausadaAcumActual ?? 0));
   const pauseReason = trabajo.motivoPausaActivaActual?.trim() || null;
@@ -135,7 +136,8 @@ function SortableMesaCard({
         linkedToNext={linkedToNext}
         isDragging={isDragging}
         className={cn(
-          isRunning && !isPaused && "border-emerald-500 bg-emerald-50/80 ring-2 ring-emerald-300",
+          isRunning && !isPaused && !isPendingStart && "border-emerald-500 bg-emerald-50/80 ring-2 ring-emerald-300",
+          isPendingStart && "border-sky-400 bg-sky-50/80 ring-2 ring-sky-200",
           isPaused && "border-amber-400 bg-amber-50/80 ring-2 ring-amber-300",
           isFinished && "border-slate-300 bg-slate-50/90 ring-1 ring-slate-300",
         )}
@@ -147,7 +149,11 @@ function SortableMesaCard({
         footerSlot={
           <div className="mt-1 flex flex-wrap items-center gap-1">
             {isRunning ? (
-              isPaused ? (
+              isPendingStart ? (
+                <span className="inline-flex shrink-0 items-center rounded-full bg-sky-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                  Pendiente inicio
+                </span>
+              ) : isPaused ? (
                 <>
                   <span className="inline-flex shrink-0 items-center rounded-full bg-amber-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
                     Pausada · {pausedMinutes} min
@@ -172,7 +178,7 @@ function SortableMesaCard({
                   ) : null}
                 </>
               ) : (
-                <span className="inline-flex items-center rounded-full bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                <span className="inline-flex shrink-0 items-center rounded-full bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
                   En marcha
                 </span>
               )
@@ -196,7 +202,7 @@ function SortableMesaCard({
                 ) : (
                   <PlayCircle className="mr-1 size-3" />
                 )}
-                Iniciar OT
+                Liberar a máquina
               </button>
             ) : (
               <span className="text-[9px] font-medium uppercase tracking-wide text-amber-700">

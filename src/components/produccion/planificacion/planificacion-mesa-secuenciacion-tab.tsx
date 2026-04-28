@@ -97,6 +97,7 @@ import type {
   CapacidadTurno,
   DayKey,
   DraftBoardState,
+  EstadoEjecucionMesa,
   MaterialStatus,
   MesaTrabajo,
   MotivoPausaCategoria,
@@ -558,17 +559,17 @@ export function PlanificacionMesaSecuenciacionTab() {
       .filter((ot) => ot.length > 0);
     const ejecByMesaId = new Map<
       string,
-      { id: string; estado: string; minutosAcum: number; updatedAt: string }
+      { id: string; estado: EstadoEjecucionMesa; minutosAcum: number; updatedAt: string }
     >();
     const ejecByOt = new Map<
       string,
-      { id: string; estado: string; minutosAcum: number; updatedAt: string }
+      { id: string; estado: EstadoEjecucionMesa; minutosAcum: number; updatedAt: string }
     >();
     if (mesaIds.length > 0 || otsList.length > 0) {
       let ejecQuery = supabase
         .from(TABLE_EJECUCIONES)
         .select("id, mesa_trabajo_id, ot_numero, estado_ejecucion, minutos_pausada_acum, updated_at")
-        .in("estado_ejecucion", ["en_curso", "pausada"]);
+        .in("estado_ejecucion", ["pendiente_inicio", "en_curso", "pausada"]);
       if (selectedMaquinaId) {
         ejecQuery = ejecQuery.eq("maquina_id", selectedMaquinaId);
       }
@@ -577,7 +578,15 @@ export function PlanificacionMesaSecuenciacionTab() {
       for (const e of (ejecData ?? []) as Array<Record<string, unknown>>) {
         const mesaTrabajoId = String(e.mesa_trabajo_id ?? "").trim();
         const otNumero = String(e.ot_numero ?? "").trim();
-        const estado = String(e.estado_ejecucion ?? "").trim();
+        const estadoRaw = String(e.estado_ejecucion ?? "").trim();
+        const estado: EstadoEjecucionMesa =
+          estadoRaw === "pendiente_inicio" ||
+          estadoRaw === "en_curso" ||
+          estadoRaw === "pausada" ||
+          estadoRaw === "finalizada" ||
+          estadoRaw === "cancelada"
+            ? estadoRaw
+            : "en_curso";
         const updatedAt = String(e.updated_at ?? "");
         const id = String(e.id ?? "");
         const entry = {
@@ -723,8 +732,10 @@ export function PlanificacionMesaSecuenciacionTab() {
         numHojasBrutasSnapshot: numHojasMerged,
         horasPlanificadasSnapshot: horasMerged,
         estadoEjecucionActual:
-          ejec?.estado === "en_curso" || ejec?.estado === "pausada"
-            ? (ejec.estado as "en_curso" | "pausada")
+          ejec?.estado === "pendiente_inicio" ||
+          ejec?.estado === "en_curso" ||
+          ejec?.estado === "pausada"
+            ? ejec.estado
             : null,
         minutosPausadaAcumActual: minutosPausadaActual,
         pausaActivaDesdeActual: openPause?.pausedAt ?? null,
@@ -1362,15 +1373,16 @@ export function PlanificacionMesaSecuenciacionTab() {
   const startExecution = useCallback(
     async (trabajo: MesaTrabajo) => {
       if (!selectedMaquinaId) {
-        toast.error("Selecciona una máquina para iniciar la OT.");
+        toast.error("Selecciona una máquina para liberar la OT.");
         return;
       }
       if (trabajo.estadoMesa !== "confirmado") {
-        toast.error("Solo se pueden iniciar OTs confirmadas.");
+        toast.error("Solo se pueden liberar OTs confirmadas.");
         return;
       }
       setStartingExecutionId(trabajo.id);
       try {
+        const nowIso = new Date().toISOString();
         const { error: insErr } = await supabase.from(TABLE_EJECUCIONES).insert({
           mesa_trabajo_id: trabajo.id,
           ot_numero: trabajo.ot,
@@ -1378,8 +1390,9 @@ export function PlanificacionMesaSecuenciacionTab() {
           fecha_planificada: trabajo.fechaPlanificada,
           turno: trabajo.turno,
           slot_orden: trabajo.slotOrden,
-          inicio_real_at: new Date().toISOString(),
-          estado_ejecucion: "en_curso",
+          liberada_at: nowIso,
+          inicio_real_at: null,
+          estado_ejecucion: "pendiente_inicio",
           horas_planificadas_snapshot: trabajo.horasPlanificadasSnapshot,
           created_by: userId,
           created_by_email: userEmail,
@@ -1392,10 +1405,10 @@ export function PlanificacionMesaSecuenciacionTab() {
           .eq("id", trabajo.id);
         if (updErr) throw updErr;
 
-        toast.success(`OT ${trabajo.ot} iniciada.`);
+        toast.success(`OT ${trabajo.ot} liberada a máquina.`);
         await reload();
       } catch (e) {
-        const msg = getErrorMessage(e, "No se pudo iniciar la OT.");
+        const msg = getErrorMessage(e, "No se pudo liberar la OT.");
         console.error("[Mesa] startExecution", { msg, error: toDebugError(e), trabajo });
         toast.error(msg);
         await reload();

@@ -146,6 +146,7 @@ function resolveDateRange(
 }
 
 function estadoLabel(value: EstadoEjecucionMesa): string {
+  if (value === "pendiente_inicio") return "Pendiente inicio";
   if (value === "en_curso") return "En curso";
   if (value === "pausada") return "Pausada";
   if (value === "finalizada") return "Finalizada";

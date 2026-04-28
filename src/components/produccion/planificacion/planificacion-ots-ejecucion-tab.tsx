@@ -53,7 +53,8 @@ type EjecucionRow = {
   fecha_planificada: string | null;
   turno: string | null;
   slot_orden: number | null;
-  inicio_real_at: string;
+  liberada_at: string | null;
+  inicio_real_at: string | null;
   fin_real_at: string | null;
   estado_ejecucion: EstadoEjecucionMesa;
   ha_estado_pausada: boolean | null;
@@ -129,6 +130,7 @@ function mapRow(
     fechaPlanificada: r.fecha_planificada,
     turno: r.turno === "manana" || r.turno === "tarde" ? r.turno : null,
     slotOrden: r.slot_orden,
+    liberadaAt: r.liberada_at,
     inicioRealAt: r.inicio_real_at,
     finRealAt: r.fin_real_at,
     estadoEjecucion: r.estado_ejecucion,
@@ -152,6 +154,7 @@ function mapRow(
 }
 
 function estadoLabel(e: EstadoEjecucionMesa): string {
+  if (e === "pendiente_inicio") return "Pendiente inicio";
   if (e === "en_curso") return "En curso";
   if (e === "pausada") return "Pausada";
   if (e === "finalizada") return "Finalizada";
@@ -176,7 +179,7 @@ export function PlanificacionOtsEjecucionTab() {
         supabase
           .from(TABLE_EJECUCIONES)
           .select("*, prod_maquinas(nombre)")
-          .order("inicio_real_at", { ascending: false }),
+          .order("updated_at", { ascending: false }),
         supabase
           .from(TABLE_MAQUINAS)
           .select("id, nombre, tipo_maquina, activa")
@@ -253,14 +256,37 @@ export function PlanificacionOtsEjecucionTab() {
   const filtered = useMemo(() => {
     return rows.filter((r) => {
       if (selectedMaquina !== "all" && r.maquinaId !== selectedMaquina) return false;
-      if (estado === "activas") return r.estadoEjecucion === "en_curso" || r.estadoEjecucion === "pausada";
+      if (estado === "activas") {
+        return (
+          r.estadoEjecucion === "pendiente_inicio" ||
+          r.estadoEjecucion === "en_curso" ||
+          r.estadoEjecucion === "pausada"
+        );
+      }
       if (estado === "all") return true;
       return r.estadoEjecucion === estado;
     });
   }, [rows, selectedMaquina, estado]);
 
+  const filteredSections = useMemo(() => {
+    const pending = filtered.filter((r) => r.estadoEjecucion === "pendiente_inicio");
+    const active = filtered.filter((r) => r.estadoEjecucion === "en_curso" || r.estadoEjecucion === "pausada");
+    const finished = filtered.filter((r) => r.estadoEjecucion === "finalizada" || r.estadoEjecucion === "cancelada");
+    const sections = [
+      { key: "pending", title: "Pendientes de iniciar", rows: pending },
+      { key: "active", title: "En curso / pausadas", rows: active },
+      { key: "finished", title: "Finalizadas / canceladas", rows: finished },
+    ];
+    if (estado === "activas") return sections.filter((s) => s.key !== "finished" && s.rows.length > 0);
+    return sections.filter((s) => s.rows.length > 0);
+  }, [estado, filtered]);
+
   const patchExecution = useCallback(
     async (row: MesaEjecucion, patch: Record<string, unknown>) => {
+      if (row.estadoEjecucion === "pendiente_inicio" && patch.estado_ejecucion === "finalizada") {
+        toast.error("Inicia la OT antes de finalizarla.");
+        return;
+      }
       setSavingId(row.id);
       try {
         const nextPatch = { ...patch };
@@ -313,8 +339,42 @@ export function PlanificacionOtsEjecucionTab() {
     [supabase, loadData, pausesByExecutionId],
   );
 
+  const beginExecution = useCallback(
+    async (row: MesaEjecucion) => {
+      if (row.estadoEjecucion !== "pendiente_inicio") {
+        toast.error("Solo se pueden iniciar OTs pendientes.");
+        return;
+      }
+      setSavingId(row.id);
+      try {
+        const nowIso = new Date().toISOString();
+        const { error } = await supabase
+          .from(TABLE_EJECUCIONES)
+          .update({
+            inicio_real_at: nowIso,
+            estado_ejecucion: "en_curso",
+            updated_at: nowIso,
+          })
+          .eq("id", row.id);
+        if (error) throw error;
+        toast.success(`OT ${row.ot} iniciada en máquina.`);
+        await loadData();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "No se pudo iniciar la OT.";
+        toast.error(msg);
+      } finally {
+        setSavingId(null);
+      }
+    },
+    [loadData, supabase],
+  );
+
   const pauseExecution = useCallback(
     async (row: MesaEjecucion, motivo: MotivoPausa | null) => {
+      if (row.estadoEjecucion !== "en_curso") {
+        toast.warning("Solo se pueden pausar OTs en curso.");
+        return;
+      }
       if (!motivo) {
         toast.warning("Selecciona un motivo antes de pausar la OT.");
         return;
@@ -436,7 +496,7 @@ export function PlanificacionOtsEjecucionTab() {
           <div>
             <CardTitle className="text-lg text-[#002147]">OTs en ejecución</CardTitle>
             <CardDescription>
-              Seguimiento manual de trabajos iniciados en máquina, sin integración directa con Optimus.
+              Cola de trabajos liberados a máquina y seguimiento del inicio real, pausas y cierre.
             </CardDescription>
           </div>
           <div className="flex gap-1.5">
@@ -471,6 +531,7 @@ export function PlanificacionOtsEjecucionTab() {
             onChange={(e) => setEstado(e.target.value as typeof estado)}
           >
             <option value="activas">Activas</option>
+            <option value="pendiente_inicio">Pendientes de iniciar</option>
             <option value="en_curso">En curso</option>
             <option value="pausada">Pausadas</option>
             <option value="finalizada">Finalizadas</option>
@@ -492,26 +553,36 @@ export function PlanificacionOtsEjecucionTab() {
           </p>
         ) : null}
 
-        <div className="grid gap-3 lg:grid-cols-2">
-          {filtered.map((row) => {
-            const desviacion =
-              row.horasReales != null && row.horasPlanificadasSnapshot != null
-                ? row.horasReales - row.horasPlanificadasSnapshot
-                : null;
-            return (
-              <ExecutionCard
-                key={`${row.id}-${row.updatedAt}`}
-                row={row}
-                pauses={pausesByExecutionId[row.id] ?? []}
-                motivosPausa={motivosPausa}
-                desviacion={desviacion}
-                saving={savingId === row.id}
-                onPatch={(patch) => void patchExecution(row, patch)}
-                onPause={(motivo) => void pauseExecution(row, motivo)}
-                onResume={(pauses) => void resumeExecution(row, pauses)}
-              />
-            );
-          })}
+        <div className="space-y-4">
+          {filteredSections.map((section) => (
+            <section key={section.key} className="space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {section.title} · {section.rows.length}
+              </h3>
+              <div className="grid gap-3 lg:grid-cols-2">
+                {section.rows.map((row) => {
+                  const desviacion =
+                    row.horasReales != null && row.horasPlanificadasSnapshot != null
+                      ? row.horasReales - row.horasPlanificadasSnapshot
+                      : null;
+                  return (
+                    <ExecutionCard
+                      key={`${row.id}-${row.updatedAt}`}
+                      row={row}
+                      pauses={pausesByExecutionId[row.id] ?? []}
+                      motivosPausa={motivosPausa}
+                      desviacion={desviacion}
+                      saving={savingId === row.id}
+                      onPatch={(patch) => void patchExecution(row, patch)}
+                      onBegin={() => void beginExecution(row)}
+                      onPause={(motivo) => void pauseExecution(row, motivo)}
+                      onResume={(pauses) => void resumeExecution(row, pauses)}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          ))}
         </div>
       </CardContent>
     </Card>
@@ -525,6 +596,7 @@ function ExecutionCard({
   desviacion,
   saving,
   onPatch,
+  onBegin,
   onPause,
   onResume,
 }: {
@@ -534,6 +606,7 @@ function ExecutionCard({
   desviacion: number | null;
   saving: boolean;
   onPatch: (patch: Record<string, unknown>) => void;
+  onBegin: () => void;
   onPause: (motivo: MotivoPausa | null) => void;
   onResume: (pauses: MesaEjecucionPausa[]) => void;
 }) {
@@ -545,6 +618,7 @@ function ExecutionCard({
   const [pausePickerOpen, setPausePickerOpen] = useState(false);
   const [selectedMotivoId, setSelectedMotivoId] = useState("");
 
+  const isPendingStart = row.estadoEjecucion === "pendiente_inicio";
   const canEdit = row.estadoEjecucion !== "finalizada" && row.estadoEjecucion !== "cancelada";
 
   return (
@@ -556,12 +630,19 @@ function ExecutionCard({
             {row.maquinaNombre} · {row.fechaPlanificada ?? "sin fecha"} · {row.turno ?? "sin turno"}
           </p>
           <p className="text-[11px] text-slate-500">
-            Inicio: {format(new Date(row.inicioRealAt), "dd/MM/yyyy HH:mm", { locale: es })}
+            {row.inicioRealAt
+              ? `Inicio: ${format(new Date(row.inicioRealAt), "dd/MM/yyyy HH:mm", { locale: es })}`
+              : `Liberada: ${
+                  row.liberadaAt
+                    ? format(new Date(row.liberadaAt), "dd/MM/yyyy HH:mm", { locale: es })
+                    : "pendiente"
+                }`}
           </p>
         </div>
         <span
           className={cn(
             "rounded-full px-2 py-1 text-[11px] font-semibold",
+            row.estadoEjecucion === "pendiente_inicio" && "bg-sky-100 text-sky-800",
             row.estadoEjecucion === "en_curso" && "bg-emerald-100 text-emerald-800",
             row.estadoEjecucion === "pausada" && "bg-amber-100 text-amber-800",
             row.estadoEjecucion === "finalizada" && "bg-slate-100 text-slate-700",
@@ -757,6 +838,17 @@ function ExecutionCard({
               <Pause className="mr-1 size-4" /> Pausar
             </Button>
           ) : null}
+          {isPendingStart ? (
+            <Button
+              type="button"
+              size="sm"
+              className="bg-emerald-700 text-white hover:bg-emerald-800"
+              disabled={saving}
+              onClick={onBegin}
+            >
+              <Play className="mr-1 size-4" /> Iniciar
+            </Button>
+          ) : null}
           {row.estadoEjecucion === "pausada" ? (
             <Button
               type="button"
@@ -772,7 +864,7 @@ function ExecutionCard({
               <Play className="mr-1 size-4" /> Reanudar
             </Button>
           ) : null}
-          {canEdit ? (
+          {canEdit && !isPendingStart ? (
             <Button
               type="button"
               size="sm"

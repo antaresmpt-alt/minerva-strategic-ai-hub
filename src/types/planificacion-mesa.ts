@@ -84,6 +84,7 @@ export interface CapacidadTurno {
 }
 
 export type EstadoEjecucionMesa =
+  | "pendiente_inicio"
   | "en_curso"
   | "pausada"
   | "finalizada"
@@ -115,7 +116,8 @@ export interface MesaEjecucion {
   fechaPlanificada: DayKey | null;
   turno: TurnoKey | null;
   slotOrden: number | null;
-  inicioRealAt: string;
+  liberadaAt: string | null;
+  inicioRealAt: string | null;
   finRealAt: string | null;
   estadoEjecucion: EstadoEjecucionMesa;
   pausaActivaDesde: string | null;

@@ -306,10 +306,11 @@ create table if not exists public.prod_mesa_ejecuciones (
   fecha_planificada date null,
   turno text null check (turno in ('manana','tarde')),
   slot_orden integer null,
-  inicio_real_at timestamptz not null default timezone('utc'::text, now()),
+  liberada_at timestamptz null,
+  inicio_real_at timestamptz null default timezone('utc'::text, now()),
   fin_real_at timestamptz null,
   estado_ejecucion text not null default 'en_curso'
-    check (estado_ejecucion in ('en_curso','pausada','finalizada','cancelada')),
+    check (estado_ejecucion in ('pendiente_inicio','en_curso','pausada','finalizada','cancelada')),
   ha_estado_pausada boolean not null default false,
   num_pausas integer not null default 0,
   minutos_pausada_acum integer not null default 0,
@@ -329,9 +330,20 @@ create table if not exists public.prod_mesa_ejecuciones (
 );
 
 alter table public.prod_mesa_ejecuciones
+  add column if not exists liberada_at timestamptz null,
   add column if not exists ha_estado_pausada boolean not null default false,
   add column if not exists num_pausas integer not null default 0,
   add column if not exists minutos_pausada_acum integer not null default 0;
+
+alter table public.prod_mesa_ejecuciones
+  alter column inicio_real_at drop not null;
+
+alter table public.prod_mesa_ejecuciones
+  drop constraint if exists prod_mesa_ejecuciones_estado_ejecucion_check;
+
+alter table public.prod_mesa_ejecuciones
+  add constraint prod_mesa_ejecuciones_estado_ejecucion_check
+  check (estado_ejecucion in ('pendiente_inicio','en_curso','pausada','finalizada','cancelada'));
 
 alter table public.prod_mesa_ejecuciones
   drop column if exists pausada_at,
@@ -344,9 +356,14 @@ create index if not exists prod_mesa_ejecuciones_maquina_estado_inicio_idx
 create index if not exists prod_mesa_ejecuciones_ot_maquina_inicio_idx
   on public.prod_mesa_ejecuciones (ot_numero, maquina_id, inicio_real_at desc);
 
-create unique index if not exists ux_prod_mesa_ejecuciones_ot_maquina_activa
+create index if not exists prod_mesa_ejecuciones_estado_liberada_idx
+  on public.prod_mesa_ejecuciones (estado_ejecucion, liberada_at desc);
+
+drop index if exists public.ux_prod_mesa_ejecuciones_ot_maquina_activa;
+
+create unique index ux_prod_mesa_ejecuciones_ot_maquina_activa
   on public.prod_mesa_ejecuciones (ot_numero, maquina_id)
-  where estado_ejecucion in ('en_curso','pausada');
+  where estado_ejecucion in ('pendiente_inicio','en_curso','pausada');
 
 alter table public.prod_mesa_ejecuciones enable row level security;
 

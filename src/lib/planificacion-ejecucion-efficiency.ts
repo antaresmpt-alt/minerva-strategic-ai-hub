@@ -112,6 +112,7 @@ function overlapMinutes(
 }
 
 function executionEnd(row: MesaEjecucion, now: Date): string | null {
+  if (!row.inicioRealAt) return null;
   if (row.finRealAt) return row.finRealAt;
   if (row.estadoEjecucion === "en_curso" || row.estadoEjecucion === "pausada") {
     return now.toISOString();
