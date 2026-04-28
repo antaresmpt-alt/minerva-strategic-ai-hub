@@ -21,6 +21,19 @@ import {
 } from "date-fns";
 import { es } from "date-fns/locale";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Bar,
+  BarChart as RechartsBarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -68,6 +81,20 @@ const DATE_PRESETS: Array<{ value: DatePreset; label: string }> = [
   { value: "month", label: "Este mes" },
   { value: "custom", label: "Rango personalizado" },
 ];
+
+const CATEGORY_COLORS: Record<string, string> = {
+  calidad: "#7C3AED",
+  suministros: "#2563EB",
+  tecnicos: "#DC2626",
+  operativos: "#64748B",
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  calidad: "Calidad",
+  suministros: "Suministros",
+  tecnicos: "Técnicos",
+  operativos: "Operativos",
+};
 
 function parseInputDate(value: string): Date | null {
   if (!value) return null;
@@ -157,6 +184,14 @@ function statusBadgeClass(key: string): string {
   return "bg-red-500/15 text-red-800";
 }
 
+function truncateLabel(value: string, max = 18): string {
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+}
+
+function categoryLabel(value: string): string {
+  return CATEGORY_LABELS[value] ?? value;
+}
+
 function KpiCard({
   title,
   value,
@@ -188,6 +223,14 @@ function KpiCard({
   );
 }
 
+function ChartEmpty({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex h-72 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50/80 p-6 text-center text-sm text-slate-600">
+      {children}
+    </div>
+  );
+}
+
 export function OtsImpresasPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [proceso, setProceso] = useState<AnaliticaProceso>("impresion");
@@ -214,6 +257,29 @@ export function OtsImpresasPage() {
     () => new Map(report.eficienciaPorOt.map((m) => [m.executionId, m] as const)),
     [report.eficienciaPorOt],
   );
+  const paretoData = useMemo(
+    () =>
+      report.topMotivosPausa.slice(0, 8).map((item) => ({
+        name: item.motivo,
+        shortName: truncateLabel(item.motivo),
+        categoriaKey: item.categoria,
+        categoria: categoryLabel(item.categoria),
+        minutos: item.minutos,
+      })),
+    [report.topMotivosPausa],
+  );
+  const categoryData = useMemo(() => {
+    const byCategory = new Map(
+      report.distribucionCategorias.map((item) => [item.categoria, item.minutos] as const),
+    );
+    return Object.keys(CATEGORY_LABELS)
+      .map((categoria) => ({
+        name: categoryLabel(categoria),
+        categoria,
+        minutos: byCategory.get(categoria) ?? 0,
+      }))
+      .filter((item) => item.minutos > 0);
+  }, [report.distribucionCategorias]);
   const title = pageTitle(proceso, maquinaId, maquinas);
 
   const loadData = useCallback(async () => {
@@ -414,12 +480,119 @@ export function OtsImpresasPage() {
         </div>
       )}
 
+      <section className="grid gap-3 xl:grid-cols-2">
+        <Card className="border-slate-200/80 bg-white/95 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-base text-[#002147]">
+              Top motivos de pausa
+            </CardTitle>
+            <CardDescription>
+              Pareto de minutos perdidos por motivo en el periodo filtrado.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="h-80 min-h-[260px] pl-0">
+            {loading ? (
+              <Skeleton className="ml-6 h-full rounded-xl" />
+            ) : paretoData.length === 0 ? (
+              <ChartEmpty>Sin pausas registradas para construir el Pareto.</ChartEmpty>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <RechartsBarChart
+                  data={paretoData}
+                  layout="vertical"
+                  margin={{ left: 12, right: 24, top: 8, bottom: 8 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-slate-200" />
+                  <XAxis
+                    type="number"
+                    tickFormatter={(v) => formatMinutesDuration(Number(v))}
+                    tick={{ fontSize: 11 }}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="shortName"
+                    width={120}
+                    tick={{ fontSize: 11 }}
+                  />
+                  <RechartsTooltip
+                    formatter={(v) => [
+                      formatMinutesDuration(Number(v)),
+                      "Tiempo perdido",
+                    ]}
+                    labelFormatter={(_, payload) => payload?.[0]?.payload?.name ?? ""}
+                    contentStyle={{ borderRadius: 8, fontSize: 12 }}
+                  />
+                  <Bar dataKey="minutos" name="Minutos" fill="#002147" radius={[0, 5, 5, 0]}>
+                    {paretoData.map((entry) => (
+                      <Cell
+                        key={entry.name}
+                        fill={CATEGORY_COLORS[entry.categoriaKey] ?? "#002147"}
+                      />
+                    ))}
+                  </Bar>
+                </RechartsBarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200/80 bg-white/95 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-base text-[#002147]">
+              Distribución por categorías
+            </CardTitle>
+            <CardDescription>
+              Peso relativo de Calidad, Suministros, Técnicos y Operativos.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="h-80 min-h-[260px]">
+            {loading ? (
+              <Skeleton className="h-full rounded-xl" />
+            ) : categoryData.length === 0 ? (
+              <ChartEmpty>Sin pausas registradas para distribuir por categoría.</ChartEmpty>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={categoryData}
+                    dataKey="minutos"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={96}
+                    innerRadius={52}
+                    paddingAngle={2}
+                    label={({ name, percent }) =>
+                      `${name ?? ""} ${((percent ?? 0) * 100).toFixed(0)}%`
+                    }
+                  >
+                    {categoryData.map((entry) => (
+                      <Cell
+                        key={entry.categoria}
+                        fill={CATEGORY_COLORS[entry.categoria] ?? "#64748B"}
+                      />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip
+                    formatter={(v) => [
+                      formatMinutesDuration(Number(v)),
+                      "Tiempo de pausa",
+                    ]}
+                    contentStyle={{ borderRadius: 8, fontSize: 12 }}
+                  />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+
       <Card className="border-slate-200/80 bg-white/95 shadow-sm">
         <CardHeader>
           <CardTitle className="text-base text-[#002147]">Histórico del periodo</CardTitle>
           <CardDescription>
-            Primera fase: KPIs y tabla. Los gráficos Pareto/donut y el PDF ejecutivo
-            quedan preparados para la siguiente iteración.
+            Detalle de ejecuciones usado para los KPIs y gráficos superiores.
           </CardDescription>
         </CardHeader>
         <CardContent>
