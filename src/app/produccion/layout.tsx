@@ -29,9 +29,17 @@ export default async function ProduccionLayout({
     "produccion",
     dynamic
   );
+  const hasProduccionEjecucionModule = canAccessHubModule(
+    role,
+    "produccion_ejecucion",
+    dynamic
+  );
 
   return (
-    <ProduccionShell hasProduccionModule={hasProduccionModule}>
+    <ProduccionShell
+      hasProduccionModule={hasProduccionModule}
+      hasProduccionEjecucionModule={hasProduccionEjecucionModule}
+    >
       {children}
     </ProduccionShell>
   );

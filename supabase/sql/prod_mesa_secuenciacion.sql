@@ -104,18 +104,42 @@ create policy prod_maquinas_select_authenticated
 create policy prod_maquinas_insert_authenticated
   on public.prod_maquinas for insert
   to authenticated
-  with check (true);
+  with check (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['admin','gerencia','produccion'])
+    )
+  );
 
 create policy prod_maquinas_update_authenticated
   on public.prod_maquinas for update
   to authenticated
-  using (true)
-  with check (true);
+  using (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['admin','gerencia','produccion'])
+    )
+  )
+  with check (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['admin','gerencia','produccion'])
+    )
+  );
 
 create policy prod_maquinas_delete_authenticated
   on public.prod_maquinas for delete
   to authenticated
-  using (true);
+  using (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['admin','gerencia'])
+    )
+  );
 
 comment on table public.prod_maquinas is
   'Catálogo de recursos productivos para planificación APS (impresión/troquelado/engomado).';
@@ -272,6 +296,45 @@ on public.prod_mesa_planificacion_trabajos (
 )
 where estado_mesa in ('borrador', 'confirmado', 'en_ejecucion', 'finalizada');
 
+-- Acceso tablet limitado: el rol `impresion` solo puede leer la mesa y marcar
+-- como finalizada la OT vinculada cuando cierra una ejecución.
+alter table public.prod_mesa_planificacion_trabajos enable row level security;
+
+drop policy if exists plan_mesa_select_impresion
+  on public.prod_mesa_planificacion_trabajos;
+drop policy if exists plan_mesa_update_impresion_finalizar
+  on public.prod_mesa_planificacion_trabajos;
+
+create policy plan_mesa_select_impresion
+  on public.prod_mesa_planificacion_trabajos for select
+  to authenticated
+  using (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = 'impresion'
+    )
+  );
+
+create policy plan_mesa_update_impresion_finalizar
+  on public.prod_mesa_planificacion_trabajos for update
+  to authenticated
+  using (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = 'impresion'
+    )
+  )
+  with check (
+    estado_mesa = 'finalizada'
+    and exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = 'impresion'
+    )
+  );
+
 -- ---------------------------------------------------------------------------
 -- 5) Compatibilidad troquel_status
 -- ---------------------------------------------------------------------------
@@ -379,7 +442,7 @@ create policy prod_mesa_ejecuciones_select
     exists (
       select 1 from profiles me
       where me.id = (select auth.uid())
-        and me.role::text = any (array['admin','gerencia','produccion'])
+        and me.role::text = any (array['admin','gerencia','produccion','impresion'])
     )
   );
 
@@ -401,14 +464,14 @@ create policy prod_mesa_ejecuciones_update
     exists (
       select 1 from profiles me
       where me.id = (select auth.uid())
-        and me.role::text = any (array['admin','gerencia','produccion'])
+        and me.role::text = any (array['admin','gerencia','produccion','impresion'])
     )
   )
   with check (
     exists (
       select 1 from profiles me
       where me.id = (select auth.uid())
-        and me.role::text = any (array['admin','gerencia','produccion'])
+        and me.role::text = any (array['admin','gerencia','produccion','impresion'])
     )
   );
 
@@ -479,7 +542,7 @@ create policy sys_motivos_pausa_select
     exists (
       select 1 from profiles me
       where me.id = (select auth.uid())
-        and me.role::text = any (array['admin','gerencia','produccion'])
+        and me.role::text = any (array['admin','gerencia','produccion','impresion'])
     )
   );
 
@@ -598,7 +661,7 @@ create policy prod_mesa_ejecuciones_pausas_select
     exists (
       select 1 from profiles me
       where me.id = (select auth.uid())
-        and me.role::text = any (array['admin','gerencia','produccion'])
+        and me.role::text = any (array['admin','gerencia','produccion','impresion'])
     )
   );
 
@@ -609,7 +672,7 @@ create policy prod_mesa_ejecuciones_pausas_insert
     exists (
       select 1 from profiles me
       where me.id = (select auth.uid())
-        and me.role::text = any (array['admin','gerencia','produccion'])
+        and me.role::text = any (array['admin','gerencia','produccion','impresion'])
     )
   );
 
@@ -620,7 +683,7 @@ create policy prod_mesa_ejecuciones_pausas_update
     exists (
       select 1 from profiles me
       where me.id = (select auth.uid())
-        and me.role::text = any (array['admin','gerencia','produccion'])
+        and me.role::text = any (array['admin','gerencia','produccion','impresion'])
     )
   )
   with check (

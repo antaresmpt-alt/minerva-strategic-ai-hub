@@ -9,6 +9,7 @@ export type HubModuleId =
   | "seo"
   | "muelle"
   | "produccion"
+  | "produccion_ejecucion"
   | "chat"
   | "settings";
 
@@ -18,6 +19,7 @@ export const HUB_MODULE_IDS: HubModuleId[] = [
   "seo",
   "muelle",
   "produccion",
+  "produccion_ejecucion",
   "chat",
   "settings",
 ];
@@ -44,7 +46,7 @@ export function hasFullAccess(role: string | null): boolean {
   return r != null && FULL_ACCESS_ROLES.has(r);
 }
 
-function useDynamic(
+function hasDynamicAccess(
   dynamic: Map<string, boolean> | null | undefined
 ): dynamic is Map<string, boolean> {
   return dynamic != null && dynamic.size > 0;
@@ -56,7 +58,7 @@ export function canAccessSettings(
 ): boolean {
   const r = normalizeDbRole(role);
   if (!r) return false;
-  if (useDynamic(dynamic)) {
+  if (hasDynamicAccess(dynamic)) {
     return dynamic.get("settings") === true;
   }
   return hasFullAccess(r);
@@ -69,13 +71,17 @@ export function canAccessHubModule(
 ): boolean {
   const r = normalizeDbRole(role);
   if (!r) return false;
-  if (useDynamic(dynamic)) {
+  if (hasDynamicAccess(dynamic)) {
     return dynamic.get(module) === true;
   }
   if (hasFullAccess(r)) return true;
 
   if (r === "produccion" || r === "logistica") {
     return module === "chat" || module === "produccion";
+  }
+
+  if (r === "impresion") {
+    return module === "produccion_ejecucion";
   }
 
   if (r === "almacen") {
@@ -105,7 +111,7 @@ export function canAccessPagePath(
   dynamic?: Map<string, boolean> | null
 ): boolean {
   if (!normalizeDbRole(role)) return false;
-  if (useDynamic(dynamic)) {
+  if (hasDynamicAccess(dynamic)) {
     const p = pathname.split("?")[0] ?? pathname;
     if (p === "/" || p === "") return true;
     if (p.startsWith("/settings"))
@@ -117,6 +123,8 @@ export function canAccessPagePath(
     if (p.startsWith("/seo")) return canAccessHubModule(role, "seo", dynamic);
     if (p.startsWith("/produccion/muelle"))
       return canAccessHubModule(role, "muelle", dynamic);
+    if (p.startsWith("/produccion/ejecucion"))
+      return canAccessHubModule(role, "produccion_ejecucion", dynamic);
     if (p.startsWith("/produccion"))
       return canAccessHubModule(role, "produccion", dynamic);
     return false;
@@ -137,6 +145,8 @@ export function canAccessPagePath(
   if (p.startsWith("/seo")) return canAccessHubModule(role, "seo");
   if (p.startsWith("/produccion/muelle"))
     return canAccessHubModule(role, "muelle");
+  if (p.startsWith("/produccion/ejecucion"))
+    return canAccessHubModule(role, "produccion_ejecucion");
   if (p.startsWith("/produccion"))
     return canAccessHubModule(role, "produccion");
 
@@ -150,7 +160,7 @@ export function canAccessApiRoute(
   dynamic?: Map<string, boolean> | null
 ): boolean {
   if (!normalizeDbRole(role)) return false;
-  if (useDynamic(dynamic)) {
+  if (hasDynamicAccess(dynamic)) {
     if (pathname.startsWith("/api/admin")) {
       return canAccessSettings(role, dynamic);
     }
@@ -257,6 +267,7 @@ export const ROLE_LABELS: Record<string, string> = {
   gerencia: "Gerencia",
   comercial: "Comercial",
   produccion: "Producción",
+  impresion: "Impresión",
   logistica: "Logística",
   almacen: "Almacén",
   oficina_tecnica: "Oficina técnica",
@@ -269,6 +280,7 @@ export const ASSIGNABLE_ROLES = [
   "gerencia",
   "comercial",
   "produccion",
+  "impresion",
   "logistica",
   "almacen",
   "ctp",
@@ -300,6 +312,7 @@ export const MODULE_LABELS: Record<HubModuleId, string> = {
   seo: "SEO",
   muelle: "Muelle",
   produccion: "Producción",
+  produccion_ejecucion: "OTs en ejecución",
   chat: "Chat",
   settings: "Configuración",
 };

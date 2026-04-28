@@ -32,6 +32,14 @@ const NAV: NavItem[] = [
     match: (p) => p === "/",
   },
   {
+    href: "/produccion/ejecucion",
+    label: "OTs en ejecución",
+    icon: LayoutList,
+    match: (p) =>
+      p === "/produccion/ejecucion" ||
+      p.startsWith("/produccion/ejecucion/"),
+  },
+  {
     href: "/produccion/ots",
     label: "OTs",
     icon: LayoutList,
@@ -85,17 +93,23 @@ const NAV: NavItem[] = [
 export function ProduccionShell({
   children,
   hasProduccionModule = true,
+  hasProduccionEjecucionModule = false,
 }: {
   children: React.ReactNode;
   /** Si es false (p. ej. rol Almacén), en rutas de Muelle solo se muestra navegación mínima. */
   hasProduccionModule?: boolean;
+  /** Acceso tablet limitado a OTs en ejecución. */
+  hasProduccionEjecucionModule?: boolean;
 }) {
   const pathname = usePathname();
   const underMuelle = pathname.startsWith("/produccion/muelle");
-  const showFullProduccionNav = !underMuelle || hasProduccionModule;
-  const navLinks: NavItem[] = showFullProduccionNav
-    ? NAV.filter((item) => item.href !== "/")
-    : [];
+  const onlyExecution = hasProduccionEjecucionModule && !hasProduccionModule;
+  const showFullProduccionNav = !onlyExecution && (!underMuelle || hasProduccionModule);
+  const navLinks: NavItem[] = onlyExecution
+    ? NAV.filter((item) => item.href === "/produccion/ejecucion")
+    : showFullProduccionNav
+      ? NAV.filter((item) => item.href !== "/" && item.href !== "/produccion/ejecucion")
+      : [];
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -115,7 +129,7 @@ export function ProduccionShell({
             className="flex min-w-0 flex-1 flex-wrap items-center gap-1"
             aria-label="Módulo Producción"
           >
-            {!showFullProduccionNav && (
+            {!showFullProduccionNav && !onlyExecution && (
               <>
                 <Link
                   href="/chat"

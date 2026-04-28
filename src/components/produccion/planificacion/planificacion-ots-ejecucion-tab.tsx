@@ -161,7 +161,11 @@ function estadoLabel(e: EstadoEjecucionMesa): string {
   return "Cancelada";
 }
 
-export function PlanificacionOtsEjecucionTab() {
+export function PlanificacionOtsEjecucionTab({
+  tabletMode = false,
+}: {
+  tabletMode?: boolean;
+}) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [rows, setRows] = useState<MesaEjecucion[]>([]);
   const [pausesByExecutionId, setPausesByExecutionId] = useState<Record<string, MesaEjecucionPausa[]>>({});
@@ -500,14 +504,18 @@ export function PlanificacionOtsEjecucionTab() {
             </CardDescription>
           </div>
           <div className="flex gap-1.5">
-            <Button type="button" variant="outline" size="sm" onClick={handleExportExcel} disabled={loading}>
-              <FileSpreadsheet className="mr-1 size-4" />
-              Excel
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={handleExportPdf} disabled={loading}>
-              <FileText className="mr-1 size-4" />
-              PDF
-            </Button>
+            {!tabletMode && (
+              <>
+                <Button type="button" variant="outline" size="sm" onClick={handleExportExcel} disabled={loading}>
+                  <FileSpreadsheet className="mr-1 size-4" />
+                  Excel
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={handleExportPdf} disabled={loading}>
+                  <FileText className="mr-1 size-4" />
+                  PDF
+                </Button>
+              </>
+            )}
             <Button type="button" variant="outline" size="sm" onClick={() => void loadData()} disabled={loading}>
               <RefreshCcw className={cn("mr-1 size-4", loading && "animate-spin")} />
               Recargar
