@@ -99,6 +99,7 @@ import type {
   DraftBoardState,
   MaterialStatus,
   MesaTrabajo,
+  MotivoPausaCategoria,
   PlanificacionIaSettings,
   PlanificacionIaScope,
   PoolOT,
@@ -600,11 +601,20 @@ export function PlanificacionMesaSecuenciacionTab() {
           .filter((x) => x.length > 0),
       ),
     );
-    const openPauseByExecutionId = new Map<string, { pausedAt: string; motivo: string }>();
+    const openPauseByExecutionId = new Map<
+      string,
+      {
+        pausedAt: string;
+        motivoLabel: string | null;
+        motivoCategoria: MotivoPausaCategoria | null;
+        motivoColorHex: string | null;
+        observaciones: string | null;
+      }
+    >();
     if (activeExecutionIds.length > 0) {
       const { data: pauseData, error: pauseErr } = await supabase
         .from("prod_mesa_ejecuciones_pausas")
-        .select("ejecucion_id, paused_at, motivo")
+        .select("ejecucion_id, paused_at, observaciones_pausa, sys_motivos_pausa(label,categoria,color_hex)")
         .in("ejecucion_id", activeExecutionIds)
         .is("resumed_at", null)
         .order("paused_at", { ascending: false });
@@ -612,9 +622,26 @@ export function PlanificacionMesaSecuenciacionTab() {
       for (const p of (pauseData ?? []) as Array<Record<string, unknown>>) {
         const executionId = String(p.ejecucion_id ?? "").trim();
         if (!executionId || openPauseByExecutionId.has(executionId)) continue;
+        const motivoJoin = Array.isArray(p.sys_motivos_pausa)
+          ? p.sys_motivos_pausa[0]
+          : p.sys_motivos_pausa;
+        const motivo =
+          motivoJoin && typeof motivoJoin === "object"
+            ? (motivoJoin as Record<string, unknown>)
+            : null;
+        const categoria = String(motivo?.categoria ?? "").trim();
         openPauseByExecutionId.set(executionId, {
           pausedAt: String(p.paused_at ?? ""),
-          motivo: String(p.motivo ?? "").trim(),
+          motivoLabel: String(motivo?.label ?? "").trim() || null,
+          motivoCategoria:
+            categoria === "operativos" ||
+            categoria === "suministros" ||
+            categoria === "calidad" ||
+            categoria === "tecnicos"
+              ? (categoria as MotivoPausaCategoria)
+              : null,
+          motivoColorHex: String(motivo?.color_hex ?? "").trim() || null,
+          observaciones: String(p.observaciones_pausa ?? "").trim() || null,
         });
       }
     }
@@ -700,6 +727,11 @@ export function PlanificacionMesaSecuenciacionTab() {
             ? (ejec.estado as "en_curso" | "pausada")
             : null,
         minutosPausadaAcumActual: minutosPausadaActual,
+        pausaActivaDesdeActual: openPause?.pausedAt ?? null,
+        motivoPausaActivaActual: openPause?.motivoLabel ?? null,
+        motivoPausaColorHexActual: openPause?.motivoColorHex ?? null,
+        motivoPausaCategoriaActual: openPause?.motivoCategoria ?? null,
+        observacionesPausaActivaActual: openPause?.observaciones ?? null,
       });
     }
     return dedupeMesaByOt(out);

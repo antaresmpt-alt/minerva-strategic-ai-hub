@@ -7,7 +7,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Loader2, Pencil, PlayCircle, Sun, Sunrise } from "lucide-react";
+import { Info, Loader2, Pencil, PlayCircle, Sun, Sunrise } from "lucide-react";
 import { useMemo } from "react";
 
 import {
@@ -58,6 +58,19 @@ function turnoIcon(t: TurnoKey) {
   );
 }
 
+function isValidHexColor(value: string | null | undefined): value is string {
+  return /^#[0-9a-f]{6}$/i.test(value ?? "");
+}
+
+function readableTextColor(hex: string): "#0f172a" | "#ffffff" {
+  const normalized = hex.replace("#", "");
+  const r = Number.parseInt(normalized.slice(0, 2), 16);
+  const g = Number.parseInt(normalized.slice(2, 4), 16);
+  const b = Number.parseInt(normalized.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.62 ? "#0f172a" : "#ffffff";
+}
+
 function SortableMesaCard({
   trabajo,
   linkedToNext,
@@ -76,6 +89,12 @@ function SortableMesaCard({
   const isFinished = trabajo.estadoMesa === "finalizada";
   const isPaused = trabajo.estadoEjecucionActual === "pausada";
   const pausedMinutes = Math.max(0, Math.trunc(trabajo.minutosPausadaAcumActual ?? 0));
+  const pauseReason = trabajo.motivoPausaActivaActual?.trim() || null;
+  const pauseColor = isValidHexColor(trabajo.motivoPausaColorHexActual)
+    ? trabajo.motivoPausaColorHexActual
+    : "#64748B";
+  const pauseTextColor = readableTextColor(pauseColor);
+  const pauseObservation = trabajo.observacionesPausaActivaActual?.trim() || null;
   const {
     setNodeRef,
     attributes,
@@ -126,12 +145,32 @@ function SortableMesaCard({
           </span>
         }
         footerSlot={
-          <div className="mt-1 flex items-center justify-between gap-1">
+          <div className="mt-1 flex flex-wrap items-center gap-1">
             {isRunning ? (
               isPaused ? (
-                <span className="inline-flex items-center rounded-full bg-amber-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
-                  Pausada · {pausedMinutes} min
-                </span>
+                <>
+                  <span className="inline-flex shrink-0 items-center rounded-full bg-amber-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                    Pausada · {pausedMinutes} min
+                  </span>
+                  {pauseReason ? (
+                    <span
+                      className="inline-flex min-w-0 max-w-[8.5rem] items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide shadow-xs"
+                      style={{ backgroundColor: pauseColor, color: pauseTextColor }}
+                      title={[
+                        pauseReason,
+                        trabajo.motivoPausaCategoriaActual
+                          ? `Categoría: ${trabajo.motivoPausaCategoriaActual}`
+                          : null,
+                        pauseObservation ? `Obs.: ${pauseObservation}` : null,
+                      ].filter(Boolean).join(" · ")}
+                    >
+                      <span className="min-w-0 truncate">{pauseReason}</span>
+                      {pauseObservation ? (
+                        <Info className="size-2.5 shrink-0" aria-label="Con observaciones" />
+                      ) : null}
+                    </span>
+                  ) : null}
+                </>
               ) : (
                 <span className="inline-flex items-center rounded-full bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
                   En marcha

@@ -67,6 +67,12 @@ export interface MesaTrabajo {
   estadoEjecucionActual?: EstadoEjecucionMesa | null;
   /** Minutos pausados acumulados (incluye tramo abierto si está en pausa). */
   minutosPausadaAcumActual?: number;
+  /** Pausa abierta asociada a la ejecución activa, si existe. */
+  pausaActivaDesdeActual?: string | null;
+  motivoPausaActivaActual?: string | null;
+  motivoPausaColorHexActual?: string | null;
+  motivoPausaCategoriaActual?: MotivoPausaCategoria | null;
+  observacionesPausaActivaActual?: string | null;
 }
 
 /** Capacidad horaria por día y turno (config). */
