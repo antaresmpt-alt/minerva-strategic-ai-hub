@@ -347,14 +347,18 @@ export function PlanificacionPoolOtsTab() {
           setSortBy(parsed.sortBy);
         }
         if (parsed.sortDir === "asc" || parsed.sortDir === "desc") setSortDir(parsed.sortDir);
-        if (
-          parsed.compraEstadoFilter === "all" ||
-          normalizeCompraEstado(parsed.compraEstadoFilter) === "sin compra" ||
-          COMPRAS_MATERIAL_ESTADOS.map((x) => normalizeCompraEstado(x)).includes(
-            normalizeCompraEstado(parsed.compraEstadoFilter),
-          )
-        ) {
-          setCompraEstadoFilter(parsed.compraEstadoFilter);
+        const savedCompraEstadoFilter = parsed.compraEstadoFilter;
+        if (typeof savedCompraEstadoFilter === "string") {
+          const normalizedCompraEstadoFilter = normalizeCompraEstado(savedCompraEstadoFilter);
+          if (
+            savedCompraEstadoFilter === "all" ||
+            normalizedCompraEstadoFilter === "sin compra" ||
+            COMPRAS_MATERIAL_ESTADOS.map((x) => normalizeCompraEstado(x)).includes(
+              normalizedCompraEstadoFilter,
+            )
+          ) {
+            setCompraEstadoFilter(savedCompraEstadoFilter);
+          }
         }
       }
     } catch {
