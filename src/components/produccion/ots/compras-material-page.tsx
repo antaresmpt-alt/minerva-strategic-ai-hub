@@ -811,6 +811,19 @@ export function ComprasMaterialPage() {
     });
   }, [planCursor, rowsFiltradas]);
 
+  const rowsParaExportar = useMemo(() => {
+    if (viewMode === "diaria") return dailyRowsForGrid;
+    if (viewMode === "semanal") {
+      const monday = startOfWeek(weekMondayForBoard, { weekStartsOn: 1 });
+      return rowsFiltradas.filter((row) => {
+        const d = fechaRecepcionToLocalDate(row.fecha_prevista_recepcion);
+        if (!d) return false;
+        return startOfWeek(d, { weekStartsOn: 1 }).getTime() === monday.getTime();
+      });
+    }
+    return rowsFiltradas;
+  }, [viewMode, dailyRowsForGrid, weekMondayForBoard, rowsFiltradas]);
+
   useEffect(() => {
     const allowed = new Set(rowsFiltradas.map((r) => r.id));
     setRowSelection((prev) => {
@@ -1463,7 +1476,7 @@ export function ComprasMaterialPage() {
   }, [loadProveedoresPapelCarton, solicitarOpen, selectedRows]);
 
   const exportComprasMaterialExcel = useCallback(() => {
-    const data = rowsFiltradas.map((r) => ({
+    const data = rowsParaExportar.map((r) => ({
       OT: r.ot_numero,
       "Nº compra": r.num_compra?.trim() || buildNumCompraFromOt(r.ot_numero),
       P: r.posicion ?? 1,
@@ -1489,11 +1502,23 @@ export function ComprasMaterialPage() {
     XLSX.utils.book_append_sheet(wb, ws, "Compras");
     const stamp = new Date().toISOString().slice(0, 10);
     XLSX.writeFile(wb, `compras-material-${stamp}.xlsx`);
-    toast.success("Excel descargado (vista filtrada actual).");
-  }, [rowsFiltradas]);
+    toast.success(`Excel descargado (${rowsParaExportar.length} fila(s) de la vista actual).`);
+  }, [rowsParaExportar]);
 
   const exportComprasMaterialPdf = useCallback(() => {
-    if (rowsFiltradas.length === 0) return;
+    if (rowsParaExportar.length === 0) return;
+    const contextoVista =
+      viewMode === "diaria"
+        ? `Vista diaria (${format(startOfDay(planCursor), "dd/MM/yyyy", {
+            locale: esLocale,
+          })})`
+        : viewMode === "semanal"
+          ? `Vista semanal (${format(weekMondayForBoard, "dd/MM", {
+              locale: esLocale,
+            })} - ${format(addDays(weekMondayForBoard, 4), "dd/MM/yyyy", {
+              locale: esLocale,
+            })})`
+          : "Vista lista";
     const doc = new jsPDF({
       orientation: "landscape",
       unit: "mm",
@@ -1501,11 +1526,11 @@ export function ComprasMaterialPage() {
     });
     doc.setTextColor(0, 33, 71);
     doc.setFontSize(13);
-    doc.text("Compras de material", 10, 12);
+    doc.text(`Compras de material - ${contextoVista}`, 10, 12);
     doc.setFontSize(8);
     doc.setTextColor(60, 60, 60);
     doc.text(
-      `Listado filtrado · ${rowsFiltradas.length} fila(s) · ${new Date().toLocaleString("es-ES")}`,
+      `Listado filtrado · ${rowsParaExportar.length} fila(s) · ${new Date().toLocaleString("es-ES")}`,
       10,
       18
     );
@@ -1527,7 +1552,7 @@ export function ComprasMaterialPage() {
     ];
     const cell = (v: string | number | null | undefined) =>
       String(v ?? "").trim() || "—";
-    const body = rowsFiltradas.map((r) => [
+    const body = rowsParaExportar.map((r) => [
       cell(r.ot_numero),
       cell(r.num_compra?.trim() || buildNumCompraFromOt(r.ot_numero)),
       cell(r.posicion ?? 1),
@@ -1569,8 +1594,8 @@ export function ComprasMaterialPage() {
     });
     const stamp = new Date().toISOString().slice(0, 10);
     doc.save(`compras-material-${stamp}.pdf`);
-    toast.success("PDF descargado (vista filtrada actual).");
-  }, [rowsFiltradas]);
+    toast.success(`PDF descargado (${rowsParaExportar.length} fila(s) de la vista actual).`);
+  }, [rowsParaExportar, viewMode, planCursor, weekMondayForBoard]);
 
   const resetManualForm = useCallback(() => {
     setManualOt("");
