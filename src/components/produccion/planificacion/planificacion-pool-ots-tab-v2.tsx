@@ -45,6 +45,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  COMPRAS_MATERIAL_ESTADOS,
+  normalizeCompraEstado,
+} from "@/lib/compras-material-estados";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
@@ -66,6 +70,7 @@ type PoolUiState = {
   search: string;
   sortBy: SortKey;
   sortDir: "asc" | "desc";
+  compraEstadoFilter: string;
 };
 
 type DespRow = {
@@ -93,11 +98,13 @@ type CompraRow = {
   ot_numero: string;
   num_compra: string | null;
   proveedor_id: string | null;
+  estado: string | null;
 };
 type RecepRow = { compra_id: string; hojas_recibidas: number | null };
 type PoolPersisted = {
   id: string;
   ot_numero: string;
+  estado_pool: string | null;
   troquel_status: string | null;
   acabado_pral_snapshot: string | null;
 };
@@ -113,8 +120,10 @@ type PoolRow = {
   hojasObjetivo: number;
   hojasRecibidasTotal: number;
   numCompra: string | null;
+  compraEstado: string;
   compraProveedor: string | null;
   compraProveedorExtraCount: number;
+  hasCompraGenerada: boolean;
   materialStatus: "verde" | "amarillo" | "rojo";
   troquelLabel: string;
   troquelId: string | null;
@@ -217,6 +226,17 @@ function cauchoAcrilicoShowsViewer(v: string | null): boolean {
   return t !== "" && t.toUpperCase().includes("SI");
 }
 
+function compraEstadoRank(estado: string | null | undefined): number {
+  const n = normalizeCompraEstado(estado);
+  if (n === "recibido") return 5;
+  if (n === "recibido parcial") return 4;
+  if (n === "confirmado") return 3;
+  if (n === "generada") return 2;
+  if (n === "pendiente") return 1;
+  if (n === "cancelado") return 0;
+  return -1;
+}
+
 function statusPill(
   status: "verde" | "amarillo" | "rojo" | "gris",
   label: string
@@ -255,6 +275,7 @@ export function PlanificacionPoolOtsTab() {
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortKey>("entrega");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [compraEstadoFilter, setCompraEstadoFilter] = useState<string>("all");
   const [editingOt, setEditingOt] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftRow | null>(null);
   const [savedRowOt, setSavedRowOt] = useState<string | null>(null);
@@ -326,6 +347,15 @@ export function PlanificacionPoolOtsTab() {
           setSortBy(parsed.sortBy);
         }
         if (parsed.sortDir === "asc" || parsed.sortDir === "desc") setSortDir(parsed.sortDir);
+        if (
+          parsed.compraEstadoFilter === "all" ||
+          normalizeCompraEstado(parsed.compraEstadoFilter) === "sin compra" ||
+          COMPRAS_MATERIAL_ESTADOS.map((x) => normalizeCompraEstado(x)).includes(
+            normalizeCompraEstado(parsed.compraEstadoFilter),
+          )
+        ) {
+          setCompraEstadoFilter(parsed.compraEstadoFilter);
+        }
       }
     } catch {
       // fallback silencioso
@@ -336,7 +366,7 @@ export function PlanificacionPoolOtsTab() {
 
   useEffect(() => {
     if (!uiHydrated) return;
-    const payload: PoolUiState = { search, sortBy, sortDir };
+    const payload: PoolUiState = { search, sortBy, sortDir, compraEstadoFilter };
     const t = window.setTimeout(() => {
       try {
         window.localStorage.setItem(uiStorageKey, JSON.stringify(payload));
@@ -345,7 +375,7 @@ export function PlanificacionPoolOtsTab() {
       }
     }, 180);
     return () => window.clearTimeout(t);
-  }, [search, sortBy, sortDir, uiHydrated, uiStorageKey]);
+  }, [search, sortBy, sortDir, compraEstadoFilter, uiHydrated, uiStorageKey]);
 
   const loadRows = useCallback(async () => {
     setLoading(true);
@@ -379,8 +409,10 @@ export function PlanificacionPoolOtsTab() {
             hojasObjetivo: hojasObj,
             hojasRecibidasTotal: 0,
             numCompra: null,
+            compraEstado: "Sin compra",
             compraProveedor: null,
             compraProveedorExtraCount: 0,
+            hasCompraGenerada: false,
             materialStatus: "rojo",
             troquelLabel: troquel,
             troquelId: null,
@@ -438,11 +470,12 @@ export function PlanificacionPoolOtsTab() {
 
       const { data: compraData, error: compraErr } = await supabase
         .from(TABLE_COMPRA)
-        .select("id, ot_numero, num_compra, proveedor_id")
+        .select("id, ot_numero, num_compra, proveedor_id, estado")
         .in("ot_numero", ots);
       if (compraErr) throw compraErr;
       const compraByOt = new Map<string, string[]>();
       const compraNumByOt = new Map<string, string>();
+      const compraEstadoByOt = new Map<string, string>();
       const compraProveedorIdsByOt = new Map<string, Set<string>>();
       const proveedorIds = new Set<string>();
       const compraIds: string[] = [];
@@ -456,6 +489,13 @@ export function PlanificacionPoolOtsTab() {
         if (!compraNumByOt.has(ot)) {
           const nc = String(c.num_compra ?? "").trim();
           if (nc) compraNumByOt.set(ot, nc);
+        }
+        const estadoRaw = String(c.estado ?? "").trim();
+        if (estadoRaw) {
+          const prevEstado = compraEstadoByOt.get(ot);
+          if (!prevEstado || compraEstadoRank(estadoRaw) > compraEstadoRank(prevEstado)) {
+            compraEstadoByOt.set(ot, estadoRaw);
+          }
         }
         const provId = String(c.proveedor_id ?? "").trim();
         if (provId) {
@@ -527,9 +567,9 @@ export function PlanificacionPoolOtsTab() {
 
       const { data: poolData, error: poolErr } = await supabase
         .from(TABLE_POOL)
-        .select("id, ot_numero, troquel_status, acabado_pral_snapshot")
+        .select("id, ot_numero, estado_pool, troquel_status, acabado_pral_snapshot")
         .in("ot_numero", ots)
-        .in("estado_pool", ["pendiente", "enviada_mesa"]);
+        .in("estado_pool", ["pendiente", "enviada_mesa", "cerrada"]);
       if (poolErr) throw poolErr;
       const poolByOt = new Map<string, PoolPersisted>();
       for (const p of (poolData ?? []) as PoolPersisted[]) {
@@ -545,6 +585,7 @@ export function PlanificacionPoolOtsTab() {
         row.trabajo = String(meta?.titulo ?? "").trim() || "—";
         row.fechaEntrega = meta?.fecha_entrega ?? null;
         row.numCompra = compraNumByOt.get(ot) ?? null;
+        row.compraEstado = compraEstadoByOt.get(ot) ?? "Sin compra";
         const provIdsSet = compraProveedorIdsByOt.get(ot);
         if (provIdsSet && provIdsSet.size > 0) {
           const provs = [...provIdsSet]
@@ -564,6 +605,7 @@ export function PlanificacionPoolOtsTab() {
           row.compraProveedorExtraCount = 0;
         }
         const cids = compraByOt.get(ot) ?? [];
+        row.hasCompraGenerada = cids.length > 0;
         row.hojasRecibidasTotal = Math.trunc(
           cids.reduce((acc, id) => acc + (recepByCompra.get(id) ?? 0), 0)
         );
@@ -572,6 +614,9 @@ export function PlanificacionPoolOtsTab() {
         else row.materialStatus = "verde";
 
         const pp = poolByOt.get(ot);
+        if (pp && String(pp.estado_pool ?? "").trim().toLowerCase() === "cerrada") {
+          continue;
+        }
         if (pp) {
           const ac = String(pp.acabado_pral_snapshot ?? "").trim();
           if (ac) row.acabadoPral = ac;
@@ -612,18 +657,28 @@ export function PlanificacionPoolOtsTab() {
     void loadRows();
   }, [loadRows]);
 
-  const allChecked = rows.length > 0 && rows.every((r) => selected[r.ot]);
+  const selectableRows = useMemo(
+    () => rows.filter((r) => r.hasCompraGenerada),
+    [rows],
+  );
+  const allChecked =
+    selectableRows.length > 0 && selectableRows.every((r) => selected[r.ot]);
   const selectedRows = rows.filter((r) => selected[r.ot]);
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) =>
-      [r.ot, r.cliente, r.trabajo, r.material, r.troquelLabel, r.acabadoPral]
-        .map((x) => String(x ?? "").toLowerCase())
-        .some((s) => s.includes(q))
-    );
-  }, [rows, search]);
+    const filterNorm = normalizeCompraEstado(compraEstadoFilter);
+    return rows.filter((r) => {
+      const matchesSearch =
+        !q ||
+        [r.ot, r.cliente, r.trabajo, r.material, r.troquelLabel, r.acabadoPral, r.compraEstado]
+          .map((x) => String(x ?? "").toLowerCase())
+          .some((s) => s.includes(q));
+      if (!matchesSearch) return false;
+      if (filterNorm === "all") return true;
+      return normalizeCompraEstado(r.compraEstado) === filterNorm;
+    });
+  }, [rows, search, compraEstadoFilter]);
 
   const sortedRows = useMemo(() => {
     const arr = [...filteredRows];
@@ -717,7 +772,7 @@ export function PlanificacionPoolOtsTab() {
         .from(TABLE_POOL)
         .select("id")
         .eq("ot_numero", editingOt)
-        .in("estado_pool", ["pendiente", "enviada_mesa"])
+        .in("estado_pool", ["pendiente", "enviada_mesa", "cerrada"])
         .limit(1);
       if (exErr) throw exErr;
       if ((exPool ?? []).length > 0) {
@@ -982,6 +1037,13 @@ export function PlanificacionPoolOtsTab() {
     }
     setSaving(true);
     try {
+      const sinCompra = selectedRows.filter((r) => !r.hasCompraGenerada).map((r) => r.ot);
+      if (sinCompra.length > 0) {
+        toast.error(
+          `No se puede enviar a mesa sin compra generada: ${sinCompra.join(", ")}.`,
+        );
+        return;
+      }
       const ots = selectedRows.map((r) => r.ot);
       const { data: mesaExist, error: meErr } = await supabase
         .from(TABLE_MESA)
@@ -1014,7 +1076,7 @@ export function PlanificacionPoolOtsTab() {
         .from(TABLE_POOL)
         .select("id, ot_numero")
         .in("ot_numero", nuevos.map((r) => r.ot))
-        .in("estado_pool", ["pendiente", "enviada_mesa"]);
+        .in("estado_pool", ["pendiente", "enviada_mesa", "cerrada"]);
       if (poolErr) throw poolErr;
       const poolByOt = new Map<string, string>();
       for (const p of (poolExist ?? []) as Array<{ id: string; ot_numero: string }>) {
@@ -1031,6 +1093,9 @@ export function PlanificacionPoolOtsTab() {
             estado_pool: "enviada_mesa",
             troquel_status: item.row.troquelStatus,
             acabado_pral_snapshot: item.row.acabadoPral || null,
+            closed_at: null,
+            closed_by: null,
+            closed_by_email: null,
             notas: "Enviada desde Pool a Mesa",
           })
           .eq("id", item.id);
@@ -1076,14 +1141,31 @@ export function PlanificacionPoolOtsTab() {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="relative w-full max-w-md">
-            <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-slate-400" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar OT, cliente, trabajo, material, troquel, acabado..."
-              className="pl-8"
-            />
+          <div className="flex w-full max-w-3xl flex-wrap items-center gap-2">
+            <div className="relative min-w-[18rem] flex-1">
+              <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-slate-400" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar OT, cliente, trabajo, material, troquel, acabado..."
+                className="pl-8"
+              />
+            </div>
+            <select
+              className="h-9 min-w-[12rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700"
+              value={compraEstadoFilter}
+              onChange={(e) => setCompraEstadoFilter(e.target.value)}
+              aria-label="Filtrar por estado de compra"
+              title="Filtrar por estado de compra"
+            >
+              <option value="all">Compra: todos</option>
+              {COMPRAS_MATERIAL_ESTADOS.map((estado) => (
+                <option key={estado} value={estado}>
+                  {estado}
+                </option>
+              ))}
+              <option value="Sin compra">Sin compra</option>
+            </select>
           </div>
           <Button
             type="button"
@@ -1125,7 +1207,9 @@ export function PlanificacionPoolOtsTab() {
                       checked={allChecked}
                       onChange={(e) => {
                         const next: Record<string, boolean> = {};
-                        for (const r of rows) next[r.ot] = e.target.checked;
+                        for (const r of rows) {
+                          next[r.ot] = r.hasCompraGenerada ? e.target.checked : false;
+                        }
                         setSelected(next);
                       }}
                       aria-label="Seleccionar todas"
@@ -1192,7 +1276,13 @@ export function PlanificacionPoolOtsTab() {
                         onChange={(e) =>
                           setSelected((prev) => ({ ...prev, [r.ot]: e.target.checked }))
                         }
+                        disabled={!r.hasCompraGenerada}
                         aria-label={`Seleccionar OT ${r.ot}`}
+                        title={
+                          r.hasCompraGenerada
+                            ? `Seleccionar OT ${r.ot}`
+                            : `OT ${r.ot} bloqueada: requiere compra generada`
+                        }
                       />
                     </TableCell>
                     <TableCell>
@@ -1277,7 +1367,14 @@ export function PlanificacionPoolOtsTab() {
                               ? ` (+${r.compraProveedorExtraCount})`
                               : ""}
                           </p>
-                        ) : null}
+                        ) : (
+                          <p className="text-[11px] font-medium text-red-600">
+                            Sin compra generada (no se puede enviar a mesa)
+                          </p>
+                        )}
+                        <p className="text-[11px] text-slate-500">
+                          Estado compra: {r.compraEstado}
+                        </p>
                       </div>
                     </TableCell>
                     <TableCell>

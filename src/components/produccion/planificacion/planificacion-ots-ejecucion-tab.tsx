@@ -43,6 +43,7 @@ const TABLE_EJECUCIONES_PAUSAS = "prod_mesa_ejecuciones_pausas";
 const TABLE_MOTIVOS_PAUSA = "sys_motivos_pausa";
 const TABLE_MAQUINAS = "prod_maquinas";
 const TABLE_MESA = "prod_mesa_planificacion_trabajos";
+const TABLE_POOL = "prod_planificacion_pool";
 
 type EjecucionRow = {
   id: string;
@@ -330,6 +331,32 @@ export function PlanificacionOtsEjecucionTab({
             .update({ estado_mesa: "finalizada" })
             .eq("id", row.mesaTrabajoId);
           if (mesaError) throw mesaError;
+        }
+        if (nextPatch.estado_ejecucion === "finalizada") {
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          const actorId =
+            typeof user?.id === "string" && user.id.trim().length > 0
+              ? user.id.trim()
+              : null;
+          const actorEmail =
+            typeof user?.email === "string" && user.email.trim().length > 0
+              ? user.email.trim()
+              : null;
+          const nowIso = new Date().toISOString();
+          const { error: poolError } = await supabase
+            .from(TABLE_POOL)
+            .update({
+              estado_pool: "cerrada",
+              closed_at: nowIso,
+              closed_by: actorId,
+              closed_by_email: actorEmail,
+              notas: "Cerrada automáticamente al finalizar ejecución",
+            })
+            .eq("ot_numero", row.ot)
+            .in("estado_pool", ["pendiente", "enviada_mesa"]);
+          if (poolError) throw poolError;
         }
         toast.success("Ejecución actualizada.");
         await loadData();

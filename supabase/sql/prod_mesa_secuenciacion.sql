@@ -358,6 +358,68 @@ alter table public.prod_planificacion_pool
     or troquel_status in ('ok', 'falta', 'no_aplica', 'desconocido', 'sin_informar')
   );
 
+-- Estado de ciclo de vida en Pool: pendiente -> enviada_mesa -> cerrada.
+alter table public.prod_planificacion_pool
+  add column if not exists closed_at timestamptz null,
+  add column if not exists closed_by uuid null,
+  add column if not exists closed_by_email text null;
+
+alter table public.prod_planificacion_pool
+  drop constraint if exists prod_planificacion_pool_estado_pool_check;
+alter table public.prod_planificacion_pool
+  drop constraint if exists prod_planificacion_pool_estado_check;
+
+alter table public.prod_planificacion_pool
+  add constraint prod_planificacion_pool_estado_pool_check
+  check (estado_pool in ('pendiente', 'enviada_mesa', 'cerrada'));
+
+create index if not exists prod_planificacion_pool_estado_ot_idx
+  on public.prod_planificacion_pool (estado_pool, ot_numero);
+
+create index if not exists prod_planificacion_pool_closed_at_idx
+  on public.prod_planificacion_pool (closed_at desc);
+
+comment on column public.prod_planificacion_pool.closed_at is
+  'Marca temporal de cierre operativo de la OT en Pool.';
+comment on column public.prod_planificacion_pool.closed_by is
+  'Usuario que cerró la OT en Pool (normalmente al finalizar ejecución).';
+comment on column public.prod_planificacion_pool.closed_by_email is
+  'Email del usuario que cerró la OT en Pool.';
+
+-- Backfill histórico: cerrar en Pool las OTs que ya figuran como finalizadas.
+update public.prod_planificacion_pool p
+set
+  estado_pool = 'cerrada',
+  closed_at = coalesce(
+    p.closed_at,
+    (
+      select max(e.fin_real_at)
+      from public.prod_mesa_ejecuciones e
+      where e.ot_numero = p.ot_numero
+        and e.estado_ejecucion = 'finalizada'
+    ),
+    timezone('utc'::text, now())
+  ),
+  notas = coalesce(
+    nullif(trim(p.notas), ''),
+    'Cerrada automáticamente por backfill de finalizadas'
+  )
+where p.estado_pool in ('pendiente', 'enviada_mesa')
+  and (
+    exists (
+      select 1
+      from public.prod_mesa_planificacion_trabajos m
+      where m.ot_numero = p.ot_numero
+        and m.estado_mesa = 'finalizada'
+    )
+    or exists (
+      select 1
+      from public.prod_mesa_ejecuciones e
+      where e.ot_numero = p.ot_numero
+        and e.estado_ejecucion = 'finalizada'
+    )
+  );
+
 -- ---------------------------------------------------------------------------
 -- 6) Ejecución manual de OTs en máquina (sin integración Optimus)
 -- ---------------------------------------------------------------------------

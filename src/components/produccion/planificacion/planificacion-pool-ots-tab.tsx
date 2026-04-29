@@ -176,6 +176,18 @@ export function PlanificacionPoolOtsTab() {
           .map((x) => String(x.ot_numero ?? "").trim())
           .filter(Boolean)
       );
+      const { data: poolStateData, error: poolStateErr } = await supabase
+        .from(TABLE_POOL)
+        .select("ot_numero, estado_pool")
+        .in("ot_numero", otList)
+        .in("estado_pool", ["pendiente", "enviada_mesa", "cerrada"]);
+      if (poolStateErr) throw poolStateErr;
+      const otsPoolCerradas = new Set(
+        ((poolStateData ?? []) as Array<{ ot_numero: string | null; estado_pool: string | null }>)
+          .filter((x) => String(x.estado_pool ?? "").trim().toLowerCase() === "cerrada")
+          .map((x) => String(x.ot_numero ?? "").trim())
+          .filter(Boolean)
+      );
 
       const { data: generalData, error: genErr } = await supabase
         .from(TABLE_OTS_GENERAL)
@@ -239,6 +251,7 @@ export function PlanificacionPoolOtsTab() {
       const finalRows: PoolRow[] = [];
       for (const [ot, base] of byOt.entries()) {
         if (otsMesa.has(ot)) continue;
+        if (otsPoolCerradas.has(ot)) continue;
         const g = genByOt.get(ot);
         if (g) {
           base.cliente = String(g.cliente ?? "").trim() || "—";
@@ -362,7 +375,7 @@ export function PlanificacionPoolOtsTab() {
         .from(TABLE_POOL)
         .select("id, ot_numero")
         .in("ot_numero", nuevos.map((r) => r.ot))
-        .in("estado_pool", ["pendiente", "enviada_mesa"]);
+        .in("estado_pool", ["pendiente", "enviada_mesa", "cerrada"]);
       if (poolExistErr) throw poolExistErr;
 
       const poolByOt = new Map<string, string>();
@@ -376,6 +389,9 @@ export function PlanificacionPoolOtsTab() {
           .from(TABLE_POOL)
           .update({
             estado_pool: "enviada_mesa",
+            closed_at: null,
+            closed_by: null,
+            closed_by_email: null,
             notas: "Enviada desde Pool a Mesa",
           })
           .in("id", toUpdateIds);

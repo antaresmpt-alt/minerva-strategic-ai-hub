@@ -765,7 +765,29 @@ export function PlanificacionMesaSecuenciacionTab() {
       acabado_pral_snapshot: string | null;
     };
     const rows = (poolData ?? []) as PoolRow[];
-    const otsList = rows.map((r) => String(r.ot_numero ?? "").trim()).filter(Boolean);
+    const poolOts = rows.map((r) => String(r.ot_numero ?? "").trim()).filter(Boolean);
+    if (poolOts.length === 0) return [] as PoolOT[];
+
+    // Regla de negocio: una OT ya colocada en mesa (cualquier semana) no debe
+    // reaparecer en el Pool al navegar semanas.
+    let placedQuery = supabase
+      .from(TABLE_MESA)
+      .select("ot_numero")
+      .in("estado_mesa", ACTIVE_MESA_ESTADOS as unknown as string[])
+      .in("ot_numero", poolOts);
+    if (selectedMaquinaId) {
+      placedQuery = placedQuery.or(`maquina_id.eq.${selectedMaquinaId},maquina_id.is.null`);
+    }
+    const { data: placedData, error: placedErr } = await placedQuery;
+    if (placedErr) throw placedErr;
+    const otsPlacedAnywhere = new Set(
+      ((placedData ?? []) as Array<{ ot_numero: string | null }>)
+        .map((x) => String(x.ot_numero ?? "").trim())
+        .filter(Boolean),
+    );
+    const visibleRows = rows.filter((r) => !otsPlacedAnywhere.has(String(r.ot_numero ?? "").trim()));
+
+    const otsList = visibleRows.map((r) => String(r.ot_numero ?? "").trim()).filter(Boolean);
     if (otsList.length === 0) return [] as PoolOT[];
 
     // Datos técnicos (despachadas) para tarjetas: agregamos por OT.
@@ -837,7 +859,7 @@ export function PlanificacionMesaSecuenciacionTab() {
     }
 
     const out: PoolOT[] = [];
-    for (const r of rows) {
+    for (const r of visibleRows) {
       const ot = String(r.ot_numero ?? "").trim();
       if (!ot) continue;
       const desp = despAgg.get(ot) ?? {
