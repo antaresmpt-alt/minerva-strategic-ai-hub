@@ -318,6 +318,7 @@ export function ComprasMaterialPage() {
   >([]);
 
   const [filtroBusqueda, setFiltroBusqueda] = useState("");
+  const [filtroBusquedaTecnica, setFiltroBusquedaTecnica] = useState("");
   const [filtroProveedorId, setFiltroProveedorId] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("");
   /** `false`: ocultar compras en estado «Recibido» (vista limpia). `true`: ver todo el histórico. */
@@ -752,8 +753,33 @@ export function ComprasMaterialPage() {
         return bloques.some((s) => s.includes(q));
       });
     }
+    const qTecnica = filtroBusquedaTecnica.trim().toLowerCase();
+    if (qTecnica) {
+      list = list.filter((r) => {
+        const netas = r.num_hojas_netas != null ? String(r.num_hojas_netas) : "";
+        const brutas =
+          r.num_hojas_brutas != null ? String(r.num_hojas_brutas) : "";
+        const bloques = [
+          r.material,
+          r.gramaje != null ? String(r.gramaje) : "",
+          r.tamano_hoja,
+          netas,
+          brutas,
+          netas && brutas ? `${netas}/${brutas}` : "",
+          netas && brutas ? `${netas} / ${brutas}` : "",
+        ].map((x) => String(x ?? "").toLowerCase());
+        return bloques.some((s) => s.includes(qTecnica));
+      });
+    }
     return list;
-  }, [rows, verHistorial, filtroBusqueda, filtroEstado, filtroProveedorId]);
+  }, [
+    rows,
+    verHistorial,
+    filtroBusqueda,
+    filtroBusquedaTecnica,
+    filtroEstado,
+    filtroProveedorId,
+  ]);
 
   const proveedoresUnicosDeLista = useMemo(() => {
     const map = new Map<string, string>();
@@ -1837,6 +1863,18 @@ export function ComprasMaterialPage() {
                 className="h-9 w-full max-w-sm"
               />
             </div>
+            <div className="grid min-w-0 max-w-sm flex-1 gap-1.5">
+              <Label htmlFor="busq-compra-mat-tecnica">
+                Buscar (material, gramaje, formato, netas/brutas)
+              </Label>
+              <Input
+                id="busq-compra-mat-tecnica"
+                placeholder="Ej. couché 350 o 5000/5500"
+                value={filtroBusquedaTecnica}
+                onChange={(e) => setFiltroBusquedaTecnica(e.target.value)}
+                className="h-9 w-full max-w-sm"
+              />
+            </div>
             <div className="flex flex-col gap-1.5">
               <span className="text-xs font-medium text-muted-foreground">
                 Histórico
@@ -1984,6 +2022,18 @@ export function ComprasMaterialPage() {
               placeholder="Ej. 24001 o cliente"
               value={filtroBusqueda}
               onChange={(e) => setFiltroBusqueda(e.target.value)}
+              className="min-h-11 w-full touch-manipulation text-base"
+            />
+          </div>
+          <div className="grid min-w-0 gap-1.5">
+            <Label htmlFor="busq-compra-mat-tecnica-m">
+              Buscar (material, gramaje, formato, netas/brutas)
+            </Label>
+            <Input
+              id="busq-compra-mat-tecnica-m"
+              placeholder="Ej. couché 350 o 5000/5500"
+              value={filtroBusquedaTecnica}
+              onChange={(e) => setFiltroBusquedaTecnica(e.target.value)}
               className="min-h-11 w-full touch-manipulation text-base"
             />
           </div>
