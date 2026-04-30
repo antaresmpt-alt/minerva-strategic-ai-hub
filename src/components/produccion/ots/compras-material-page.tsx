@@ -51,13 +51,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { NativeSelect, type Option } from "@/components/ui/select-native";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -373,6 +366,11 @@ export function ComprasMaterialPage() {
 
   const loadProveedoresPapelCarton = useCallback(async () => {
     try {
+      const mapProviders = (provs: { id: string; nombre: string | null }[]) =>
+        provs.map((x) => ({
+          id: x.id,
+          nombre: String(x.nombre ?? "").trim() || "Sin nombre",
+        }));
       const { data: tipos, error: tErr } = await supabase
         .from(TABLE_TIPOS_PROVEEDOR)
         .select("id, nombre");
@@ -381,10 +379,16 @@ export function ComprasMaterialPage() {
         (tipos ?? []) as { id: string; nombre: string | null }[]
       );
       if (!tipoId) {
-        toast.error(
-          "No se encontró el tipo «Papel/Cartón» en prod_cat_tipos_proveedor."
+        const { data: allProvs, error: allErr } = await supabase
+          .from(TABLE_PROVEEDORES)
+          .select("id, nombre")
+          .order("nombre", { ascending: true });
+        if (allErr) throw allErr;
+        const allList = (allProvs ?? []) as { id: string; nombre: string | null }[];
+        setProveedoresPapelCarton(mapProviders(allList));
+        toast.warning(
+          "No se encontró el tipo «Papel/Cartón». Se muestran todos los proveedores."
         );
-        setProveedoresPapelCarton([]);
         return;
       }
       const { data: provs, error: pErr } = await supabase
@@ -394,11 +398,19 @@ export function ComprasMaterialPage() {
         .order("nombre", { ascending: true });
       if (pErr) throw pErr;
       const list = (provs ?? []) as { id: string; nombre: string | null }[];
-      setProveedoresPapelCarton(
-        list.map((x) => ({
-          id: x.id,
-          nombre: String(x.nombre ?? "").trim() || "Sin nombre",
-        }))
+      if (list.length > 0) {
+        setProveedoresPapelCarton(mapProviders(list));
+        return;
+      }
+      const { data: allProvs, error: allErr } = await supabase
+        .from(TABLE_PROVEEDORES)
+        .select("id, nombre")
+        .order("nombre", { ascending: true });
+      if (allErr) throw allErr;
+      const allList = (allProvs ?? []) as { id: string; nombre: string | null }[];
+      setProveedoresPapelCarton(mapProviders(allList));
+      toast.warning(
+        "No hay proveedores en tipo «Papel/Cartón». Se muestran todos los proveedores."
       );
     } catch (e) {
       console.error(e);
@@ -961,6 +973,47 @@ export function ComprasMaterialPage() {
     setEditOpen(true);
   }, []);
 
+  const sugerirSiguientePosicionOt = useCallback(
+    (otNumero: string) => {
+      const ot = String(otNumero ?? "").trim();
+      if (!ot) return 1;
+      const maxPos = rows.reduce((acc, r) => {
+        if (String(r.ot_numero ?? "").trim() !== ot) return acc;
+        const p = r.posicion ?? 1;
+        return p > acc ? p : acc;
+      }, 0);
+      return Math.max(1, maxPos + 1);
+    },
+    [rows]
+  );
+
+  const openManualDuplicate = useCallback(
+    (row: ComprasMaterialTableRow) => {
+      const nextPos = sugerirSiguientePosicionOt(row.ot_numero);
+      setManualOt(normalizeOtNumeroInput(row.ot_numero));
+      setManualPosicion(String(nextPos));
+      setManualProveedorId(row.proveedor_id?.trim() ?? "");
+      setManualMaterial(row.material?.trim() ?? "");
+      setManualGramaje(
+        row.gramaje != null && Number.isFinite(row.gramaje)
+          ? String(row.gramaje)
+          : ""
+      );
+      setManualFormato(row.tamano_hoja?.trim() ?? "");
+      setManualHojasNetas(
+        row.num_hojas_netas != null ? String(row.num_hojas_netas) : ""
+      );
+      setManualHojasBrutas(
+        row.num_hojas_brutas != null ? String(row.num_hojas_brutas) : ""
+      );
+      setManualCliente(row.cliente?.trim() ?? "");
+      setManualTitulo(row.titulo?.trim() ?? "");
+      setManualNotasCompra(row.notas?.trim() ?? "");
+      setManualOpen(true);
+    },
+    [sugerirSiguientePosicionOt]
+  );
+
   const patchNombreProveedorLocal = useCallback(
     (rowId: string, proveedorId: string | null) => {
       const nombre =
@@ -1139,6 +1192,7 @@ export function ComprasMaterialPage() {
     () =>
       createComprasMaterialColumns({
         onEdit: openEdit,
+        onDuplicate: openManualDuplicate,
         onDelete: async (row) => {
           const ok = window.confirm(
             `¿Eliminar la compra OT ${row.ot_numero} / P${row.posicion ?? 1}?`
@@ -1243,6 +1297,7 @@ export function ComprasMaterialPage() {
       onEstadoChange,
       onFechaPrevistaCommit,
       onProveedorChange,
+      openManualDuplicate,
       openEdit,
       openRecepcionFotos,
       proveedoresPapelCarton,
@@ -2210,22 +2265,34 @@ export function ComprasMaterialPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  table.getRowModel().rows.map((row) => (
-                    <TableRow
-                      key={row.id}
-                      className="hover:bg-slate-50/80"
-                      data-state={row.getIsSelected() ? "selected" : undefined}
-                    >
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id} className="p-0 align-middle">
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
-                          )}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))
+                  table.getRowModel().rows.map((row, index, allRows) => {
+                    const currentOt = String(row.original.ot_numero ?? "").trim();
+                    const prevOt =
+                      index > 0
+                        ? String(allRows[index - 1]?.original.ot_numero ?? "").trim()
+                        : "";
+                    const startsNewOtGroup =
+                      index > 0 && currentOt.length > 0 && currentOt !== prevOt;
+                    return (
+                      <TableRow
+                        key={row.id}
+                        className={cn(
+                          "hover:bg-slate-50/80",
+                          startsNewOtGroup && "border-t-2 border-slate-300/80"
+                        )}
+                        data-state={row.getIsSelected() ? "selected" : undefined}
+                      >
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell key={cell.id} className="p-0 align-middle">
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext()
+                            )}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
@@ -2887,31 +2954,19 @@ export function ComprasMaterialPage() {
           </DialogHeader>
           <div className="grid max-h-[min(50vh,360px)] gap-3 overflow-y-auto px-4 py-3">
             <div className="grid gap-1">
-              <Label className="text-xs">Proveedor</Label>
-              <Select
-                value={proveedorSeleccionado || "__none__"}
-                onValueChange={(v) =>
-                  setProveedorSeleccionado(!v || v === "__none__" ? "" : v)
-                }
-              >
-                <SelectTrigger size="sm" className="h-8 w-full min-w-0 text-xs">
-                  <SelectValue placeholder="Seleccionar proveedor">
-                    {proveedorSeleccionado
-                      ? proveedoresPapelCarton.find(
-                          (p) => p.id === proveedorSeleccionado
-                        )?.nombre ?? null
-                      : null}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent className="max-h-64">
-                  <SelectItem value="__none__">Seleccionar proveedor</SelectItem>
-                  {proveedoresPapelCarton.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <NativeSelect
+                label="Proveedor"
+                options={[
+                  { value: "", label: "Seleccionar proveedor" },
+                  ...proveedoresPapelCarton.map((p) => ({
+                    value: p.id,
+                    label: p.nombre,
+                  })),
+                ]}
+                value={proveedorSeleccionado}
+                onChange={(e) => setProveedorSeleccionado(e.target.value)}
+                className="h-8 text-xs"
+              />
             </div>
             {selectedRows.length > 0 ? (
               <div className="rounded-md border border-slate-200 bg-slate-100/80 px-3 py-2.5 text-xs leading-relaxed text-slate-800">

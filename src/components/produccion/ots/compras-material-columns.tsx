@@ -6,6 +6,7 @@ import {
   ArrowUp,
   ArrowUpDown,
   Camera,
+  CopyPlus,
   Package,
   StickyNote,
   Pencil,
@@ -121,6 +122,7 @@ function InlineFechaPrevistaCompraCell({
 
 export type ComprasMaterialColumnsContext = {
   onEdit: (row: ComprasMaterialTableRow) => void;
+  onDuplicate: (row: ComprasMaterialTableRow) => void;
   onDelete: (row: ComprasMaterialTableRow) => void;
   onOpenRecepcionFotos: (row: ComprasMaterialTableRow) => void;
   proveedoresPapelCarton: { id: string; nombre: string }[];
@@ -171,6 +173,27 @@ export function createComprasMaterialColumns(
             aria-label={`Editar compra ${row.original.num_compra}`}
           >
             <Pencil className="size-3.5 text-[#002147]" aria-hidden />
+          </Button>
+        </div>
+      ),
+    },
+    {
+      id: "acciones_multi",
+      size: 44,
+      enableSorting: false,
+      header: () => <span className="sr-only">Acciones compra múltiple</span>,
+      cell: ({ row }) => (
+        <div className="flex justify-center px-0.5 py-0.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="size-7 shrink-0"
+            onClick={() => ctx.onDuplicate(row.original)}
+            aria-label={`Duplicar línea ${row.original.num_compra}`}
+            title="Duplicar línea (P siguiente)"
+          >
+            <CopyPlus className="size-3.5 text-[#002147]" aria-hidden />
           </Button>
         </div>
       ),

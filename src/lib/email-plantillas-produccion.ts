@@ -312,6 +312,15 @@ function gramajeTexto(g: number | null | undefined): string {
   return Number.isInteger(n) ? String(Math.trunc(n)) : String(n);
 }
 
+function otPosicionComprasDisplay(row: ComprasMaterialTableRow): string {
+  const ot = String(row.ot_numero ?? "").trim();
+  if (!ot) return "—";
+  const pos = row.posicion;
+  if (pos == null || !Number.isFinite(pos)) return ot;
+  const p = Math.max(1, Math.trunc(pos));
+  return `${ot}${String(p).padStart(2, "0")}`;
+}
+
 function varsComprasFila(
   row: ComprasMaterialTableRow,
   nombreProveedor: string
@@ -329,7 +338,7 @@ function varsComprasFila(
         : "—",
     gramaje,
     formato: (row.tamano_hoja ?? "").trim() || "—",
-    ot_asociada: String(row.ot_numero ?? "").trim() || "—",
+    ot_asociada: otPosicionComprasDisplay(row),
   };
 }
 
@@ -337,7 +346,13 @@ function varsComprasAgregadas(
   rows: ComprasMaterialTableRow[],
   nombreProveedor: string
 ): Record<string, string> {
-  const ots = [...new Set(rows.map((r) => String(r.ot_numero ?? "").trim()).filter(Boolean))].join(", ");
+  const ots = [
+    ...new Set(
+      rows
+        .map((r) => otPosicionComprasDisplay(r))
+        .filter((v) => v !== "—" && v.trim().length > 0)
+    ),
+  ].join(", ");
   return {
     proveedor: nombreProveedor.trim() || "—",
     material: rows.length === 1 ? varsComprasFila(rows[0]!, nombreProveedor).material : `${rows.length} líneas`,
