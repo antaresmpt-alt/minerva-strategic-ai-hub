@@ -43,6 +43,27 @@ function safeNextPathnameFromSearch(next: string | null): string {
   return path || "/";
 }
 
+async function auditAccessDenied(
+  request: NextRequest,
+  payload: {
+    reason: string;
+    path: string;
+    role?: string | null;
+    userId?: string | null;
+  }
+) {
+  try {
+    await fetch(new URL("/api/security/access-denied", request.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      cache: "no-store",
+    });
+  } catch {
+    // Best-effort de auditoría en Edge.
+  }
+}
+
 export async function updateSession(request: NextRequest) {
   const response = NextResponse.next({
     request: {
@@ -76,6 +97,7 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
+  const ip = clientIpFromRequest(request);
 
   if (isMfaSetupPath(pathname)) {
     if (userError || !user) {
@@ -95,6 +117,9 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (isLoginPath(pathname)) {
+    if (!rateLimitAllow(`login:page:ip:${ip}`, 120, 60_000)) {
+      return new NextResponse("Too Many Requests", { status: 429 });
+    }
     if (!userError && user) {
       const nextPath = safeNextPathnameFromSearch(
         request.nextUrl.searchParams.get("next")
@@ -115,8 +140,21 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (pathname.startsWith("/api")) {
-    const ip = clientIpFromRequest(request);
-    if (!rateLimitAllow(`api:ip:${ip}`, 120, 60_000)) {
+    if (pathname.startsWith("/api/security/")) {
+      return response;
+    }
+    const isAdminApi = pathname.startsWith("/api/admin/");
+    const isGeminiApi = pathname.startsWith("/api/gemini/");
+    const isAiCostlyApi =
+      isGeminiApi ||
+      pathname === "/api/chat" ||
+      pathname === "/api/sales-chat" ||
+      pathname === "/api/sales-email";
+    const ipLimit = isAdminApi ? 40 : isAiCostlyApi ? 25 : 120;
+    const userLimit = isAdminApi ? 80 : isAiCostlyApi ? 35 : 400;
+    const bucket = isAdminApi ? "admin" : isAiCostlyApi ? "ai" : "default";
+
+    if (!rateLimitAllow(`api:ip:${ip}:${bucket}`, ipLimit, 60_000)) {
       const tooMany = NextResponse.json(
         { error: "Too Many Requests", message: "Demasiadas peticiones. Espera un momento." },
         { status: 429 }
@@ -137,7 +175,7 @@ export async function updateSession(request: NextRequest) {
       return unauthorized;
     }
 
-    if (!rateLimitAllow(`api:user:${user.id}`, 400, 60_000)) {
+    if (!rateLimitAllow(`api:user:${user.id}:${bucket}`, userLimit, 60_000)) {
       const tooMany = NextResponse.json(
         { error: "Too Many Requests", message: "Demasiadas peticiones desde esta cuenta." },
         { status: 429 }
@@ -161,6 +199,12 @@ export async function updateSession(request: NextRequest) {
       const { data: sess } = await supabase.auth.getSession();
       const aal = getAalFromAccessToken(sess.session?.access_token);
       if (aal !== "aal2") {
+        await auditAccessDenied(request, {
+          reason: "MFA_REQUIRED",
+          path: pathname,
+          role,
+          userId: user.id,
+        });
         const mfaRequired = NextResponse.json(
           {
             error: "MFA_REQUIRED",
@@ -177,6 +221,12 @@ export async function updateSession(request: NextRequest) {
     const dynamic = role ? await fetchRolePermissionMap(role) : null;
 
     if (!canAccessApiRoute(role, pathname, dynamic)) {
+      await auditAccessDenied(request, {
+        reason: "API_FORBIDDEN",
+        path: pathname,
+        role,
+        userId: user.id,
+      });
       const forbidden = NextResponse.json(
         {
           error: "Forbidden",
@@ -222,6 +272,12 @@ export async function updateSession(request: NextRequest) {
     const { data: sess } = await supabase.auth.getSession();
     const aal = getAalFromAccessToken(sess.session?.access_token);
     if (aal !== "aal2") {
+      await auditAccessDenied(request, {
+        reason: "PAGE_MFA_REQUIRED",
+        path: pathname,
+        role,
+        userId: user.id,
+      });
       const url = request.nextUrl.clone();
       url.pathname = "/login/mfa-setup";
       url.searchParams.set(
@@ -253,6 +309,12 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (!canAccessPagePath(role, pathname, dynamic)) {
+    await auditAccessDenied(request, {
+      reason: "PAGE_FORBIDDEN",
+      path: pathname,
+      role,
+      userId: user.id,
+    });
     const url = new URL("/", request.url);
     url.searchParams.set("permiso", "denegado");
     const redirect = NextResponse.redirect(url);

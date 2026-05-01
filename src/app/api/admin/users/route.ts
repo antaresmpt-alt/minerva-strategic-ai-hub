@@ -7,6 +7,20 @@ import { getPublicSiteUrl } from "@/lib/public-site-url";
 import { recordSecurityAudit } from "@/lib/security-audit";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
+function getCorporateDomains(): string[] {
+  return (process.env.CORPORATE_EMAIL_DOMAINS ?? "")
+    .split(",")
+    .map((d) => d.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function isCorporateEmail(email: string, domains: string[]): boolean {
+  const at = email.lastIndexOf("@");
+  if (at === -1) return false;
+  const domain = email.slice(at + 1).toLowerCase();
+  return domains.includes(domain);
+}
+
 export async function GET() {
   const gate = await requireSettingsAdmin();
   if (!gate.ok) return gate.response;
@@ -86,6 +100,25 @@ export async function POST(request: Request) {
     const pwdErr = assertPasswordOrMessage(body.password);
     if (pwdErr) {
       return NextResponse.json({ error: pwdErr }, { status: 400 });
+    }
+    const domains = getCorporateDomains();
+    if (domains.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Configura CORPORATE_EMAIL_DOMAINS para habilitar el alta con contraseña.",
+        },
+        { status: 400 }
+      );
+    }
+    if (!isCorporateEmail(email, domains)) {
+      return NextResponse.json(
+        {
+          error:
+            "El alta con contraseña solo está permitida para dominios corporativos.",
+        },
+        { status: 400 }
+      );
     }
   }
 

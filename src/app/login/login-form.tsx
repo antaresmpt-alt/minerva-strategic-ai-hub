@@ -60,18 +60,53 @@ export function LoginForm() {
       e.preventDefault();
       setFormError(null);
       setLoading(true);
+      const normalizedEmail = email.trim().toLowerCase();
+
+      const precheckRes = await fetch("/api/security/login-attempt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: normalizedEmail,
+          ok: false,
+          reason: "precheck",
+        }),
+      });
+      if (precheckRes.status === 429) {
+        setFormError("Demasiados intentos. Espera un minuto y vuelve a intentarlo.");
+        setLoading(false);
+        return;
+      }
 
       const supabase = createSupabaseBrowserClient();
       const { error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
+        email: normalizedEmail,
         password,
       });
 
       if (error) {
+        await fetch("/api/security/login-attempt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: normalizedEmail,
+            ok: false,
+            reason: error.message,
+          }),
+        });
         setFormError(error.message);
         setLoading(false);
         return;
       }
+
+      await fetch("/api/security/login-attempt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: normalizedEmail,
+          ok: true,
+          reason: "password_sign_in_ok",
+        }),
+      });
 
       const dest = safeClientNextPath(nextParam);
       const q = new URLSearchParams({ next: dest });
