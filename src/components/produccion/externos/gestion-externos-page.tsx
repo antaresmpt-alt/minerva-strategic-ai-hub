@@ -6,10 +6,10 @@ import {
   ArrowUpDown,
   CalendarDays,
   Check,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Copy,
+  CopyPlus,
   Factory,
   FileOutput,
   FileSpreadsheet,
@@ -694,79 +694,6 @@ function computeSemaforo(row: SeguimientoRow): SemaforoInfo {
     tooltip: row.estado,
     excelLabel: `🔵 ${row.estado}`,
   };
-}
-
-function SemaforoCell({ row }: { row: SeguimientoRow }) {
-  const s = computeSemaforo(row);
-  if (s.kind === "recibido") {
-    return (
-      <span className="inline-flex justify-center" title={s.tooltip}>
-        <CheckCircle2
-          className="size-6 shrink-0"
-          style={{ color: "#16a34a" }}
-          strokeWidth={2.25}
-          aria-hidden
-        />
-        <span className="sr-only">{s.tooltip}</span>
-      </span>
-    );
-  }
-  if (s.kind === "retraso") {
-    return (
-      <span className="inline-flex justify-center" title={s.tooltip}>
-        <span
-          className="inline-block size-5 shrink-0 rounded-full bg-[#ef4444]"
-          aria-hidden
-        />
-        <span className="sr-only">{s.tooltip}</span>
-      </span>
-    );
-  }
-  if (s.kind === "urgente") {
-    return (
-      <span className="inline-flex justify-center" title={s.tooltip}>
-        <span
-          className="inline-block size-5 shrink-0 rounded-full bg-[#eab308]"
-          aria-hidden
-        />
-        <span className="sr-only">{s.tooltip}</span>
-      </span>
-    );
-  }
-  if (s.kind === "listo_recogida") {
-    return (
-      <span className="inline-flex justify-center" title={s.tooltip}>
-        <span
-          className="inline-block size-5 shrink-0 rounded-full bg-sky-300 ring-2 ring-sky-200/90 dark:bg-sky-400 dark:ring-sky-500/50"
-          aria-hidden
-        />
-        <span className="sr-only">{s.tooltip}</span>
-      </span>
-    );
-  }
-  if (s.kind === "transito") {
-    return (
-      <span className="inline-flex justify-center" title={s.tooltip}>
-        <span
-          className="inline-block size-5 shrink-0 rounded-full bg-cyan-500"
-          aria-hidden
-        />
-        <span className="sr-only">{s.tooltip}</span>
-      </span>
-    );
-  }
-  return (
-    <span
-      className="inline-flex justify-center"
-      title={s.tooltip}
-    >
-      <span
-        className="inline-block size-5 shrink-0 rounded-full border-2 border-slate-400 bg-white dark:border-slate-500 dark:bg-slate-950"
-        aria-hidden
-      />
-      <span className="sr-only">{s.tooltip}</span>
-    </span>
-  );
 }
 
 export function MaterialCompraColumnCell({
@@ -2322,6 +2249,57 @@ export function GestionExternosPage() {
     void loadCore();
   }
 
+  async function handleDuplicateSeguimiento(row: SeguimientoRow) {
+    const otRaw = String(row.OT ?? row.id_pedido ?? "").trim();
+    if (!otRaw) {
+      toast.error("No se pudo determinar la OT para duplicar.");
+      return;
+    }
+    setSaving(true);
+    const { data: opRows, error: opErr } = await supabase
+      .from("prod_seguimiento_externos")
+      .select("num_operacion")
+      .eq("OT", otRaw);
+    if (opErr) {
+      setSaving(false);
+      toast.error(opErr.message);
+      return;
+    }
+    const nextOp =
+      Math.max(0, ...(opRows?.map((x) => x.num_operacion ?? 0) ?? [])) + 1;
+    const now = new Date().toISOString();
+    const { error } = await supabase.from("prod_seguimiento_externos").insert({
+      id_pedido: row.id_pedido,
+      OT: otRaw,
+      num_operacion: nextOp,
+      cliente_nombre: row.cliente_nombre?.trim() || "—",
+      trabajo_titulo: row.trabajo_titulo?.trim() || "—",
+      pedido_cliente: row.pedido_cliente?.trim() || null,
+      proveedor_id: row.proveedor_id,
+      acabado_id: row.acabado_id,
+      estado: row.estado,
+      fecha_envio: row.fecha_envio,
+      fecha_prevista: row.fecha_prevista,
+      f_entrega_ot: row.f_entrega_ot ?? null,
+      dias_a_fEntOT:
+        row.f_entrega_ot != null ? computeDiasHastaFEntregaOt(row.f_entrega_ot) : null,
+      notas_logistica: row.notas_logistica?.trim() || null,
+      unidades: row.unidades ?? null,
+      prioridad: row.prioridad?.trim() || null,
+      palets: row.palets ?? null,
+      observaciones: row.observaciones?.trim() || null,
+      orden_diario: row.orden_diario ?? null,
+      updated_at: now,
+    });
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(`Fila duplicada en OT ${otRaw} (Op ${nextOp}).`);
+    void loadCore();
+  }
+
   async function updateSeguimientoFecha(
     row: SeguimientoRow,
     field: "fecha_envio" | "fecha_prevista" | "f_entrega_ot",
@@ -3003,8 +2981,8 @@ export function GestionExternosPage() {
                         <th className="sticky top-0 z-30 w-10 bg-slate-50/95 px-0.5 py-1 text-center font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           Ed.
                         </th>
-                        <th className="sticky top-0 z-30 w-9 bg-slate-50/95 px-0.5 py-1 text-center font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
-                          Sem.
+                        <th className="sticky top-0 z-30 w-10 bg-slate-50/95 px-0.5 py-1 text-center font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
+                          Dup.
                         </th>
                         <th className="sticky top-0 z-30 w-12 min-w-0 max-w-[6rem] bg-slate-50/95 px-1 py-1 text-left font-medium text-muted-foreground shadow-[0_1px_0_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-950/95">
                           <button
@@ -3166,8 +3144,18 @@ export function GestionExternosPage() {
                                 <Pencil className="size-3.5" />
                               </Button>
                             </td>
-                            <td className="w-9 px-0.5 py-0.5 text-center align-middle">
-                              <SemaforoCell row={row} />
+                            <td className="w-10 p-0.5 text-center align-middle">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                className="size-7 shrink-0"
+                                onClick={() => void handleDuplicateSeguimiento(row)}
+                                aria-label={`Duplicar OT ${getOtDisplay(row)} Op ${row.num_operacion ?? "—"}`}
+                                title="Duplicar fila (Op siguiente)"
+                              >
+                                <CopyPlus className="size-3.5" />
+                              </Button>
                             </td>
                             <td className="w-[4.5rem] min-w-[4.25rem] max-w-[6rem] px-0.5 py-0.5 align-middle">
                               <OtNumeroSemaforoBadge
@@ -3366,7 +3354,18 @@ export function GestionExternosPage() {
                           </div>
                           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 pt-3">
                             <div className="flex flex-wrap items-center gap-3">
-                              <SemaforoCell row={row} />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-9 gap-1.5"
+                                onClick={() => void handleDuplicateSeguimiento(row)}
+                                aria-label={`Duplicar OT ${getOtDisplay(row)} Op ${row.num_operacion ?? "—"}`}
+                                title="Duplicar fila (Op siguiente)"
+                              >
+                                <CopyPlus className="size-4" aria-hidden />
+                                Duplicar
+                              </Button>
                               <div className="flex items-center gap-1.5">
                                 <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
                                   M
