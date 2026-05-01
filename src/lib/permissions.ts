@@ -185,7 +185,10 @@ export function canAccessApiRoute(
     ) {
       return canAccessHubModule(role, "seo", dynamic);
     }
-    if (pathname.startsWith("/api/gemini/produccion-externos-analyze")) {
+    if (
+      pathname.startsWith("/api/gemini/produccion-externos-analyze") ||
+      pathname.startsWith("/api/gemini/produccion-externos-optimus-import")
+    ) {
       return canAccessHubModule(role, "produccion", dynamic);
     }
     if (
@@ -236,7 +239,10 @@ export function canAccessApiRoute(
     return canAccessHubModule(role, "seo");
   }
 
-  if (pathname.startsWith("/api/gemini/produccion-externos-analyze")) {
+  if (
+    pathname.startsWith("/api/gemini/produccion-externos-analyze") ||
+    pathname.startsWith("/api/gemini/produccion-externos-optimus-import")
+  ) {
     return canAccessHubModule(role, "produccion");
   }
 
