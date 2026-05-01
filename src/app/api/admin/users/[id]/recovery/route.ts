@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireSettingsAdmin } from "@/lib/api/require-settings-admin";
+import { recordSecurityAudit } from "@/lib/security-audit";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -45,6 +46,15 @@ export async function POST(_request: Request, ctx: Ctx) {
         { status: 400 }
       );
     }
+
+    await recordSecurityAudit({
+      accion: "PASSWORD_RECOVERY_EMAIL",
+      tabla_afectada: "auth.users",
+      registro_id: id,
+      detalle: `Email de recuperación disparado por admin. target=${email}`,
+      actor_id: gate.ctx.userId,
+      actor_email: gate.ctx.actorEmail,
+    });
 
     return NextResponse.json({ ok: true });
   } catch (e) {

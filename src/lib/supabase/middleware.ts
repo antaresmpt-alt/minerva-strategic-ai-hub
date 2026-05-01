@@ -1,5 +1,15 @@
 import { createServerClient } from "@supabase/ssr";
 import {
+  clientIpFromRequest,
+  rateLimitAllow,
+} from "@/lib/edge-rate-limit";
+import { getAalFromAccessToken } from "@/lib/jwt-aal";
+import {
+  isHubMfaEnforcementDisabled,
+  isMfaSetupExemptPath,
+  roleRequiresMfa,
+} from "@/lib/hub-mfa";
+import {
   canAccessApiRoute,
   canAccessPagePath,
   normalizeDbRole,
@@ -15,6 +25,13 @@ function copyAuthCookies(from: NextResponse, to: NextResponse) {
 
 function isLoginPath(pathname: string) {
   return pathname === "/login" || pathname.startsWith("/login/");
+}
+
+function isMfaSetupPath(pathname: string) {
+  return (
+    pathname === "/login/mfa-setup" ||
+    pathname.startsWith("/login/mfa-setup/")
+  );
 }
 
 /** Evita redirecciones abiertas: solo rutas relativas internas. */
@@ -60,12 +77,31 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
 
+  if (isMfaSetupPath(pathname)) {
+    if (userError || !user) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      url.searchParams.delete("next");
+      url.searchParams.set("reason", "auth");
+      url.searchParams.set(
+        "next",
+        `/login/mfa-setup${request.nextUrl.search ?? ""}`
+      );
+      const redirect = NextResponse.redirect(url);
+      copyAuthCookies(response, redirect);
+      return redirect;
+    }
+    return response;
+  }
+
   if (isLoginPath(pathname)) {
     if (!userError && user) {
       const nextPath = safeNextPathnameFromSearch(
         request.nextUrl.searchParams.get("next")
       );
-      const url = new URL(nextPath, request.url);
+      const url = request.nextUrl.clone();
+      url.pathname = "/auth/continue";
+      url.searchParams.set("next", nextPath);
       const redirect = NextResponse.redirect(url);
       copyAuthCookies(response, redirect);
       return redirect;
@@ -79,6 +115,16 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (pathname.startsWith("/api")) {
+    const ip = clientIpFromRequest(request);
+    if (!rateLimitAllow(`api:ip:${ip}`, 120, 60_000)) {
+      const tooMany = NextResponse.json(
+        { error: "Too Many Requests", message: "Demasiadas peticiones. Espera un momento." },
+        { status: 429 }
+      );
+      copyAuthCookies(response, tooMany);
+      return tooMany;
+    }
+
     if (userError || !user) {
       const unauthorized = NextResponse.json(
         {
@@ -91,12 +137,42 @@ export async function updateSession(request: NextRequest) {
       return unauthorized;
     }
 
+    if (!rateLimitAllow(`api:user:${user.id}`, 400, 60_000)) {
+      const tooMany = NextResponse.json(
+        { error: "Too Many Requests", message: "Demasiadas peticiones desde esta cuenta." },
+        { status: 429 }
+      );
+      copyAuthCookies(response, tooMany);
+      return tooMany;
+    }
+
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
       .eq("id", user.id)
       .maybeSingle();
     const role = profile?.role ?? null;
+
+    if (
+      !isHubMfaEnforcementDisabled() &&
+      roleRequiresMfa(role) &&
+      !isMfaSetupExemptPath(pathname)
+    ) {
+      const { data: sess } = await supabase.auth.getSession();
+      const aal = getAalFromAccessToken(sess.session?.access_token);
+      if (aal !== "aal2") {
+        const mfaRequired = NextResponse.json(
+          {
+            error: "MFA_REQUIRED",
+            message:
+              "Debes completar el segundo factor (MFA) con tu cuenta de administración.",
+          },
+          { status: 403 }
+        );
+        copyAuthCookies(response, mfaRequired);
+        return mfaRequired;
+      }
+    }
 
     const dynamic = role ? await fetchRolePermissionMap(role) : null;
 
@@ -137,6 +213,26 @@ export async function updateSession(request: NextRequest) {
   const role = profile?.role ?? null;
 
   const dynamic = role ? await fetchRolePermissionMap(role) : null;
+
+  if (
+    !isHubMfaEnforcementDisabled() &&
+    roleRequiresMfa(role) &&
+    !isMfaSetupExemptPath(pathname)
+  ) {
+    const { data: sess } = await supabase.auth.getSession();
+    const aal = getAalFromAccessToken(sess.session?.access_token);
+    if (aal !== "aal2") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login/mfa-setup";
+      url.searchParams.set(
+        "next",
+        `${pathname}${request.nextUrl.search ?? ""}`
+      );
+      const redirect = NextResponse.redirect(url);
+      copyAuthCookies(response, redirect);
+      return redirect;
+    }
+  }
 
   if (
     (pathname === "/" || pathname === "") &&

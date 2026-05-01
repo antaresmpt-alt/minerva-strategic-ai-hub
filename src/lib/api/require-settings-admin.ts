@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 export type SettingsAdminContext = {
   userId: string;
   role: string;
+  actorEmail: string | null;
 };
 
 export type RequireSettingsAdminResult =
@@ -39,6 +40,10 @@ export async function requireSettingsAdmin(): Promise<RequireSettingsAdminResult
 
   return {
     ok: true,
-    ctx: { userId: user.id, role },
+    ctx: {
+      userId: user.id,
+      role,
+      actorEmail: user.email ?? null,
+    },
   };
 }

@@ -35,6 +35,7 @@ import {
   formatRoleLabel,
   type HubModuleId,
 } from "@/lib/permissions";
+import { PASSWORD_MIN_LENGTH, validatePassword } from "@/lib/password-policy";
 import type { RolePermissionRow } from "@/lib/role-permissions-fetch";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -80,6 +81,7 @@ export function UsersManagementPanel() {
   const [matrixMsg, setMatrixMsg] = useState<string | null>(null);
 
   const [addOpen, setAddOpen] = useState(false);
+  const [addMode, setAddMode] = useState<"invite" | "password">("invite");
   const [addEmail, setAddEmail] = useState("");
   const [addPassword, setAddPassword] = useState("");
   const [addRole, setAddRole] = useState("comercial");
@@ -206,7 +208,12 @@ export function UsersManagementPanel() {
   };
 
   const setPassword = async () => {
-    if (!pwdUser || pwdValue.length < 6) return;
+    if (!pwdUser) return;
+    const v = validatePassword(pwdValue);
+    if (!v.ok) {
+      toast.error(v.error);
+      return;
+    }
     setPwdBusy(true);
     try {
       const res = await fetch(`/api/admin/users/${pwdUser.id}/password`, {
@@ -263,6 +270,13 @@ export function UsersManagementPanel() {
   };
 
   const createUser = async () => {
+    if (addMode === "password") {
+      const v = validatePassword(addPassword);
+      if (!v.ok) {
+        toast.error(v.error);
+        return;
+      }
+    }
     setAddBusy(true);
     try {
       const res = await fetch("/api/admin/users", {
@@ -270,20 +284,26 @@ export function UsersManagementPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: addEmail.trim(),
-          password: addPassword,
           role: addRole,
+          mode: addMode,
+          ...(addMode === "password" ? { password: addPassword } : {}),
         }),
       });
-      const data = (await res.json()) as { error?: string };
+      const data = (await res.json()) as { error?: string; mode?: string };
       if (!res.ok) {
         toast.error(data.error ?? "Error al crear usuario");
         return;
       }
-      toast.success("Usuario creado y confirmado");
+      toast.success(
+        addMode === "invite"
+          ? "Invitación enviada (email de Supabase)"
+          : "Usuario creado y confirmado"
+      );
       setAddOpen(false);
       setAddEmail("");
       setAddPassword("");
       setAddRole("comercial");
+      setAddMode("invite");
       void loadUsers();
     } finally {
       setAddBusy(false);
@@ -533,10 +553,24 @@ export function UsersManagementPanel() {
               Nuevo usuario
             </h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Se crea en Auth con email confirmado y fila en{" "}
-              <code className="text-xs">profiles</code>.
+              Invitación por email (recomendado) o alta inmediata con contraseña
+              y perfil en <code className="text-xs">profiles</code>.
             </p>
             <div className="mt-4 space-y-3">
+              <NativeSelect
+                label="Modo de alta"
+                options={[
+                  { value: "invite", label: "Invitar por email" },
+                  {
+                    value: "password",
+                    label: "Crear con contraseña (admin)",
+                  },
+                ]}
+                value={addMode}
+                onChange={(e) =>
+                  setAddMode(e.target.value as "invite" | "password")
+                }
+              />
               <div className="space-y-1.5">
                 <Label htmlFor="nu-email">Email</Label>
                 <Input
@@ -547,15 +581,21 @@ export function UsersManagementPanel() {
                   autoComplete="off"
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="nu-pw">Contraseña</Label>
-                <Input
-                  id="nu-pw"
-                  type="password"
-                  value={addPassword}
-                  onChange={(e) => setAddPassword(e.target.value)}
-                />
-              </div>
+              {addMode === "password" && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="nu-pw">Contraseña</Label>
+                  <Input
+                    id="nu-pw"
+                    type="password"
+                    value={addPassword}
+                    onChange={(e) => setAddPassword(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Mínimo {PASSWORD_MIN_LENGTH} caracteres, mayúscula,
+                    minúscula, número y símbolo.
+                  </p>
+                </div>
+              )}
               <NativeSelect
                 label="Rol"
                 options={ROLE_OPTIONS.map((r) => ({
@@ -577,10 +617,16 @@ export function UsersManagementPanel() {
               </Button>
               <Button
                 type="button"
-                disabled={addBusy}
+                disabled={addBusy || !addEmail.trim()}
                 onClick={() => void createUser()}
               >
-                {addBusy ? "Creando…" : "Crear usuario"}
+                {addBusy
+                  ? addMode === "invite"
+                    ? "Enviando…"
+                    : "Creando…"
+                  : addMode === "invite"
+                    ? "Enviar invitación"
+                    : "Crear usuario"}
               </Button>
             </div>
           </div>
@@ -597,7 +643,10 @@ export function UsersManagementPanel() {
               {pwdUser.email}
             </p>
             <div className="mt-4 space-y-1.5">
-              <Label htmlFor="npw">Contraseña (mín. 6 caracteres)</Label>
+              <Label htmlFor="npw">
+                Contraseña (mín. {PASSWORD_MIN_LENGTH} caracteres, complejidad
+                requerida)
+              </Label>
               <Input
                 id="npw"
                 type="password"
@@ -616,7 +665,7 @@ export function UsersManagementPanel() {
               </Button>
               <Button
                 type="button"
-                disabled={pwdBusy || pwdValue.length < 6}
+                disabled={pwdBusy || !validatePassword(pwdValue).ok}
                 onClick={() => void setPassword()}
               >
                 Guardar

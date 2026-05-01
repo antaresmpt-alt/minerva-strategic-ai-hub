@@ -74,7 +74,8 @@ export function LoginForm() {
       }
 
       const dest = safeClientNextPath(nextParam);
-      window.location.assign(dest);
+      const q = new URLSearchParams({ next: dest });
+      window.location.assign(`/auth/continue?${q.toString()}`);
     },
     [email, password, nextParam]
   );

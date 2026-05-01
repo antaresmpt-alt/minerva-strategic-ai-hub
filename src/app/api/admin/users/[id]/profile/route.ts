@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireSettingsAdmin } from "@/lib/api/require-settings-admin";
 import { PROFILE_ROLES } from "@/lib/permissions";
+import { recordSecurityAudit } from "@/lib/security-audit";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -29,6 +30,14 @@ export async function PATCH(request: Request, ctx: Ctx) {
 
   try {
     const admin = createSupabaseAdminClient();
+    const { data: prev } = await admin
+      .from("profiles")
+      .select("role")
+      .eq("id", id)
+      .maybeSingle();
+
+    const { data: authU } = await admin.auth.admin.getUserById(id);
+
     const { error } = await admin
       .from("profiles")
       .update({ role })
@@ -37,6 +46,15 @@ export async function PATCH(request: Request, ctx: Ctx) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
+
+    await recordSecurityAudit({
+      accion: "PROFILE_ROLE_CHANGE",
+      tabla_afectada: "profiles",
+      registro_id: id,
+      detalle: `Rol: ${prev?.role ?? "—"} → ${role}. user=${authU.user?.email ?? id}`,
+      actor_id: gate.ctx.userId,
+      actor_email: gate.ctx.actorEmail,
+    });
 
     return NextResponse.json({ ok: true });
   } catch (e) {
