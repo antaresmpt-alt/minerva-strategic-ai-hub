@@ -1,9 +1,10 @@
 "use client";
 
-import { Loader2, Plus, Save } from "lucide-react";
+import { Factory, Loader2, Plus, Route, Save } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { RecursosPlantillasRutasPanel } from "@/components/settings/recursos-plantillas-rutas-panel";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,6 +16,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+const SUBTAB_TRIGGER_CLASS =
+  "flex h-full min-h-8 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs data-active:bg-[#C69C2B]/20 data-active:font-semibold data-active:text-[#002147] data-active:shadow-sm data-active:ring-2 data-active:ring-[#C69C2B]/45 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm";
 
 type TipoMaquina = "impresion" | "troquelado" | "engomado";
 type MaquinaRow = {
@@ -49,6 +54,7 @@ function emptyDraft(): Omit<MaquinaRow, "id"> {
 }
 
 export function RecursosProduccionTab() {
+  const [subtab, setSubtab] = useState("maquinas");
   const [rows, setRows] = useState<MaquinaRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -182,10 +188,24 @@ export function RecursosProduccionTab() {
       <CardHeader>
         <CardTitle className="text-lg">Recursos de Producción</CardTitle>
         <CardDescription>
-          Configura máquinas por tipo y sus capacidades por defecto de turno.
+          Configura máquinas por tipo y capacidades por turno; define plantillas
+          rápidas de itinerario (orden de procesos) para el despacho.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-4">
+        <Tabs value={subtab} onValueChange={setSubtab} className="w-full space-y-4">
+          <TabsList className="box-border inline-flex h-auto min-h-9 w-fit max-w-full flex-wrap items-stretch gap-0 rounded-lg border border-slate-200/90 bg-slate-50/90 p-1 shadow-sm">
+            <TabsTrigger value="maquinas" className={SUBTAB_TRIGGER_CLASS}>
+              <Factory className="size-4 shrink-0 opacity-90" aria-hidden />
+              Máquinas
+            </TabsTrigger>
+            <TabsTrigger value="plantillas" className={SUBTAB_TRIGGER_CLASS}>
+              <Route className="size-4 shrink-0 opacity-90" aria-hidden />
+              Plantillas / rutas
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="maquinas" className="mt-0 space-y-6 outline-none">
         {loadError ? (
           <p className="text-sm text-destructive" role="alert">
             {loadError}
@@ -405,6 +425,12 @@ export function RecursosProduccionTab() {
             )}
           </section>
         ))}
+          </TabsContent>
+
+          <TabsContent value="plantillas" className="mt-0 outline-none">
+            <RecursosPlantillasRutasPanel />
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
   );

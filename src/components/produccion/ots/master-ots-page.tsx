@@ -25,6 +25,10 @@ import { toast } from "sonner";
 import { GlobalModelSelector } from "@/components/layout/header";
 import { createMasterOtsColumns } from "@/components/produccion/ots/master-ots-columns";
 import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
+import {
+  DespachoItinerarioPicker,
+  type DespachoItinerarioSlot,
+} from "@/components/produccion/ots/despacho-itinerario-picker";
 import { TroquelPickerField } from "@/components/produccion/ots/troquel-picker-field";
 import { estadoDisplayForRow } from "@/components/produccion/ots/master-ots-table-helpers";
 import { Button } from "@/components/ui/button";
@@ -101,6 +105,7 @@ function masterOtsPrimaryOrder(sorting: SortingState): {
   return { column: "fecha_entrega", ascending: true };
 }
 const TABLE_OT_DESPACHADAS = "produccion_ot_despachadas";
+const TABLE_OT_PASOS = "prod_ot_pasos";
 /** Seguimiento externo: columna `OT` e `id_pedido` (equivalente a `num_pedido` / OT). */
 const SEGUIMIENTO_EXTERNOS = "prod_seguimiento_externos";
 
@@ -287,6 +292,9 @@ export function MasterOtsPage() {
   const [despachoForm, setDespachoForm] = useState<DespachoFormState>(() =>
     emptyDespachoForm()
   );
+  const [despachoItinerarioSlots, setDespachoItinerarioSlots] = useState<
+    DespachoItinerarioSlot[]
+  >([]);
   const [despachoSaving, setDespachoSaving] = useState(false);
 
   const estadoEditSelectOptions = useMemo((): Option[] => {
@@ -319,6 +327,10 @@ export function MasterOtsPage() {
     setPage(0);
     setRowSelection({});
   }, [debouncedSearch, estadoFilter, vendedorFilter, familiaFilter, despachadoFilter]);
+
+  useEffect(() => {
+    if (!despachoOpen) setDespachoItinerarioSlots([]);
+  }, [despachoOpen]);
 
   const applyFilters = useCallback(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -679,6 +691,24 @@ export function MasterOtsPage() {
     try {
       if (!selectedOt) throw new Error("OT inválida.");
 
+      if (despachoItinerarioSlots.length > 0) {
+        const { error: errDelPasos } = await supabase
+          .from(TABLE_OT_PASOS)
+          .delete()
+          .eq("ot_id", selectedRowId);
+        if (errDelPasos) throw errDelPasos;
+        const pasoRows = despachoItinerarioSlots.map((s, i) => ({
+          ot_id: selectedRowId,
+          orden: i + 1,
+          proceso_id: s.procesoId,
+          estado: i === 0 ? "disponible" : "pendiente",
+        }));
+        const { error: errInsPasos } = await supabase
+          .from(TABLE_OT_PASOS)
+          .insert(pasoRows);
+        if (errInsPasos) throw errInsPasos;
+      }
+
       const dataToInsert = {
         ot_numero: selectedOt,
         tintas: despachoForm.tintas.trim() || null,
@@ -937,7 +967,7 @@ ${otsContextJson}
       </Dialog>
 
       <Dialog open={despachoOpen} onOpenChange={setDespachoOpen}>
-        <DialogContent className="flex max-h-[min(92vh,720px)] max-w-[min(96vw,560px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+        <DialogContent className="flex max-h-[min(94vh,880px)] max-w-[min(96vw,920px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
           <DialogHeader className="shrink-0 border-b border-slate-100 px-4 py-3 sm:px-5">
             <DialogTitle className="text-base">
               Despachar OT{" "}
@@ -946,11 +976,12 @@ ${otsContextJson}
               </span>
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Completa los datos de despacho. Se guardarán en producción y se
-              marcará la OT como despachada.
+              Completa los datos de despacho y, si quieres, el itinerario de
+              procesos. Al guardar se registra el despacho y se marca la OT como
+              despachada.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid max-h-[min(60vh,480px)] gap-3 overflow-y-auto px-4 py-3 sm:grid-cols-2 sm:px-5">
+          <div className="grid max-h-[min(82vh,700px)] gap-3 overflow-y-auto px-4 py-3 sm:grid-cols-2 sm:px-5">
             <div className="grid gap-1">
               <Label htmlFor="despacho-tintas" className="text-xs">
                 Tintas
@@ -1140,6 +1171,13 @@ ${otsContextJson}
                 }
               />
             </div>
+            <DespachoItinerarioPicker
+              open={despachoOpen}
+              supabase={supabase}
+              disabled={despachoSaving}
+              slots={despachoItinerarioSlots}
+              onSlotsChange={setDespachoItinerarioSlots}
+            />
           </div>
           <DialogFooter className="shrink-0 gap-2 border-t border-slate-100 px-4 py-3 sm:flex-row sm:px-5">
             <Button
@@ -1224,6 +1262,7 @@ ${otsContextJson}
             onClick={() => {
               if (despachoYaProcesado) return;
               setDespachoForm(emptyDespachoForm());
+              setDespachoItinerarioSlots([]);
               setDespachoOpen(true);
             }}
           >
