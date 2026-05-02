@@ -48,6 +48,7 @@ const TABLE_POOL = "prod_planificacion_pool";
 type EjecucionRow = {
   id: string;
   mesa_trabajo_id: string | null;
+  ot_paso_id: string | null;
   ot_numero: string;
   maquina_id: string;
   prod_maquinas?: { nombre: string | null } | null;
@@ -125,6 +126,7 @@ function mapRow(
   return {
     id: r.id,
     mesaTrabajoId: r.mesa_trabajo_id,
+    otPasoId: r.ot_paso_id,
     ot: r.ot_numero,
     maquinaId: r.maquina_id,
     maquinaNombre: r.prod_maquinas?.nombre ?? "—",

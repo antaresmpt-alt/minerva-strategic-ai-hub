@@ -110,6 +110,8 @@ export interface MotivoPausa {
 export interface MesaEjecucion {
   id: string;
   mesaTrabajoId: string | null;
+  /** Paso de itinerario (`prod_ot_pasos`) al liberar la OT, si aplica. */
+  otPasoId: string | null;
   ot: string;
   maquinaId: string;
   maquinaNombre: string;

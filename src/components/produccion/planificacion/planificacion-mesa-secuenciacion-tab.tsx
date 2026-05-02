@@ -114,6 +114,7 @@ import type {
 // ---------------------------------------------------------------------------
 const TABLE_DESPACHADAS = "produccion_ot_despachadas";
 const TABLE_OTS_GENERAL = "prod_ots_general";
+const TABLE_OT_PASOS = "prod_ot_pasos";
 const TABLE_POOL = "prod_planificacion_pool";
 const TABLE_MESA = "prod_mesa_planificacion_trabajos";
 const TABLE_CAPACIDAD = "prod_mesa_capacidad_turnos";
@@ -1405,6 +1406,31 @@ export function PlanificacionMesaSecuenciacionTab() {
       setStartingExecutionId(trabajo.id);
       try {
         const nowIso = new Date().toISOString();
+        const otKey = String(trabajo.ot ?? "").trim();
+        let otPasoId: string | null = null;
+        if (otKey) {
+          const { data: ogRow, error: ogErr } = await supabase
+            .from(TABLE_OTS_GENERAL)
+            .select("id")
+            .eq("num_pedido", otKey)
+            .maybeSingle();
+          if (ogErr) throw ogErr;
+          const ogId = ogRow && typeof (ogRow as { id?: unknown }).id === "string"
+            ? (ogRow as { id: string }).id
+            : null;
+          if (ogId) {
+            const { data: pasoRows, error: pasoErr } = await supabase
+              .from(TABLE_OT_PASOS)
+              .select("id")
+              .eq("ot_id", ogId)
+              .eq("estado", "disponible")
+              .order("orden", { ascending: true })
+              .limit(1);
+            if (pasoErr) throw pasoErr;
+            const first = pasoRows?.[0] as { id?: string } | undefined;
+            if (first?.id) otPasoId = first.id;
+          }
+        }
         const { error: insErr } = await supabase.from(TABLE_EJECUCIONES).insert({
           mesa_trabajo_id: trabajo.id,
           ot_numero: trabajo.ot,
@@ -1416,6 +1442,7 @@ export function PlanificacionMesaSecuenciacionTab() {
           inicio_real_at: null,
           estado_ejecucion: "pendiente_inicio",
           horas_planificadas_snapshot: trabajo.horasPlanificadasSnapshot,
+          ot_paso_id: otPasoId,
           created_by: userId,
           created_by_email: userEmail,
         });
