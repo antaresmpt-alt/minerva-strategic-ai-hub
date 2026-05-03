@@ -1,20 +1,6 @@
 import type { Metadata } from "next";
-import dynamic from "next/dynamic";
 
-const SettingsShell = dynamic(
-  () =>
-    import("@/components/settings/settings-shell").then((m) => ({
-      default: m.SettingsShell,
-    })),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex min-h-[50vh] items-center justify-center bg-muted/40 px-4 text-sm text-muted-foreground">
-        Cargando configuración…
-      </div>
-    ),
-  },
-);
+import { SettingsRouteLazy } from "@/components/settings/settings-route-lazy";
 
 export const metadata: Metadata = {
   title: "Configuración | Minerva Strategic AI Hub",
@@ -45,5 +31,5 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
             ? "logs"
           : "ingest";
 
-  return <SettingsShell defaultTab={defaultTab} />;
+  return <SettingsRouteLazy defaultTab={defaultTab} />;
 }

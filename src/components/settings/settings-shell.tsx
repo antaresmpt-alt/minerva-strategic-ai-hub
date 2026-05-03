@@ -65,7 +65,7 @@ const LogsTab = dynamic(
   { loading: () => <TabRouteLoading label="Cargando logs…" /> },
 );
 
-type SettingsTab =
+export type SettingsTab =
   | "ingest"
   | "users"
   | "variables"
@@ -74,7 +74,7 @@ type SettingsTab =
   | "recursos"
   | "logs";
 
-type SettingsShellProps = {
+export type SettingsShellProps = {
   defaultTab: SettingsTab;
 };
 
