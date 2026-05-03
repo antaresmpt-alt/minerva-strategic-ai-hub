@@ -151,6 +151,10 @@ export function canAccessPagePath(
   if (!normalizeDbRole(role)) return false;
   if (hasDynamicAccess(dynamic)) {
     const p = pathname.split("?")[0] ?? pathname;
+    /** Handoff post-login (middleware redirige aquí); no forma parte del mapa de módulos. */
+    if (p.startsWith("/auth/")) return true;
+    /** Misma regla que sin `role_permissions`: admin/gerencia no quedan bloqueados en rutas no listadas. */
+    if (hasFullAccess(role)) return true;
     if (p === "/" || p === "") return true;
     if (p.startsWith("/settings"))
       return canAccessSettings(role, dynamic);
@@ -171,6 +175,8 @@ export function canAccessPagePath(
   if (hasFullAccess(role)) return true;
 
   const p = pathname.split("?")[0] ?? pathname;
+
+  if (p.startsWith("/auth/")) return true;
 
   if (p === "/" || p === "") return true;
 

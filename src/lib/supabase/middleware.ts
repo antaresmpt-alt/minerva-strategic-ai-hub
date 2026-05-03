@@ -99,6 +99,11 @@ export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const ip = clientIpFromRequest(request);
 
+  /** Chrome/DevTools u otros clientes; no son rutas de la app ni deben auditar PAGE_FORBIDDEN. */
+  if (pathname.startsWith("/.well-known/")) {
+    return response;
+  }
+
   if (isMfaSetupPath(pathname)) {
     if (userError || !user) {
       const url = request.nextUrl.clone();
