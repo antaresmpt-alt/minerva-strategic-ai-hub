@@ -2,6 +2,8 @@
 
 import {
   ArrowUpDown,
+  CheckCircle2,
+  Circle,
   Droplet,
   Edit3,
   Eye,
@@ -49,6 +51,14 @@ import {
   COMPRAS_MATERIAL_ESTADOS,
   normalizeCompraEstado,
 } from "@/lib/compras-material-estados";
+import {
+  etiquetaAmbitoPlanificacion,
+  fetchProximoPasoDisponiblePorOt,
+  getPlanificacionTipoMaquinaFilter,
+  PLANIFICACION_TIPOS_MAQUINA,
+  type PlanificacionTipoMaquina,
+  type ProximoPasoInfo,
+} from "@/lib/planificacion-ambito";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
@@ -60,7 +70,16 @@ const TABLE_RECEPCION = "prod_recepciones_material";
 const TABLE_TROQUELES = "prod_troqueles";
 const TABLE_POOL = "prod_planificacion_pool";
 const TABLE_MESA = "prod_mesa_planificacion_trabajos";
+const TABLE_MAQUINAS = "prod_maquinas";
 const POOL_UI_STATE_KEY = "produccion.poolOts.uiState.v1";
+
+/** OT con al menos un trabajo en mesa (hueco asignado en el calendario). */
+const MESA_ESTADOS_PLANIFICADA = [
+  "borrador",
+  "confirmado",
+  "en_ejecucion",
+  "finalizada",
+] as const;
 
 type SortKey = "entrega" | "ot" | "cliente";
 type TroquelStatus = "ok" | "falta" | "no_aplica" | "sin_informar";
@@ -134,6 +153,13 @@ type PoolRow = {
   horasEntrada: number;
   horasTiraje: number;
   horasTotal: number;
+  proximoPasoNombre: string | null;
+  proximoPasoSlug: string | null;
+  planificacionTipoPaso: PlanificacionTipoMaquina | null;
+  /** `estado_pool === enviada_mesa`: en cola para la mesa, aún sin huecos obligatorios. */
+  enColaMesa: boolean;
+  /** Al menos una fila en `prod_mesa_planificacion_trabajos` en estado de plan ya asignado. */
+  planificadaEnMesa: boolean;
 };
 
 type DraftRow = {
@@ -298,6 +324,8 @@ export function PlanificacionPoolOtsTab() {
   const cauchoIframeRef = useRef<HTMLIFrameElement>(null);
   const skipBlurSaveRef = useRef(false);
   const saveInFlightRef = useRef(false);
+  const [planificacionRole, setPlanificacionRole] = useState<string | null>(null);
+  const [poolCountPreAmbito, setPoolCountPreAmbito] = useState(0);
 
   const uiStorageKey = `${POOL_UI_STATE_KEY}:${uiUserId ?? "anon"}`;
 
@@ -383,7 +411,28 @@ export function PlanificacionPoolOtsTab() {
 
   const loadRows = useCallback(async () => {
     setLoading(true);
+    let roleRead: string | null = null;
     try {
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+      const uid =
+        typeof authUser?.id === "string" && authUser.id.trim().length > 0
+          ? authUser.id.trim()
+          : null;
+      if (uid) {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", uid)
+          .maybeSingle();
+        roleRead =
+          prof && typeof (prof as { role?: unknown }).role === "string"
+            ? String((prof as { role: string }).role).trim() || null
+            : null;
+      }
+      setPlanificacionRole(roleRead);
+
       const { data: despData, error: despErr } = await supabase
         .from(TABLE_DESPACHADAS)
         .select(
@@ -427,6 +476,11 @@ export function PlanificacionPoolOtsTab() {
             horasEntrada: parseNum(d.horas_entrada),
             horasTiraje: parseNum(d.horas_tiraje),
             horasTotal: horas,
+            proximoPasoNombre: null,
+            proximoPasoSlug: null,
+            planificacionTipoPaso: null,
+            enColaMesa: false,
+            planificadaEnMesa: false,
           });
           continue;
         }
@@ -445,21 +499,104 @@ export function PlanificacionPoolOtsTab() {
       }
       const ots = [...byOt.keys()];
       if (ots.length === 0) {
+        setPoolCountPreAmbito(0);
         setRows([]);
         setSelected({});
         return;
       }
 
-      const { data: mesaData, error: mesaErr } = await supabase
+      let pasoEarlyMap = new Map<string, ProximoPasoInfo>();
+      const otsConPlanEnMesa = new Set<string>();
+      try {
+        const [pasoMapResolved, mesaPlannedRes] = await Promise.all([
+          fetchProximoPasoDisponiblePorOt(supabase, ots).catch((e) => {
+            console.warn("[Pool OTs] itinerario paso (precarga)", e);
+            return new Map<string, ProximoPasoInfo>();
+          }),
+          supabase
+            .from(TABLE_MESA)
+            .select("ot_numero")
+            .in("ot_numero", ots)
+            .in(
+              "estado_mesa",
+              [...MESA_ESTADOS_PLANIFICADA] as unknown as string[],
+            ),
+        ]);
+        pasoEarlyMap = pasoMapResolved;
+        if (mesaPlannedRes.error) throw mesaPlannedRes.error;
+        for (const row of (mesaPlannedRes.data ?? []) as Array<{
+          ot_numero?: string | null;
+        }>) {
+          const o = String(row.ot_numero ?? "").trim();
+          if (o) otsConPlanEnMesa.add(o);
+        }
+      } catch (earlyErr) {
+        console.warn("[Pool OTs] precarga itinerario / mesa planificada", earlyErr);
+      }
+
+      const { data: mesaActiveData, error: mesaErr } = await supabase
         .from(TABLE_MESA)
-        .select("ot_numero")
+        .select("ot_numero, maquina_id")
         .in("estado_mesa", ["borrador", "confirmado", "en_ejecucion"]);
       if (mesaErr) throw mesaErr;
-      const otsEnMesa = new Set(
-        ((mesaData ?? []) as Array<{ ot_numero: string | null }>)
-          .map((x) => String(x.ot_numero ?? "").trim())
-          .filter(Boolean)
-      );
+
+      type MesaBlockInfo = {
+        hasNullMaquina: boolean;
+        tipos: Set<PlanificacionTipoMaquina>;
+      };
+      const mesaBlockByOt = new Map<string, MesaBlockInfo>();
+      const mesaRows = (mesaActiveData ?? []) as Array<{
+        ot_numero?: string | null;
+        maquina_id?: string | null;
+      }>;
+      const mqIds = new Set<string>();
+      for (const row of mesaRows) {
+        const mid = String(row.maquina_id ?? "").trim();
+        if (mid) mqIds.add(mid);
+      }
+      const tipoByMaquinaId = new Map<string, PlanificacionTipoMaquina>();
+      if (mqIds.size > 0) {
+        const { data: mqData, error: mqErr } = await supabase
+          .from(TABLE_MAQUINAS)
+          .select("id, tipo_maquina")
+          .in("id", [...mqIds]);
+        if (mqErr) throw mqErr;
+        for (const m of mqData ?? []) {
+          const id = String((m as { id?: string | null }).id ?? "").trim();
+          const rawTipo = String((m as { tipo_maquina?: string | null }).tipo_maquina ?? "").trim();
+          if (!id) continue;
+          if ((PLANIFICACION_TIPOS_MAQUINA as readonly string[]).includes(rawTipo)) {
+            tipoByMaquinaId.set(id, rawTipo as PlanificacionTipoMaquina);
+          }
+        }
+      }
+      for (const row of mesaRows) {
+        const ot = String(row.ot_numero ?? "").trim();
+        if (!ot) continue;
+        let info = mesaBlockByOt.get(ot);
+        if (!info) {
+          info = { hasNullMaquina: false, tipos: new Set() };
+          mesaBlockByOt.set(ot, info);
+        }
+        const mid = String(row.maquina_id ?? "").trim();
+        if (!mid) {
+          info.hasNullMaquina = true;
+          continue;
+        }
+        const t = tipoByMaquinaId.get(mid);
+        if (t) info.tipos.add(t);
+        else info.hasNullMaquina = true;
+      }
+
+      function otBlockedFromPoolByMesa(otKey: string): boolean {
+        const blk = mesaBlockByOt.get(otKey);
+        if (!blk) return false;
+        if (blk.hasNullMaquina) return true;
+        if (blk.tipos.size === 0) return false;
+        const pasoTipo = pasoEarlyMap.get(otKey)?.tipoMaquina ?? null;
+        if (!pasoTipo) return true;
+        return blk.tipos.has(pasoTipo);
+      }
 
       const { data: otsData, error: otsErr } = await supabase
         .from(TABLE_OTS_GENERAL)
@@ -583,7 +720,7 @@ export function PlanificacionPoolOtsTab() {
 
       const out: PoolRow[] = [];
       for (const [ot, row] of byOt.entries()) {
-        if (otsEnMesa.has(ot)) continue;
+        if (otBlockedFromPoolByMesa(ot)) continue;
         const meta = otByNum.get(ot);
         row.cliente = String(meta?.cliente ?? "").trim() || "—";
         row.trabajo = String(meta?.titulo ?? "").trim() || "—";
@@ -637,13 +774,34 @@ export function PlanificacionPoolOtsTab() {
             row.cauchoAcrilico = m.cauchoAcrilico;
           }
         }
+        row.enColaMesa = Boolean(
+          pp && String(pp.estado_pool ?? "").trim().toLowerCase() === "enviada_mesa",
+        );
+        row.planificadaEnMesa = otsConPlanEnMesa.has(ot);
         out.push(row);
       }
 
-      setRows(out);
+      let enrichedRows: PoolRow[] = out.map((r) => {
+        const info = pasoEarlyMap.get(r.ot);
+        if (!info) return { ...r };
+        return {
+          ...r,
+          proximoPasoNombre: info.nombre,
+          proximoPasoSlug: info.seccionSlug,
+          planificacionTipoPaso: info.tipoMaquina,
+        };
+      });
+
+      setPoolCountPreAmbito(enrichedRows.length);
+      const tipoFiltro = getPlanificacionTipoMaquinaFilter(roleRead);
+      if (tipoFiltro) {
+        enrichedRows = enrichedRows.filter((r) => r.planificacionTipoPaso === tipoFiltro);
+      }
+
+      setRows(enrichedRows);
       setSelected((prev) => {
         const next: Record<string, boolean> = {};
-        for (const r of out) next[r.ot] = prev[r.ot] ?? false;
+        for (const r of enrichedRows) next[r.ot] = prev[r.ot] ?? false;
         return next;
       });
     } catch (e) {
@@ -683,6 +841,11 @@ export function PlanificacionPoolOtsTab() {
       return normalizeCompraEstado(r.compraEstado) === filterNorm;
     });
   }, [rows, search, compraEstadoFilter]);
+
+  const tipoFiltroPlanificacion = useMemo(
+    () => getPlanificacionTipoMaquinaFilter(planificacionRole),
+    [planificacionRole],
+  );
 
   const sortedRows = useMemo(() => {
     const arr = [...filteredRows];
@@ -1137,11 +1300,24 @@ export function PlanificacionPoolOtsTab() {
   return (
     <Card className="border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
       <CardHeader>
-        <CardTitle className="text-lg text-[#002147]">Pool de OT&apos;s</CardTitle>
-        <CardDescription>
-          OTs despachadas pendientes de planificación, con control de material y
-          validación de troquel antes de pasar a mesa.
-        </CardDescription>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <CardTitle className="text-lg text-[#002147]">Pool de OT&apos;s</CardTitle>
+            <CardDescription>
+              OTs despachadas pendientes de planificación, con control de material y
+              validación de troquel antes de pasar a mesa.
+            </CardDescription>
+          </div>
+          {tipoFiltroPlanificacion ? (
+            <span className="shrink-0 rounded-md border border-[#C69C2B]/40 bg-[#C69C2B]/15 px-2 py-1 text-[11px] font-semibold text-[#002147]">
+              Ámbito: {etiquetaAmbitoPlanificacion(tipoFiltroPlanificacion)}
+            </span>
+          ) : (
+            <span className="shrink-0 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700">
+              Ámbito: {etiquetaAmbitoPlanificacion(null)}
+            </span>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1198,11 +1374,21 @@ export function PlanificacionPoolOtsTab() {
           </div>
         ) : sortedRows.length === 0 ? (
           <div className="rounded-lg border border-slate-200/90 bg-slate-50/80 px-3 py-6 text-sm text-slate-600">
-            No hay OT&apos;s despachadas pendientes de planificación.
+            {tipoFiltroPlanificacion &&
+            poolCountPreAmbito > 0 &&
+            rows.length === 0 ? (
+              <>
+                No hay OT&apos;s en el pool que coincidan con tu ámbito (
+                {etiquetaAmbitoPlanificacion(tipoFiltroPlanificacion)}). Hay{" "}
+                {poolCountPreAmbito} OT(s) en otras fases del itinerario.
+              </>
+            ) : (
+              <>No hay OT&apos;s despachadas pendientes de planificación.</>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-slate-200/90">
-            <Table className="min-w-[90rem]">
+            <Table className="min-w-[100rem]">
               <TableHeader>
                 <TableRow className="bg-slate-50/90">
                   <TableHead className="w-10">
@@ -1248,6 +1434,19 @@ export function PlanificacionPoolOtsTab() {
                       Cliente
                       <ArrowUpDown className="size-3.5 text-slate-500" />
                     </button>
+                  </TableHead>
+                  <TableHead className="min-w-[9rem]">Próximo paso</TableHead>
+                  <TableHead
+                    className="w-[4.5rem] text-center text-xs font-medium normal-case"
+                    title="En cola para la mesa (enviada a planificación). No implica tener ya huecos en el calendario."
+                  >
+                    Cola mesa
+                  </TableHead>
+                  <TableHead
+                    className="w-[4.5rem] text-center text-xs font-medium normal-case"
+                    title="Tiene trabajos en el calendario de mesa (borrador, confirmado, en ejecución o finalizado en mesa)."
+                  >
+                    En plan
                   </TableHead>
                   <TableHead>Trabajo</TableHead>
                   <TableHead>Tintas</TableHead>
@@ -1305,6 +1504,67 @@ export function PlanificacionPoolOtsTab() {
                       <p className="max-w-[12rem] truncate text-xs text-slate-700" title={r.cliente}>
                         {r.cliente || "—"}
                       </p>
+                    </TableCell>
+                    <TableCell>
+                      <p
+                        className="max-w-[10rem] truncate text-xs font-medium text-[#002147]"
+                        title={
+                          r.proximoPasoSlug
+                            ? `${r.proximoPasoNombre ?? ""} (${r.proximoPasoSlug})`
+                            : (r.proximoPasoNombre ?? "")
+                        }
+                      >
+                        {r.proximoPasoNombre ?? "—"}
+                      </p>
+                      {r.proximoPasoSlug ? (
+                        <p className="max-w-[10rem] truncate text-[10px] uppercase text-slate-500">
+                          {r.proximoPasoSlug}
+                        </p>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="text-center align-middle">
+                      <span
+                        className="inline-flex justify-center"
+                        title={
+                          r.enColaMesa
+                            ? "En cola para mesa: enviada a planificación (pool lateral). No implica tener ya huecos en el calendario."
+                            : "Aún no enviada a la cola de mesa (pendiente u otro estado)."
+                        }
+                      >
+                        {r.enColaMesa ? (
+                          <CheckCircle2
+                            className="size-5 shrink-0 text-emerald-600"
+                            aria-label="En cola para mesa"
+                          />
+                        ) : (
+                          <Circle
+                            className="size-4 shrink-0 text-slate-200"
+                            aria-label="No en cola mesa"
+                          />
+                        )}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-center align-middle">
+                      <span
+                        className="inline-flex justify-center"
+                        title={
+                          r.planificadaEnMesa
+                            ? "Planificada: tiene trabajos en el calendario de mesa (borrador, confirmado, en ejecución o finalizado en mesa)."
+                            : "Sin plan en mesa: aún no hay trabajos en el calendario."
+                        }
+                      >
+                        {r.planificadaEnMesa ? (
+                          <CheckCircle2
+                            className="size-5 shrink-0 text-emerald-600"
+                            aria-label="Planificada en mesa"
+                          />
+                        ) : (
+                          <Circle
+                            className="size-4 shrink-0 text-slate-200"
+                            aria-label="Sin plan en mesa"
+                          />
+                        )}
+                      </span>
                     </TableCell>
                     <TableCell>
                       {editingOt === r.ot && draft ? (

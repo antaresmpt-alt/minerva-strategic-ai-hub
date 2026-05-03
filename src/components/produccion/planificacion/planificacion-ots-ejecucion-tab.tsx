@@ -28,6 +28,11 @@ import {
   exportEjecucionesExcel,
   exportEjecucionesPdf,
 } from "@/lib/planificacion-ejecucion-export";
+import {
+  etiquetaAmbitoPlanificacion,
+  getPlanificacionTipoMaquinaFilter,
+  PLANIFICACION_TIPOS_MAQUINA,
+} from "@/lib/planificacion-ambito";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
 import type {
@@ -178,21 +183,55 @@ export function PlanificacionOtsEjecucionTab({
   const [estado, setEstado] = useState<"activas" | EstadoEjecucionMesa | "all">("activas");
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [planificacionRole, setPlanificacionRole] = useState<string | null>(null);
+
+  const etiquetaAmbitoEjecucion = useMemo(
+    () => etiquetaAmbitoPlanificacion(getPlanificacionTipoMaquinaFilter(planificacionRole)),
+    [planificacionRole],
+  );
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      let roleRead: string | null = null;
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+      const uid =
+        typeof authUser?.id === "string" && authUser.id.trim().length > 0
+          ? authUser.id.trim()
+          : null;
+      if (uid) {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", uid)
+          .maybeSingle();
+        roleRead =
+          prof && typeof (prof as { role?: unknown }).role === "string"
+            ? String((prof as { role: string }).role).trim() || null
+            : null;
+      }
+      setPlanificacionRole(roleRead);
+      const tipoFiltro = getPlanificacionTipoMaquinaFilter(roleRead);
+
+      let maqQuery = supabase
+        .from(TABLE_MAQUINAS)
+        .select("id, nombre, tipo_maquina, activa")
+        .eq("activa", true)
+        .order("nombre");
+      if (tipoFiltro) {
+        maqQuery = maqQuery.eq("tipo_maquina", tipoFiltro);
+      } else {
+        maqQuery = maqQuery.in("tipo_maquina", PLANIFICACION_TIPOS_MAQUINA);
+      }
+
       const [execRes, maqRes, motivosRes] = await Promise.all([
         supabase
           .from(TABLE_EJECUCIONES)
           .select("*, prod_maquinas(nombre)")
           .order("updated_at", { ascending: false }),
-        supabase
-          .from(TABLE_MAQUINAS)
-          .select("id, nombre, tipo_maquina, activa")
-          .eq("tipo_maquina", "impresion")
-          .eq("activa", true)
-          .order("nombre"),
+        maqQuery,
         supabase
           .from(TABLE_MOTIVOS_PAUSA)
           .select("id, slug, label, categoria, color_hex, activo, orden")
@@ -204,7 +243,19 @@ export function PlanificacionOtsEjecucionTab({
       if (maqRes.error) throw maqRes.error;
       if (motivosRes.error) throw motivosRes.error;
       const motivos = ((motivosRes.data ?? []) as MotivoPausaRow[]).map(mapMotivoRow);
-      const execRows = ((execRes.data ?? []) as unknown as EjecucionRow[]);
+      const maqRowsRaw = (maqRes.data ?? []) as Array<{
+        id: string;
+        nombre: string;
+        tipo_maquina: string | null;
+      }>;
+      const tiposPlan = new Set<string>(PLANIFICACION_TIPOS_MAQUINA);
+      const maqRows = maqRowsRaw.filter((m) =>
+        tiposPlan.has(String(m.tipo_maquina ?? "").trim()),
+      );
+      const allowedMaquinaIds = new Set(maqRows.map((m) => m.id));
+      const execRows = ((execRes.data ?? []) as unknown as EjecucionRow[]).filter(
+        (r) => allowedMaquinaIds.has(String(r.maquina_id ?? "").trim()),
+      );
       const executionIds = execRows.map((r) => r.id);
       const pauseMap = new Map<string, MesaEjecucionPausa[]>();
       if (executionIds.length > 0) {
@@ -243,7 +294,7 @@ export function PlanificacionOtsEjecucionTab({
       setRows(execRows.map((r) => mapRow(r, pauseMap)));
       setMotivosPausa(motivos);
       setMaquinas(
-        ((maqRes.data ?? []) as Array<{ id: string; nombre: string }>).map((m) => ({
+        maqRows.map((m) => ({
           id: m.id,
           nombre: m.nombre,
         })),
@@ -551,7 +602,10 @@ export function PlanificacionOtsEjecucionTab({
             </Button>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700">
+            Ámbito: {etiquetaAmbitoEjecucion}
+          </span>
           <select
             className="h-8 rounded-md border border-slate-300 bg-white px-2"
             value={selectedMaquina}

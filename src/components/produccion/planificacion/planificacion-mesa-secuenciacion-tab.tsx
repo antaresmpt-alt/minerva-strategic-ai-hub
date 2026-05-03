@@ -84,6 +84,14 @@ import {
   slotKey,
   toDayKey,
 } from "@/lib/planificacion-mesa";
+import {
+  draftScopeFromTipoFilter,
+  etiquetaAmbitoPlanificacion,
+  fetchProximoPasoDisponiblePorOt,
+  getPlanificacionTipoMaquinaFilter,
+  planificacionTipoFiltroEfectivo,
+  PLANIFICACION_TIPOS_MAQUINA,
+} from "@/lib/planificacion-ambito";
 import { reorderBoardWithIaRules } from "@/lib/planificacion-ia-reorder";
 import { mapRowsToIaSettings } from "@/lib/planificacion-ia-settings";
 import {
@@ -310,7 +318,7 @@ function buildIaInsights(bySlot: Record<SlotKey, MesaTrabajo[]>): string[] {
   ];
 }
 
-type TipoMaquina = "impresion" | "troquelado" | "engomado";
+type TipoMaquina = "impresion" | "digital" | "troquelado" | "engomado";
 type MaquinaOption = {
   id: string;
   codigo: string;
@@ -321,9 +329,6 @@ type MaquinaOption = {
   capacidad_horas_default_manana: number;
   capacidad_horas_default_tarde: number;
 };
-
-const IMPRESION_SCOPE: TipoMaquina = "impresion";
-const DRAFT_SCOPE = "impresion" as const;
 
 const dragOverlayPointerFix: Modifier = ({ transform }) => transform;
 
@@ -371,6 +376,25 @@ export function PlanificacionMesaSecuenciacionTab() {
   // ---- Identidad
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [planificacionRole, setPlanificacionRole] = useState<string | null>(null);
+
+  const draftScope = useMemo(
+    () => draftScopeFromTipoFilter(getPlanificacionTipoMaquinaFilter(planificacionRole)),
+    [planificacionRole],
+  );
+
+  const etiquetaMesaTitulo = useMemo(
+    () => etiquetaAmbitoPlanificacion(getPlanificacionTipoMaquinaFilter(planificacionRole)),
+    [planificacionRole],
+  );
+
+  const emptyMaquinasMessage = useMemo(() => {
+    const t = getPlanificacionTipoMaquinaFilter(planificacionRole);
+    if (t) {
+      return `No hay máquinas activas de ${etiquetaAmbitoPlanificacion(t)} configuradas. Ve a Settings → Recursos Producción y activa al menos una.`;
+    }
+    return "No hay máquinas activas de planificación (offset, digital, troquel o engomado). Ve a Settings → Recursos Producción y activa al menos una.";
+  }, [planificacionRole]);
 
   useEffect(() => {
     let mounted = true;
@@ -749,7 +773,22 @@ export function PlanificacionMesaSecuenciacionTab() {
     return dedupeMesaByOt(out);
   }, [supabase, weekStartKey, weekEndKey, selectedMaquinaId]);
 
-  const loadPool = useCallback(async () => {
+  const loadPool = useCallback(
+    async (roleForFilter: string | null) => {
+    let tipoMaquinaSeleccionada: string | null = null;
+    if (selectedMaquinaId) {
+      const { data: mrow, error: mErr } = await supabase
+        .from(TABLE_MAQUINAS)
+        .select("tipo_maquina")
+        .eq("id", selectedMaquinaId)
+        .maybeSingle();
+      if (mErr) throw mErr;
+      tipoMaquinaSeleccionada =
+        mrow && typeof (mrow as { tipo_maquina?: unknown }).tipo_maquina === "string"
+          ? String((mrow as { tipo_maquina: string }).tipo_maquina).trim() || null
+          : null;
+    }
+
     const { data: poolData, error: poolErr } = await supabase
       .from(TABLE_POOL)
       .select(
@@ -907,34 +946,94 @@ export function PlanificacionMesaSecuenciacionTab() {
         horasPlanificadas: desp.horas,
         materialStatus: matStatus,
         troquelStatus: troqStatus,
+        proximoPasoNombre: null,
+        proximoPasoSlug: null,
+        planificacionTipoPaso: null,
       });
     }
-    return out;
-  }, [supabase]);
+    let poolOut: PoolOT[] = [...out];
+    try {
+      const pasoMap = await fetchProximoPasoDisponiblePorOt(
+        supabase,
+        poolOut.map((p) => p.ot),
+      );
+      poolOut = poolOut.map((p) => {
+        const info = pasoMap.get(p.ot);
+        if (!info) return p;
+        return {
+          ...p,
+          proximoPasoNombre: info.nombre,
+          proximoPasoSlug: info.seccionSlug,
+          planificacionTipoPaso: info.tipoMaquina,
+        };
+      });
+    } catch (e) {
+      console.warn("[Mesa] pool itinerario", e);
+    }
+    const tipoEfectivo = planificacionTipoFiltroEfectivo(
+      getPlanificacionTipoMaquinaFilter(roleForFilter),
+      tipoMaquinaSeleccionada,
+    );
+    if (tipoEfectivo) {
+      poolOut = poolOut.filter((p) => p.planificacionTipoPaso === tipoEfectivo);
+    }
+    return poolOut;
+  },
+  [supabase, selectedMaquinaId],
+);
 
-  const loadMaquinas = useCallback(async () => {
-    const { data, error: mqErr } = await supabase
+  const loadMaquinas = useCallback(async (roleForFilter: string | null) => {
+    const tipo = getPlanificacionTipoMaquinaFilter(roleForFilter);
+    let query = supabase
       .from(TABLE_MAQUINAS)
       .select(
         "id, codigo, nombre, tipo_maquina, activa, orden_visual, capacidad_horas_default_manana, capacidad_horas_default_tarde",
       )
-      .eq("tipo_maquina", IMPRESION_SCOPE)
       .eq("activa", true)
       .order("orden_visual")
       .order("nombre");
+    if (tipo) {
+      query = query.eq("tipo_maquina", tipo);
+    } else {
+      query = query.in("tipo_maquina", PLANIFICACION_TIPOS_MAQUINA);
+    }
+    const { data, error: mqErr } = await query;
     if (mqErr) throw mqErr;
-    return ((data ?? []) as MaquinaOption[]).filter(
-      (m) => m.tipo_maquina === IMPRESION_SCOPE,
+    return ((data ?? []) as MaquinaOption[]).filter((m) =>
+      PLANIFICACION_TIPOS_MAQUINA.includes(
+        m.tipo_maquina as (typeof PLANIFICACION_TIPOS_MAQUINA)[number],
+      ),
     );
   }, [supabase]);
 
   const reload = useCallback(async () => {
     setLoading(true);
     setError(null);
+    let roleRead: string | null = null;
     try {
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+      const uid =
+        typeof authUser?.id === "string" && authUser.id.trim().length > 0
+          ? authUser.id.trim()
+          : null;
+      if (uid) {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", uid)
+          .maybeSingle();
+        roleRead =
+          prof && typeof (prof as { role?: unknown }).role === "string"
+            ? String((prof as { role: string }).role).trim() || null
+            : null;
+      }
+      setPlanificacionRole(roleRead);
+
       const [maqList, poolList, mesaList, capList] = await Promise.all([
-        loadMaquinas(),
-        loadPool(),
+        loadMaquinas(roleRead),
+        loadPool(roleRead),
         loadMesa(),
         loadCapacidades(),
       ]);
@@ -950,11 +1049,27 @@ export function PlanificacionMesaSecuenciacionTab() {
     } finally {
       setLoading(false);
     }
-  }, [loadMaquinas, loadPool, loadMesa, loadCapacidades]);
+  }, [supabase, loadMaquinas, loadPool, loadMesa, loadCapacidades]);
 
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  /** Al cambiar máquina o rol, el pool lateral debe recalcularse (filtro por tipo de máquina). */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await loadPool(planificacionRole);
+        if (!cancelled) setPool(list);
+      } catch (e) {
+        console.warn("[Mesa] pool refresh", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedMaquinaId, planificacionRole, loadPool]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1038,7 +1153,7 @@ export function PlanificacionMesaSecuenciacionTab() {
     }
   }, [maquinas, selectedMaquinaId]);
 
-  const hasImpresionMachine = maquinas.length > 0 && !!selectedMaquinaId;
+  const boardReady = maquinas.length > 0 && !!selectedMaquinaId;
 
   /** Mesa real agrupada por slotKey y ordenada por slot_orden. */
   const realBySlot = useMemo(() => {
@@ -1173,7 +1288,7 @@ export function PlanificacionMesaSecuenciacionTab() {
           parsed &&
           parsed.weekMondayKey === weekStartKey &&
           parsed.maquinaId === selectedMaquinaId &&
-          parsed.scope === DRAFT_SCOPE &&
+          parsed.scope === draftScope &&
           (!realBoardHasItems || boardHasItems(parsed.bySlot))
         ) {
           setDraftBySlot(normalizeBySlotPreservingLocked(parsed.bySlot, true));
@@ -1197,6 +1312,7 @@ export function PlanificacionMesaSecuenciacionTab() {
     simulationBaseBySlot,
     realBoardHasItems,
     normalizeBySlotPreservingLocked,
+    draftScope,
   ]);
 
   // Persistir draft a localStorage (debounced)
@@ -1209,7 +1325,7 @@ export function PlanificacionMesaSecuenciacionTab() {
         const payload: DraftBoardState = {
           weekMondayKey: weekStartKey,
           maquinaId: selectedMaquinaId ?? "",
-          scope: DRAFT_SCOPE,
+          scope: draftScope,
           bySlot: draftBySlot,
           updatedAt,
         };
@@ -1227,6 +1343,7 @@ export function PlanificacionMesaSecuenciacionTab() {
     draftKey,
     weekStartKey,
     selectedMaquinaId,
+    draftScope,
   ]);
 
   const clearDraft = useCallback(() => {
@@ -1629,7 +1746,7 @@ export function PlanificacionMesaSecuenciacionTab() {
 
   const onDragStart = useCallback(
     (event: DragStartEvent) => {
-      if (!hasImpresionMachine) return;
+      if (!boardReady) return;
       setActiveId(String(event.active.id));
       if (simulationOn) {
         setDragStartDraftSnapshot(draftBySlot ?? realBySlot);
@@ -1637,7 +1754,7 @@ export function PlanificacionMesaSecuenciacionTab() {
         setDragStartDraftSnapshot(null);
       }
     },
-    [hasImpresionMachine, simulationOn, draftBySlot, realBySlot],
+    [boardReady, simulationOn, draftBySlot, realBySlot],
   );
 
   /**
@@ -1646,7 +1763,7 @@ export function PlanificacionMesaSecuenciacionTab() {
    */
   const onDragOver = useCallback(
     (event: DragOverEvent) => {
-      if (!hasImpresionMachine) return;
+      if (!boardReady) return;
       if (!simulationOn) return; // En modo Real, esperamos al drop
 
       const { active, over } = event;
@@ -1688,7 +1805,7 @@ export function PlanificacionMesaSecuenciacionTab() {
       setDraftBySlot(t.next);
     },
     [
-      hasImpresionMachine,
+      boardReady,
       simulationOn,
       draftBySlot,
       realBySlot,
@@ -1700,7 +1817,7 @@ export function PlanificacionMesaSecuenciacionTab() {
 
   const onDragEnd = useCallback(
     async (event: DragEndEvent) => {
-      if (!hasImpresionMachine) return;
+      if (!boardReady) return;
       const { active, over } = event;
       setActiveId(null);
       const isPoolDrag = String(active.id).startsWith("pool::");
@@ -1803,7 +1920,7 @@ export function PlanificacionMesaSecuenciacionTab() {
       });
     },
     [
-      hasImpresionMachine,
+      boardReady,
       simulationOn,
       dragStartDraftSnapshot,
       draftBySlot,
@@ -2300,7 +2417,7 @@ export function PlanificacionMesaSecuenciacionTab() {
       <CardHeader className="space-y-2 pb-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-lg text-[#002147]">
-            Mesa de Secuenciación - Impresión
+            Mesa de Secuenciación — {etiquetaMesaTitulo}
           </CardTitle>
           <div className="flex flex-wrap items-center gap-1.5">
             <Button
@@ -2341,7 +2458,7 @@ export function PlanificacionMesaSecuenciacionTab() {
               variant="outline"
               size="sm"
               onClick={() => setExportDialogOpen(true)}
-              disabled={!hasImpresionMachine || loading}
+              disabled={!boardReady || loading}
               title="Imprimir / Exportar"
             >
               <Printer className="mr-1 size-4" />
@@ -2352,7 +2469,7 @@ export function PlanificacionMesaSecuenciacionTab() {
               variant="ghost"
               size="sm"
               onClick={() => void reload()}
-              disabled={loading || savingChanges || publishing || !hasImpresionMachine}
+              disabled={loading || savingChanges || publishing || !boardReady}
               title="Recargar"
             >
               <RefreshCcw
@@ -2365,7 +2482,7 @@ export function PlanificacionMesaSecuenciacionTab() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700">
-              Ámbito: Impresión
+              Ámbito: {etiquetaMesaTitulo}
             </span>
             <span
               className={cn(
@@ -2385,7 +2502,7 @@ export function PlanificacionMesaSecuenciacionTab() {
               className="h-8 min-w-[13rem] rounded-md border border-slate-300 bg-white px-2 text-xs"
               value={selectedMaquinaId ?? ""}
               onChange={(e) => setSelectedMaquinaId(e.target.value || null)}
-              disabled={!hasImpresionMachine}
+              disabled={!boardReady}
             >
               {maquinasPorTipo.map((m) => (
                 <option key={m.id} value={m.id}>
@@ -2422,7 +2539,7 @@ export function PlanificacionMesaSecuenciacionTab() {
                 checked={simulationOn}
                 onChange={(e) => setSimulationOn(e.target.checked)}
                 aria-label="Modo simulación"
-                disabled={!hasImpresionMachine}
+                disabled={!boardReady}
               />
               Modo simulación
             </label>
@@ -2449,7 +2566,7 @@ export function PlanificacionMesaSecuenciacionTab() {
                 variant="outline"
                 size="sm"
                 onClick={resetDraftFromReal}
-                disabled={publishing || !hasImpresionMachine}
+                disabled={publishing || !boardReady}
               >
                 Cargar plan real en simulación
               </Button>
@@ -2481,7 +2598,7 @@ export function PlanificacionMesaSecuenciacionTab() {
                 variant="outline"
                 size="sm"
                 onClick={() => void orderDraftWithIa("rules")}
-                disabled={publishing || iaOrdering || !draftHydrated || !hasImpresionMachine}
+                disabled={publishing || iaOrdering || !draftHydrated || !boardReady}
                 title={iaSettings.promptBase}
               >
                 {iaOrdering ? (
@@ -2496,7 +2613,7 @@ export function PlanificacionMesaSecuenciacionTab() {
                 variant="outline"
                 size="sm"
                 onClick={() => void orderDraftWithIa("advanced")}
-                disabled={publishing || iaOrdering || !draftHydrated || !hasImpresionMachine}
+                disabled={publishing || iaOrdering || !draftHydrated || !boardReady}
                 title={`Usa el modelo global: ${globalModel}`}
               >
                 <Sparkles className="mr-1 size-4 text-[#C69C2B]" />
@@ -2508,7 +2625,7 @@ export function PlanificacionMesaSecuenciacionTab() {
                 size="sm"
                 className="border-[#C69C2B]/60 bg-[#C69C2B]/10 text-[#002147] hover:bg-[#C69C2B]/20"
                 onClick={() => void orderDraftWithIa("mixed")}
-                disabled={publishing || iaOrdering || !draftHydrated || !hasImpresionMachine}
+                disabled={publishing || iaOrdering || !draftHydrated || !boardReady}
                 title={`Reglas + refinado con ${globalModel}`}
               >
                 <Sparkles className="mr-1 size-4 text-[#C69C2B]" />
@@ -2518,7 +2635,7 @@ export function PlanificacionMesaSecuenciacionTab() {
                 type="button"
                 size="sm"
                 className="bg-[#002147] text-white hover:bg-[#001735]"
-                disabled={publishing || !draftHydrated || !hasImpresionMachine}
+                disabled={publishing || !draftHydrated || !boardReady}
                 onClick={() => void applySimulation()}
               >
                 {publishing ? (
@@ -2535,7 +2652,7 @@ export function PlanificacionMesaSecuenciacionTab() {
                 type="button"
                 variant="outline"
                 size="sm"
-                disabled={!hasImpresionMachine || loading}
+                disabled={!boardReady || loading}
                 onClick={() => {
                   setSimulationOn(true);
                   setDraftBySlot(simulationBaseBySlot);
@@ -2630,12 +2747,11 @@ export function PlanificacionMesaSecuenciacionTab() {
           </div>
         ) : null}
 
-        {!hasImpresionMachine ? (
+        {!boardReady ? (
           <div className="flex items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
             <span className="inline-flex items-center gap-1.5">
               <TriangleAlert className="size-4" />
-              No hay máquinas activas de impresión configuradas. Ve a Settings →
-              Recursos Producción y activa al menos una.
+              {emptyMaquinasMessage}
             </span>
           </div>
         ) : null}
@@ -2661,7 +2777,7 @@ export function PlanificacionMesaSecuenciacionTab() {
               search={poolSearch}
               onSearchChange={setPoolSearch}
               otsEnMesa={otsEnMesa}
-              disabled={publishing || !hasImpresionMachine}
+              disabled={publishing || !boardReady}
             />
 
             <div className="min-w-0">
@@ -2706,7 +2822,7 @@ export function PlanificacionMesaSecuenciacionTab() {
                         onEditCapacity={openCapacityDialog}
                         onStartExecution={startExecution}
                         startingExecutionId={startingExecutionId}
-                        disabled={publishing || !hasImpresionMachine}
+                        disabled={publishing || !boardReady}
                       />
                     );
                   })}

@@ -80,6 +80,15 @@ export function canAccessHubModule(
     return module === "chat" || module === "produccion";
   }
 
+  /** Responsables de sección: planificación + ejecución en el mismo módulo Producción. */
+  if (r === "digital" || r === "troquelado" || r === "engomado") {
+    return (
+      module === "chat" ||
+      module === "produccion" ||
+      module === "produccion_ejecucion"
+    );
+  }
+
   if (r === "impresion") {
     return module === "produccion_ejecucion";
   }
@@ -273,7 +282,10 @@ export const ROLE_LABELS: Record<string, string> = {
   gerencia: "Gerencia",
   comercial: "Comercial",
   produccion: "Producción",
-  impresion: "Impresión",
+  impresion: "Impresión offset",
+  digital: "Impresión digital",
+  troquelado: "Troquelado",
+  engomado: "Engomado",
   logistica: "Logística",
   almacen: "Almacén",
   oficina_tecnica: "Oficina técnica",
@@ -287,6 +299,9 @@ export const ASSIGNABLE_ROLES = [
   "comercial",
   "produccion",
   "impresion",
+  "digital",
+  "troquelado",
+  "engomado",
   "logistica",
   "almacen",
   "ctp",

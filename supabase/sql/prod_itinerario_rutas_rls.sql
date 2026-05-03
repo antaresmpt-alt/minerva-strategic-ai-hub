@@ -185,7 +185,15 @@ create policy prod_ot_pasos_select_authenticated
       select 1 from public.profiles me
       where me.id = (select auth.uid())
         and me.role::text = any (
-          array['admin','gerencia','produccion','impresion']
+          array[
+            'admin',
+            'gerencia',
+            'produccion',
+            'impresion',
+            'digital',
+            'troquelado',
+            'engomado'
+          ]
         )
     )
   );
