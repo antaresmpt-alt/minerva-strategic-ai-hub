@@ -86,10 +86,11 @@ export function canAccessSettings(
 ): boolean {
   const r = normalizeDbRole(role);
   if (!r) return false;
+  if (hasFullAccess(r)) return true;
   if (hasDynamicAccess(dynamic)) {
     return dynamic.get("settings") === true;
   }
-  return hasFullAccess(r);
+  return false;
 }
 
 export function canAccessHubModule(
@@ -99,10 +100,10 @@ export function canAccessHubModule(
 ): boolean {
   const r = normalizeDbRole(role);
   if (!r) return false;
+  if (hasFullAccess(r)) return true;
   if (hasDynamicAccess(dynamic)) {
     return dynamic.get(module) === true;
   }
-  if (hasFullAccess(r)) return true;
 
   if (r === "produccion" || r === "logistica") {
     return module === "chat" || module === "produccion";

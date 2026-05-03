@@ -1,8 +1,23 @@
 import Image from "next/image";
+import dynamic from "next/dynamic";
 
-import { HubModulesGrid } from "@/components/portal/hub-modules-grid";
 import { MinervaSiteFooter } from "@/components/layout/minerva-site-footer";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { TabRouteLoading } from "@/components/ui/tab-route-loading";
+
+const HubModulesGrid = dynamic(
+  () =>
+    import("@/components/portal/hub-modules-grid").then((m) => ({
+      default: m.HubModulesGrid,
+    })),
+  {
+    loading: () => (
+      <div className="flex min-h-[12rem] items-center justify-center py-8">
+        <TabRouteLoading label="Cargando módulos del Hub…" />
+      </div>
+    ),
+  },
+);
 
 /** PNG corporativos (~268×106 / 205×68): no ampliar mucho más del tamaño nativo para evitar pixelado. */
 const BRAND_WORDMARK_W = 205;

@@ -210,10 +210,15 @@ export function ExternosDailyGrid({
   renderMrp,
   otEntregaUmbrales,
 }: ExternosDailyGridProps) {
-  const sorted = useMemo(
-    () => [...rows].sort(compareDailyRows),
-    [rows]
-  );
+  const sorted = useMemo(() => {
+    const seen = new Set<string>();
+    const uniq = rows.filter((r) => {
+      if (seen.has(r.id)) return false;
+      seen.add(r.id);
+      return true;
+    });
+    return [...uniq].sort(compareDailyRows);
+  }, [rows]);
 
   const [items, setItems] = useState<ExternosDailyGridRow[]>(sorted);
 
