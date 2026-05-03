@@ -52,6 +52,34 @@ function hasDynamicAccess(
   return dynamic != null && dynamic.size > 0;
 }
 
+/** Roles (matriz estática) que pueden usar la pestaña Planificación OT's dentro de /produccion/ots. */
+const PLANIFICACION_OTS_TAB_ROLES = new Set([
+  "produccion",
+  "logistica",
+  "impresion",
+  "digital",
+  "troquelado",
+  "engomado",
+]);
+
+/**
+ * Pestaña "Planificación OT's" (pool, mesa, ejecución planificada): no todo el mundo con acceso a OTs.
+ * Con `role_permissions` activo: mismo criterio que el módulo `produccion` (admin/gerencia siempre).
+ */
+export function canAccessPlanificacionOtsTab(
+  role: string | null,
+  dynamic?: Map<string, boolean> | null,
+): boolean {
+  if (hasDynamicAccess(dynamic)) {
+    if (hasFullAccess(role)) return true;
+    return dynamic.get("produccion") === true;
+  }
+  const r = normalizeDbRole(role);
+  if (!r) return false;
+  if (hasFullAccess(r)) return true;
+  return PLANIFICACION_OTS_TAB_ROLES.has(r);
+}
+
 export function canAccessSettings(
   role: string | null,
   dynamic?: Map<string, boolean> | null

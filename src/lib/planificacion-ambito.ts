@@ -20,6 +20,38 @@ export const PLANIFICACION_TIPOS_MAQUINA: PlanificacionTipoMaquina[] = [
   "engomado",
 ];
 
+/** Orden UI cuando el usuario ve todas las áreas: evita que la primera máquina sea siempre offset. */
+const PLANIFICACION_TIPO_UI_ORDER: Record<PlanificacionTipoMaquina, number> = {
+  digital: 0,
+  troquelado: 1,
+  engomado: 2,
+  impresion: 3,
+};
+
+export type MaquinaPlanificacionSortRow = {
+  tipo_maquina: string;
+  orden_visual?: number | string | null;
+  nombre: string;
+};
+
+export function sortMaquinasPlanificacionUiOrder<T extends MaquinaPlanificacionSortRow>(
+  list: T[],
+): T[] {
+  return [...list].sort((a, b) => {
+    const ta =
+      PLANIFICACION_TIPO_UI_ORDER[a.tipo_maquina as PlanificacionTipoMaquina] ??
+      99;
+    const tb =
+      PLANIFICACION_TIPO_UI_ORDER[b.tipo_maquina as PlanificacionTipoMaquina] ??
+      99;
+    if (ta !== tb) return ta - tb;
+    const oa = Number(a.orden_visual ?? 0);
+    const ob = Number(b.orden_visual ?? 0);
+    if (oa !== ob) return oa - ob;
+    return a.nombre.localeCompare(b.nombre, "es");
+  });
+}
+
 const DRAFT_SCOPES: PlanificacionDraftScope[] = [
   "impresion",
   "digital",

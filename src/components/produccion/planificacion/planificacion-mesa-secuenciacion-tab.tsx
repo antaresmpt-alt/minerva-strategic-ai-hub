@@ -91,6 +91,7 @@ import {
   getPlanificacionTipoMaquinaFilter,
   planificacionTipoFiltroEfectivo,
   PLANIFICACION_TIPOS_MAQUINA,
+  sortMaquinasPlanificacionUiOrder,
   type PlanificacionTipoMaquina,
 } from "@/lib/planificacion-ambito";
 import { reorderBoardWithIaRules } from "@/lib/planificacion-ia-reorder";
@@ -523,10 +524,11 @@ export function PlanificacionMesaSecuenciacionTab() {
   // entre re-renders y cambios de semana).
   const [poolSearch, setPoolSearch] = useState("");
 
-  const machineUiStorageKey = useMemo(
-    () => `minerva_plan_machine_ui_${userId ?? "anon"}`,
-    [userId],
-  );
+  /** Sin `userId` no persistimos ni leemos máquina (evita clave `anon` y datos cruzados). */
+  const machineUiStorageKey = useMemo(() => {
+    const id = typeof userId === "string" ? userId.trim() : "";
+    return id.length > 0 ? `minerva_plan_machine_ui_${id}` : null;
+  }, [userId]);
 
   // ===== CARGA DE DATOS =====================================================
 
@@ -1069,6 +1071,7 @@ export function PlanificacionMesaSecuenciacionTab() {
           ? authUser.id.trim()
           : null;
       if (uid) {
+        setUserId(uid);
         const { data: prof } = await supabase
           .from("profiles")
           .select("role")
@@ -1078,7 +1081,13 @@ export function PlanificacionMesaSecuenciacionTab() {
           prof && typeof (prof as { role?: unknown }).role === "string"
             ? String((prof as { role: string }).role).trim() || null
             : null;
+      } else {
+        setUserId(null);
       }
+      const emailRaw =
+        typeof authUser?.email === "string" ? authUser.email.trim() : "";
+      setUserEmail(emailRaw.length > 0 ? emailRaw : null);
+
       setPlanificacionRole(roleRead);
 
       const [maqList, poolList, mesaList, capList] = await Promise.all([
@@ -1087,7 +1096,7 @@ export function PlanificacionMesaSecuenciacionTab() {
         loadMesa(),
         loadCapacidades(),
       ]);
-      setMaquinas(maqList);
+      setMaquinas(sortMaquinasPlanificacionUiOrder(maqList));
       setPool(poolList);
       setMesaItems(mesaList);
       setCapacidades(capList);
@@ -1147,13 +1156,13 @@ export function PlanificacionMesaSecuenciacionTab() {
   }, [supabase]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !machineUiStorageKey) return;
     try {
       const raw = window.localStorage.getItem(machineUiStorageKey);
       if (!raw) return;
       const parsed = JSON.parse(raw) as { maquinaId?: string | null };
       if (typeof parsed.maquinaId === "string" && parsed.maquinaId.trim()) {
-        setSelectedMaquinaId(parsed.maquinaId);
+        setSelectedMaquinaId(parsed.maquinaId.trim());
       }
     } catch {
       // ignore
@@ -1161,7 +1170,7 @@ export function PlanificacionMesaSecuenciacionTab() {
   }, [machineUiStorageKey]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !machineUiStorageKey) return;
     try {
       window.localStorage.setItem(
         machineUiStorageKey,
