@@ -91,6 +91,7 @@ import {
   getPlanificacionTipoMaquinaFilter,
   planificacionTipoFiltroEfectivo,
   PLANIFICACION_TIPOS_MAQUINA,
+  type PlanificacionTipoMaquina,
 } from "@/lib/planificacion-ambito";
 import { reorderBoardWithIaRules } from "@/lib/planificacion-ia-reorder";
 import { mapRowsToIaSettings } from "@/lib/planificacion-ia-settings";
@@ -808,23 +809,76 @@ export function PlanificacionMesaSecuenciacionTab() {
     const poolOts = rows.map((r) => String(r.ot_numero ?? "").trim()).filter(Boolean);
     if (poolOts.length === 0) return [] as PoolOT[];
 
-    // Regla de negocio: una OT ya colocada en mesa (cualquier semana) no debe
-    // reaparecer en el Pool al navegar semanas.
-    let placedQuery = supabase
-      .from(TABLE_MESA)
-      .select("ot_numero")
-      .in("estado_mesa", ACTIVE_MESA_ESTADOS as unknown as string[])
-      .in("ot_numero", poolOts);
-    if (selectedMaquinaId) {
-      placedQuery = placedQuery.or(`maquina_id.eq.${selectedMaquinaId},maquina_id.is.null`);
-    }
-    const { data: placedData, error: placedErr } = await placedQuery;
-    if (placedErr) throw placedErr;
-    const otsPlacedAnywhere = new Set(
-      ((placedData ?? []) as Array<{ ot_numero: string | null }>)
-        .map((x) => String(x.ot_numero ?? "").trim())
-        .filter(Boolean),
+    const tipoEfectivo = planificacionTipoFiltroEfectivo(
+      getPlanificacionTipoMaquinaFilter(roleForFilter),
+      tipoMaquinaSeleccionada,
     );
+
+    // No reaparecer en el pool lateral: si hay ámbito por tipo (rol o máquina),
+    // ocultar OT ya planificada en CUALQUIER máquina de ese mismo tipo.
+    let otsPlacedAnywhere = new Set<string>();
+    if (tipoEfectivo) {
+      const { data: mesaPlacedRows, error: mpErr } = await supabase
+        .from(TABLE_MESA)
+        .select("ot_numero, maquina_id")
+        .in("estado_mesa", ACTIVE_MESA_ESTADOS as unknown as string[])
+        .in("ot_numero", poolOts);
+      if (mpErr) throw mpErr;
+      const rawPlaced = (mesaPlacedRows ?? []) as Array<{
+        ot_numero?: string | null;
+        maquina_id?: string | null;
+      }>;
+      const mids = new Set<string>();
+      for (const row of rawPlaced) {
+        const mid = String(row.maquina_id ?? "").trim();
+        if (mid) mids.add(mid);
+      }
+      const tipoByMaquinaId = new Map<string, PlanificacionTipoMaquina>();
+      if (mids.size > 0) {
+        const { data: maqs, error: maqPlErr } = await supabase
+          .from(TABLE_MAQUINAS)
+          .select("id, tipo_maquina")
+          .in("id", [...mids]);
+        if (maqPlErr) throw maqPlErr;
+        for (const m of maqs ?? []) {
+          const id = String((m as { id?: string | null }).id ?? "").trim();
+          const rawT = String((m as { tipo_maquina?: string | null }).tipo_maquina ?? "").trim();
+          if (!id) continue;
+          if ((PLANIFICACION_TIPOS_MAQUINA as readonly string[]).includes(rawT)) {
+            tipoByMaquinaId.set(id, rawT as PlanificacionTipoMaquina);
+          }
+        }
+      }
+      for (const row of rawPlaced) {
+        const ot = String(row.ot_numero ?? "").trim();
+        if (!ot) continue;
+        const mid = String(row.maquina_id ?? "").trim();
+        if (!mid) {
+          otsPlacedAnywhere.add(ot);
+          continue;
+        }
+        const tmaq = tipoByMaquinaId.get(mid);
+        if (tmaq === tipoEfectivo) {
+          otsPlacedAnywhere.add(ot);
+        }
+      }
+    } else {
+      let placedQuery = supabase
+        .from(TABLE_MESA)
+        .select("ot_numero")
+        .in("estado_mesa", ACTIVE_MESA_ESTADOS as unknown as string[])
+        .in("ot_numero", poolOts);
+      if (selectedMaquinaId) {
+        placedQuery = placedQuery.or(`maquina_id.eq.${selectedMaquinaId},maquina_id.is.null`);
+      }
+      const { data: placedData, error: placedErr } = await placedQuery;
+      if (placedErr) throw placedErr;
+      otsPlacedAnywhere = new Set(
+        ((placedData ?? []) as Array<{ ot_numero: string | null }>)
+          .map((x) => String(x.ot_numero ?? "").trim())
+          .filter(Boolean),
+      );
+    }
     const visibleRows = rows.filter((r) => !otsPlacedAnywhere.has(String(r.ot_numero ?? "").trim()));
 
     const otsList = visibleRows.map((r) => String(r.ot_numero ?? "").trim()).filter(Boolean);
@@ -970,10 +1024,6 @@ export function PlanificacionMesaSecuenciacionTab() {
     } catch (e) {
       console.warn("[Mesa] pool itinerario", e);
     }
-    const tipoEfectivo = planificacionTipoFiltroEfectivo(
-      getPlanificacionTipoMaquinaFilter(roleForFilter),
-      tipoMaquinaSeleccionada,
-    );
     if (tipoEfectivo) {
       poolOut = poolOut.filter((p) => p.planificacionTipoPaso === tipoEfectivo);
     }

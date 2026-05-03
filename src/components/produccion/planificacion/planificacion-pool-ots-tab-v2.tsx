@@ -69,6 +69,10 @@ const TABLE_PROVEEDORES = "prod_proveedores";
 const TABLE_RECEPCION = "prod_recepciones_material";
 const TABLE_TROQUELES = "prod_troqueles";
 const TABLE_POOL = "prod_planificacion_pool";
+/** Estados de pool que pueden leerse desde despacho; `cerrada` = itinerario completo (se excluye del listado). */
+const POOL_ESTADOS_INCLUIDOS = ["pendiente", "enviada_mesa", "en_transito", "cerrada"] as const;
+/** Filas de pool que pueden reenviarse a mesa o actualizarse (nunca `cerrada` = itinerario completo). */
+const POOL_ESTADOS_PARA_MESA = ["pendiente", "enviada_mesa", "en_transito"] as const;
 const TABLE_MESA = "prod_mesa_planificacion_trabajos";
 const TABLE_MAQUINAS = "prod_maquinas";
 const POOL_UI_STATE_KEY = "produccion.poolOts.uiState.v1";
@@ -85,11 +89,14 @@ type SortKey = "entrega" | "ot" | "cliente";
 type TroquelStatus = "ok" | "falta" | "no_aplica" | "sin_informar";
 type TroquelModo = "informado" | "no_aplica" | "sin_informar";
 
+type PoolAmbitoFiltroUi = "all" | PlanificacionTipoMaquina;
+
 type PoolUiState = {
   search: string;
   sortBy: SortKey;
   sortDir: "asc" | "desc";
   compraEstadoFilter: string;
+  areaTipoFilter: PoolAmbitoFiltroUi;
 };
 
 type DespRow = {
@@ -160,6 +167,8 @@ type PoolRow = {
   enColaMesa: boolean;
   /** Al menos una fila en `prod_mesa_planificacion_trabajos` en estado de plan ya asignado. */
   planificadaEnMesa: boolean;
+  /** `estado_pool === en_transito`: fase anterior cerrada en mesa, itinerario sigue (p. ej. a troquel). */
+  poolEnTransitoFase: boolean;
 };
 
 type DraftRow = {
@@ -302,6 +311,7 @@ export function PlanificacionPoolOtsTab() {
   const [sortBy, setSortBy] = useState<SortKey>("entrega");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [compraEstadoFilter, setCompraEstadoFilter] = useState<string>("all");
+  const [areaTipoFilter, setAreaTipoFilter] = useState<PoolAmbitoFiltroUi>("all");
   const [editingOt, setEditingOt] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftRow | null>(null);
   const [savedRowOt, setSavedRowOt] = useState<string | null>(null);
@@ -388,6 +398,14 @@ export function PlanificacionPoolOtsTab() {
             setCompraEstadoFilter(savedCompraEstadoFilter);
           }
         }
+        const savedArea = parsed.areaTipoFilter;
+        if (
+          savedArea === "all" ||
+          (typeof savedArea === "string" &&
+            (PLANIFICACION_TIPOS_MAQUINA as readonly string[]).includes(savedArea))
+        ) {
+          setAreaTipoFilter(savedArea as PoolAmbitoFiltroUi);
+        }
       }
     } catch {
       // fallback silencioso
@@ -398,7 +416,13 @@ export function PlanificacionPoolOtsTab() {
 
   useEffect(() => {
     if (!uiHydrated) return;
-    const payload: PoolUiState = { search, sortBy, sortDir, compraEstadoFilter };
+    const payload: PoolUiState = {
+      search,
+      sortBy,
+      sortDir,
+      compraEstadoFilter,
+      areaTipoFilter,
+    };
     const t = window.setTimeout(() => {
       try {
         window.localStorage.setItem(uiStorageKey, JSON.stringify(payload));
@@ -407,7 +431,7 @@ export function PlanificacionPoolOtsTab() {
       }
     }, 180);
     return () => window.clearTimeout(t);
-  }, [search, sortBy, sortDir, compraEstadoFilter, uiHydrated, uiStorageKey]);
+  }, [search, sortBy, sortDir, compraEstadoFilter, areaTipoFilter, uiHydrated, uiStorageKey]);
 
   const loadRows = useCallback(async () => {
     setLoading(true);
@@ -481,6 +505,7 @@ export function PlanificacionPoolOtsTab() {
             planificacionTipoPaso: null,
             enColaMesa: false,
             planificadaEnMesa: false,
+            poolEnTransitoFase: false,
           });
           continue;
         }
@@ -710,7 +735,7 @@ export function PlanificacionPoolOtsTab() {
         .from(TABLE_POOL)
         .select("id, ot_numero, estado_pool, troquel_status, acabado_pral_snapshot")
         .in("ot_numero", ots)
-        .in("estado_pool", ["pendiente", "enviada_mesa", "cerrada"]);
+        .in("estado_pool", [...POOL_ESTADOS_INCLUIDOS]);
       if (poolErr) throw poolErr;
       const poolByOt = new Map<string, PoolPersisted>();
       for (const p of (poolData ?? []) as PoolPersisted[]) {
@@ -778,6 +803,9 @@ export function PlanificacionPoolOtsTab() {
           pp && String(pp.estado_pool ?? "").trim().toLowerCase() === "enviada_mesa",
         );
         row.planificadaEnMesa = otsConPlanEnMesa.has(ot);
+        row.poolEnTransitoFase = Boolean(
+          pp && String(pp.estado_pool ?? "").trim().toLowerCase() === "en_transito",
+        );
         out.push(row);
       }
 
@@ -819,14 +847,6 @@ export function PlanificacionPoolOtsTab() {
     void loadRows();
   }, [loadRows]);
 
-  const selectableRows = useMemo(
-    () => rows.filter((r) => r.hasCompraGenerada),
-    [rows],
-  );
-  const allChecked =
-    selectableRows.length > 0 && selectableRows.every((r) => selected[r.ot]);
-  const selectedRows = rows.filter((r) => selected[r.ot]);
-
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     const filterNorm = normalizeCompraEstado(compraEstadoFilter);
@@ -837,10 +857,23 @@ export function PlanificacionPoolOtsTab() {
           .map((x) => String(x ?? "").toLowerCase())
           .some((s) => s.includes(q));
       if (!matchesSearch) return false;
-      if (filterNorm === "all") return true;
-      return normalizeCompraEstado(r.compraEstado) === filterNorm;
+      if (filterNorm !== "all" && normalizeCompraEstado(r.compraEstado) !== filterNorm) {
+        return false;
+      }
+      if (areaTipoFilter !== "all" && r.planificacionTipoPaso !== areaTipoFilter) {
+        return false;
+      }
+      return true;
     });
-  }, [rows, search, compraEstadoFilter]);
+  }, [rows, search, compraEstadoFilter, areaTipoFilter]);
+
+  const selectableRows = useMemo(
+    () => filteredRows.filter((r) => r.hasCompraGenerada),
+    [filteredRows],
+  );
+  const allChecked =
+    selectableRows.length > 0 && selectableRows.every((r) => selected[r.ot]);
+  const selectedRows = rows.filter((r) => selected[r.ot]);
 
   const tipoFiltroPlanificacion = useMemo(
     () => getPlanificacionTipoMaquinaFilter(planificacionRole),
@@ -939,7 +972,7 @@ export function PlanificacionPoolOtsTab() {
         .from(TABLE_POOL)
         .select("id")
         .eq("ot_numero", editingOt)
-        .in("estado_pool", ["pendiente", "enviada_mesa", "cerrada"])
+        .in("estado_pool", [...POOL_ESTADOS_INCLUIDOS])
         .limit(1);
       if (exErr) throw exErr;
       if ((exPool ?? []).length > 0) {
@@ -1243,7 +1276,7 @@ export function PlanificacionPoolOtsTab() {
         .from(TABLE_POOL)
         .select("id, ot_numero")
         .in("ot_numero", nuevos.map((r) => r.ot))
-        .in("estado_pool", ["pendiente", "enviada_mesa", "cerrada"]);
+        .in("estado_pool", [...POOL_ESTADOS_PARA_MESA]);
       if (poolErr) throw poolErr;
       const poolByOt = new Map<string, string>();
       for (const p of (poolExist ?? []) as Array<{ id: string; ot_numero: string }>) {
@@ -1291,7 +1324,7 @@ export function PlanificacionPoolOtsTab() {
       await loadRows();
     } catch (e) {
       console.error(e);
-      toast.error(e instanceof Error ? e.message : "No se pudo pasar la selección a mesa.");
+      toast.error(getErrorMessage(e, "No se pudo pasar la selección a mesa."));
     } finally {
       setSaving(false);
     }
@@ -1346,6 +1379,26 @@ export function PlanificacionPoolOtsTab() {
               ))}
               <option value="Sin compra">Sin compra</option>
             </select>
+            <select
+              className="h-9 min-w-[11rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700"
+              value={areaTipoFilter}
+              onChange={(e) =>
+                setAreaTipoFilter(
+                  e.target.value === "all"
+                    ? "all"
+                    : (e.target.value as PlanificacionTipoMaquina),
+                )
+              }
+              aria-label="Filtrar por área del próximo paso"
+              title="Filtra por tipo de proceso del primer paso disponible (itinerario)."
+            >
+              <option value="all">Próximo paso: todos</option>
+              {PLANIFICACION_TIPOS_MAQUINA.map((t) => (
+                <option key={t} value={t}>
+                  {etiquetaAmbitoPlanificacion(t)}
+                </option>
+              ))}
+            </select>
           </div>
           <Button
             type="button"
@@ -1382,6 +1435,12 @@ export function PlanificacionPoolOtsTab() {
                 {etiquetaAmbitoPlanificacion(tipoFiltroPlanificacion)}). Hay{" "}
                 {poolCountPreAmbito} OT(s) en otras fases del itinerario.
               </>
+            ) : rows.length > 0 && areaTipoFilter !== "all" ? (
+              <>
+                Ninguna OT coincide con el filtro de próximo paso (
+                {etiquetaAmbitoPlanificacion(areaTipoFilter)}). Prueba &quot;Próximo paso:
+                todos&quot; o revisa OTs sin itinerario inferido.
+              </>
             ) : (
               <>No hay OT&apos;s despachadas pendientes de planificación.</>
             )}
@@ -1397,7 +1456,7 @@ export function PlanificacionPoolOtsTab() {
                       checked={allChecked}
                       onChange={(e) => {
                         const next: Record<string, boolean> = {};
-                        for (const r of rows) {
+                        for (const r of filteredRows) {
                           next[r.ot] = r.hasCompraGenerada ? e.target.checked : false;
                         }
                         setSelected(next);
@@ -1499,6 +1558,14 @@ export function PlanificacionPoolOtsTab() {
                     </TableCell>
                     <TableCell>
                       <p className="font-mono text-sm font-semibold text-[#002147]">{r.ot}</p>
+                      {r.poolEnTransitoFase ? (
+                        <p
+                          className="mt-0.5 text-[10px] font-medium text-amber-800"
+                          title="Fase anterior finalizada en mesa; el itinerario sigue (p. ej. pendiente de troquel u otra sección)."
+                        >
+                          Entre fases
+                        </p>
+                      ) : null}
                     </TableCell>
                     <TableCell>
                       <p className="max-w-[12rem] truncate text-xs text-slate-700" title={r.cliente}>

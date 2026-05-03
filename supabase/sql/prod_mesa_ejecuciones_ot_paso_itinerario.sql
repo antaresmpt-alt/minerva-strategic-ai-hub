@@ -98,6 +98,8 @@ declare
   v_orden integer;
   v_next_id uuid;
   v_now timestamptz := timezone('utc'::text, now());
+  v_ot_num text;
+  v_pending bigint;
 begin
   if tg_op is distinct from 'UPDATE' then
     return new;
@@ -111,7 +113,27 @@ begin
     return new;
   end if;
 
+  -- Cerrar el trabajo de mesa vinculado a esta ejecución (libera hueco / índice OT+máquina).
+  if new.mesa_trabajo_id is not null then
+    update public.prod_mesa_planificacion_trabajos m
+    set
+      estado_mesa = 'finalizada',
+      updated_at = v_now
+    where m.id = new.mesa_trabajo_id
+      and m.estado_mesa is distinct from 'finalizada';
+  end if;
+
+  -- Sin paso de itinerario: cierre operativo clásico (pool a cerrada).
   if new.ot_paso_id is null then
+    update public.prod_planificacion_pool po
+    set
+      estado_pool = 'cerrada',
+      closed_at = coalesce(new.fin_real_at, v_now),
+      closed_by = new.updated_by,
+      closed_by_email = new.updated_by_email,
+      notas = coalesce(nullif(trim(po.notas), ''), 'Cerrada al finalizar ejecucion')
+    where btrim(po.ot_numero) = btrim(new.ot_numero)
+      and po.estado_pool in ('pendiente', 'enviada_mesa', 'en_transito');
     return new;
   end if;
 
@@ -141,6 +163,39 @@ begin
       estado = 'disponible'::public.paso_estado,
       fecha_disponible = v_now
     where id = v_next_id;
+  end if;
+
+  -- Sincronizar pool: en_transito si queda algún paso sin finalizar; cerrada solo con itinerario completo.
+  select btrim(g.num_pedido::text) into v_ot_num
+  from public.prod_ots_general g
+  where g.id = v_ot_id;
+
+  if v_ot_num is not null and length(v_ot_num) > 0 then
+    select count(*)::bigint into v_pending
+    from public.prod_ot_pasos p
+    where p.ot_id = v_ot_id
+      and p.estado is distinct from 'finalizado'::public.paso_estado;
+
+    if v_pending = 0 then
+      update public.prod_planificacion_pool po
+      set
+        estado_pool = 'cerrada',
+        closed_at = coalesce(new.fin_real_at, v_now),
+        closed_by = new.updated_by,
+        closed_by_email = new.updated_by_email,
+        notas = coalesce(nullif(trim(po.notas), ''), 'Cerrada: itinerario completo')
+      where btrim(po.ot_numero) = v_ot_num
+        and po.estado_pool in ('pendiente', 'enviada_mesa', 'en_transito');
+    else
+      update public.prod_planificacion_pool po
+      set
+        estado_pool = 'en_transito',
+        closed_at = null,
+        closed_by = null,
+        closed_by_email = null
+      where btrim(po.ot_numero) = v_ot_num
+        and po.estado_pool in ('pendiente', 'enviada_mesa', 'en_transito');
+    end if;
   end if;
 
   return new;
