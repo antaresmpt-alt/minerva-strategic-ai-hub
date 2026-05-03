@@ -1,3 +1,5 @@
+"use client";
+
 import Image from "next/image";
 import dynamic from "next/dynamic";
 
@@ -11,6 +13,7 @@ const HubModulesGrid = dynamic(
       default: m.HubModulesGrid,
     })),
   {
+    ssr: false,
     loading: () => (
       <div className="flex min-h-[12rem] items-center justify-center py-8">
         <TabRouteLoading label="Cargando módulos del Hub…" />

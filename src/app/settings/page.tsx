@@ -1,6 +1,20 @@
 import type { Metadata } from "next";
+import dynamic from "next/dynamic";
 
-import { SettingsShell } from "@/components/settings/settings-shell";
+const SettingsShell = dynamic(
+  () =>
+    import("@/components/settings/settings-shell").then((m) => ({
+      default: m.SettingsShell,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex min-h-[50vh] items-center justify-center bg-muted/40 px-4 text-sm text-muted-foreground">
+        Cargando configuración…
+      </div>
+    ),
+  },
+);
 
 export const metadata: Metadata = {
   title: "Configuración | Minerva Strategic AI Hub",
