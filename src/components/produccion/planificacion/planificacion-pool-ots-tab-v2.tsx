@@ -478,7 +478,7 @@ export function PlanificacionPoolOtsTab() {
         setPoolEditPasosVista(pasos);
         const can = itinerarioPasosPermitenReemplazo(pasos);
         setPoolEditCanReplaceItinerario(can);
-        const slots = can ? pasosVistaToItinerarioSlots(pasos) : [];
+        const slots = pasosVistaToItinerarioSlots(pasos);
         setPoolEditItinerarioSlots(slots);
         poolItinerarioInitialRef.current = serializeItinerarioProcesoIds(slots);
       } catch (e) {

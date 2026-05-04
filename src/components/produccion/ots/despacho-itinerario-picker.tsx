@@ -69,28 +69,37 @@ function SortablePasoRow({
         isDragging && "z-10 opacity-90 ring-1 ring-[#C69C2B]/50",
       )}
     >
-      <button
-        type="button"
-        className="touch-none text-slate-400 hover:text-slate-700"
-        aria-label="Arrastrar"
-        disabled={disabled}
-        {...attributes}
-        {...listeners}
-      >
-        <GripVertical className="size-3.5 shrink-0" />
-      </button>
+      {disabled ? (
+        <span
+          className="inline-flex size-3.5 shrink-0 items-center justify-center rounded border border-slate-200 bg-slate-50 text-[9px] font-semibold text-slate-500"
+          aria-hidden
+        >
+          ·
+        </span>
+      ) : (
+        <button
+          type="button"
+          className="touch-none text-slate-400 hover:text-slate-700"
+          aria-label="Arrastrar"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="size-3.5 shrink-0" />
+        </button>
+      )}
       <span className="min-w-0 flex-1 truncate font-medium text-[#002147]">
         {slot.nombre}
       </span>
-      <button
-        type="button"
-        className="rounded p-0.5 text-slate-500 hover:bg-red-50 hover:text-red-700"
-        aria-label="Quitar"
-        disabled={disabled}
-        onClick={onRemove}
-      >
-        <X className="size-3.5" />
-      </button>
+      {!disabled ? (
+        <button
+          type="button"
+          className="rounded p-0.5 text-slate-500 hover:bg-red-50 hover:text-red-700"
+          aria-label="Quitar"
+          onClick={onRemove}
+        >
+          <X className="size-3.5" />
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -123,6 +132,15 @@ export function DespachoItinerarioPicker({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
+    if (disabled) {
+      setProcesos([]);
+      setPlantillas([]);
+      setLoadErr(null);
+      setLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
     setLoading(true);
     setLoadErr(null);
     void (async () => {
@@ -165,7 +183,7 @@ export function DespachoItinerarioPicker({
     return () => {
       cancelled = true;
     };
-  }, [open, supabase]);
+  }, [disabled, open, supabase]);
 
   const loadPlantillaPasos = useCallback(
     async (plantillaId: string) => {
@@ -223,106 +241,138 @@ export function DespachoItinerarioPicker({
 
   if (!open) return null;
 
+  const readOnly = !!disabled;
+
   return (
     <div className="space-y-2 border-t border-slate-200 pt-3 sm:col-span-2">
-      <p className="text-xs font-semibold text-[#002147]">Itinerario (opcional)</p>
+      <p className="text-xs font-semibold text-[#002147]">
+        {readOnly ? "Itinerario (solo lectura)" : "Itinerario (opcional)"}
+      </p>
       <p className="text-[11px] text-muted-foreground">
-        Define el orden de procesos para esta OT. Si lo dejas vacío, solo se
-        registra el despacho técnico.
+        {readOnly
+          ? "Refleja el orden actual guardado en base de datos. No se puede modificar porque ya hay pasos iniciados o finalizados."
+          : "Define el orden de procesos para esta OT. Si lo dejas vacío, solo se registra el despacho técnico."}
       </p>
       {loadErr ? (
         <p className="text-[11px] text-destructive" role="alert">
           {loadErr}
         </p>
       ) : null}
-      {loading ? (
+      {!readOnly && loading ? (
         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <Loader2 className="size-3.5 animate-spin" />
           Cargando procesos…
         </div>
       ) : null}
 
-      <div className="grid min-h-0 gap-2 md:grid-cols-3 md:items-start">
-        <div className="flex min-h-0 flex-col space-y-1 rounded border border-slate-200 bg-slate-50/60 p-2">
+      {readOnly ? (
+        <div className="flex min-h-0 flex-col space-y-1 rounded border border-slate-200 bg-slate-50/40 p-2">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-            Plantillas
+            Orden actual
           </p>
-          <div className="max-h-40 min-h-0 space-y-1 overflow-y-auto overscroll-contain pb-3 pr-2 [scrollbar-gutter:stable]">
-            {plantillas.length === 0 ? (
-              <p className="text-[10px] text-muted-foreground">Sin plantillas.</p>
+          <div className="flex max-h-40 min-h-[5.625rem] flex-col gap-1 overflow-y-auto overscroll-contain rounded border border-dashed border-slate-200 bg-white p-1 pb-3 pr-2 [scrollbar-gutter:stable]">
+            {slots.length === 0 ? (
+              <p className="py-2 text-center text-[10px] text-muted-foreground">
+                Sin pasos
+              </p>
             ) : (
-              plantillas.map((pl) => (
-                <button
-                  key={pl.id}
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => void loadPlantillaPasos(pl.id)}
-                  className="w-full rounded px-1.5 py-1 text-left text-[10px] hover:bg-white"
+              slots.map((slot, idx) => (
+                <div
+                  key={slot.key}
+                  className="flex items-center gap-1.5 rounded border border-slate-200 bg-white px-1.5 py-1 text-[11px]"
                 >
-                  {pl.nombre}
-                </button>
+                  <span className="inline-flex min-w-[1.1rem] justify-center font-mono text-[10px] font-semibold text-slate-500">
+                    {idx + 1}.
+                  </span>
+                  <span className="min-w-0 flex-1 truncate font-medium text-[#002147]">
+                    {slot.nombre}
+                  </span>
+                </div>
               ))
             )}
           </div>
         </div>
-        <div className="flex min-h-0 flex-col space-y-1 rounded border border-slate-200 p-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-            Procesos
-          </p>
-          <div className="flex min-h-0 max-h-40 flex-wrap gap-1 overflow-y-auto overscroll-contain pb-3 pr-2 [scrollbar-gutter:stable]">
-            {procesos.map((p) => (
-              <Button
-                key={p.id}
-                type="button"
-                size="sm"
-                variant="secondary"
-                disabled={disabled}
-                className={cn(
-                  "h-auto min-h-7 max-w-full whitespace-normal px-1.5 py-0.5 text-[10px]",
-                  p.activo === false && "opacity-50",
-                )}
-                onClick={() => appendProceso(p)}
-              >
-                {p.nombre}
-              </Button>
-            ))}
+      ) : (
+        <div className="grid min-h-0 gap-2 md:grid-cols-3 md:items-start">
+          <div className="flex min-h-0 flex-col space-y-1 rounded border border-slate-200 bg-slate-50/60 p-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+              Plantillas
+            </p>
+            <div className="max-h-40 min-h-0 space-y-1 overflow-y-auto overscroll-contain pb-3 pr-2 [scrollbar-gutter:stable]">
+              {plantillas.length === 0 ? (
+                <p className="text-[10px] text-muted-foreground">Sin plantillas.</p>
+              ) : (
+                plantillas.map((pl) => (
+                  <button
+                    key={pl.id}
+                    type="button"
+                    onClick={() => void loadPlantillaPasos(pl.id)}
+                    className="w-full rounded px-1.5 py-1 text-left text-[10px] hover:bg-white"
+                  >
+                    {pl.nombre}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+          <div className="flex min-h-0 flex-col space-y-1 rounded border border-slate-200 p-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+              Procesos
+            </p>
+            <div className="flex min-h-0 max-h-40 flex-wrap gap-1 overflow-y-auto overscroll-contain pb-3 pr-2 [scrollbar-gutter:stable]">
+              {procesos.map((p) => (
+                <Button
+                  key={p.id}
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className={cn(
+                    "h-auto min-h-7 max-w-full whitespace-normal px-1.5 py-0.5 text-[10px]",
+                    p.activo === false && "opacity-50",
+                  )}
+                  onClick={() => appendProceso(p)}
+                >
+                  {p.nombre}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <div className="flex min-h-0 flex-col space-y-1 rounded border border-slate-200 p-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+              Orden
+            </p>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={onDragEnd}
+            >
+              <SortableContext items={slotIds} strategy={verticalListSortingStrategy}>
+                <div className="flex max-h-40 min-h-[5.625rem] flex-col gap-1 overflow-y-auto overscroll-contain rounded border border-dashed border-slate-200 bg-white p-1 pb-3 pr-2 [scrollbar-gutter:stable]">
+                  {slots.length === 0 ? (
+                    <p className="py-2 text-center text-[10px] text-muted-foreground">
+                      Vacío
+                    </p>
+                  ) : (
+                    slots.map((slot, idx) => (
+                      <SortablePasoRow
+                        key={slot.key}
+                        slot={{
+                          ...slot,
+                          nombre: `${idx + 1}. ${slot.nombre}`,
+                        }}
+                        disabled={false}
+                        onRemove={() =>
+                          onSlotsChange(slots.filter((s) => s.key !== slot.key))
+                        }
+                      />
+                    ))
+                  )}
+                </div>
+              </SortableContext>
+            </DndContext>
           </div>
         </div>
-        <div className="flex min-h-0 flex-col space-y-1 rounded border border-slate-200 p-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-            Orden
-          </p>
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={onDragEnd}
-          >
-            <SortableContext items={slotIds} strategy={verticalListSortingStrategy}>
-              <div className="flex max-h-40 min-h-[5.625rem] flex-col gap-1 overflow-y-auto overscroll-contain rounded border border-dashed border-slate-200 bg-white p-1 pb-3 pr-2 [scrollbar-gutter:stable]">
-                {slots.length === 0 ? (
-                  <p className="py-2 text-center text-[10px] text-muted-foreground">
-                    Vacío
-                  </p>
-                ) : (
-                  slots.map((slot, idx) => (
-                    <SortablePasoRow
-                      key={slot.key}
-                      slot={{
-                        ...slot,
-                        nombre: `${idx + 1}. ${slot.nombre}`,
-                      }}
-                      disabled={disabled}
-                      onRemove={() =>
-                        onSlotsChange(slots.filter((s) => s.key !== slot.key))
-                      }
-                    />
-                  ))
-                )}
-              </div>
-            </SortableContext>
-          </DndContext>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -569,7 +569,7 @@ export function OtsDespachadasPage({
         setEditPasosVista(pasos);
         const can = itinerarioPasosPermitenReemplazo(pasos);
         setEditCanReplaceItinerario(can);
-        const slots = can ? pasosVistaToItinerarioSlots(pasos) : [];
+        const slots = pasosVistaToItinerarioSlots(pasos);
         setEditItinerarioSlots(slots);
         editItinerarioInitialRef.current = serializeItinerarioProcesoIds(slots);
       } catch (e) {
