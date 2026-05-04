@@ -12,17 +12,13 @@ import {
   Search,
   Send,
 } from "lucide-react";
-import {
-  type FocusEvent,
-  type ReactElement,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import {
+  DespachoItinerarioPicker,
+  type DespachoItinerarioSlot,
+} from "@/components/produccion/ots/despacho-itinerario-picker";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -34,11 +30,13 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -60,6 +58,14 @@ import {
   type ProximoPasoInfo,
 } from "@/lib/planificacion-ambito";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
+import {
+  fetchProdOtGeneralIdByNumPedido,
+  fetchProdOtPasosVista,
+  itinerarioPasosPermitenReemplazo,
+  pasosVistaToItinerarioSlots,
+  replaceProdOtItinerarioSlots,
+  type ProdOtPasoVista,
+} from "@/lib/prod-ot-itinerario-client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 const TABLE_DESPACHADAS = "produccion_ot_despachadas";
@@ -180,6 +186,10 @@ type DraftRow = {
   horasEntrada: string;
   horasTiraje: string;
 };
+
+function serializeItinerarioProcesoIds(slots: DespachoItinerarioSlot[]): string {
+  return JSON.stringify(slots.map((s) => s.procesoId));
+}
 
 function parseNum(v: unknown): number {
   if (typeof v === "number") return Number.isFinite(v) ? v : 0;
@@ -314,6 +324,21 @@ export function PlanificacionPoolOtsTab() {
   const [areaTipoFilter, setAreaTipoFilter] = useState<PoolAmbitoFiltroUi>("all");
   const [editingOt, setEditingOt] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftRow | null>(null);
+  const [poolEditDialogOpen, setPoolEditDialogOpen] = useState(false);
+  const [poolEditOtGeneralId, setPoolEditOtGeneralId] = useState<string | null>(
+    null
+  );
+  const [poolEditPasosVista, setPoolEditPasosVista] = useState<ProdOtPasoVista[]>(
+    []
+  );
+  const [poolEditCanReplaceItinerario, setPoolEditCanReplaceItinerario] =
+    useState(false);
+  const [poolEditItinerarioSlots, setPoolEditItinerarioSlots] = useState<
+    DespachoItinerarioSlot[]
+  >([]);
+  const [poolEditItinerarioLoading, setPoolEditItinerarioLoading] =
+    useState(false);
+  const poolItinerarioInitialRef = useRef("");
   const [savedRowOt, setSavedRowOt] = useState<string | null>(null);
   const [uiUserId, setUiUserId] = useState<string | null>(null);
   const [uiHydrated, setUiHydrated] = useState(false);
@@ -332,7 +357,6 @@ export function PlanificacionPoolOtsTab() {
   const [cauchoError, setCauchoError] = useState<string | null>(null);
   const [cauchoBlobUrl, setCauchoBlobUrl] = useState<string | null>(null);
   const cauchoIframeRef = useRef<HTMLIFrameElement>(null);
-  const skipBlurSaveRef = useRef(false);
   const saveInFlightRef = useRef(false);
   const [planificacionRole, setPlanificacionRole] = useState<string | null>(null);
   const [poolCountPreAmbito, setPoolCountPreAmbito] = useState(0);
@@ -432,6 +456,50 @@ export function PlanificacionPoolOtsTab() {
     }, 180);
     return () => window.clearTimeout(t);
   }, [search, sortBy, sortDir, compraEstadoFilter, areaTipoFilter, uiHydrated, uiStorageKey]);
+
+  useEffect(() => {
+    if (!poolEditDialogOpen || !editingOt) return;
+    let cancelled = false;
+    setPoolEditItinerarioLoading(true);
+    void (async () => {
+      try {
+        const id = await fetchProdOtGeneralIdByNumPedido(supabase, editingOt);
+        if (cancelled) return;
+        setPoolEditOtGeneralId(id);
+        if (!id) {
+          setPoolEditPasosVista([]);
+          setPoolEditCanReplaceItinerario(false);
+          setPoolEditItinerarioSlots([]);
+          poolItinerarioInitialRef.current = serializeItinerarioProcesoIds([]);
+          return;
+        }
+        const pasos = await fetchProdOtPasosVista(supabase, id);
+        if (cancelled) return;
+        setPoolEditPasosVista(pasos);
+        const can = itinerarioPasosPermitenReemplazo(pasos);
+        setPoolEditCanReplaceItinerario(can);
+        const slots = can ? pasosVistaToItinerarioSlots(pasos) : [];
+        setPoolEditItinerarioSlots(slots);
+        poolItinerarioInitialRef.current = serializeItinerarioProcesoIds(slots);
+      } catch (e) {
+        if (!cancelled) {
+          console.error("[Pool] itinerario modal", e);
+          toast.error(
+            e instanceof Error ? e.message : "No se pudo cargar el itinerario."
+          );
+          setPoolEditPasosVista([]);
+          setPoolEditCanReplaceItinerario(false);
+          setPoolEditItinerarioSlots([]);
+          poolItinerarioInitialRef.current = serializeItinerarioProcesoIds([]);
+        }
+      } finally {
+        if (!cancelled) setPoolEditItinerarioLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [poolEditDialogOpen, editingOt, supabase]);
 
   const loadRows = useCallback(async () => {
     setLoading(true);
@@ -898,6 +966,15 @@ export function PlanificacionPoolOtsTab() {
     return arr;
   }, [filteredRows, sortBy, sortDir]);
 
+  const resetPoolEditItinerario = useCallback(() => {
+    setPoolEditOtGeneralId(null);
+    setPoolEditPasosVista([]);
+    setPoolEditCanReplaceItinerario(false);
+    setPoolEditItinerarioSlots([]);
+    setPoolEditItinerarioLoading(false);
+    poolItinerarioInitialRef.current = "";
+  }, []);
+
   const startEdit = useCallback((r: PoolRow) => {
     setEditingOt(r.ot);
     setDraft({
@@ -909,12 +986,16 @@ export function PlanificacionPoolOtsTab() {
       horasEntrada: r.horasEntrada.toFixed(2),
       horasTiraje: r.horasTiraje.toFixed(2),
     });
-  }, []);
+    resetPoolEditItinerario();
+    setPoolEditDialogOpen(true);
+  }, [resetPoolEditItinerario]);
 
   const cancelEdit = useCallback(() => {
     setEditingOt(null);
     setDraft(null);
-  }, []);
+    setPoolEditDialogOpen(false);
+    resetPoolEditItinerario();
+  }, [resetPoolEditItinerario]);
 
   const hasDraftChanges = useCallback(() => {
     if (!editingOt || !draft) return false;
@@ -925,16 +1006,26 @@ export function PlanificacionPoolOtsTab() {
       draft.troquelModo === "informado"
         ? draft.troquel.trim() !== curr.troquelLabel.trim()
         : curr.troquelLabel.trim() !== "";
-    return (
+    const despachoChanged =
       draft.trabajo.trim() !== curr.trabajo.trim() ||
       draft.tintas.trim() !== currTintas.trim() ||
       draft.acabadoPral.trim() !== curr.acabadoPral.trim() ||
       parseNonNegative(draft.horasEntrada) !== curr.horasEntrada ||
       parseNonNegative(draft.horasTiraje) !== curr.horasTiraje ||
       draft.troquelModo !== curr.troquelModo ||
-      troquelChanged
-    );
-  }, [draft, editingOt, rows]);
+      troquelChanged;
+    const itinerarioChanged =
+      poolEditCanReplaceItinerario &&
+      serializeItinerarioProcesoIds(poolEditItinerarioSlots) !==
+        poolItinerarioInitialRef.current;
+    return despachoChanged || itinerarioChanged;
+  }, [
+    draft,
+    editingOt,
+    poolEditCanReplaceItinerario,
+    poolEditItinerarioSlots,
+    rows,
+  ]);
 
   const saveEdit = useCallback(async () => {
     if (!editingOt || !draft) return;
@@ -1010,6 +1101,20 @@ export function PlanificacionPoolOtsTab() {
         });
         if (pInsErr) throw pInsErr;
       }
+
+      if (
+        poolEditOtGeneralId &&
+        poolEditCanReplaceItinerario &&
+        serializeItinerarioProcesoIds(poolEditItinerarioSlots) !==
+          poolItinerarioInitialRef.current
+      ) {
+        await replaceProdOtItinerarioSlots(
+          supabase,
+          poolEditOtGeneralId,
+          poolEditItinerarioSlots
+        );
+      }
+
       toast.success("Fila actualizada.");
       setSavedRowOt(editingOt);
       window.setTimeout(() => {
@@ -1042,29 +1147,19 @@ export function PlanificacionPoolOtsTab() {
       saveInFlightRef.current = false;
       setSavingEdit(false);
     }
-  }, [cancelEdit, draft, editingOt, hasDraftChanges, loadRows, rows, savingEdit, supabase]);
-
-  const onDraftKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement | HTMLSelectElement>) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        void saveEdit();
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        cancelEdit();
-      }
-    },
-    [cancelEdit, saveEdit]
-  );
-
-  const onDraftBlur = useCallback(() => {
-    if (skipBlurSaveRef.current) {
-      skipBlurSaveRef.current = false;
-      return;
-    }
-    if (!editingOt || !draft) return;
-    void saveEdit();
-  }, [draft, editingOt, saveEdit]);
+  }, [
+    cancelEdit,
+    draft,
+    editingOt,
+    hasDraftChanges,
+    loadRows,
+    poolEditCanReplaceItinerario,
+    poolEditItinerarioSlots,
+    poolEditOtGeneralId,
+    rows,
+    savingEdit,
+    supabase,
+  ]);
 
   const revokePdfBlob = useCallback(() => {
     setPdfBlobUrl((prev) => {
@@ -1218,16 +1313,6 @@ export function PlanificacionPoolOtsTab() {
       }
     },
     [loadCauchoPreview, revokeCauchoBlob]
-  );
-
-  const onEditRowBlurCapture = useCallback(
-    (e: FocusEvent<HTMLTableRowElement>, ot: string) => {
-      if (editingOt !== ot) return;
-      const next = e.relatedTarget as Node | null;
-      if (next && e.currentTarget.contains(next)) return;
-      onDraftBlur();
-    },
-    [editingOt, onDraftBlur]
   );
 
   const pasarAMesa = useCallback(async () => {
@@ -1520,11 +1605,6 @@ export function PlanificacionPoolOtsTab() {
                 {sortedRows.map((r) => (
                   <TableRow
                     key={r.ot}
-                    onBlurCapture={
-                      editingOt === r.ot
-                        ? (e) => onEditRowBlurCapture(e, r.ot)
-                        : undefined
-                    }
                     className={
                       savedRowOt === r.ot
                         ? "bg-emerald-50/80 ring-1 ring-emerald-200 transition-colors duration-700"
@@ -1634,52 +1714,31 @@ export function PlanificacionPoolOtsTab() {
                       </span>
                     </TableCell>
                     <TableCell>
-                      {editingOt === r.ot && draft ? (
-                        <Input
-                          value={draft.trabajo}
-                          onChange={(e) => setDraft({ ...draft, trabajo: e.target.value })}
-                          onKeyDown={onDraftKeyDown}
-                          className="h-8 max-w-[14rem]"
-                        />
-                      ) : (
-                        <>
-                          <p
-                            className="max-w-[14rem] truncate text-sm font-medium text-slate-900"
-                            title={r.trabajo}
-                          >
-                            {r.trabajo || "—"}
-                          </p>
-                          <p className="max-w-[14rem] truncate text-xs text-slate-600" title={r.material}>
-                            {r.material || "—"}
-                          </p>
-                        </>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {editingOt === r.ot && draft ? (
-                        <Input
-                          value={draft.tintas}
-                          onChange={(e) => setDraft({ ...draft, tintas: e.target.value })}
-                          onKeyDown={onDraftKeyDown}
-                          className="h-8 w-20"
-                        />
-                      ) : (
-                        <span className="font-mono text-xs">{r.tintas || "—"}</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {editingOt === r.ot && draft ? (
-                        <Input
-                          value={draft.acabadoPral}
-                          onChange={(e) => setDraft({ ...draft, acabadoPral: e.target.value })}
-                          onKeyDown={onDraftKeyDown}
-                          className="h-8 max-w-[10rem]"
-                        />
-                      ) : (
-                        <p className="max-w-[10rem] truncate text-xs text-slate-700" title={r.acabadoPral}>
-                          {r.acabadoPral || "—"}
+                      <>
+                        <p
+                          className="max-w-[14rem] truncate text-sm font-medium text-slate-900"
+                          title={r.trabajo}
+                        >
+                          {r.trabajo || "—"}
                         </p>
-                      )}
+                        <p
+                          className="max-w-[14rem] truncate text-xs text-slate-600"
+                          title={r.material}
+                        >
+                          {r.material || "—"}
+                        </p>
+                      </>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-mono text-xs">{r.tintas || "—"}</span>
+                    </TableCell>
+                    <TableCell>
+                      <p
+                        className="max-w-[10rem] truncate text-xs text-slate-700"
+                        title={r.acabadoPral}
+                      >
+                        {r.acabadoPral || "—"}
+                      </p>
                     </TableCell>
                     <TableCell>
                       <div className="space-y-1">
@@ -1709,160 +1768,73 @@ export function PlanificacionPoolOtsTab() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {editingOt === r.ot && draft ? (
-                        <div className="space-y-1">
-                          <select
-                            className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs"
-                            value={draft.troquelModo}
-                            onChange={(e) =>
-                              setDraft({
-                                ...draft,
-                                troquelModo: e.target.value as TroquelModo,
-                                troquel: e.target.value === "informado" ? draft.troquel : "",
-                              })
-                            }
-                            onKeyDown={onDraftKeyDown}
-                          >
-                            <option value="sin_informar">Sin informar</option>
-                            <option value="no_aplica">No aplica</option>
-                            <option value="informado">Informado</option>
-                          </select>
-                          {draft.troquelModo === "informado" ? (
-                            <Input
-                              value={draft.troquel}
-                              onChange={(e) => setDraft({ ...draft, troquel: e.target.value })}
-                              onKeyDown={onDraftKeyDown}
-                              className="h-8"
-                              placeholder="Nº troquel"
-                            />
-                          ) : null}
-                        </div>
-                      ) : (
-                        <>
-                          {r.troquelStatus === "ok"
-                            ? statusPill("verde", "OK")
-                            : r.troquelStatus === "falta"
-                              ? statusPill("amarillo", "Falta")
-                              : r.troquelStatus === "no_aplica"
-                                ? statusPill("gris", "No aplica")
-                                : statusPill("gris", "Sin informar")}
-                          {r.troquelStatus === "ok" && r.troquelLabel.trim() ? (
-                            <div className="mt-1 flex items-center gap-1">
+                      <>
+                        {r.troquelStatus === "ok"
+                          ? statusPill("verde", "OK")
+                          : r.troquelStatus === "falta"
+                            ? statusPill("amarillo", "Falta")
+                            : r.troquelStatus === "no_aplica"
+                              ? statusPill("gris", "No aplica")
+                              : statusPill("gris", "Sin informar")}
+                        {r.troquelStatus === "ok" && r.troquelLabel.trim() ? (
+                          <div className="mt-1 flex items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-6 text-[#002147]/85 hover:bg-[#002147]/10 hover:text-[#002147]"
+                              title="Ver troquel"
+                              onClick={() => void openTroquelPdf(r.troquelLabel)}
+                            >
+                              <Eye className="size-3.5" aria-hidden />
+                            </Button>
+                            {cauchoAcrilicoShowsViewer(r.cauchoAcrilico) ? (
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="icon"
                                 className="size-6 text-[#002147]/85 hover:bg-[#002147]/10 hover:text-[#002147]"
-                                title="Ver troquel"
-                                onClick={() => void openTroquelPdf(r.troquelLabel)}
+                                title="Ver caucho"
+                                onClick={() => void openCauchoQuick(r.troquelLabel)}
                               >
-                                <Eye className="size-3.5" aria-hidden />
+                                <Droplet className="size-3.5" aria-hidden />
                               </Button>
-                              {cauchoAcrilicoShowsViewer(r.cauchoAcrilico) ? (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="size-6 text-[#002147]/85 hover:bg-[#002147]/10 hover:text-[#002147]"
-                                  title="Ver caucho"
-                                  onClick={() => void openCauchoQuick(r.troquelLabel)}
-                                >
-                                  <Droplet className="size-3.5" aria-hidden />
-                                </Button>
-                              ) : null}
-                            </div>
-                          ) : null}
-                          {r.troquelLabel ? (
-                            <p className="mt-1 font-mono text-[11px] text-slate-600">
-                              {r.troquelLabel}
-                              {r.poses != null ? (
-                                <span className="ml-1 text-[10px] text-slate-500">({r.poses})</span>
-                              ) : null}
-                            </p>
-                          ) : r.poses != null ? (
-                            <p className="mt-1 text-[10px] text-slate-500">({r.poses})</p>
-                          ) : null}
-                        </>
-                      )}
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {r.troquelLabel ? (
+                          <p className="mt-1 font-mono text-[11px] text-slate-600">
+                            {r.troquelLabel}
+                            {r.poses != null ? (
+                              <span className="ml-1 text-[10px] text-slate-500">({r.poses})</span>
+                            ) : null}
+                          </p>
+                        ) : r.poses != null ? (
+                          <p className="mt-1 text-[10px] text-slate-500">({r.poses})</p>
+                        ) : null}
+                      </>
                     </TableCell>
                     <TableCell className="text-right">
-                      {editingOt === r.ot && draft ? (
-                        <div className="flex items-center justify-end gap-1.5">
-                          <Input
-                            inputMode="decimal"
-                            value={draft.horasEntrada}
-                            onChange={(e) =>
-                              setDraft({ ...draft, horasEntrada: e.target.value })
-                            }
-                            onKeyDown={onDraftKeyDown}
-                            className="h-8 w-20 text-right"
-                            title="Horas entrada"
-                            placeholder="E"
-                          />
-                          <Input
-                            inputMode="decimal"
-                            value={draft.horasTiraje}
-                            onChange={(e) =>
-                              setDraft({ ...draft, horasTiraje: e.target.value })
-                            }
-                            onKeyDown={onDraftKeyDown}
-                            className="h-8 w-20 text-right"
-                            title="Horas tiraje"
-                            placeholder="T"
-                          />
-                        </div>
-                      ) : (
-                        <div className="space-y-0.5">
-                          <p className="text-[11px] text-slate-600">
-                            E {r.horasEntrada.toFixed(2)}h · T {r.horasTiraje.toFixed(2)}h
-                          </p>
-                          <span className="font-medium tabular-nums text-slate-900">
-                            {r.horasTotal.toFixed(2)} h
-                          </span>
-                        </div>
-                      )}
+                      <div className="space-y-0.5">
+                        <p className="text-[11px] text-slate-600">
+                          E {r.horasEntrada.toFixed(2)}h · T {r.horasTiraje.toFixed(2)}h
+                        </p>
+                        <span className="font-medium tabular-nums text-slate-900">
+                          {r.horasTotal.toFixed(2)} h
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell>
-                      {editingOt === r.ot ? (
-                        <div className="flex items-center gap-1">
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="h-7 bg-[#002147] px-2 text-white hover:bg-[#001735]"
-                            disabled={savingEdit}
-                            onMouseDown={() => {
-                              skipBlurSaveRef.current = true;
-                            }}
-                            onClick={() => void saveEdit()}
-                          >
-                            {savingEdit ? <Loader2 className="size-3.5 animate-spin" /> : "OK"}
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-7 px-2"
-                            disabled={savingEdit}
-                            onMouseDown={() => {
-                              skipBlurSaveRef.current = true;
-                            }}
-                            onClick={cancelEdit}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      ) : (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 text-slate-600 hover:text-[#002147]"
-                          onClick={() => startEdit(r)}
-                          title="Editar fila"
-                        >
-                          <Edit3 className="size-4" />
-                        </Button>
-                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 text-slate-600 hover:text-[#002147]"
+                        onClick={() => startEdit(r)}
+                        title="Editar despacho e itinerario"
+                      >
+                        <Edit3 className="size-4" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1871,6 +1843,198 @@ export function PlanificacionPoolOtsTab() {
           </div>
         )}
       </CardContent>
+      <Dialog
+        open={poolEditDialogOpen}
+        onOpenChange={(o) => {
+          if (!o) cancelEdit();
+        }}
+      >
+        <DialogContent className="flex max-h-[min(92vh,760px)] max-w-[min(96vw,560px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+          <DialogHeader className="shrink-0 border-b border-slate-100 px-4 py-3 sm:px-5">
+            <DialogTitle className="text-base text-[#002147]">
+              Editar pool · OT{" "}
+              <span className="font-mono text-sm font-semibold">{editingOt ?? ""}</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Despacho en{" "}
+              <code className="rounded bg-slate-100 px-1 text-[10px]">
+                {TABLE_DESPACHADAS}
+              </code>
+              . Itinerario en{" "}
+              <code className="rounded bg-slate-100 px-1 text-[10px]">prod_ot_pasos</code>.
+            </DialogDescription>
+          </DialogHeader>
+          {draft && editingOt ? (
+            <>
+              <div className="grid max-h-[min(52vh,440px)] gap-3 overflow-y-auto px-4 py-3 sm:px-5">
+                <div className="grid gap-1">
+                  <Label htmlFor="pool-edit-trabajo" className="text-xs">
+                    Trabajo (referencia)
+                  </Label>
+                  <Input
+                    id="pool-edit-trabajo"
+                    className="h-8 text-xs"
+                    value={draft.trabajo}
+                    onChange={(e) => setDraft({ ...draft, trabajo: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-1 sm:grid-cols-2 sm:gap-3">
+                  <div className="grid gap-1">
+                    <Label htmlFor="pool-edit-tintas" className="text-xs">
+                      Tintas
+                    </Label>
+                    <Input
+                      id="pool-edit-tintas"
+                      className="h-8 text-xs"
+                      value={draft.tintas}
+                      onChange={(e) => setDraft({ ...draft, tintas: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid gap-1">
+                    <Label htmlFor="pool-edit-acabado" className="text-xs">
+                      Acabado PRAL
+                    </Label>
+                    <Input
+                      id="pool-edit-acabado"
+                      className="h-8 text-xs"
+                      value={draft.acabadoPral}
+                      onChange={(e) => setDraft({ ...draft, acabadoPral: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-1">
+                  <Label className="text-xs">Troquel</Label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs"
+                      value={draft.troquelModo}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          troquelModo: e.target.value as TroquelModo,
+                          troquel:
+                            e.target.value === "informado" ? draft.troquel : "",
+                        })
+                      }
+                    >
+                      <option value="sin_informar">Sin informar</option>
+                      <option value="no_aplica">No aplica</option>
+                      <option value="informado">Informado</option>
+                    </select>
+                    {draft.troquelModo === "informado" ? (
+                      <Input
+                        className="h-8 max-w-[10rem] text-xs"
+                        value={draft.troquel}
+                        onChange={(e) =>
+                          setDraft({ ...draft, troquel: e.target.value })
+                        }
+                        placeholder="Nº troquel"
+                      />
+                    ) : null}
+                  </div>
+                </div>
+                <div className="grid gap-1 sm:grid-cols-2 sm:gap-3">
+                  <div className="grid gap-1">
+                    <Label htmlFor="pool-edit-he" className="text-xs">
+                      Horas entrada
+                    </Label>
+                    <Input
+                      id="pool-edit-he"
+                      inputMode="decimal"
+                      className="h-8 text-xs"
+                      value={draft.horasEntrada}
+                      onChange={(e) =>
+                        setDraft({ ...draft, horasEntrada: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="grid gap-1">
+                    <Label htmlFor="pool-edit-ht" className="text-xs">
+                      Horas tiraje
+                    </Label>
+                    <Input
+                      id="pool-edit-ht"
+                      inputMode="decimal"
+                      className="h-8 text-xs"
+                      value={draft.horasTiraje}
+                      onChange={(e) =>
+                        setDraft({ ...draft, horasTiraje: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="border-t border-slate-100 pt-2">
+                  <p className="text-xs font-semibold text-[#002147]">Itinerario</p>
+                  {poolEditItinerarioLoading ? (
+                    <p className="text-muted-foreground mt-1 flex items-center gap-2 text-[11px]">
+                      <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                      Cargando pasos…
+                    </p>
+                  ) : poolEditPasosVista.length === 0 ? (
+                    <p className="text-muted-foreground mt-1 text-[11px]">
+                      Sin pasos en base de datos.
+                    </p>
+                  ) : (
+                    <ol className="mt-1.5 list-decimal space-y-0.5 pl-4 text-[11px] text-slate-800">
+                      {poolEditPasosVista.map((p) => (
+                        <li key={p.id}>
+                          <span className="font-medium">{p.orden}.</span>{" "}
+                          {p.procesoNombre}{" "}
+                          <span className="text-slate-500">({p.estado})</span>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                  {!poolEditCanReplaceItinerario && poolEditPasosVista.length > 0 ? (
+                    <p className="mt-2 rounded border border-amber-200 bg-amber-50/80 px-2 py-1.5 text-[11px] text-amber-950">
+                      Hay pasos en marcha o finalizados: no se puede sustituir el
+                      itinerario desde aquí.
+                    </p>
+                  ) : null}
+                  <DespachoItinerarioPicker
+                    open={poolEditDialogOpen}
+                    supabase={supabase}
+                    disabled={
+                      savingEdit ||
+                      poolEditItinerarioLoading ||
+                      !poolEditCanReplaceItinerario
+                    }
+                    slots={poolEditItinerarioSlots}
+                    onSlotsChange={setPoolEditItinerarioSlots}
+                  />
+                </div>
+              </div>
+              <DialogFooter className="shrink-0 gap-2 border-t border-slate-100 px-4 py-3 sm:flex-row sm:px-5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={savingEdit}
+                  onClick={() => cancelEdit()}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="bg-[#002147] text-white hover:bg-[#001735]"
+                  disabled={savingEdit || !hasDraftChanges()}
+                  onClick={() => void saveEdit()}
+                >
+                  {savingEdit ? (
+                    <>
+                      <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden />
+                      Guardando…
+                    </>
+                  ) : (
+                    "Guardar"
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
       <Dialog open={pdfModalOpen} onOpenChange={closePdfModal}>
         <DialogContent
           showCloseButton

@@ -1,7 +1,15 @@
 "use client";
 
 import type { Column, ColumnDef } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ArrowUpDown, Eye, Info, Pencil } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Eye,
+  Info,
+  Pencil,
+  Route,
+} from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -114,6 +122,12 @@ function mostrarBotonVerCompra(estado: string | null | undefined): boolean {
   return b === "azul" || b === "amarillo" || b === "verde";
 }
 
+function itinerarioIconClass(hasItinerario: boolean): string {
+  return hasItinerario
+    ? "h-7 w-7 shrink-0 text-emerald-600 hover:text-emerald-700"
+    : "h-7 w-7 shrink-0 text-amber-600 hover:text-amber-700";
+}
+
 function formatMaterialGramaje(
   material: string | null,
   gramaje: number | null
@@ -177,6 +191,8 @@ function OtsDespachadasSortHeader({
 
 export type OtsDespachadasColumnsContext = {
   onVerCompra: (row: OtsDespachadasTableRow) => void;
+  /** Abre el mismo modal de edición (despacho + itinerario). */
+  onItinerario: (row: OtsDespachadasTableRow) => void;
   onEditarDespacho: (row: OtsDespachadasTableRow) => void;
   troquelExcelByCodigo: Map<string, TroquelExcelTooltip>;
   /** true = checkbox deshabilitado (OT con gestión de compra ya iniciada). */
@@ -464,7 +480,7 @@ export function createOtsDespachadasColumns(
     },
     {
       accessorKey: "estado_material",
-      size: 172,
+      size: 200,
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
           Estado material
@@ -486,6 +502,21 @@ export function createOtsDespachadasColumns(
             >
               {label}
             </Badge>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={itinerarioIconClass(row.original.has_itinerario)}
+              aria-label={`Itinerario y despacho OT ${row.original.ot_numero}`}
+              title={
+                row.original.has_itinerario
+                  ? "Itinerario asignado"
+                  : "Sin itinerario asignado"
+              }
+              onClick={() => ctx.onItinerario(row.original)}
+            >
+              <Route className="h-4 w-4" aria-hidden />
+            </Button>
             {verCompra ? (
               <Button
                 type="button"
