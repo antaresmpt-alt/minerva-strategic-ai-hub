@@ -2,6 +2,8 @@
 
 import {
   AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   ExternalLink,
   Loader2,
@@ -64,6 +66,7 @@ export function PlanificacionPipelineTab() {
   const [quickExternoActivo, setQuickExternoActivo] = useState(false);
   const [quickSinItinerario, setQuickSinItinerario] = useState(false);
   const [compactMode, setCompactMode] = useState(false);
+  const [showAnalyticsColumns, setShowAnalyticsColumns] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailOt, setDetailOt] = useState<Awaited<ReturnType<typeof fetchPipelineRows>>[number] | null>(null);
   const [selectedOtNumero, setSelectedOtNumero] = useState<string | null>(null);
@@ -102,6 +105,7 @@ export function PlanificacionPipelineTab() {
     if (searchParams.get("quickExternoActivo") === "1") setQuickExternoActivo(true);
     if (searchParams.get("quickSinItinerario") === "1") setQuickSinItinerario(true);
     if (searchParams.get("compact") === "1") setCompactMode(true);
+    if (searchParams.get("analyticsCols") === "1") setShowAnalyticsColumns(true);
     const otQ = searchParams.get("ot");
     if (otQ) setSelectedOtNumero(otQ);
 
@@ -144,6 +148,7 @@ export function PlanificacionPipelineTab() {
     setOrDelete("quickExternoActivo", quickExternoActivo ? "1" : null);
     setOrDelete("quickSinItinerario", quickSinItinerario ? "1" : null);
     setOrDelete("compact", compactMode ? "1" : null);
+    setOrDelete("analyticsCols", showAnalyticsColumns ? "1" : null);
     setOrDelete("ot", detailOpen ? selectedOtNumero : null);
 
     const nextQuery = next.toString();
@@ -164,6 +169,7 @@ export function PlanificacionPipelineTab() {
     router,
     searchParamsString,
     selectedOtNumero,
+    showAnalyticsColumns,
     search,
   ]);
 
@@ -451,7 +457,7 @@ export function PlanificacionPipelineTab() {
             </div>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-slate-200/90">
-              <Table className={compactMode ? "min-w-[68rem]" : "min-w-[72rem]"}>
+              <Table className={showAnalyticsColumns ? (compactMode ? "min-w-[68rem]" : "min-w-[72rem]") : (compactMode ? "min-w-[56rem]" : "min-w-[60rem]")}>
                 <TableHeader>
                   <TableRow className="bg-slate-50/90">
                     <TableHead>OT</TableHead>
@@ -459,13 +465,38 @@ export function PlanificacionPipelineTab() {
                     <TableHead>Trabajo</TableHead>
                     <TableHead>Paso actual</TableHead>
                     <TableHead>Siguiente</TableHead>
-                    <TableHead>Timeline</TableHead>
-                    <TableHead>Plan/Real</TableHead>
-                    <TableHead>Desv.</TableHead>
-                    <TableHead>ETA</TableHead>
-                    <TableHead>SLA</TableHead>
-                    <TableHead>Riesgo</TableHead>
-                    <TableHead>Badges</TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-2">
+                        <span>Timeline</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-6"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowAnalyticsColumns((v) => !v);
+                          }}
+                          title={showAnalyticsColumns ? "Ocultar analítica" : "Mostrar analítica"}
+                        >
+                          {showAnalyticsColumns ? (
+                            <ChevronLeft className="size-3.5" />
+                          ) : (
+                            <ChevronRight className="size-3.5" />
+                          )}
+                        </Button>
+                      </div>
+                    </TableHead>
+                    {showAnalyticsColumns ? (
+                      <>
+                        <TableHead>Plan/Real</TableHead>
+                        <TableHead>Desv.</TableHead>
+                        <TableHead>ETA</TableHead>
+                        <TableHead>SLA</TableHead>
+                        <TableHead>Riesgo</TableHead>
+                        <TableHead>Badges</TableHead>
+                      </>
+                    ) : null}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -548,61 +579,65 @@ export function PlanificacionPipelineTab() {
                           ) : null}
                         </div>
                       </TableCell>
-                      <TableCell className={compactMode ? "py-1 text-[11px]" : "text-xs"}>
-                        {fmtHours(row.analytics.horasPlanificadasTotal)} / {fmtHours(row.analytics.horasRealesTotal)}
-                      </TableCell>
-                      <TableCell className={compactMode ? "py-1 text-[11px]" : "text-xs"}>
-                        {row.analytics.desviacionHoras != null ? (
-                          <span className={row.analytics.desviacionHoras > 0 ? "text-red-700" : "text-emerald-700"}>
-                            {row.analytics.desviacionHoras > 0 ? "+" : ""}
-                            {row.analytics.desviacionHoras.toFixed(1)}h
-                          </span>
-                        ) : (
-                          "—"
-                        )}
-                      </TableCell>
-                      <TableCell className={compactMode ? "py-1 text-[11px]" : "text-xs"}>
-                        {row.analytics.etaPrevista ?? "—"}
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`rounded-md px-2 py-0.5 text-xs font-medium ${
-                            row.analytics.slaStatus === "late"
-                              ? "bg-red-100 text-red-800"
-                              : row.analytics.slaStatus === "at_risk"
-                                ? "bg-amber-100 text-amber-800"
-                                : "bg-emerald-100 text-emerald-800"
-                          }`}
-                        >
-                          {row.analytics.slaStatus}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`rounded-md px-2 py-0.5 text-xs font-medium ${
-                            row.riesgo === "overdue"
-                              ? "bg-red-100 text-red-800"
-                              : row.riesgo === "warning"
-                                ? "bg-amber-100 text-amber-800"
-                                : "bg-emerald-100 text-emerald-800"
-                          }`}
-                        >
-                          {row.riesgo}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {row.badges.map((b) => (
+                      {showAnalyticsColumns ? (
+                        <>
+                          <TableCell className={compactMode ? "py-1 text-[11px]" : "text-xs"}>
+                            {fmtHours(row.analytics.horasPlanificadasTotal)} / {fmtHours(row.analytics.horasRealesTotal)}
+                          </TableCell>
+                          <TableCell className={compactMode ? "py-1 text-[11px]" : "text-xs"}>
+                            {row.analytics.desviacionHoras != null ? (
+                              <span className={row.analytics.desviacionHoras > 0 ? "text-red-700" : "text-emerald-700"}>
+                                {row.analytics.desviacionHoras > 0 ? "+" : ""}
+                                {row.analytics.desviacionHoras.toFixed(1)}h
+                              </span>
+                            ) : (
+                              "—"
+                            )}
+                          </TableCell>
+                          <TableCell className={compactMode ? "py-1 text-[11px]" : "text-xs"}>
+                            {row.analytics.etaPrevista ?? "—"}
+                          </TableCell>
+                          <TableCell>
                             <span
-                              key={b}
-                            className={`inline-flex items-center gap-1 rounded-md bg-slate-100 text-slate-700 ${compactMode ? "px-1 py-0 text-[9px]" : "px-1.5 py-0.5 text-[10px]"}`}
+                              className={`rounded-md px-2 py-0.5 text-xs font-medium ${
+                                row.analytics.slaStatus === "late"
+                                  ? "bg-red-100 text-red-800"
+                                  : row.analytics.slaStatus === "at_risk"
+                                    ? "bg-amber-100 text-amber-800"
+                                    : "bg-emerald-100 text-emerald-800"
+                              }`}
                             >
-                              <AlertTriangle className="size-3" />
-                              {b}
+                              {row.analytics.slaStatus}
                             </span>
-                          ))}
-                        </div>
-                      </TableCell>
+                          </TableCell>
+                          <TableCell>
+                            <span
+                              className={`rounded-md px-2 py-0.5 text-xs font-medium ${
+                                row.riesgo === "overdue"
+                                  ? "bg-red-100 text-red-800"
+                                  : row.riesgo === "warning"
+                                    ? "bg-amber-100 text-amber-800"
+                                    : "bg-emerald-100 text-emerald-800"
+                              }`}
+                            >
+                              {row.riesgo}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {row.badges.map((b) => (
+                                <span
+                                  key={b}
+                                className={`inline-flex items-center gap-1 rounded-md bg-slate-100 text-slate-700 ${compactMode ? "px-1 py-0 text-[9px]" : "px-1.5 py-0.5 text-[10px]"}`}
+                                >
+                                  <AlertTriangle className="size-3" />
+                                  {b}
+                                </span>
+                              ))}
+                            </div>
+                          </TableCell>
+                        </>
+                      ) : null}
                     </TableRow>
                   ))}
                 </TableBody>
