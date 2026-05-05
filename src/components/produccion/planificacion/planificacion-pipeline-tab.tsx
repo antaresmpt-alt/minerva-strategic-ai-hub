@@ -180,6 +180,14 @@ export function PlanificacionPipelineTab() {
     search,
   ]);
 
+  const navigateFromDetailShortcut = useCallback((href: string) => {
+    setDetailOpen(false);
+    // Force full-page navigation so URL sync effects can't override the destination.
+    window.setTimeout(() => {
+      window.location.assign(href);
+    }, 0);
+  }, []);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
@@ -940,8 +948,7 @@ export function PlanificacionPipelineTab() {
                           variant="outline"
                           size="sm"
                           onClick={() => {
-                            setDetailOpen(false);
-                            router.push("/produccion/ots?tab=despachadas");
+                            navigateFromDetailShortcut("/produccion/ots?tab=despachadas");
                           }}
                           className="w-full justify-start"
                         >
@@ -953,8 +960,7 @@ export function PlanificacionPipelineTab() {
                           variant="outline"
                           size="sm"
                           onClick={() => {
-                            setDetailOpen(false);
-                            router.push("/produccion/ots?tab=planificacion");
+                            navigateFromDetailShortcut("/produccion/ots?tab=planificacion");
                           }}
                           className="w-full justify-start"
                         >
