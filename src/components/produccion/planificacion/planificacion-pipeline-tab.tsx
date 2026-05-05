@@ -58,6 +58,7 @@ export function PlanificacionPipelineTab() {
   const searchParams = useSearchParams();
   const searchParamsString = searchParams.toString();
   const didInitFromUrl = useRef(false);
+  const shortcutNavigationRef = useRef(false);
   const [rows, setRows] = useState<Awaited<ReturnType<typeof fetchPipelineRows>>>([]);
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState("");
@@ -136,6 +137,7 @@ export function PlanificacionPipelineTab() {
 
   useEffect(() => {
     if (!didInitFromUrl.current) return;
+    if (shortcutNavigationRef.current) return;
 
     const next = new URLSearchParams(searchParams.toString());
     const setOrDelete = (k: string, v: string | null | undefined) => {
@@ -179,6 +181,17 @@ export function PlanificacionPipelineTab() {
     showAnalyticsColumns,
     search,
   ]);
+
+  const navigateFromDetailShortcut = useCallback((href: string) => {
+    shortcutNavigationRef.current = true;
+    setDetailOpen(false);
+    void router.push(href);
+
+    // If navigation is interrupted, re-enable URL sync for this screen.
+    window.setTimeout(() => {
+      shortcutNavigationRef.current = false;
+    }, 1200);
+  }, [router]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -940,8 +953,7 @@ export function PlanificacionPipelineTab() {
                           variant="outline"
                           size="sm"
                           onClick={() => {
-                            setDetailOpen(false);
-                            router.push("/produccion/ots?tab=despachadas");
+                            navigateFromDetailShortcut("/produccion/ots?tab=despachadas");
                           }}
                           className="w-full justify-start"
                         >
@@ -953,8 +965,7 @@ export function PlanificacionPipelineTab() {
                           variant="outline"
                           size="sm"
                           onClick={() => {
-                            setDetailOpen(false);
-                            router.push("/produccion/ots?tab=planificacion");
+                            navigateFromDetailShortcut("/produccion/ots?tab=planificacion");
                           }}
                           className="w-full justify-start"
                         >
