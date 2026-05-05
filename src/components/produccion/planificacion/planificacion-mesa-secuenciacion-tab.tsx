@@ -686,14 +686,20 @@ export function PlanificacionMesaSecuenciacionTab() {
     if (otsList.length > 0) {
       const { data: despData, error: despErr } = await supabase
         .from(TABLE_DESPACHADAS)
-        .select("ot_numero, horas_entrada, horas_tiraje, num_hojas_brutas")
+        .select(
+          "ot_numero, horas_entrada, horas_tiraje, horas_estimadas_troquelado, horas_estimadas_engomado, num_hojas_brutas"
+        )
         .in("ot_numero", otsList);
       if (despErr) throw despErr;
       for (const d of (despData ?? []) as Array<Record<string, unknown>>) {
         const ot = String(d.ot_numero ?? "").trim();
         if (!ot) continue;
         const prev = fallbackByOt.get(ot) ?? { horas: 0, numHojas: 0 };
-        prev.horas += parseNum(d.horas_entrada) + parseNum(d.horas_tiraje);
+        prev.horas +=
+          parseNum(d.horas_entrada) +
+          parseNum(d.horas_tiraje) +
+          parseNum(d.horas_estimadas_troquelado) +
+          parseNum(d.horas_estimadas_engomado);
         prev.numHojas = Math.max(prev.numHojas, Math.trunc(parseNum(d.num_hojas_brutas)));
         fallbackByOt.set(ot, prev);
       }
@@ -890,7 +896,7 @@ export function PlanificacionMesaSecuenciacionTab() {
     const { data: despData, error: despErr } = await supabase
       .from(TABLE_DESPACHADAS)
       .select(
-        "ot_numero, tintas, material, num_hojas_brutas, horas_entrada, horas_tiraje, acabado_pral",
+        "ot_numero, tintas, material, num_hojas_brutas, horas_entrada, horas_tiraje, horas_estimadas_troquelado, horas_estimadas_engomado, acabado_pral",
       )
       .in("ot_numero", otsList);
     if (despErr) throw despErr;
@@ -908,7 +914,11 @@ export function PlanificacionMesaSecuenciacionTab() {
     for (const d of (despData ?? []) as Array<Record<string, unknown>>) {
       const ot = String(d.ot_numero ?? "").trim();
       if (!ot) continue;
-      const horas = parseNum(d.horas_entrada) + parseNum(d.horas_tiraje);
+      const horas =
+        parseNum(d.horas_entrada) +
+        parseNum(d.horas_tiraje) +
+        parseNum(d.horas_estimadas_troquelado) +
+        parseNum(d.horas_estimadas_engomado);
       const hojas = Math.max(0, Math.trunc(parseNum(d.num_hojas_brutas)));
       const tintas = String(d.tintas ?? "").trim();
       const material = String(d.material ?? "").trim();

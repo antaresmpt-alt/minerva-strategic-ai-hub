@@ -40,6 +40,8 @@ type DespachadaRow = {
   num_hojas_brutas: number | null;
   horas_entrada: number | null;
   horas_tiraje: number | null;
+  horas_estimadas_troquelado: number | null;
+  horas_estimadas_engomado: number | null;
   troquel: string | null;
   despachado_at: string | null;
 };
@@ -131,7 +133,7 @@ export function PlanificacionPoolOtsTab() {
       const { data: despData, error: despErr } = await supabase
         .from(TABLE_DESPACHADAS)
         .select(
-          "ot_numero, tintas, material, num_hojas_brutas, horas_entrada, horas_tiraje, troquel, despachado_at"
+          "ot_numero, tintas, material, num_hojas_brutas, horas_entrada, horas_tiraje, horas_estimadas_troquelado, horas_estimadas_engomado, troquel, despachado_at"
         )
         .order("despachado_at", { ascending: false })
         .limit(1500);
@@ -143,7 +145,11 @@ export function PlanificacionPoolOtsTab() {
         const ot = String(d.ot_numero ?? "").trim();
         if (!ot) continue;
         const prev = byOt.get(ot);
-        const horasTotal = parseNum(d.horas_entrada) + parseNum(d.horas_tiraje);
+        const horasTotal =
+          parseNum(d.horas_entrada) +
+          parseNum(d.horas_tiraje) +
+          parseNum(d.horas_estimadas_troquelado) +
+          parseNum(d.horas_estimadas_engomado);
         const hojasObj = Math.max(0, Math.trunc(parseNum(d.num_hojas_brutas)));
         const troquelRaw = String(d.troquel ?? "").trim();
         const tintasRaw = String(d.tintas ?? "").trim();

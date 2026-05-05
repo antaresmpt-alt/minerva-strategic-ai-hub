@@ -140,6 +140,8 @@ export interface MesaEjecucion {
   minutosPausadaAcum: number;
   horasPlanificadasSnapshot: number | null;
   horasReales: number | null;
+  horasRealesTroquelado: number | null;
+  horasRealesEngomado: number | null;
   incidencia: string | null;
   accionCorrectiva: string | null;
   maquinista: string | null;

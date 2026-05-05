@@ -112,6 +112,8 @@ type DespRow = {
   num_hojas_brutas: number | null;
   horas_entrada: number | null;
   horas_tiraje: number | null;
+  horas_estimadas_troquelado: number | null;
+  horas_estimadas_engomado: number | null;
   troquel: string | null;
   poses: number | null;
   acabado_pral: string | null;
@@ -165,6 +167,8 @@ type PoolRow = {
   poses: number | null;
   horasEntrada: number;
   horasTiraje: number;
+  horasTroquelado: number;
+  horasEngomado: number;
   horasTotal: number;
   proximoPasoNombre: string | null;
   proximoPasoSlug: string | null;
@@ -528,7 +532,7 @@ export function PlanificacionPoolOtsTab() {
       const { data: despData, error: despErr } = await supabase
         .from(TABLE_DESPACHADAS)
         .select(
-          "ot_numero, tintas, material, num_hojas_brutas, horas_entrada, horas_tiraje, troquel, poses, acabado_pral, despachado_at"
+          "ot_numero, tintas, material, num_hojas_brutas, horas_entrada, horas_tiraje, horas_estimadas_troquelado, horas_estimadas_engomado, troquel, poses, acabado_pral, despachado_at"
         )
         .order("despachado_at", { ascending: false })
         .limit(1500);
@@ -539,7 +543,11 @@ export function PlanificacionPoolOtsTab() {
         const ot = String(d.ot_numero ?? "").trim();
         if (!ot) continue;
         const prev = byOt.get(ot);
-        const horas = parseNum(d.horas_entrada) + parseNum(d.horas_tiraje);
+        const horas =
+          parseNum(d.horas_entrada) +
+          parseNum(d.horas_tiraje) +
+          parseNum(d.horas_estimadas_troquelado) +
+          parseNum(d.horas_estimadas_engomado);
         const hojasObj = Math.max(0, Math.trunc(parseNum(d.num_hojas_brutas)));
         const troquel = String(d.troquel ?? "").trim();
         if (!prev) {
@@ -567,6 +575,8 @@ export function PlanificacionPoolOtsTab() {
             poses: parseNum(d.poses) > 0 ? Math.trunc(parseNum(d.poses)) : null,
             horasEntrada: parseNum(d.horas_entrada),
             horasTiraje: parseNum(d.horas_tiraje),
+            horasTroquelado: parseNum(d.horas_estimadas_troquelado),
+            horasEngomado: parseNum(d.horas_estimadas_engomado),
             horasTotal: horas,
             proximoPasoNombre: null,
             proximoPasoSlug: null,
@@ -579,6 +589,8 @@ export function PlanificacionPoolOtsTab() {
         }
         prev.horasEntrada += parseNum(d.horas_entrada);
         prev.horasTiraje += parseNum(d.horas_tiraje);
+        prev.horasTroquelado += parseNum(d.horas_estimadas_troquelado);
+        prev.horasEngomado += parseNum(d.horas_estimadas_engomado);
         prev.horasTotal += horas;
         prev.hojasObjetivo = Math.max(prev.hojasObjetivo, hojasObj);
         if (prev.material === "—") prev.material = String(d.material ?? "").trim() || "—";

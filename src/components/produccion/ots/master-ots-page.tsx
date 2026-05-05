@@ -120,6 +120,8 @@ type DespachoFormState = {
   num_hojas_netas: string;
   horas_entrada: string;
   horas_tiraje: string;
+  horas_estimadas_troquelado: string;
+  horas_estimadas_engomado: string;
   troquel: string;
   poses: string;
   acabado_pral: string;
@@ -136,6 +138,8 @@ function emptyDespachoForm(): DespachoFormState {
     num_hojas_netas: "",
     horas_entrada: "",
     horas_tiraje: "",
+    horas_estimadas_troquelado: "",
+    horas_estimadas_engomado: "",
     troquel: "",
     poses: "",
     acabado_pral: "",
@@ -719,6 +723,12 @@ export function MasterOtsPage() {
         num_hojas_netas: integerOrZeroForDespacho(despachoForm.num_hojas_netas),
         horas_entrada: numberOrZeroForDespacho(despachoForm.horas_entrada),
         horas_tiraje: numberOrZeroForDespacho(despachoForm.horas_tiraje),
+        horas_estimadas_troquelado: parseOptionalDecimalInput(
+          despachoForm.horas_estimadas_troquelado
+        ),
+        horas_estimadas_engomado: parseOptionalDecimalInput(
+          despachoForm.horas_estimadas_engomado
+        ),
         troquel: despachoForm.troquel.trim() || null,
         poses: integerOrZeroForDespacho(despachoForm.poses),
         acabado_pral: despachoForm.acabado_pral.trim() || null,
@@ -1106,6 +1116,42 @@ ${otsContextJson}
                   setDespachoForm((f) => ({
                     ...f,
                     horas_tiraje: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="despacho-horas-troquelado" className="text-xs">
+                Horas troquelado estimadas
+              </Label>
+              <Input
+                id="despacho-horas-troquelado"
+                className="h-8 text-xs"
+                type="number"
+                step="0.1"
+                value={despachoForm.horas_estimadas_troquelado}
+                onChange={(e) =>
+                  setDespachoForm((f) => ({
+                    ...f,
+                    horas_estimadas_troquelado: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="despacho-horas-engomado" className="text-xs">
+                Horas engomado estimadas
+              </Label>
+              <Input
+                id="despacho-horas-engomado"
+                className="h-8 text-xs"
+                type="number"
+                step="0.1"
+                value={despachoForm.horas_estimadas_engomado}
+                onChange={(e) =>
+                  setDespachoForm((f) => ({
+                    ...f,
+                    horas_estimadas_engomado: e.target.value,
                   }))
                 }
               />

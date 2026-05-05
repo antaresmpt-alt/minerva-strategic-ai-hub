@@ -68,6 +68,8 @@ type EjecucionRow = {
   minutos_pausada_acum: number | string | null;
   horas_planificadas_snapshot: number | string | null;
   horas_reales: number | string | null;
+  horas_reales_troquelado: number | string | null;
+  horas_reales_engomado: number | string | null;
   incidencia: string | null;
   accion_correctiva: string | null;
   maquinista: string | null;
@@ -150,6 +152,8 @@ function mapRow(
     minutosPausadaAcum: Number(parseNum(r.minutos_pausada_acum) ?? 0),
     horasPlanificadasSnapshot: parseNum(r.horas_planificadas_snapshot),
     horasReales: parseNum(r.horas_reales),
+    horasRealesTroquelado: parseNum(r.horas_reales_troquelado),
+    horasRealesEngomado: parseNum(r.horas_reales_engomado),
     incidencia: r.incidencia,
     accionCorrectiva: r.accion_correctiva,
     maquinista: r.maquinista,
@@ -690,6 +694,12 @@ function ExecutionCard({
   onResume: (pauses: MesaEjecucionPausa[]) => void;
 }) {
   const [horas, setHoras] = useState(row.horasReales != null ? String(row.horasReales) : "");
+  const [horasTroquelado, setHorasTroquelado] = useState(
+    row.horasRealesTroquelado != null ? String(row.horasRealesTroquelado) : "",
+  );
+  const [horasEngomado, setHorasEngomado] = useState(
+    row.horasRealesEngomado != null ? String(row.horasRealesEngomado) : "",
+  );
   const [incidencia, setIncidencia] = useState(row.incidencia ?? "");
   const [accion, setAccion] = useState(row.accionCorrectiva ?? "");
   const [maquinista, setMaquinista] = useState(row.maquinista ?? "");
@@ -739,6 +749,24 @@ function ExecutionCard({
         <div>
           <Label className="text-xs">Maquinista</Label>
           <Input value={maquinista} onChange={(e) => setMaquinista(e.target.value)} disabled={!canEdit || saving} />
+        </div>
+      </div>
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        <div>
+          <Label className="text-xs">Horas reales troquelado</Label>
+          <Input
+            value={horasTroquelado}
+            onChange={(e) => setHorasTroquelado(e.target.value)}
+            disabled={!canEdit || saving}
+          />
+        </div>
+        <div>
+          <Label className="text-xs">Horas reales engomado</Label>
+          <Input
+            value={horasEngomado}
+            onChange={(e) => setHorasEngomado(e.target.value)}
+            disabled={!canEdit || saving}
+          />
         </div>
       </div>
 
@@ -893,6 +921,10 @@ function ExecutionCard({
               onClick={() =>
                 onPatch({
                   horas_reales: Number(horas.replace(",", ".")) || null,
+                  horas_reales_troquelado:
+                    Number(horasTroquelado.replace(",", ".")) || null,
+                  horas_reales_engomado:
+                    Number(horasEngomado.replace(",", ".")) || null,
                   maquinista: maquinista.trim() || null,
                   incidencia: incidencia.trim() || null,
                   accion_correctiva: accion.trim() || null,
@@ -954,6 +986,10 @@ function ExecutionCard({
                   estado_ejecucion: "finalizada",
                   fin_real_at: new Date().toISOString(),
                   horas_reales: Number(horas.replace(",", ".")) || null,
+                  horas_reales_troquelado:
+                    Number(horasTroquelado.replace(",", ".")) || null,
+                  horas_reales_engomado:
+                    Number(horasEngomado.replace(",", ".")) || null,
                   maquinista: maquinista.trim() || null,
                   incidencia: incidencia.trim() || null,
                   accion_correctiva: accion.trim() || null,
