@@ -28,6 +28,11 @@ import {
   exportEjecucionesExcel,
   exportEjecucionesPdf,
 } from "@/lib/planificacion-ejecucion-export";
+import {
+  etiquetaAmbitoPlanificacion,
+  getPlanificacionTipoMaquinaFilter,
+  PLANIFICACION_TIPOS_MAQUINA,
+} from "@/lib/planificacion-ambito";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
 import type {
@@ -43,11 +48,11 @@ const TABLE_EJECUCIONES_PAUSAS = "prod_mesa_ejecuciones_pausas";
 const TABLE_MOTIVOS_PAUSA = "sys_motivos_pausa";
 const TABLE_MAQUINAS = "prod_maquinas";
 const TABLE_MESA = "prod_mesa_planificacion_trabajos";
-const TABLE_POOL = "prod_planificacion_pool";
 
 type EjecucionRow = {
   id: string;
   mesa_trabajo_id: string | null;
+  ot_paso_id: string | null;
   ot_numero: string;
   maquina_id: string;
   prod_maquinas?: { nombre: string | null } | null;
@@ -63,6 +68,8 @@ type EjecucionRow = {
   minutos_pausada_acum: number | string | null;
   horas_planificadas_snapshot: number | string | null;
   horas_reales: number | string | null;
+  horas_reales_troquelado: number | string | null;
+  horas_reales_engomado: number | string | null;
   incidencia: string | null;
   accion_correctiva: string | null;
   maquinista: string | null;
@@ -125,6 +132,7 @@ function mapRow(
   return {
     id: r.id,
     mesaTrabajoId: r.mesa_trabajo_id,
+    otPasoId: r.ot_paso_id,
     ot: r.ot_numero,
     maquinaId: r.maquina_id,
     maquinaNombre: r.prod_maquinas?.nombre ?? "—",
@@ -144,6 +152,8 @@ function mapRow(
     minutosPausadaAcum: Number(parseNum(r.minutos_pausada_acum) ?? 0),
     horasPlanificadasSnapshot: parseNum(r.horas_planificadas_snapshot),
     horasReales: parseNum(r.horas_reales),
+    horasRealesTroquelado: parseNum(r.horas_reales_troquelado),
+    horasRealesEngomado: parseNum(r.horas_reales_engomado),
     incidencia: r.incidencia,
     accionCorrectiva: r.accion_correctiva,
     maquinista: r.maquinista,
@@ -176,21 +186,55 @@ export function PlanificacionOtsEjecucionTab({
   const [estado, setEstado] = useState<"activas" | EstadoEjecucionMesa | "all">("activas");
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [planificacionRole, setPlanificacionRole] = useState<string | null>(null);
+
+  const etiquetaAmbitoEjecucion = useMemo(
+    () => etiquetaAmbitoPlanificacion(getPlanificacionTipoMaquinaFilter(planificacionRole)),
+    [planificacionRole],
+  );
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      let roleRead: string | null = null;
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+      const uid =
+        typeof authUser?.id === "string" && authUser.id.trim().length > 0
+          ? authUser.id.trim()
+          : null;
+      if (uid) {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", uid)
+          .maybeSingle();
+        roleRead =
+          prof && typeof (prof as { role?: unknown }).role === "string"
+            ? String((prof as { role: string }).role).trim() || null
+            : null;
+      }
+      setPlanificacionRole(roleRead);
+      const tipoFiltro = getPlanificacionTipoMaquinaFilter(roleRead);
+
+      let maqQuery = supabase
+        .from(TABLE_MAQUINAS)
+        .select("id, nombre, tipo_maquina, activa")
+        .eq("activa", true)
+        .order("nombre");
+      if (tipoFiltro) {
+        maqQuery = maqQuery.eq("tipo_maquina", tipoFiltro);
+      } else {
+        maqQuery = maqQuery.in("tipo_maquina", PLANIFICACION_TIPOS_MAQUINA);
+      }
+
       const [execRes, maqRes, motivosRes] = await Promise.all([
         supabase
           .from(TABLE_EJECUCIONES)
           .select("*, prod_maquinas(nombre)")
           .order("updated_at", { ascending: false }),
-        supabase
-          .from(TABLE_MAQUINAS)
-          .select("id, nombre, tipo_maquina, activa")
-          .eq("tipo_maquina", "impresion")
-          .eq("activa", true)
-          .order("nombre"),
+        maqQuery,
         supabase
           .from(TABLE_MOTIVOS_PAUSA)
           .select("id, slug, label, categoria, color_hex, activo, orden")
@@ -202,7 +246,19 @@ export function PlanificacionOtsEjecucionTab({
       if (maqRes.error) throw maqRes.error;
       if (motivosRes.error) throw motivosRes.error;
       const motivos = ((motivosRes.data ?? []) as MotivoPausaRow[]).map(mapMotivoRow);
-      const execRows = ((execRes.data ?? []) as unknown as EjecucionRow[]);
+      const maqRowsRaw = (maqRes.data ?? []) as Array<{
+        id: string;
+        nombre: string;
+        tipo_maquina: string | null;
+      }>;
+      const tiposPlan = new Set<string>(PLANIFICACION_TIPOS_MAQUINA);
+      const maqRows = maqRowsRaw.filter((m) =>
+        tiposPlan.has(String(m.tipo_maquina ?? "").trim()),
+      );
+      const allowedMaquinaIds = new Set(maqRows.map((m) => m.id));
+      const execRows = ((execRes.data ?? []) as unknown as EjecucionRow[]).filter(
+        (r) => allowedMaquinaIds.has(String(r.maquina_id ?? "").trim()),
+      );
       const executionIds = execRows.map((r) => r.id);
       const pauseMap = new Map<string, MesaEjecucionPausa[]>();
       if (executionIds.length > 0) {
@@ -241,7 +297,7 @@ export function PlanificacionOtsEjecucionTab({
       setRows(execRows.map((r) => mapRow(r, pauseMap)));
       setMotivosPausa(motivos);
       setMaquinas(
-        ((maqRes.data ?? []) as Array<{ id: string; nombre: string }>).map((m) => ({
+        maqRows.map((m) => ({
           id: m.id,
           nombre: m.nombre,
         })),
@@ -317,11 +373,24 @@ export function PlanificacionOtsEjecucionTab({
             nextPatch.minutos_pausada_acum = Math.max(0, row.minutosPausadaAcum) + deltaMin;
           }
         }
+        const {
+          data: { user: authUser },
+        } = await supabase.auth.getUser();
+        const updatedBy =
+          typeof authUser?.id === "string" && authUser.id.trim().length > 0
+            ? authUser.id.trim()
+            : null;
+        const updatedByEmail =
+          typeof authUser?.email === "string" && authUser.email.trim().length > 0
+            ? authUser.email.trim()
+            : null;
         const { error } = await supabase
           .from(TABLE_EJECUCIONES)
           .update({
             ...nextPatch,
             updated_at: new Date().toISOString(),
+            updated_by: updatedBy,
+            updated_by_email: updatedByEmail,
           })
           .eq("id", row.id);
         if (error) throw error;
@@ -332,32 +401,8 @@ export function PlanificacionOtsEjecucionTab({
             .eq("id", row.mesaTrabajoId);
           if (mesaError) throw mesaError;
         }
-        if (nextPatch.estado_ejecucion === "finalizada") {
-          const {
-            data: { user },
-          } = await supabase.auth.getUser();
-          const actorId =
-            typeof user?.id === "string" && user.id.trim().length > 0
-              ? user.id.trim()
-              : null;
-          const actorEmail =
-            typeof user?.email === "string" && user.email.trim().length > 0
-              ? user.email.trim()
-              : null;
-          const nowIso = new Date().toISOString();
-          const { error: poolError } = await supabase
-            .from(TABLE_POOL)
-            .update({
-              estado_pool: "cerrada",
-              closed_at: nowIso,
-              closed_by: actorId,
-              closed_by_email: actorEmail,
-              notas: "Cerrada automáticamente al finalizar ejecución",
-            })
-            .eq("ot_numero", row.ot)
-            .in("estado_pool", ["pendiente", "enviada_mesa"]);
-          if (poolError) throw poolError;
-        }
+        /* prod_planificacion_pool: sincronizado por trigger prod_trg_mesa_ejecucion_itinerario_finaliza
+           (en_transito si quedan pasos; cerrada solo con itinerario completo; sin ot_paso_id -> cerrada). */
         toast.success("Ejecución actualizada.");
         await loadData();
       } catch (e) {
@@ -549,7 +594,10 @@ export function PlanificacionOtsEjecucionTab({
             </Button>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700">
+            Ámbito: {etiquetaAmbitoEjecucion}
+          </span>
           <select
             className="h-8 rounded-md border border-slate-300 bg-white px-2"
             value={selectedMaquina}
@@ -646,6 +694,12 @@ function ExecutionCard({
   onResume: (pauses: MesaEjecucionPausa[]) => void;
 }) {
   const [horas, setHoras] = useState(row.horasReales != null ? String(row.horasReales) : "");
+  const [horasTroquelado, setHorasTroquelado] = useState(
+    row.horasRealesTroquelado != null ? String(row.horasRealesTroquelado) : "",
+  );
+  const [horasEngomado, setHorasEngomado] = useState(
+    row.horasRealesEngomado != null ? String(row.horasRealesEngomado) : "",
+  );
   const [incidencia, setIncidencia] = useState(row.incidencia ?? "");
   const [accion, setAccion] = useState(row.accionCorrectiva ?? "");
   const [maquinista, setMaquinista] = useState(row.maquinista ?? "");
@@ -695,6 +749,24 @@ function ExecutionCard({
         <div>
           <Label className="text-xs">Maquinista</Label>
           <Input value={maquinista} onChange={(e) => setMaquinista(e.target.value)} disabled={!canEdit || saving} />
+        </div>
+      </div>
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        <div>
+          <Label className="text-xs">Horas reales troquelado</Label>
+          <Input
+            value={horasTroquelado}
+            onChange={(e) => setHorasTroquelado(e.target.value)}
+            disabled={!canEdit || saving}
+          />
+        </div>
+        <div>
+          <Label className="text-xs">Horas reales engomado</Label>
+          <Input
+            value={horasEngomado}
+            onChange={(e) => setHorasEngomado(e.target.value)}
+            disabled={!canEdit || saving}
+          />
         </div>
       </div>
 
@@ -849,6 +921,10 @@ function ExecutionCard({
               onClick={() =>
                 onPatch({
                   horas_reales: Number(horas.replace(",", ".")) || null,
+                  horas_reales_troquelado:
+                    Number(horasTroquelado.replace(",", ".")) || null,
+                  horas_reales_engomado:
+                    Number(horasEngomado.replace(",", ".")) || null,
                   maquinista: maquinista.trim() || null,
                   incidencia: incidencia.trim() || null,
                   accion_correctiva: accion.trim() || null,
@@ -910,6 +986,10 @@ function ExecutionCard({
                   estado_ejecucion: "finalizada",
                   fin_real_at: new Date().toISOString(),
                   horas_reales: Number(horas.replace(",", ".")) || null,
+                  horas_reales_troquelado:
+                    Number(horasTroquelado.replace(",", ".")) || null,
+                  horas_reales_engomado:
+                    Number(horasEngomado.replace(",", ".")) || null,
                   maquinista: maquinista.trim() || null,
                   incidencia: incidencia.trim() || null,
                   accion_correctiva: accion.trim() || null,

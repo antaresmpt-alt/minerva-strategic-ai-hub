@@ -22,6 +22,7 @@ import {
   Pencil,
   Printer,
   RefreshCw,
+  Route,
   Settings2,
   Sparkles,
   Trash2,
@@ -45,6 +46,7 @@ import * as XLSX from "xlsx";
 
 import { GlobalModelSelector } from "@/components/layout/header";
 import { OtNumeroSemaforoBadge } from "@/components/produccion/ots/ot-numero-semaforo-badge";
+import { ExternosItinerarioPoolTab } from "@/components/produccion/externos/externos-itinerario-pool-tab";
 import {
   ExternosDailyGrid,
   type ExternosDailyGridRow,
@@ -268,6 +270,8 @@ type SeguimientoRow = {
   observaciones?: string | null;
   /** Orden manual en vista cuadrícula diaria (misma fecha prevista). */
   orden_diario?: number | null;
+  /** Paso de itinerario vinculado (avance al marcar Recibido). */
+  ot_paso_id?: string | null;
 };
 
 type OtGeneralLookupRow = {
@@ -290,6 +294,23 @@ function normalizeSeguimientoRowEstado(row: SeguimientoRow): SeguimientoRow {
     return { ...row, estado: "Muelle Minerva" };
   }
   return row;
+}
+
+/** Primera aparición gana; evita listas con el mismo `id` y keys React duplicadas. */
+function dedupeRowsById<T extends { id: string }>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const r of rows) {
+    const id = String(r.id ?? "").trim();
+    if (!id) {
+      out.push(r);
+      continue;
+    }
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(r);
+  }
+  return out;
 }
 
 function isEstadoTerminalExternos(estado: string): boolean {
@@ -841,7 +862,7 @@ export function GestionExternosPage() {
       ...DEFAULT_EMAIL_PLANTILLA_EXTERNOS,
     }));
 
-  const [tab, setTab] = useState("seguimiento");
+  const [tab, setTab] = useState("itinerario-externo");
 
   const [tipos, setTipos] = useState<TipoProveedorRow[]>([]);
   const [proveedores, setProveedores] = useState<ProveedorRow[]>([]);
@@ -853,6 +874,7 @@ export function GestionExternosPage() {
   >([]);
 
   const [loading, setLoading] = useState(true);
+  const [segLoading, setSegLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -1070,7 +1092,7 @@ export function GestionExternosPage() {
   }, [acabadosCatalogo]);
 
   const seguimientosOrdenados = useMemo(
-    () => [...seguimientos].sort(compareSeguimientoRows),
+    () => [...dedupeRowsById(seguimientos)].sort(compareSeguimientoRows),
     [seguimientos]
   );
 
@@ -1365,17 +1387,16 @@ export function GestionExternosPage() {
     }
   }, [analistaPregunta, buildAnalistaRowsPayload, globalModel]);
 
-  const loadCore = useCallback(async () => {
+  const loadCatalog = useCallback(async () => {
     setLoading(true);
     try {
-      const [tiposRes, provRes, acabRes, segRes] = await Promise.all([
+      const [tiposRes, provRes, acabRes] = await Promise.all([
         supabase.from("prod_cat_tipos_proveedor").select("*").order("nombre"),
         supabase.from("prod_proveedores").select("*").order("nombre"),
         supabase
           .from("prod_cat_acabados")
           .select("id, tipo_proveedor_id, nombre, created_at")
           .order("nombre"),
-        supabase.from("prod_seguimiento_externos").select("*"),
       ]);
 
       if (tiposRes.error) {
@@ -1389,10 +1410,6 @@ export function GestionExternosPage() {
       if (acabRes.error) {
         console.error("[prod_cat_acabados]", acabRes.error);
         throw acabRes.error;
-      }
-      if (segRes.error) {
-        console.error("[prod_seguimiento_externos]", segRes.error);
-        throw segRes.error;
       }
 
       const tiposData = tiposRes.data;
@@ -1408,19 +1425,35 @@ export function GestionExternosPage() {
       const proveedoresList = Array.isArray(provRes.data)
         ? provRes.data.map(mapProveedorFromApi)
         : [];
-      const proveedorNombreByIdForCompra = new Map<string, string>();
-      for (const p of proveedoresList) {
-        proveedorNombreByIdForCompra.set(p.id, p.nombre);
-      }
       setProveedores(proveedoresList);
       setAcabadosCatalogo(
         Array.isArray(acabRes.data)
           ? (acabRes.data as AcabadoRow[])
           : []
       );
+    } catch (e) {
+      console.error(e);
+      toast.error(formatPostgrestError(e) || "No se pudieron cargar el catálogo.");
+    } finally {
+      setLoading(false);
+    }
+  }, [supabase]);
+
+  const loadSeguimientosCompra = useCallback(async () => {
+    setSegLoading(true);
+    try {
+      const segRes = await supabase.from("prod_seguimiento_externos").select("*");
+      if (segRes.error) {
+        console.error("[prod_seguimiento_externos]", segRes.error);
+        throw segRes.error;
+      }
       const segRowsRaw = Array.isArray(segRes.data)
         ? (segRes.data as SeguimientoRow[]).map(normalizeSeguimientoRowEstado)
         : [];
+      const proveedorNombreByIdForCompra = new Map<string, string>();
+      for (const p of proveedores) {
+        proveedorNombreByIdForCompra.set(p.id, p.nombre);
+      }
       const otDisplaysCompra = [
         ...new Set(segRowsRaw.map((r) => getOtDisplay(r))),
       ];
@@ -1429,15 +1462,22 @@ export function GestionExternosPage() {
         otDisplaysCompra,
         proveedorNombreByIdForCompra
       );
-      setSeguimientos(segRowsRaw);
+      setSeguimientos(dedupeRowsById(segRowsRaw));
       setCompraMaterialByOt(compraMap);
     } catch (e) {
       console.error(e);
-      toast.error(formatPostgrestError(e) || "No se pudieron cargar los datos.");
+      toast.error(
+        formatPostgrestError(e) || "No se pudieron cargar los seguimientos.",
+      );
     } finally {
-      setLoading(false);
+      setSegLoading(false);
     }
-  }, [supabase]);
+  }, [supabase, proveedores]);
+
+  const loadCore = useCallback(async () => {
+    await loadCatalog();
+    await loadSeguimientosCompra();
+  }, [loadCatalog, loadSeguimientosCompra]);
 
   const syncMissingFEntregaOtFromMaster = useCallback(async (): Promise<number> => {
     const candidates = seguimientos.filter(
@@ -1574,8 +1614,14 @@ export function GestionExternosPage() {
   }, [supabase, loadCore]);
 
   useEffect(() => {
-    void loadCore();
-  }, [loadCore]);
+    void loadCatalog();
+  }, [loadCatalog]);
+
+  useEffect(() => {
+    if (tab === "seguimiento") {
+      void loadSeguimientosCompra();
+    }
+  }, [tab, loadSeguimientosCompra]);
 
   useEffect(() => {
     const ot = normalizeOtRawToString(envIdPedido);
@@ -1640,7 +1686,9 @@ export function GestionExternosPage() {
         setSegComunicacionLogs([]);
         return;
       }
-      setSegComunicacionLogs((data ?? []) as ComunicacionLogRow[]);
+      setSegComunicacionLogs(
+        dedupeRowsById((data ?? []) as ComunicacionLogRow[]),
+      );
     })();
     return () => {
       cancelled = true;
@@ -2289,6 +2337,10 @@ export function GestionExternosPage() {
       palets: row.palets ?? null,
       observaciones: row.observaciones?.trim() || null,
       orden_diario: row.orden_diario ?? null,
+      ot_paso_id:
+        row.ot_paso_id != null && String(row.ot_paso_id).trim()
+          ? String(row.ot_paso_id).trim()
+          : null,
       updated_at: now,
     });
     setSaving(false);
@@ -2569,6 +2621,8 @@ export function GestionExternosPage() {
   const tabTriggerClass =
     "flex h-full min-h-8 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs data-active:bg-[#C69C2B]/20 data-active:font-semibold data-active:text-[#002147] data-active:shadow-sm data-active:ring-2 data-active:ring-[#C69C2B]/45 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm";
 
+  const seguimientoUiBusy = loading || segLoading;
+
   return (
     <TooltipProvider>
     <div className="w-full min-w-0 max-w-[100vw] space-y-3 overflow-x-hidden">
@@ -2593,6 +2647,10 @@ export function GestionExternosPage() {
       >
         <div className="externos-plan-print-hide mb-2 flex w-full justify-start sm:mb-3">
           <TabsList className="box-border inline-flex h-auto min-h-9 w-fit max-w-full flex-wrap items-stretch gap-0 rounded-lg border border-slate-200/90 bg-slate-50/90 p-1 shadow-sm">
+            <TabsTrigger value="itinerario-externo" className={tabTriggerClass}>
+              <Route className="size-4 shrink-0 opacity-90" aria-hidden />
+              OTs con paso externo
+            </TabsTrigger>
             <TabsTrigger value="seguimiento" className={tabTriggerClass}>
               <PackageSearch className="size-4 shrink-0 opacity-90" aria-hidden />
               Seguimiento
@@ -2615,6 +2673,17 @@ export function GestionExternosPage() {
             </TabsTrigger>
           </TabsList>
         </div>
+
+        <TabsContent value="itinerario-externo" className="mt-0 space-y-3 outline-none">
+          <ExternosItinerarioPoolTab
+            supabase={supabase}
+            proveedores={proveedores}
+            tipos={tipos}
+            acabadosCatalogo={acabadosCatalogo}
+            onCreated={() => void loadSeguimientosCompra()}
+            onIrASeguimiento={() => setTab("seguimiento")}
+          />
+        </TabsContent>
 
         <TabsContent value="seguimiento" className="mt-0 space-y-3 outline-none">
           {!proveedores.length && !loading ? (
@@ -2649,14 +2718,16 @@ export function GestionExternosPage() {
                   </CardTitle>
                   <CardDescription
                     className="line-clamp-1 text-xs leading-snug"
-                    title="Por defecto no se listan trabajos «Recibido». Usa «Ver Histórico» para incluirlos. Cambia el estado desde la tabla al instante; el lápiz abre el panel para proveedor, acabado, fecha prevista y notas. Al pasar a «Enviado» se registra la fecha de envío. Tras abrir Gmail desde «Preparar Envío», confirma el envío para pasar las OT a «Muelle Minerva»."
+                    title="Por defecto no se listan trabajos Recibido. Ver Histórico para incluirlos. Con itinerario vinculado, Recibido avanza el siguiente paso en la OT."
                   >
                     Por defecto no se listan trabajos «Recibido». Usa «Ver
                     Histórico» para incluirlos. Cambia el estado desde la tabla
                     al instante; el lápiz abre el panel para proveedor, acabado,
                     fecha prevista y notas. Al pasar a «Enviado» se registra la
                     fecha de envío. Tras abrir Gmail desde «Preparar Envío»,
-                    confirma el envío para pasar las OT a «Muelle Minerva».
+                    confirma el envío para pasar las OT a «Muelle Minerva». Con
+                    itinerario vinculado, «Recibido» avanza el GPS de la OT al
+                    siguiente proceso.
                   </CardDescription>
                 </div>
                 <ToggleGroup
@@ -2757,7 +2828,7 @@ export function GestionExternosPage() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={loading || !prepararEnvioEnabled}
+                    disabled={seguimientoUiBusy || !prepararEnvioEnabled}
                     title={
                       !prepararEnvioEnabled
                         ? seleccionSeguimientoRows.length === 0
@@ -2774,7 +2845,7 @@ export function GestionExternosPage() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={loading || seguimientosFiltrados.length === 0}
+                    disabled={seguimientoUiBusy || seguimientosFiltrados.length === 0}
                     onClick={exportSeguimientoExcel}
                   >
                     <FileSpreadsheet className="mr-1.5 size-4" aria-hidden />
@@ -2784,7 +2855,7 @@ export function GestionExternosPage() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={loading || seguimientosFiltrados.length === 0}
+                    disabled={seguimientoUiBusy || seguimientosFiltrados.length === 0}
                     title="Imprimir listado (PDF)"
                     onClick={() => void handlePrintListado()}
                   >
@@ -2796,7 +2867,7 @@ export function GestionExternosPage() {
                     variant="outline"
                     size="icon-sm"
                     className="shrink-0 border-[#002147]/15"
-                    disabled={loading || seguimientosFiltrados.length === 0}
+                    disabled={seguimientoUiBusy || seguimientosFiltrados.length === 0}
                     title="Analista de Producción Minerva"
                     aria-label="Abrir Analista de Producción Minerva"
                     onClick={() => {
@@ -2813,7 +2884,7 @@ export function GestionExternosPage() {
                     variant="outline"
                     size="icon-sm"
                     className="shrink-0 border-[#002147]/15"
-                    disabled={loading || refreshing}
+                    disabled={seguimientoUiBusy || refreshing}
                     title="Refrescar tabla"
                     aria-label="Refrescar tabla de seguimiento"
                     onClick={() => void handleRefreshSeguimiento()}
@@ -2873,7 +2944,7 @@ export function GestionExternosPage() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={loading || !prepararEnvioEnabled}
+                    disabled={seguimientoUiBusy || !prepararEnvioEnabled}
                     title={
                       !prepararEnvioEnabled
                         ? seleccionSeguimientoRows.length === 0
@@ -2890,7 +2961,7 @@ export function GestionExternosPage() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={loading || seguimientosFiltrados.length === 0}
+                    disabled={seguimientoUiBusy || seguimientosFiltrados.length === 0}
                     onClick={exportSeguimientoExcel}
                   >
                     <FileSpreadsheet className="mr-1.5 size-4" aria-hidden />
@@ -2900,7 +2971,7 @@ export function GestionExternosPage() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={loading || seguimientosFiltrados.length === 0}
+                    disabled={seguimientoUiBusy || seguimientosFiltrados.length === 0}
                     title="Imprimir listado (PDF)"
                     onClick={() => void handlePrintListado()}
                   >
@@ -2912,7 +2983,7 @@ export function GestionExternosPage() {
                     variant="outline"
                     size="icon-sm"
                     className="shrink-0 border-[#002147]/15"
-                    disabled={loading || seguimientosFiltrados.length === 0}
+                    disabled={seguimientoUiBusy || seguimientosFiltrados.length === 0}
                     title="Analista de Producción Minerva"
                     aria-label="Abrir Analista de Producción Minerva"
                     onClick={() => {
@@ -2929,7 +3000,7 @@ export function GestionExternosPage() {
                     variant="outline"
                     size="icon-sm"
                     className="shrink-0 border-[#002147]/15"
-                    disabled={loading || refreshing}
+                    disabled={seguimientoUiBusy || refreshing}
                     title="Refrescar tabla"
                     aria-label="Refrescar tabla de seguimiento"
                     onClick={() => void handleRefreshSeguimiento()}
@@ -2946,7 +3017,7 @@ export function GestionExternosPage() {
               </div>
             </CardHeader>
             <CardContent className="mt-0 p-0 sm:px-4 sm:pb-4 sm:pt-2">
-              {loading ? (
+              {seguimientoUiBusy ? (
                 <p className="px-4 py-3 text-sm text-muted-foreground sm:px-4">
                   Cargando…
                 </p>
@@ -3256,7 +3327,7 @@ export function GestionExternosPage() {
                             <td className="w-7 px-0.5 py-0.5 text-center align-middle">
                               <MaterialCompraColumnCell
                                 info={lookupCompraMaterialStatus(compraMaterialByOt, getOtDisplay(row))}
-                                loading={loading}
+                                loading={seguimientoUiBusy}
                               />
                             </td>
                             <td className="w-8 px-0.5 py-0.5 text-center tabular-nums">
@@ -3372,7 +3443,7 @@ export function GestionExternosPage() {
                                 </span>
                                 <MaterialCompraColumnCell
                                   info={lookupCompraMaterialStatus(compraMaterialByOt, getOtDisplay(row))}
-                                  loading={loading}
+                                  loading={seguimientoUiBusy}
                                 />
                               </div>
                             </div>
@@ -3663,7 +3734,7 @@ export function GestionExternosPage() {
                                 compraMaterialByOt,
                                 getOtDisplay(r as SeguimientoRow)
                               )}
-                              loading={loading}
+                              loading={seguimientoUiBusy}
                             />
                           )}
                           onCardClick={(r) => {
@@ -3707,7 +3778,7 @@ export function GestionExternosPage() {
                                 compraMaterialByOt,
                                 getOtDisplay(r as SeguimientoRow)
                               )}
-                              loading={loading}
+                              loading={seguimientoUiBusy}
                             />
                           )}
                         />

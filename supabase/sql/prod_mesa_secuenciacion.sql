@@ -296,6 +296,16 @@ on public.prod_mesa_planificacion_trabajos (
 )
 where estado_mesa in ('borrador', 'confirmado', 'en_ejecucion', 'finalizada');
 
+-- Una misma OT puede estar en offset y en troquel (itinerario); unicidad por OT + máquina, solo estados activos.
+drop index if exists public.ux_mesa_ot_activa;
+
+create unique index ux_mesa_ot_activa
+on public.prod_mesa_planificacion_trabajos (ot_numero, coalesce(maquina_id::text, ''))
+where estado_mesa in ('borrador', 'confirmado', 'en_ejecucion');
+
+comment on index public.ux_mesa_ot_activa is
+  'Como máximo un trabajo activo por OT y máquina (relevo offset → troquel → engom).';
+
 -- Acceso tablet limitado: el rol `impresion` solo puede leer la mesa y marcar
 -- como finalizada la OT vinculada cuando cierra una ejecución.
 alter table public.prod_mesa_planificacion_trabajos enable row level security;
@@ -335,6 +345,63 @@ create policy plan_mesa_update_impresion_finalizar
     )
   );
 
+-- Responsables digital / troquelado / engomado: CRUD mesa (planificación por sección).
+drop policy if exists plan_mesa_seccion_select on public.prod_mesa_planificacion_trabajos;
+drop policy if exists plan_mesa_seccion_insert on public.prod_mesa_planificacion_trabajos;
+drop policy if exists plan_mesa_seccion_update on public.prod_mesa_planificacion_trabajos;
+drop policy if exists plan_mesa_seccion_delete on public.prod_mesa_planificacion_trabajos;
+
+create policy plan_mesa_seccion_select
+  on public.prod_mesa_planificacion_trabajos for select
+  to authenticated
+  using (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['digital', 'troquelado', 'engomado'])
+    )
+  );
+
+create policy plan_mesa_seccion_insert
+  on public.prod_mesa_planificacion_trabajos for insert
+  to authenticated
+  with check (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['digital', 'troquelado', 'engomado'])
+    )
+  );
+
+create policy plan_mesa_seccion_update
+  on public.prod_mesa_planificacion_trabajos for update
+  to authenticated
+  using (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['digital', 'troquelado', 'engomado'])
+    )
+  )
+  with check (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['digital', 'troquelado', 'engomado'])
+    )
+  );
+
+create policy plan_mesa_seccion_delete
+  on public.prod_mesa_planificacion_trabajos for delete
+  to authenticated
+  using (
+    exists (
+      select 1 from profiles me
+      where me.id = (select auth.uid())
+        and me.role::text = any (array['digital', 'troquelado', 'engomado'])
+    )
+  );
+
 -- ---------------------------------------------------------------------------
 -- 5) Compatibilidad troquel_status
 -- ---------------------------------------------------------------------------
@@ -358,7 +425,7 @@ alter table public.prod_planificacion_pool
     or troquel_status in ('ok', 'falta', 'no_aplica', 'desconocido', 'sin_informar')
   );
 
--- Estado de ciclo de vida en Pool: pendiente -> enviada_mesa -> cerrada.
+-- Estado de ciclo de vida en Pool: pendiente -> enviada_mesa -> en_transito -> cerrada (itinerario completo).
 alter table public.prod_planificacion_pool
   add column if not exists closed_at timestamptz null,
   add column if not exists closed_by uuid null,
@@ -371,7 +438,7 @@ alter table public.prod_planificacion_pool
 
 alter table public.prod_planificacion_pool
   add constraint prod_planificacion_pool_estado_pool_check
-  check (estado_pool in ('pendiente', 'enviada_mesa', 'cerrada'));
+  check (estado_pool in ('pendiente', 'enviada_mesa', 'en_transito', 'cerrada'));
 
 create index if not exists prod_planificacion_pool_estado_ot_idx
   on public.prod_planificacion_pool (estado_pool, ot_numero);
@@ -504,7 +571,9 @@ create policy prod_mesa_ejecuciones_select
     exists (
       select 1 from profiles me
       where me.id = (select auth.uid())
-        and me.role::text = any (array['admin','gerencia','produccion','impresion'])
+        and me.role::text = any (
+          array['admin','gerencia','produccion','impresion','digital','troquelado','engomado']
+        )
     )
   );
 
@@ -515,7 +584,9 @@ create policy prod_mesa_ejecuciones_insert
     exists (
       select 1 from profiles me
       where me.id = (select auth.uid())
-        and me.role::text = any (array['admin','gerencia','produccion'])
+        and me.role::text = any (
+          array['admin','gerencia','produccion','digital','troquelado','engomado']
+        )
     )
   );
 
@@ -526,14 +597,18 @@ create policy prod_mesa_ejecuciones_update
     exists (
       select 1 from profiles me
       where me.id = (select auth.uid())
-        and me.role::text = any (array['admin','gerencia','produccion','impresion'])
+        and me.role::text = any (
+          array['admin','gerencia','produccion','impresion','digital','troquelado','engomado']
+        )
     )
   )
   with check (
     exists (
       select 1 from profiles me
       where me.id = (select auth.uid())
-        and me.role::text = any (array['admin','gerencia','produccion','impresion'])
+        and me.role::text = any (
+          array['admin','gerencia','produccion','impresion','digital','troquelado','engomado']
+        )
     )
   );
 
@@ -604,7 +679,9 @@ create policy sys_motivos_pausa_select
     exists (
       select 1 from profiles me
       where me.id = (select auth.uid())
-        and me.role::text = any (array['admin','gerencia','produccion','impresion'])
+        and me.role::text = any (
+          array['admin','gerencia','produccion','impresion','digital','troquelado','engomado']
+        )
     )
   );
 
@@ -723,7 +800,9 @@ create policy prod_mesa_ejecuciones_pausas_select
     exists (
       select 1 from profiles me
       where me.id = (select auth.uid())
-        and me.role::text = any (array['admin','gerencia','produccion','impresion'])
+        and me.role::text = any (
+          array['admin','gerencia','produccion','impresion','digital','troquelado','engomado']
+        )
     )
   );
 
@@ -734,7 +813,9 @@ create policy prod_mesa_ejecuciones_pausas_insert
     exists (
       select 1 from profiles me
       where me.id = (select auth.uid())
-        and me.role::text = any (array['admin','gerencia','produccion','impresion'])
+        and me.role::text = any (
+          array['admin','gerencia','produccion','impresion','digital','troquelado','engomado']
+        )
     )
   );
 
@@ -745,14 +826,18 @@ create policy prod_mesa_ejecuciones_pausas_update
     exists (
       select 1 from profiles me
       where me.id = (select auth.uid())
-        and me.role::text = any (array['admin','gerencia','produccion','impresion'])
+        and me.role::text = any (
+          array['admin','gerencia','produccion','impresion','digital','troquelado','engomado']
+        )
     )
   )
   with check (
     exists (
       select 1 from profiles me
       where me.id = (select auth.uid())
-        and me.role::text = any (array['admin','gerencia','produccion'])
+        and me.role::text = any (
+          array['admin','gerencia','produccion','impresion','digital','troquelado','engomado']
+        )
     )
   );
 

@@ -50,6 +50,7 @@ type MesaTrabajoJoin = {
 type EjecucionRow = {
   id: string;
   mesa_trabajo_id: string | null;
+  ot_paso_id: string | null;
   ot_numero: string;
   maquina_id: string;
   prod_maquinas?: { nombre: string | null } | null;
@@ -66,6 +67,8 @@ type EjecucionRow = {
   minutos_pausada_acum: number | string | null;
   horas_planificadas_snapshot: number | string | null;
   horas_reales: number | string | null;
+  horas_reales_troquelado: number | string | null;
+  horas_reales_engomado: number | string | null;
   incidencia: string | null;
   accion_correctiva: string | null;
   maquinista: string | null;
@@ -130,6 +133,7 @@ function mapExecution(
   return {
     id: row.id,
     mesaTrabajoId: row.mesa_trabajo_id,
+    otPasoId: row.ot_paso_id,
     ot: row.ot_numero,
     cliente: mesa?.cliente_snapshot?.trim() || null,
     maquinaId: row.maquina_id,
@@ -150,6 +154,8 @@ function mapExecution(
     minutosPausadaAcum: Number(parseNum(row.minutos_pausada_acum) ?? 0),
     horasPlanificadasSnapshot: parseNum(row.horas_planificadas_snapshot),
     horasReales: parseNum(row.horas_reales),
+    horasRealesTroquelado: parseNum(row.horas_reales_troquelado),
+    horasRealesEngomado: parseNum(row.horas_reales_engomado),
     incidencia: row.incidencia,
     accionCorrectiva: row.accion_correctiva,
     maquinista: row.maquinista,
@@ -176,7 +182,7 @@ export async function loadAnaliticaPlantaData(
       let query = supabase
         .from(TABLE_EJECUCIONES)
         .select(
-          "id, mesa_trabajo_id, ot_numero, maquina_id, fecha_planificada, turno, slot_orden, liberada_at, inicio_real_at, fin_real_at, estado_ejecucion, ha_estado_pausada, num_pausas, minutos_pausada_acum, horas_planificadas_snapshot, horas_reales, incidencia, accion_correctiva, maquinista, densidades_json, observaciones, created_at, updated_at, prod_maquinas(nombre), prod_mesa_planificacion_trabajos(cliente_snapshot)",
+          "id, mesa_trabajo_id, ot_paso_id, ot_numero, maquina_id, fecha_planificada, turno, slot_orden, liberada_at, inicio_real_at, fin_real_at, estado_ejecucion, ha_estado_pausada, num_pausas, minutos_pausada_acum, horas_planificadas_snapshot, horas_reales, horas_reales_troquelado, horas_reales_engomado, incidencia, accion_correctiva, maquinista, densidades_json, observaciones, created_at, updated_at, prod_maquinas(nombre), prod_mesa_planificacion_trabajos(cliente_snapshot)",
         )
         .lte("inicio_real_at", filters.endIso)
         .or(`fin_real_at.gte.${filters.startIso},fin_real_at.is.null`)

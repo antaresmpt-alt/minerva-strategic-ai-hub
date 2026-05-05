@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { SettingsShell } from "@/components/settings/settings-shell";
+import { SettingsRouteLazy } from "@/components/settings/settings-route-lazy";
 
 export const metadata: Metadata = {
   title: "Configuración | Minerva Strategic AI Hub",
@@ -31,5 +31,5 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
             ? "logs"
           : "ingest";
 
-  return <SettingsShell defaultTab={defaultTab} />;
+  return <SettingsRouteLazy defaultTab={defaultTab} />;
 }

@@ -29,6 +29,8 @@ const TABLE_COMPRA = "prod_compra_material";
 const TABLE_RECEPCION = "prod_recepciones_material";
 const TABLE_TROQUELES = "prod_troqueles";
 const TABLE_POOL = "prod_planificacion_pool";
+const POOL_ESTADOS_INCLUIDOS = ["pendiente", "enviada_mesa", "en_transito", "cerrada"] as const;
+const POOL_ESTADOS_PARA_MESA = ["pendiente", "enviada_mesa", "en_transito"] as const;
 const TABLE_MESA = "prod_mesa_planificacion_trabajos";
 
 type DespachadaRow = {
@@ -38,6 +40,8 @@ type DespachadaRow = {
   num_hojas_brutas: number | null;
   horas_entrada: number | null;
   horas_tiraje: number | null;
+  horas_estimadas_troquelado: number | null;
+  horas_estimadas_engomado: number | null;
   troquel: string | null;
   despachado_at: string | null;
 };
@@ -83,6 +87,22 @@ function toYmd(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  if (typeof error === "string" && error.trim()) return error.trim();
+  if (error && typeof error === "object") {
+    const c = error as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown };
+    const msg =
+      (typeof c.message === "string" && c.message.trim()) ||
+      (typeof c.details === "string" && c.details.trim()) ||
+      (typeof c.hint === "string" && c.hint.trim()) ||
+      (typeof c.code === "string" && c.code.trim()) ||
+      "";
+    if (msg) return msg;
+  }
+  return fallback;
+}
+
 function fechaBadgeClass(fechaEntrega: string | null): string {
   if (!fechaEntrega) return "bg-slate-100 text-slate-700";
   const d = new Date(fechaEntrega);
@@ -113,7 +133,7 @@ export function PlanificacionPoolOtsTab() {
       const { data: despData, error: despErr } = await supabase
         .from(TABLE_DESPACHADAS)
         .select(
-          "ot_numero, tintas, material, num_hojas_brutas, horas_entrada, horas_tiraje, troquel, despachado_at"
+          "ot_numero, tintas, material, num_hojas_brutas, horas_entrada, horas_tiraje, horas_estimadas_troquelado, horas_estimadas_engomado, troquel, despachado_at"
         )
         .order("despachado_at", { ascending: false })
         .limit(1500);
@@ -125,7 +145,11 @@ export function PlanificacionPoolOtsTab() {
         const ot = String(d.ot_numero ?? "").trim();
         if (!ot) continue;
         const prev = byOt.get(ot);
-        const horasTotal = parseNum(d.horas_entrada) + parseNum(d.horas_tiraje);
+        const horasTotal =
+          parseNum(d.horas_entrada) +
+          parseNum(d.horas_tiraje) +
+          parseNum(d.horas_estimadas_troquelado) +
+          parseNum(d.horas_estimadas_engomado);
         const hojasObj = Math.max(0, Math.trunc(parseNum(d.num_hojas_brutas)));
         const troquelRaw = String(d.troquel ?? "").trim();
         const tintasRaw = String(d.tintas ?? "").trim();
@@ -180,7 +204,7 @@ export function PlanificacionPoolOtsTab() {
         .from(TABLE_POOL)
         .select("ot_numero, estado_pool")
         .in("ot_numero", otList)
-        .in("estado_pool", ["pendiente", "enviada_mesa", "cerrada"]);
+        .in("estado_pool", [...POOL_ESTADOS_INCLUIDOS]);
       if (poolStateErr) throw poolStateErr;
       const otsPoolCerradas = new Set(
         ((poolStateData ?? []) as Array<{ ot_numero: string | null; estado_pool: string | null }>)
@@ -290,7 +314,7 @@ export function PlanificacionPoolOtsTab() {
       });
     } catch (e) {
       console.error(e);
-      toast.error(e instanceof Error ? e.message : "Error cargando Pool de OT's.");
+      toast.error(getErrorMessage(e, "Error cargando Pool de OT's."));
       setRows([]);
       setSelected({});
     } finally {
@@ -375,7 +399,7 @@ export function PlanificacionPoolOtsTab() {
         .from(TABLE_POOL)
         .select("id, ot_numero")
         .in("ot_numero", nuevos.map((r) => r.ot))
-        .in("estado_pool", ["pendiente", "enviada_mesa", "cerrada"]);
+        .in("estado_pool", [...POOL_ESTADOS_PARA_MESA]);
       if (poolExistErr) throw poolExistErr;
 
       const poolByOt = new Map<string, string>();
@@ -418,7 +442,7 @@ export function PlanificacionPoolOtsTab() {
       await loadPoolRows();
     } catch (e) {
       console.error(e);
-      toast.error(e instanceof Error ? e.message : "No se pudo pasar la selección a mesa.");
+      toast.error(getErrorMessage(e, "No se pudo pasar la selección a mesa."));
     } finally {
       setSaving(false);
     }

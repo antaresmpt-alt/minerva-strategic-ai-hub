@@ -9,7 +9,7 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import { Layers, Loader2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -17,6 +17,10 @@ import {
   type OtsDespachadasColumnsContext,
   type TroquelExcelTooltip,
 } from "@/components/produccion/ots/ots-despachadas-columns";
+import {
+  DespachoItinerarioPicker,
+  type DespachoItinerarioSlot,
+} from "@/components/produccion/ots/despacho-itinerario-picker";
 import { TroquelPickerField } from "@/components/produccion/ots/troquel-picker-field";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,6 +45,15 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
+import {
+  fetchProdOtGeneralIdByNumPedido,
+  fetchProdOtPasosVista,
+  itinerarioPasosPermitenReemplazo,
+  listOtNumerosSinItinerario,
+  pasosVistaToItinerarioSlots,
+  replaceProdOtItinerarioSlots,
+  type ProdOtPasoVista,
+} from "@/lib/prod-ot-itinerario-client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
   DetallesCompraDialog,
@@ -53,6 +66,10 @@ const TABLE_MASTER = "prod_ots_general";
 const TABLE_COMPRA_MATERIAL = "prod_compra_material";
 const TABLE_PROVEEDORES = "prod_proveedores";
 const PAGE_SIZE = 500;
+
+function serializeItinerarioProcesoIds(slots: DespachoItinerarioSlot[]): string {
+  return JSON.stringify(slots.map((s) => s.procesoId));
+}
 const OTS_DESPACHADAS_DEFAULT_SORTING: SortingState = [
   { id: "despachado_at", desc: true },
 ];
@@ -170,6 +187,8 @@ type DespachoEditFormState = {
   num_hojas_netas: string;
   horas_entrada: string;
   horas_tiraje: string;
+  horas_estimadas_troquelado: string;
+  horas_estimadas_engomado: string;
   troquel: string;
   poses: string;
   acabado_pral: string;
@@ -186,6 +205,8 @@ function emptyDespachoEditForm(): DespachoEditFormState {
     num_hojas_netas: "",
     horas_entrada: "",
     horas_tiraje: "",
+    horas_estimadas_troquelado: "",
+    horas_estimadas_engomado: "",
     troquel: "",
     poses: "",
     acabado_pral: "",
@@ -220,6 +241,8 @@ function rowToEditForm(row: OtsDespachadasTableRow): DespachoEditFormState {
     num_hojas_netas: numStr(row.num_hojas_netas),
     horas_entrada: numStr(row.horas_entrada),
     horas_tiraje: numStr(row.horas_tiraje),
+    horas_estimadas_troquelado: numStr(row.horas_estimadas_troquelado),
+    horas_estimadas_engomado: numStr(row.horas_estimadas_engomado),
     troquel: row.troquel?.trim() ?? "",
     poses: row.poses != null && Number.isFinite(row.poses) ? String(row.poses) : "",
     acabado_pral: row.acabado_pral?.trim() ?? "",
@@ -265,6 +288,30 @@ export function OtsDespachadasPage({
     emptyDespachoEditForm
   );
   const [editSaving, setEditSaving] = useState(false);
+  const [editOtGeneralId, setEditOtGeneralId] = useState<string | null>(null);
+  const [editPasosVista, setEditPasosVista] = useState<ProdOtPasoVista[]>([]);
+  const [editCanReplaceItinerario, setEditCanReplaceItinerario] =
+    useState(false);
+  const [editItinerarioSlots, setEditItinerarioSlots] = useState<
+    DespachoItinerarioSlot[]
+  >([]);
+  const [editItinerarioLoading, setEditItinerarioLoading] = useState(false);
+  const editItinerarioInitialRef = useRef<string>("");
+
+  const [compraLoteConfirmOpen, setCompraLoteConfirmOpen] = useState(false);
+  const [compraLoteSinItinerario, setCompraLoteSinItinerario] = useState<
+    string[]
+  >([]);
+  const compraLotePendingRowsRef = useRef<OtsDespachadasTableRow[] | null>(null);
+
+  const resetEditItinerarioState = useCallback(() => {
+    setEditOtGeneralId(null);
+    setEditPasosVista([]);
+    setEditCanReplaceItinerario(false);
+    setEditItinerarioSlots([]);
+    setEditItinerarioLoading(false);
+    editItinerarioInitialRef.current = "";
+  }, []);
 
   const handleVerCompra = useCallback((row: OtsDespachadasTableRow) => {
     const ot = String(row.ot_numero ?? "").trim();
@@ -277,8 +324,9 @@ export function OtsDespachadasPage({
   const handleEditarDespacho = useCallback((row: OtsDespachadasTableRow) => {
     setEditRow(row);
     setEditForm(rowToEditForm(row));
+    resetEditItinerarioState();
     setEditOpen(true);
-  }, []);
+  }, [resetEditItinerarioState]);
 
   const isSeleccionCompraDeshabilitada = useCallback(
     (row: OtsDespachadasTableRow) =>
@@ -289,6 +337,7 @@ export function OtsDespachadasPage({
   const columnCtx = useMemo<OtsDespachadasColumnsContext>(
     () => ({
       onVerCompra: handleVerCompra,
+      onItinerario: handleEditarDespacho,
       onEditarDespacho: handleEditarDespacho,
       troquelExcelByCodigo,
       isSeleccionCompraDeshabilitada,
@@ -432,6 +481,7 @@ export function OtsDespachadasPage({
         return {
           id: String(d.id ?? ""),
           ot_numero: ot,
+          has_itinerario: false,
           despachado_at: (d.despachado_at as string | null) ?? null,
           material: (d.material as string | null) ?? null,
           gramaje: num(d.gramaje),
@@ -450,6 +500,8 @@ export function OtsDespachadasPage({
                 : null,
           horas_entrada: num(d.horas_entrada),
           horas_tiraje: num(d.horas_tiraje),
+          horas_estimadas_troquelado: num(d.horas_estimadas_troquelado),
+          horas_estimadas_engomado: num(d.horas_estimadas_engomado),
           tintas: (d.tintas as string | null) ?? null,
           notas: (d.notas as string | null) ?? null,
           estado_material: (d.estado_material as string | null) ?? null,
@@ -471,6 +523,18 @@ export function OtsDespachadasPage({
       } catch (e) {
         console.error(e);
       }
+      try {
+        const sinIt = await listOtNumerosSinItinerario(
+          supabase,
+          merged.map((r) => r.ot_numero)
+        );
+        const sinItSet = new Set(sinIt);
+        for (const row of merged) {
+          row.has_itinerario = !sinItSet.has(row.ot_numero);
+        }
+      } catch (e) {
+        console.error(e);
+      }
       setTroquelExcelByCodigo(troquelMap);
       setRows(merged);
     } catch (e) {
@@ -488,6 +552,53 @@ export function OtsDespachadasPage({
   useEffect(() => {
     void loadRows();
   }, [loadRows]);
+
+  useEffect(() => {
+    if (!editOpen || !editRow) return;
+    let cancelled = false;
+    setEditItinerarioLoading(true);
+    void (async () => {
+      try {
+        const id = await fetchProdOtGeneralIdByNumPedido(
+          supabase,
+          editRow.ot_numero
+        );
+        if (cancelled) return;
+        setEditOtGeneralId(id);
+        if (!id) {
+          setEditPasosVista([]);
+          setEditCanReplaceItinerario(false);
+          setEditItinerarioSlots([]);
+          editItinerarioInitialRef.current = serializeItinerarioProcesoIds([]);
+          return;
+        }
+        const pasos = await fetchProdOtPasosVista(supabase, id);
+        if (cancelled) return;
+        setEditPasosVista(pasos);
+        const can = itinerarioPasosPermitenReemplazo(pasos);
+        setEditCanReplaceItinerario(can);
+        const slots = pasosVistaToItinerarioSlots(pasos);
+        setEditItinerarioSlots(slots);
+        editItinerarioInitialRef.current = serializeItinerarioProcesoIds(slots);
+      } catch (e) {
+        if (!cancelled) {
+          console.error(e);
+          toast.error(
+            e instanceof Error ? e.message : "No se pudo cargar el itinerario."
+          );
+          setEditPasosVista([]);
+          setEditCanReplaceItinerario(false);
+          setEditItinerarioSlots([]);
+          editItinerarioInitialRef.current = serializeItinerarioProcesoIds([]);
+        }
+      } finally {
+        if (!cancelled) setEditItinerarioLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [editOpen, editRow, supabase]);
 
   const estadoMaterialFiltroOptions = useMemo<Option[]>(() => {
     const uniques = [...new Set(rows.map((r) => String(r.estado_material ?? "").trim()))]
@@ -558,6 +669,77 @@ export function OtsDespachadasPage({
     return out;
   }, [rowSelection, rowsFiltradas]);
 
+  const ejecutarGenerarComprasLote = useCallback(
+    async (rows: OtsDespachadasTableRow[]) => {
+      setComprando(true);
+      let ok = 0;
+      let skipped = 0;
+      let failed = 0;
+      try {
+        for (const row of rows) {
+          const ot = String(row.ot_numero ?? "").trim();
+          if (!ot) {
+            failed++;
+            continue;
+          }
+          const payload = {
+            ot_numero: ot,
+            num_compra: `OCM-${ot}`,
+            estado: "Pendiente",
+            material: row.material?.trim() || null,
+            gramaje: row.gramaje,
+            tamano_hoja: row.tamano_hoja?.trim() || null,
+            num_hojas_brutas: row.num_hojas_brutas,
+            num_hojas_netas: row.num_hojas_netas,
+          };
+          const { error: insertError } = await supabase
+            .from(TABLE_COMPRA_MATERIAL)
+            .insert(payload);
+          if (insertError) {
+            if (insertError.code === "23505") {
+              skipped++;
+              continue;
+            }
+            throw insertError;
+          }
+
+          const { error: updateError } = await supabase
+            .from(TABLE_DESPACHADAS)
+            .update({ estado_material: "Pendiente de pedir" })
+            .eq("id", row.id);
+          if (updateError) throw updateError;
+          ok++;
+        }
+
+        if (ok > 0) {
+          toast.success(
+            skipped || failed
+              ? `Compras generadas: ${ok}. Omitidas (ya existían): ${skipped}. Errores: ${failed}.`
+              : `Compras generadas: ${ok}.`
+          );
+          onCompraMaterialSuccess?.();
+        } else if (skipped > 0 && failed === 0) {
+          toast.info(
+            "Ninguna compra nueva: todas las OT seleccionadas ya tenían registro."
+          );
+        } else {
+          toast.error("No se pudo generar ninguna compra.");
+        }
+        setRowSelection({});
+        void loadRows();
+      } catch (e) {
+        console.error(e);
+        toast.error(
+          e instanceof Error ? e.message : "Error al generar compras en lote."
+        );
+        void loadRows();
+      } finally {
+        setComprando(false);
+      }
+    },
+    [loadRows, onCompraMaterialSuccess, supabase]
+  );
+
   const handleGenerarComprasLote = useCallback(async () => {
     if (selectedRows.length === 0) return;
     const invalid = selectedRows.filter(
@@ -569,72 +751,25 @@ export function OtsDespachadasPage({
       );
       return;
     }
-    setComprando(true);
-    let ok = 0;
-    let skipped = 0;
-    let failed = 0;
     try {
-      for (const row of selectedRows) {
-        const ot = String(row.ot_numero ?? "").trim();
-        if (!ot) {
-          failed++;
-          continue;
-        }
-        const payload = {
-          ot_numero: ot,
-          num_compra: `OCM-${ot}`,
-          estado: "Pendiente",
-          material: row.material?.trim() || null,
-          gramaje: row.gramaje,
-          tamano_hoja: row.tamano_hoja?.trim() || null,
-          num_hojas_brutas: row.num_hojas_brutas,
-          num_hojas_netas: row.num_hojas_netas,
-        };
-        const { error: insertError } = await supabase
-          .from(TABLE_COMPRA_MATERIAL)
-          .insert(payload);
-        if (insertError) {
-          if (insertError.code === "23505") {
-            skipped++;
-            continue;
-          }
-          throw insertError;
-        }
-
-        const { error: updateError } = await supabase
-          .from(TABLE_DESPACHADAS)
-          .update({ estado_material: "Pendiente de pedir" })
-          .eq("id", row.id);
-        if (updateError) throw updateError;
-        ok++;
+      const sinIt = await listOtNumerosSinItinerario(
+        supabase,
+        selectedRows.map((r) => String(r.ot_numero ?? "").trim())
+      );
+      if (sinIt.length > 0) {
+        compraLotePendingRowsRef.current = selectedRows;
+        setCompraLoteSinItinerario(sinIt);
+        setCompraLoteConfirmOpen(true);
+        return;
       }
-
-      if (ok > 0) {
-        toast.success(
-          skipped || failed
-            ? `Compras generadas: ${ok}. Omitidas (ya existían): ${skipped}. Errores: ${failed}.`
-            : `Compras generadas: ${ok}.`
-        );
-        onCompraMaterialSuccess?.();
-      } else if (skipped > 0 && failed === 0) {
-        toast.info(
-          "Ninguna compra nueva: todas las OT seleccionadas ya tenían registro."
-        );
-      } else {
-        toast.error("No se pudo generar ninguna compra.");
-      }
-      setRowSelection({});
-      void loadRows();
+      await ejecutarGenerarComprasLote(selectedRows);
     } catch (e) {
       console.error(e);
       toast.error(
-        e instanceof Error ? e.message : "Error al generar compras en lote."
+        e instanceof Error ? e.message : "No se pudo comprobar el itinerario."
       );
-      void loadRows();
-    } finally {
-      setComprando(false);
     }
-  }, [loadRows, onCompraMaterialSuccess, selectedRows, supabase]);
+  }, [ejecutarGenerarComprasLote, selectedRows, supabase]);
 
   const submitEditDespacho = useCallback(async () => {
     if (!editRow) return;
@@ -651,6 +786,12 @@ export function OtsDespachadasPage({
           num_hojas_netas: parseOptionalIntInput(editForm.num_hojas_netas),
           horas_entrada: parseOptionalDecimalInput(editForm.horas_entrada),
           horas_tiraje: parseOptionalDecimalInput(editForm.horas_tiraje),
+          horas_estimadas_troquelado: parseOptionalDecimalInput(
+            editForm.horas_estimadas_troquelado
+          ),
+          horas_estimadas_engomado: parseOptionalDecimalInput(
+            editForm.horas_estimadas_engomado
+          ),
           troquel: editForm.troquel.trim() || null,
           poses: parseOptionalIntInput(editForm.poses),
           acabado_pral: editForm.acabado_pral.trim() || null,
@@ -658,17 +799,37 @@ export function OtsDespachadasPage({
         })
         .eq("id", editRow.id);
       if (error) throw error;
-      toast.success("Despacho actualizado.");
+
+      if (
+        editOtGeneralId &&
+        editCanReplaceItinerario &&
+        serializeItinerarioProcesoIds(editItinerarioSlots) !==
+          editItinerarioInitialRef.current
+      ) {
+        await replaceProdOtItinerarioSlots(
+          supabase,
+          editOtGeneralId,
+          editItinerarioSlots
+        );
+      }
+
+      toast.success("Cambios guardados.");
       setEditOpen(false);
-      setEditRow(null);
-      setEditForm(emptyDespachoEditForm());
       void loadRows();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Error al guardar.");
     } finally {
       setEditSaving(false);
     }
-  }, [editForm, editRow, loadRows, supabase]);
+  }, [
+    editCanReplaceItinerario,
+    editForm,
+    editItinerarioSlots,
+    editOtGeneralId,
+    editRow,
+    loadRows,
+    supabase,
+  ]);
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-4">
@@ -685,8 +846,18 @@ export function OtsDespachadasPage({
         despachoRow={compraDespachoRow}
       />
 
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="flex max-h-[min(92vh,720px)] max-w-[min(96vw,560px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+      <Dialog
+        open={editOpen}
+        onOpenChange={(o) => {
+          setEditOpen(o);
+          if (!o) {
+            setEditRow(null);
+            setEditForm(emptyDespachoEditForm());
+            resetEditItinerarioState();
+          }
+        }}
+      >
+        <DialogContent className="flex max-h-[min(92vh,800px)] max-w-[min(96vw,640px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
           <DialogHeader className="shrink-0 border-b border-slate-100 px-4 py-3 sm:px-5">
             <DialogTitle className="text-base">
               Editar despacho{" "}
@@ -695,14 +866,18 @@ export function OtsDespachadasPage({
               </span>
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Modifica los datos técnicos del despacho. Los cambios se guardan en{" "}
+              Datos técnicos en{" "}
               <code className="rounded bg-slate-100 px-1 text-[10px]">
                 {TABLE_DESPACHADAS}
               </code>
-              .
+              . Itinerario en{" "}
+              <code className="rounded bg-slate-100 px-1 text-[10px]">
+                prod_ot_pasos
+              </code>{" "}
+              (solo editable si todos los pasos siguen en pendiente/disponible).
             </DialogDescription>
           </DialogHeader>
-          <div className="grid max-h-[min(60vh,480px)] gap-3 overflow-y-auto px-4 py-3 sm:grid-cols-2 sm:px-5">
+          <div className="grid max-h-[min(58vh,520px)] gap-3 overflow-y-auto px-4 py-3 sm:grid-cols-2 sm:px-5">
             <div className="grid gap-1">
               <Label htmlFor="edit-despacho-tintas" className="text-xs">
                 Tintas
@@ -831,6 +1006,42 @@ export function OtsDespachadasPage({
                 }
               />
             </div>
+            <div className="grid gap-1">
+              <Label htmlFor="edit-despacho-horas-troquelado" className="text-xs">
+                Horas troquelado estimadas
+              </Label>
+              <Input
+                id="edit-despacho-horas-troquelado"
+                className="h-8 text-xs"
+                type="number"
+                step="0.1"
+                value={editForm.horas_estimadas_troquelado}
+                onChange={(e) =>
+                  setEditForm((f) => ({
+                    ...f,
+                    horas_estimadas_troquelado: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="edit-despacho-horas-engomado" className="text-xs">
+                Horas engomado estimadas
+              </Label>
+              <Input
+                id="edit-despacho-horas-engomado"
+                className="h-8 text-xs"
+                type="number"
+                step="0.1"
+                value={editForm.horas_estimadas_engomado}
+                onChange={(e) =>
+                  setEditForm((f) => ({
+                    ...f,
+                    horas_estimadas_engomado: e.target.value,
+                  }))
+                }
+              />
+            </div>
             <div className="grid gap-1 sm:col-span-2">
               <TroquelPickerField
                 id="edit-despacho-troquel"
@@ -889,6 +1100,44 @@ export function OtsDespachadasPage({
                 }
               />
             </div>
+            <div className="sm:col-span-2">
+              <p className="text-xs font-semibold text-[#002147]">
+                Itinerario actual
+              </p>
+              {editItinerarioLoading ? (
+                <p className="text-muted-foreground mt-1 flex items-center gap-2 text-[11px]">
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  Cargando pasos…
+                </p>
+              ) : editPasosVista.length === 0 ? (
+                <p className="text-muted-foreground mt-1 text-[11px]">
+                  Sin pasos definidos en base de datos.
+                </p>
+              ) : (
+                <ol className="mt-1.5 list-decimal space-y-0.5 pl-4 text-[11px] text-slate-800">
+                  {editPasosVista.map((p) => (
+                    <li key={p.id}>
+                      <span className="font-medium">{p.orden}.</span>{" "}
+                      {p.procesoNombre}{" "}
+                      <span className="text-slate-500">({p.estado})</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+              {!editCanReplaceItinerario && editPasosVista.length > 0 ? (
+                <p className="mt-2 rounded border border-amber-200 bg-amber-50/80 px-2 py-1.5 text-[11px] text-amber-950">
+                  Hay pasos ya iniciados o finalizados: el orden de procesos no
+                  se puede sustituir desde aquí.
+                </p>
+              ) : null}
+              <DespachoItinerarioPicker
+                open={editOpen}
+                supabase={supabase}
+                disabled={editSaving || editItinerarioLoading || !editCanReplaceItinerario}
+                slots={editItinerarioSlots}
+                onSlotsChange={setEditItinerarioSlots}
+              />
+            </div>
           </div>
           <DialogFooter className="shrink-0 gap-2 border-t border-slate-100 px-4 py-3 sm:flex-row sm:px-5">
             <Button
@@ -915,6 +1164,57 @@ export function OtsDespachadasPage({
               ) : (
                 "Guardar cambios"
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={compraLoteConfirmOpen} onOpenChange={setCompraLoteConfirmOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base text-[#002147]">
+              OTs sin itinerario
+            </DialogTitle>
+            <DialogDescription className="text-xs leading-relaxed">
+              Las siguientes OT no tienen pasos en{" "}
+              <code className="rounded bg-slate-100 px-1 text-[10px]">
+                prod_ot_pasos
+              </code>
+              . Podéis generar la compra igualmente, pero la planificación no
+              seguirá el circuito por procesos hasta que defináis un itinerario.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="max-h-40 list-inside list-disc overflow-y-auto font-mono text-xs text-slate-800">
+            {compraLoteSinItinerario.map((ot) => (
+              <li key={ot}>{ot}</li>
+            ))}
+          </ul>
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setCompraLoteConfirmOpen(false);
+                compraLotePendingRowsRef.current = null;
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="bg-[#002147] text-white hover:bg-[#001a38]"
+              onClick={() => {
+                const pending = compraLotePendingRowsRef.current;
+                setCompraLoteConfirmOpen(false);
+                compraLotePendingRowsRef.current = null;
+                if (pending && pending.length > 0) {
+                  void ejecutarGenerarComprasLote(pending);
+                }
+              }}
+            >
+              Continuar igualmente
             </Button>
           </DialogFooter>
         </DialogContent>

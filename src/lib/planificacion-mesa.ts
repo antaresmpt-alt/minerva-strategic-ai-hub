@@ -1,5 +1,6 @@
 import { addDays, format, startOfWeek } from "date-fns";
 
+import { isPlanificacionDraftScope } from "@/lib/planificacion-ambito";
 import type {
   CapacidadTurno,
   DayKey,
@@ -192,7 +193,7 @@ export function deserializeDraft(raw: string): DraftBoardState | null {
       !parsed ||
       typeof parsed.weekMondayKey !== "string" ||
       typeof parsed.maquinaId !== "string" ||
-      parsed.scope !== "impresion" ||
+      !isPlanificacionDraftScope(parsed.scope) ||
       typeof parsed.updatedAt !== "string" ||
       !parsed.bySlot ||
       typeof parsed.bySlot !== "object"

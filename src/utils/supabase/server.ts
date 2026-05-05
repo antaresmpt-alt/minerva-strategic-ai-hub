@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { cache } from "react";
 
 export async function createServerSupabaseClient() {
   const cookieStore = await cookies();
@@ -28,7 +29,7 @@ export async function createServerSupabaseClient() {
 }
 
 /** Rol en `profiles` para el usuario actual, o null si no hay sesión / fila. */
-export async function getCurrentProfileRole(): Promise<string | null> {
+export const getCurrentProfileRole = cache(async (): Promise<string | null> => {
   const supabase = await createServerSupabaseClient();
   const {
     data: { user },
@@ -42,13 +43,13 @@ export async function getCurrentProfileRole(): Promise<string | null> {
     .maybeSingle();
 
   return profile?.role ?? null;
-}
+});
 
 /** Email y rol para UI (Hub, UserNav). Null en /login o sin sesión. */
-export async function getCurrentUserProfile(): Promise<{
+export const getCurrentUserProfile = cache(async (): Promise<{
   email: string;
   role: string | null;
-} | null> {
+} | null> => {
   const supabase = await createServerSupabaseClient();
   const {
     data: { user },
@@ -65,13 +66,13 @@ export async function getCurrentUserProfile(): Promise<{
     email: user.email,
     role: profile?.role ?? null,
   };
-}
+});
 
 /** Mapa module → allowed para el usuario actual (desde `role_permissions`). Null = usar matriz por defecto en cliente. */
-export async function getModuleAccessForCurrentUser(): Promise<Record<
+export const getModuleAccessForCurrentUser = cache(async (): Promise<Record<
   string,
   boolean
-> | null> {
+> | null> => {
   const supabase = await createServerSupabaseClient();
   const {
     data: { user },
@@ -98,4 +99,4 @@ export async function getModuleAccessForCurrentUser(): Promise<Record<
     o[r.module_name] = r.is_enabled;
   }
   return o;
-}
+});

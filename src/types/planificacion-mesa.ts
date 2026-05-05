@@ -1,3 +1,8 @@
+import type {
+  PlanificacionDraftScope,
+  PlanificacionTipoMaquina,
+} from "@/lib/planificacion-ambito";
+
 /**
  * Tipos de la Mesa de Secuenciación de OTs (planificación drag & drop).
  *
@@ -41,6 +46,10 @@ export interface PoolOT {
   horasPlanificadas: number;
   materialStatus: MaterialStatus;
   troquelStatus: TroquelStatus;
+  /** Primer paso `disponible` del itinerario (GPS), si existe. */
+  proximoPasoNombre?: string | null;
+  proximoPasoSlug?: string | null;
+  planificacionTipoPaso?: PlanificacionTipoMaquina | null;
 }
 
 /** Item ya planificado en la mesa para una celda (día + turno). */
@@ -110,6 +119,8 @@ export interface MotivoPausa {
 export interface MesaEjecucion {
   id: string;
   mesaTrabajoId: string | null;
+  /** Paso de itinerario (`prod_ot_pasos`) al liberar la OT, si aplica. */
+  otPasoId: string | null;
   ot: string;
   maquinaId: string;
   maquinaNombre: string;
@@ -129,6 +140,8 @@ export interface MesaEjecucion {
   minutosPausadaAcum: number;
   horasPlanificadasSnapshot: number | null;
   horasReales: number | null;
+  horasRealesTroquelado: number | null;
+  horasRealesEngomado: number | null;
   incidencia: string | null;
   accionCorrectiva: string | null;
   maquinista: string | null;
@@ -183,7 +196,7 @@ export interface DraftBoardState {
   /** Máquina productiva a la que pertenece el draft. */
   maquinaId: string;
   /** Ámbito funcional de la pantalla que creó el draft. */
-  scope: "impresion";
+  scope: PlanificacionDraftScope;
   bySlot: Record<SlotKey, MesaTrabajo[]>;
   /** Marca temporal para evitar mostrar drafts antiguos. */
   updatedAt: string;

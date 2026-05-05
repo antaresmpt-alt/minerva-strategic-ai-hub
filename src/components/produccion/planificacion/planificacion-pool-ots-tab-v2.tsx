@@ -2,6 +2,8 @@
 
 import {
   ArrowUpDown,
+  CheckCircle2,
+  Circle,
   Droplet,
   Edit3,
   Eye,
@@ -10,17 +12,13 @@ import {
   Search,
   Send,
 } from "lucide-react";
-import {
-  type FocusEvent,
-  type ReactElement,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import {
+  DespachoItinerarioPicker,
+  type DespachoItinerarioSlot,
+} from "@/components/produccion/ots/despacho-itinerario-picker";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -32,11 +30,13 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -49,7 +49,23 @@ import {
   COMPRAS_MATERIAL_ESTADOS,
   normalizeCompraEstado,
 } from "@/lib/compras-material-estados";
+import {
+  etiquetaAmbitoPlanificacion,
+  fetchProximoPasoDisponiblePorOt,
+  getPlanificacionTipoMaquinaFilter,
+  PLANIFICACION_TIPOS_MAQUINA,
+  type PlanificacionTipoMaquina,
+  type ProximoPasoInfo,
+} from "@/lib/planificacion-ambito";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
+import {
+  fetchProdOtGeneralIdByNumPedido,
+  fetchProdOtPasosVista,
+  itinerarioPasosPermitenReemplazo,
+  pasosVistaToItinerarioSlots,
+  replaceProdOtItinerarioSlots,
+  type ProdOtPasoVista,
+} from "@/lib/prod-ot-itinerario-client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 const TABLE_DESPACHADAS = "produccion_ot_despachadas";
@@ -59,18 +75,34 @@ const TABLE_PROVEEDORES = "prod_proveedores";
 const TABLE_RECEPCION = "prod_recepciones_material";
 const TABLE_TROQUELES = "prod_troqueles";
 const TABLE_POOL = "prod_planificacion_pool";
+/** Estados de pool que pueden leerse desde despacho; `cerrada` = itinerario completo (se excluye del listado). */
+const POOL_ESTADOS_INCLUIDOS = ["pendiente", "enviada_mesa", "en_transito", "cerrada"] as const;
+/** Filas de pool que pueden reenviarse a mesa o actualizarse (nunca `cerrada` = itinerario completo). */
+const POOL_ESTADOS_PARA_MESA = ["pendiente", "enviada_mesa", "en_transito"] as const;
 const TABLE_MESA = "prod_mesa_planificacion_trabajos";
+const TABLE_MAQUINAS = "prod_maquinas";
 const POOL_UI_STATE_KEY = "produccion.poolOts.uiState.v1";
+
+/** OT con al menos un trabajo en mesa (hueco asignado en el calendario). */
+const MESA_ESTADOS_PLANIFICADA = [
+  "borrador",
+  "confirmado",
+  "en_ejecucion",
+  "finalizada",
+] as const;
 
 type SortKey = "entrega" | "ot" | "cliente";
 type TroquelStatus = "ok" | "falta" | "no_aplica" | "sin_informar";
 type TroquelModo = "informado" | "no_aplica" | "sin_informar";
+
+type PoolAmbitoFiltroUi = "all" | PlanificacionTipoMaquina;
 
 type PoolUiState = {
   search: string;
   sortBy: SortKey;
   sortDir: "asc" | "desc";
   compraEstadoFilter: string;
+  areaTipoFilter: PoolAmbitoFiltroUi;
 };
 
 type DespRow = {
@@ -80,6 +112,8 @@ type DespRow = {
   num_hojas_brutas: number | null;
   horas_entrada: number | null;
   horas_tiraje: number | null;
+  horas_estimadas_troquelado: number | null;
+  horas_estimadas_engomado: number | null;
   troquel: string | null;
   poses: number | null;
   acabado_pral: string | null;
@@ -133,7 +167,18 @@ type PoolRow = {
   poses: number | null;
   horasEntrada: number;
   horasTiraje: number;
+  horasTroquelado: number;
+  horasEngomado: number;
   horasTotal: number;
+  proximoPasoNombre: string | null;
+  proximoPasoSlug: string | null;
+  planificacionTipoPaso: PlanificacionTipoMaquina | null;
+  /** `estado_pool === enviada_mesa`: en cola para la mesa, aún sin huecos obligatorios. */
+  enColaMesa: boolean;
+  /** Al menos una fila en `prod_mesa_planificacion_trabajos` en estado de plan ya asignado. */
+  planificadaEnMesa: boolean;
+  /** `estado_pool === en_transito`: fase anterior cerrada en mesa, itinerario sigue (p. ej. a troquel). */
+  poolEnTransitoFase: boolean;
 };
 
 type DraftRow = {
@@ -145,6 +190,10 @@ type DraftRow = {
   horasEntrada: string;
   horasTiraje: string;
 };
+
+function serializeItinerarioProcesoIds(slots: DespachoItinerarioSlot[]): string {
+  return JSON.stringify(slots.map((s) => s.procesoId));
+}
 
 function parseNum(v: unknown): number {
   if (typeof v === "number") return Number.isFinite(v) ? v : 0;
@@ -276,8 +325,24 @@ export function PlanificacionPoolOtsTab() {
   const [sortBy, setSortBy] = useState<SortKey>("entrega");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [compraEstadoFilter, setCompraEstadoFilter] = useState<string>("all");
+  const [areaTipoFilter, setAreaTipoFilter] = useState<PoolAmbitoFiltroUi>("all");
   const [editingOt, setEditingOt] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftRow | null>(null);
+  const [poolEditDialogOpen, setPoolEditDialogOpen] = useState(false);
+  const [poolEditOtGeneralId, setPoolEditOtGeneralId] = useState<string | null>(
+    null
+  );
+  const [poolEditPasosVista, setPoolEditPasosVista] = useState<ProdOtPasoVista[]>(
+    []
+  );
+  const [poolEditCanReplaceItinerario, setPoolEditCanReplaceItinerario] =
+    useState(false);
+  const [poolEditItinerarioSlots, setPoolEditItinerarioSlots] = useState<
+    DespachoItinerarioSlot[]
+  >([]);
+  const [poolEditItinerarioLoading, setPoolEditItinerarioLoading] =
+    useState(false);
+  const poolItinerarioInitialRef = useRef("");
   const [savedRowOt, setSavedRowOt] = useState<string | null>(null);
   const [uiUserId, setUiUserId] = useState<string | null>(null);
   const [uiHydrated, setUiHydrated] = useState(false);
@@ -296,8 +361,9 @@ export function PlanificacionPoolOtsTab() {
   const [cauchoError, setCauchoError] = useState<string | null>(null);
   const [cauchoBlobUrl, setCauchoBlobUrl] = useState<string | null>(null);
   const cauchoIframeRef = useRef<HTMLIFrameElement>(null);
-  const skipBlurSaveRef = useRef(false);
   const saveInFlightRef = useRef(false);
+  const [planificacionRole, setPlanificacionRole] = useState<string | null>(null);
+  const [poolCountPreAmbito, setPoolCountPreAmbito] = useState(0);
 
   const uiStorageKey = `${POOL_UI_STATE_KEY}:${uiUserId ?? "anon"}`;
 
@@ -360,6 +426,14 @@ export function PlanificacionPoolOtsTab() {
             setCompraEstadoFilter(savedCompraEstadoFilter);
           }
         }
+        const savedArea = parsed.areaTipoFilter;
+        if (
+          savedArea === "all" ||
+          (typeof savedArea === "string" &&
+            (PLANIFICACION_TIPOS_MAQUINA as readonly string[]).includes(savedArea))
+        ) {
+          setAreaTipoFilter(savedArea as PoolAmbitoFiltroUi);
+        }
       }
     } catch {
       // fallback silencioso
@@ -370,7 +444,13 @@ export function PlanificacionPoolOtsTab() {
 
   useEffect(() => {
     if (!uiHydrated) return;
-    const payload: PoolUiState = { search, sortBy, sortDir, compraEstadoFilter };
+    const payload: PoolUiState = {
+      search,
+      sortBy,
+      sortDir,
+      compraEstadoFilter,
+      areaTipoFilter,
+    };
     const t = window.setTimeout(() => {
       try {
         window.localStorage.setItem(uiStorageKey, JSON.stringify(payload));
@@ -379,15 +459,80 @@ export function PlanificacionPoolOtsTab() {
       }
     }, 180);
     return () => window.clearTimeout(t);
-  }, [search, sortBy, sortDir, compraEstadoFilter, uiHydrated, uiStorageKey]);
+  }, [search, sortBy, sortDir, compraEstadoFilter, areaTipoFilter, uiHydrated, uiStorageKey]);
+
+  useEffect(() => {
+    if (!poolEditDialogOpen || !editingOt) return;
+    let cancelled = false;
+    setPoolEditItinerarioLoading(true);
+    void (async () => {
+      try {
+        const id = await fetchProdOtGeneralIdByNumPedido(supabase, editingOt);
+        if (cancelled) return;
+        setPoolEditOtGeneralId(id);
+        if (!id) {
+          setPoolEditPasosVista([]);
+          setPoolEditCanReplaceItinerario(false);
+          setPoolEditItinerarioSlots([]);
+          poolItinerarioInitialRef.current = serializeItinerarioProcesoIds([]);
+          return;
+        }
+        const pasos = await fetchProdOtPasosVista(supabase, id);
+        if (cancelled) return;
+        setPoolEditPasosVista(pasos);
+        const can = itinerarioPasosPermitenReemplazo(pasos);
+        setPoolEditCanReplaceItinerario(can);
+        const slots = pasosVistaToItinerarioSlots(pasos);
+        setPoolEditItinerarioSlots(slots);
+        poolItinerarioInitialRef.current = serializeItinerarioProcesoIds(slots);
+      } catch (e) {
+        if (!cancelled) {
+          console.error("[Pool] itinerario modal", e);
+          toast.error(
+            e instanceof Error ? e.message : "No se pudo cargar el itinerario."
+          );
+          setPoolEditPasosVista([]);
+          setPoolEditCanReplaceItinerario(false);
+          setPoolEditItinerarioSlots([]);
+          poolItinerarioInitialRef.current = serializeItinerarioProcesoIds([]);
+        }
+      } finally {
+        if (!cancelled) setPoolEditItinerarioLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [poolEditDialogOpen, editingOt, supabase]);
 
   const loadRows = useCallback(async () => {
     setLoading(true);
+    let roleRead: string | null = null;
     try {
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+      const uid =
+        typeof authUser?.id === "string" && authUser.id.trim().length > 0
+          ? authUser.id.trim()
+          : null;
+      if (uid) {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", uid)
+          .maybeSingle();
+        roleRead =
+          prof && typeof (prof as { role?: unknown }).role === "string"
+            ? String((prof as { role: string }).role).trim() || null
+            : null;
+      }
+      setPlanificacionRole(roleRead);
+
       const { data: despData, error: despErr } = await supabase
         .from(TABLE_DESPACHADAS)
         .select(
-          "ot_numero, tintas, material, num_hojas_brutas, horas_entrada, horas_tiraje, troquel, poses, acabado_pral, despachado_at"
+          "ot_numero, tintas, material, num_hojas_brutas, horas_entrada, horas_tiraje, horas_estimadas_troquelado, horas_estimadas_engomado, troquel, poses, acabado_pral, despachado_at"
         )
         .order("despachado_at", { ascending: false })
         .limit(1500);
@@ -398,7 +543,11 @@ export function PlanificacionPoolOtsTab() {
         const ot = String(d.ot_numero ?? "").trim();
         if (!ot) continue;
         const prev = byOt.get(ot);
-        const horas = parseNum(d.horas_entrada) + parseNum(d.horas_tiraje);
+        const horas =
+          parseNum(d.horas_entrada) +
+          parseNum(d.horas_tiraje) +
+          parseNum(d.horas_estimadas_troquelado) +
+          parseNum(d.horas_estimadas_engomado);
         const hojasObj = Math.max(0, Math.trunc(parseNum(d.num_hojas_brutas)));
         const troquel = String(d.troquel ?? "").trim();
         if (!prev) {
@@ -426,12 +575,22 @@ export function PlanificacionPoolOtsTab() {
             poses: parseNum(d.poses) > 0 ? Math.trunc(parseNum(d.poses)) : null,
             horasEntrada: parseNum(d.horas_entrada),
             horasTiraje: parseNum(d.horas_tiraje),
+            horasTroquelado: parseNum(d.horas_estimadas_troquelado),
+            horasEngomado: parseNum(d.horas_estimadas_engomado),
             horasTotal: horas,
+            proximoPasoNombre: null,
+            proximoPasoSlug: null,
+            planificacionTipoPaso: null,
+            enColaMesa: false,
+            planificadaEnMesa: false,
+            poolEnTransitoFase: false,
           });
           continue;
         }
         prev.horasEntrada += parseNum(d.horas_entrada);
         prev.horasTiraje += parseNum(d.horas_tiraje);
+        prev.horasTroquelado += parseNum(d.horas_estimadas_troquelado);
+        prev.horasEngomado += parseNum(d.horas_estimadas_engomado);
         prev.horasTotal += horas;
         prev.hojasObjetivo = Math.max(prev.hojasObjetivo, hojasObj);
         if (prev.material === "—") prev.material = String(d.material ?? "").trim() || "—";
@@ -445,21 +604,104 @@ export function PlanificacionPoolOtsTab() {
       }
       const ots = [...byOt.keys()];
       if (ots.length === 0) {
+        setPoolCountPreAmbito(0);
         setRows([]);
         setSelected({});
         return;
       }
 
-      const { data: mesaData, error: mesaErr } = await supabase
+      let pasoEarlyMap = new Map<string, ProximoPasoInfo>();
+      const otsConPlanEnMesa = new Set<string>();
+      try {
+        const [pasoMapResolved, mesaPlannedRes] = await Promise.all([
+          fetchProximoPasoDisponiblePorOt(supabase, ots).catch((e) => {
+            console.warn("[Pool OTs] itinerario paso (precarga)", e);
+            return new Map<string, ProximoPasoInfo>();
+          }),
+          supabase
+            .from(TABLE_MESA)
+            .select("ot_numero")
+            .in("ot_numero", ots)
+            .in(
+              "estado_mesa",
+              [...MESA_ESTADOS_PLANIFICADA] as unknown as string[],
+            ),
+        ]);
+        pasoEarlyMap = pasoMapResolved;
+        if (mesaPlannedRes.error) throw mesaPlannedRes.error;
+        for (const row of (mesaPlannedRes.data ?? []) as Array<{
+          ot_numero?: string | null;
+        }>) {
+          const o = String(row.ot_numero ?? "").trim();
+          if (o) otsConPlanEnMesa.add(o);
+        }
+      } catch (earlyErr) {
+        console.warn("[Pool OTs] precarga itinerario / mesa planificada", earlyErr);
+      }
+
+      const { data: mesaActiveData, error: mesaErr } = await supabase
         .from(TABLE_MESA)
-        .select("ot_numero")
+        .select("ot_numero, maquina_id")
         .in("estado_mesa", ["borrador", "confirmado", "en_ejecucion"]);
       if (mesaErr) throw mesaErr;
-      const otsEnMesa = new Set(
-        ((mesaData ?? []) as Array<{ ot_numero: string | null }>)
-          .map((x) => String(x.ot_numero ?? "").trim())
-          .filter(Boolean)
-      );
+
+      type MesaBlockInfo = {
+        hasNullMaquina: boolean;
+        tipos: Set<PlanificacionTipoMaquina>;
+      };
+      const mesaBlockByOt = new Map<string, MesaBlockInfo>();
+      const mesaRows = (mesaActiveData ?? []) as Array<{
+        ot_numero?: string | null;
+        maquina_id?: string | null;
+      }>;
+      const mqIds = new Set<string>();
+      for (const row of mesaRows) {
+        const mid = String(row.maquina_id ?? "").trim();
+        if (mid) mqIds.add(mid);
+      }
+      const tipoByMaquinaId = new Map<string, PlanificacionTipoMaquina>();
+      if (mqIds.size > 0) {
+        const { data: mqData, error: mqErr } = await supabase
+          .from(TABLE_MAQUINAS)
+          .select("id, tipo_maquina")
+          .in("id", [...mqIds]);
+        if (mqErr) throw mqErr;
+        for (const m of mqData ?? []) {
+          const id = String((m as { id?: string | null }).id ?? "").trim();
+          const rawTipo = String((m as { tipo_maquina?: string | null }).tipo_maquina ?? "").trim();
+          if (!id) continue;
+          if ((PLANIFICACION_TIPOS_MAQUINA as readonly string[]).includes(rawTipo)) {
+            tipoByMaquinaId.set(id, rawTipo as PlanificacionTipoMaquina);
+          }
+        }
+      }
+      for (const row of mesaRows) {
+        const ot = String(row.ot_numero ?? "").trim();
+        if (!ot) continue;
+        let info = mesaBlockByOt.get(ot);
+        if (!info) {
+          info = { hasNullMaquina: false, tipos: new Set() };
+          mesaBlockByOt.set(ot, info);
+        }
+        const mid = String(row.maquina_id ?? "").trim();
+        if (!mid) {
+          info.hasNullMaquina = true;
+          continue;
+        }
+        const t = tipoByMaquinaId.get(mid);
+        if (t) info.tipos.add(t);
+        else info.hasNullMaquina = true;
+      }
+
+      function otBlockedFromPoolByMesa(otKey: string): boolean {
+        const blk = mesaBlockByOt.get(otKey);
+        if (!blk) return false;
+        if (blk.hasNullMaquina) return true;
+        if (blk.tipos.size === 0) return false;
+        const pasoTipo = pasoEarlyMap.get(otKey)?.tipoMaquina ?? null;
+        if (!pasoTipo) return true;
+        return blk.tipos.has(pasoTipo);
+      }
 
       const { data: otsData, error: otsErr } = await supabase
         .from(TABLE_OTS_GENERAL)
@@ -573,7 +815,7 @@ export function PlanificacionPoolOtsTab() {
         .from(TABLE_POOL)
         .select("id, ot_numero, estado_pool, troquel_status, acabado_pral_snapshot")
         .in("ot_numero", ots)
-        .in("estado_pool", ["pendiente", "enviada_mesa", "cerrada"]);
+        .in("estado_pool", [...POOL_ESTADOS_INCLUIDOS]);
       if (poolErr) throw poolErr;
       const poolByOt = new Map<string, PoolPersisted>();
       for (const p of (poolData ?? []) as PoolPersisted[]) {
@@ -583,7 +825,7 @@ export function PlanificacionPoolOtsTab() {
 
       const out: PoolRow[] = [];
       for (const [ot, row] of byOt.entries()) {
-        if (otsEnMesa.has(ot)) continue;
+        if (otBlockedFromPoolByMesa(ot)) continue;
         const meta = otByNum.get(ot);
         row.cliente = String(meta?.cliente ?? "").trim() || "—";
         row.trabajo = String(meta?.titulo ?? "").trim() || "—";
@@ -637,13 +879,37 @@ export function PlanificacionPoolOtsTab() {
             row.cauchoAcrilico = m.cauchoAcrilico;
           }
         }
+        row.enColaMesa = Boolean(
+          pp && String(pp.estado_pool ?? "").trim().toLowerCase() === "enviada_mesa",
+        );
+        row.planificadaEnMesa = otsConPlanEnMesa.has(ot);
+        row.poolEnTransitoFase = Boolean(
+          pp && String(pp.estado_pool ?? "").trim().toLowerCase() === "en_transito",
+        );
         out.push(row);
       }
 
-      setRows(out);
+      let enrichedRows: PoolRow[] = out.map((r) => {
+        const info = pasoEarlyMap.get(r.ot);
+        if (!info) return { ...r };
+        return {
+          ...r,
+          proximoPasoNombre: info.nombre,
+          proximoPasoSlug: info.seccionSlug,
+          planificacionTipoPaso: info.tipoMaquina,
+        };
+      });
+
+      setPoolCountPreAmbito(enrichedRows.length);
+      const tipoFiltro = getPlanificacionTipoMaquinaFilter(roleRead);
+      if (tipoFiltro) {
+        enrichedRows = enrichedRows.filter((r) => r.planificacionTipoPaso === tipoFiltro);
+      }
+
+      setRows(enrichedRows);
       setSelected((prev) => {
         const next: Record<string, boolean> = {};
-        for (const r of out) next[r.ot] = prev[r.ot] ?? false;
+        for (const r of enrichedRows) next[r.ot] = prev[r.ot] ?? false;
         return next;
       });
     } catch (e) {
@@ -661,14 +927,6 @@ export function PlanificacionPoolOtsTab() {
     void loadRows();
   }, [loadRows]);
 
-  const selectableRows = useMemo(
-    () => rows.filter((r) => r.hasCompraGenerada),
-    [rows],
-  );
-  const allChecked =
-    selectableRows.length > 0 && selectableRows.every((r) => selected[r.ot]);
-  const selectedRows = rows.filter((r) => selected[r.ot]);
-
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     const filterNorm = normalizeCompraEstado(compraEstadoFilter);
@@ -679,10 +937,28 @@ export function PlanificacionPoolOtsTab() {
           .map((x) => String(x ?? "").toLowerCase())
           .some((s) => s.includes(q));
       if (!matchesSearch) return false;
-      if (filterNorm === "all") return true;
-      return normalizeCompraEstado(r.compraEstado) === filterNorm;
+      if (filterNorm !== "all" && normalizeCompraEstado(r.compraEstado) !== filterNorm) {
+        return false;
+      }
+      if (areaTipoFilter !== "all" && r.planificacionTipoPaso !== areaTipoFilter) {
+        return false;
+      }
+      return true;
     });
-  }, [rows, search, compraEstadoFilter]);
+  }, [rows, search, compraEstadoFilter, areaTipoFilter]);
+
+  const selectableRows = useMemo(
+    () => filteredRows.filter((r) => r.hasCompraGenerada),
+    [filteredRows],
+  );
+  const allChecked =
+    selectableRows.length > 0 && selectableRows.every((r) => selected[r.ot]);
+  const selectedRows = rows.filter((r) => selected[r.ot]);
+
+  const tipoFiltroPlanificacion = useMemo(
+    () => getPlanificacionTipoMaquinaFilter(planificacionRole),
+    [planificacionRole],
+  );
 
   const sortedRows = useMemo(() => {
     const arr = [...filteredRows];
@@ -702,6 +978,15 @@ export function PlanificacionPoolOtsTab() {
     return arr;
   }, [filteredRows, sortBy, sortDir]);
 
+  const resetPoolEditItinerario = useCallback(() => {
+    setPoolEditOtGeneralId(null);
+    setPoolEditPasosVista([]);
+    setPoolEditCanReplaceItinerario(false);
+    setPoolEditItinerarioSlots([]);
+    setPoolEditItinerarioLoading(false);
+    poolItinerarioInitialRef.current = "";
+  }, []);
+
   const startEdit = useCallback((r: PoolRow) => {
     setEditingOt(r.ot);
     setDraft({
@@ -713,12 +998,16 @@ export function PlanificacionPoolOtsTab() {
       horasEntrada: r.horasEntrada.toFixed(2),
       horasTiraje: r.horasTiraje.toFixed(2),
     });
-  }, []);
+    resetPoolEditItinerario();
+    setPoolEditDialogOpen(true);
+  }, [resetPoolEditItinerario]);
 
   const cancelEdit = useCallback(() => {
     setEditingOt(null);
     setDraft(null);
-  }, []);
+    setPoolEditDialogOpen(false);
+    resetPoolEditItinerario();
+  }, [resetPoolEditItinerario]);
 
   const hasDraftChanges = useCallback(() => {
     if (!editingOt || !draft) return false;
@@ -729,16 +1018,26 @@ export function PlanificacionPoolOtsTab() {
       draft.troquelModo === "informado"
         ? draft.troquel.trim() !== curr.troquelLabel.trim()
         : curr.troquelLabel.trim() !== "";
-    return (
+    const despachoChanged =
       draft.trabajo.trim() !== curr.trabajo.trim() ||
       draft.tintas.trim() !== currTintas.trim() ||
       draft.acabadoPral.trim() !== curr.acabadoPral.trim() ||
       parseNonNegative(draft.horasEntrada) !== curr.horasEntrada ||
       parseNonNegative(draft.horasTiraje) !== curr.horasTiraje ||
       draft.troquelModo !== curr.troquelModo ||
-      troquelChanged
-    );
-  }, [draft, editingOt, rows]);
+      troquelChanged;
+    const itinerarioChanged =
+      poolEditCanReplaceItinerario &&
+      serializeItinerarioProcesoIds(poolEditItinerarioSlots) !==
+        poolItinerarioInitialRef.current;
+    return despachoChanged || itinerarioChanged;
+  }, [
+    draft,
+    editingOt,
+    poolEditCanReplaceItinerario,
+    poolEditItinerarioSlots,
+    rows,
+  ]);
 
   const saveEdit = useCallback(async () => {
     if (!editingOt || !draft) return;
@@ -776,7 +1075,7 @@ export function PlanificacionPoolOtsTab() {
         .from(TABLE_POOL)
         .select("id")
         .eq("ot_numero", editingOt)
-        .in("estado_pool", ["pendiente", "enviada_mesa", "cerrada"])
+        .in("estado_pool", [...POOL_ESTADOS_INCLUIDOS])
         .limit(1);
       if (exErr) throw exErr;
       if ((exPool ?? []).length > 0) {
@@ -814,6 +1113,20 @@ export function PlanificacionPoolOtsTab() {
         });
         if (pInsErr) throw pInsErr;
       }
+
+      if (
+        poolEditOtGeneralId &&
+        poolEditCanReplaceItinerario &&
+        serializeItinerarioProcesoIds(poolEditItinerarioSlots) !==
+          poolItinerarioInitialRef.current
+      ) {
+        await replaceProdOtItinerarioSlots(
+          supabase,
+          poolEditOtGeneralId,
+          poolEditItinerarioSlots
+        );
+      }
+
       toast.success("Fila actualizada.");
       setSavedRowOt(editingOt);
       window.setTimeout(() => {
@@ -846,29 +1159,19 @@ export function PlanificacionPoolOtsTab() {
       saveInFlightRef.current = false;
       setSavingEdit(false);
     }
-  }, [cancelEdit, draft, editingOt, hasDraftChanges, loadRows, rows, savingEdit, supabase]);
-
-  const onDraftKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement | HTMLSelectElement>) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        void saveEdit();
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        cancelEdit();
-      }
-    },
-    [cancelEdit, saveEdit]
-  );
-
-  const onDraftBlur = useCallback(() => {
-    if (skipBlurSaveRef.current) {
-      skipBlurSaveRef.current = false;
-      return;
-    }
-    if (!editingOt || !draft) return;
-    void saveEdit();
-  }, [draft, editingOt, saveEdit]);
+  }, [
+    cancelEdit,
+    draft,
+    editingOt,
+    hasDraftChanges,
+    loadRows,
+    poolEditCanReplaceItinerario,
+    poolEditItinerarioSlots,
+    poolEditOtGeneralId,
+    rows,
+    savingEdit,
+    supabase,
+  ]);
 
   const revokePdfBlob = useCallback(() => {
     setPdfBlobUrl((prev) => {
@@ -1024,16 +1327,6 @@ export function PlanificacionPoolOtsTab() {
     [loadCauchoPreview, revokeCauchoBlob]
   );
 
-  const onEditRowBlurCapture = useCallback(
-    (e: FocusEvent<HTMLTableRowElement>, ot: string) => {
-      if (editingOt !== ot) return;
-      const next = e.relatedTarget as Node | null;
-      if (next && e.currentTarget.contains(next)) return;
-      onDraftBlur();
-    },
-    [editingOt, onDraftBlur]
-  );
-
   const pasarAMesa = useCallback(async () => {
     if (selectedRows.length === 0) {
       toast.error("Selecciona al menos una OT para pasar a mesa.");
@@ -1080,7 +1373,7 @@ export function PlanificacionPoolOtsTab() {
         .from(TABLE_POOL)
         .select("id, ot_numero")
         .in("ot_numero", nuevos.map((r) => r.ot))
-        .in("estado_pool", ["pendiente", "enviada_mesa", "cerrada"]);
+        .in("estado_pool", [...POOL_ESTADOS_PARA_MESA]);
       if (poolErr) throw poolErr;
       const poolByOt = new Map<string, string>();
       for (const p of (poolExist ?? []) as Array<{ id: string; ot_numero: string }>) {
@@ -1128,7 +1421,7 @@ export function PlanificacionPoolOtsTab() {
       await loadRows();
     } catch (e) {
       console.error(e);
-      toast.error(e instanceof Error ? e.message : "No se pudo pasar la selección a mesa.");
+      toast.error(getErrorMessage(e, "No se pudo pasar la selección a mesa."));
     } finally {
       setSaving(false);
     }
@@ -1137,11 +1430,24 @@ export function PlanificacionPoolOtsTab() {
   return (
     <Card className="border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
       <CardHeader>
-        <CardTitle className="text-lg text-[#002147]">Pool de OT&apos;s</CardTitle>
-        <CardDescription>
-          OTs despachadas pendientes de planificación, con control de material y
-          validación de troquel antes de pasar a mesa.
-        </CardDescription>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <CardTitle className="text-lg text-[#002147]">Pool de OT&apos;s</CardTitle>
+            <CardDescription>
+              OTs despachadas pendientes de planificación, con control de material y
+              validación de troquel antes de pasar a mesa.
+            </CardDescription>
+          </div>
+          {tipoFiltroPlanificacion ? (
+            <span className="shrink-0 rounded-md border border-[#C69C2B]/40 bg-[#C69C2B]/15 px-2 py-1 text-[11px] font-semibold text-[#002147]">
+              Ámbito: {etiquetaAmbitoPlanificacion(tipoFiltroPlanificacion)}
+            </span>
+          ) : (
+            <span className="shrink-0 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700">
+              Ámbito: {etiquetaAmbitoPlanificacion(null)}
+            </span>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1169,6 +1475,26 @@ export function PlanificacionPoolOtsTab() {
                 </option>
               ))}
               <option value="Sin compra">Sin compra</option>
+            </select>
+            <select
+              className="h-9 min-w-[11rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700"
+              value={areaTipoFilter}
+              onChange={(e) =>
+                setAreaTipoFilter(
+                  e.target.value === "all"
+                    ? "all"
+                    : (e.target.value as PlanificacionTipoMaquina),
+                )
+              }
+              aria-label="Filtrar por área del próximo paso"
+              title="Filtra por tipo de proceso del primer paso disponible (itinerario)."
+            >
+              <option value="all">Próximo paso: todos</option>
+              {PLANIFICACION_TIPOS_MAQUINA.map((t) => (
+                <option key={t} value={t}>
+                  {etiquetaAmbitoPlanificacion(t)}
+                </option>
+              ))}
             </select>
           </div>
           <Button
@@ -1198,11 +1524,27 @@ export function PlanificacionPoolOtsTab() {
           </div>
         ) : sortedRows.length === 0 ? (
           <div className="rounded-lg border border-slate-200/90 bg-slate-50/80 px-3 py-6 text-sm text-slate-600">
-            No hay OT&apos;s despachadas pendientes de planificación.
+            {tipoFiltroPlanificacion &&
+            poolCountPreAmbito > 0 &&
+            rows.length === 0 ? (
+              <>
+                No hay OT&apos;s en el pool que coincidan con tu ámbito (
+                {etiquetaAmbitoPlanificacion(tipoFiltroPlanificacion)}). Hay{" "}
+                {poolCountPreAmbito} OT(s) en otras fases del itinerario.
+              </>
+            ) : rows.length > 0 && areaTipoFilter !== "all" ? (
+              <>
+                Ninguna OT coincide con el filtro de próximo paso (
+                {etiquetaAmbitoPlanificacion(areaTipoFilter)}). Prueba &quot;Próximo paso:
+                todos&quot; o revisa OTs sin itinerario inferido.
+              </>
+            ) : (
+              <>No hay OT&apos;s despachadas pendientes de planificación.</>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-slate-200/90">
-            <Table className="min-w-[90rem]">
+            <Table className="min-w-[100rem]">
               <TableHeader>
                 <TableRow className="bg-slate-50/90">
                   <TableHead className="w-10">
@@ -1211,7 +1553,7 @@ export function PlanificacionPoolOtsTab() {
                       checked={allChecked}
                       onChange={(e) => {
                         const next: Record<string, boolean> = {};
-                        for (const r of rows) {
+                        for (const r of filteredRows) {
                           next[r.ot] = r.hasCompraGenerada ? e.target.checked : false;
                         }
                         setSelected(next);
@@ -1249,6 +1591,19 @@ export function PlanificacionPoolOtsTab() {
                       <ArrowUpDown className="size-3.5 text-slate-500" />
                     </button>
                   </TableHead>
+                  <TableHead className="min-w-[9rem]">Próximo paso</TableHead>
+                  <TableHead
+                    className="w-[4.5rem] text-center text-xs font-medium normal-case"
+                    title="En cola para la mesa (enviada a planificación). No implica tener ya huecos en el calendario."
+                  >
+                    Cola mesa
+                  </TableHead>
+                  <TableHead
+                    className="w-[4.5rem] text-center text-xs font-medium normal-case"
+                    title="Tiene trabajos en el calendario de mesa (borrador, confirmado, en ejecución o finalizado en mesa)."
+                  >
+                    En plan
+                  </TableHead>
                   <TableHead>Trabajo</TableHead>
                   <TableHead>Tintas</TableHead>
                   <TableHead>Acabado pral</TableHead>
@@ -1262,11 +1617,6 @@ export function PlanificacionPoolOtsTab() {
                 {sortedRows.map((r) => (
                   <TableRow
                     key={r.ot}
-                    onBlurCapture={
-                      editingOt === r.ot
-                        ? (e) => onEditRowBlurCapture(e, r.ot)
-                        : undefined
-                    }
                     className={
                       savedRowOt === r.ot
                         ? "bg-emerald-50/80 ring-1 ring-emerald-200 transition-colors duration-700"
@@ -1300,6 +1650,14 @@ export function PlanificacionPoolOtsTab() {
                     </TableCell>
                     <TableCell>
                       <p className="font-mono text-sm font-semibold text-[#002147]">{r.ot}</p>
+                      {r.poolEnTransitoFase ? (
+                        <p
+                          className="mt-0.5 text-[10px] font-medium text-amber-800"
+                          title="Fase anterior finalizada en mesa; el itinerario sigue (p. ej. pendiente de troquel u otra sección)."
+                        >
+                          Entre fases
+                        </p>
+                      ) : null}
                     </TableCell>
                     <TableCell>
                       <p className="max-w-[12rem] truncate text-xs text-slate-700" title={r.cliente}>
@@ -1307,52 +1665,92 @@ export function PlanificacionPoolOtsTab() {
                       </p>
                     </TableCell>
                     <TableCell>
-                      {editingOt === r.ot && draft ? (
-                        <Input
-                          value={draft.trabajo}
-                          onChange={(e) => setDraft({ ...draft, trabajo: e.target.value })}
-                          onKeyDown={onDraftKeyDown}
-                          className="h-8 max-w-[14rem]"
-                        />
-                      ) : (
-                        <>
-                          <p
-                            className="max-w-[14rem] truncate text-sm font-medium text-slate-900"
-                            title={r.trabajo}
-                          >
-                            {r.trabajo || "—"}
-                          </p>
-                          <p className="max-w-[14rem] truncate text-xs text-slate-600" title={r.material}>
-                            {r.material || "—"}
-                          </p>
-                        </>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {editingOt === r.ot && draft ? (
-                        <Input
-                          value={draft.tintas}
-                          onChange={(e) => setDraft({ ...draft, tintas: e.target.value })}
-                          onKeyDown={onDraftKeyDown}
-                          className="h-8 w-20"
-                        />
-                      ) : (
-                        <span className="font-mono text-xs">{r.tintas || "—"}</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {editingOt === r.ot && draft ? (
-                        <Input
-                          value={draft.acabadoPral}
-                          onChange={(e) => setDraft({ ...draft, acabadoPral: e.target.value })}
-                          onKeyDown={onDraftKeyDown}
-                          className="h-8 max-w-[10rem]"
-                        />
-                      ) : (
-                        <p className="max-w-[10rem] truncate text-xs text-slate-700" title={r.acabadoPral}>
-                          {r.acabadoPral || "—"}
+                      <p
+                        className="max-w-[10rem] truncate text-xs font-medium text-[#002147]"
+                        title={
+                          r.proximoPasoSlug
+                            ? `${r.proximoPasoNombre ?? ""} (${r.proximoPasoSlug})`
+                            : (r.proximoPasoNombre ?? "")
+                        }
+                      >
+                        {r.proximoPasoNombre ?? "—"}
+                      </p>
+                      {r.proximoPasoSlug ? (
+                        <p className="max-w-[10rem] truncate text-[10px] uppercase text-slate-500">
+                          {r.proximoPasoSlug}
                         </p>
-                      )}
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="text-center align-middle">
+                      <span
+                        className="inline-flex justify-center"
+                        title={
+                          r.enColaMesa
+                            ? "En cola para mesa: enviada a planificación (pool lateral). No implica tener ya huecos en el calendario."
+                            : "Aún no enviada a la cola de mesa (pendiente u otro estado)."
+                        }
+                      >
+                        {r.enColaMesa ? (
+                          <CheckCircle2
+                            className="size-5 shrink-0 text-emerald-600"
+                            aria-label="En cola para mesa"
+                          />
+                        ) : (
+                          <Circle
+                            className="size-4 shrink-0 text-slate-200"
+                            aria-label="No en cola mesa"
+                          />
+                        )}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-center align-middle">
+                      <span
+                        className="inline-flex justify-center"
+                        title={
+                          r.planificadaEnMesa
+                            ? "Planificada: tiene trabajos en el calendario de mesa (borrador, confirmado, en ejecución o finalizado en mesa)."
+                            : "Sin plan en mesa: aún no hay trabajos en el calendario."
+                        }
+                      >
+                        {r.planificadaEnMesa ? (
+                          <CheckCircle2
+                            className="size-5 shrink-0 text-emerald-600"
+                            aria-label="Planificada en mesa"
+                          />
+                        ) : (
+                          <Circle
+                            className="size-4 shrink-0 text-slate-200"
+                            aria-label="Sin plan en mesa"
+                          />
+                        )}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <>
+                        <p
+                          className="max-w-[14rem] truncate text-sm font-medium text-slate-900"
+                          title={r.trabajo}
+                        >
+                          {r.trabajo || "—"}
+                        </p>
+                        <p
+                          className="max-w-[14rem] truncate text-xs text-slate-600"
+                          title={r.material}
+                        >
+                          {r.material || "—"}
+                        </p>
+                      </>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-mono text-xs">{r.tintas || "—"}</span>
+                    </TableCell>
+                    <TableCell>
+                      <p
+                        className="max-w-[10rem] truncate text-xs text-slate-700"
+                        title={r.acabadoPral}
+                      >
+                        {r.acabadoPral || "—"}
+                      </p>
                     </TableCell>
                     <TableCell>
                       <div className="space-y-1">
@@ -1382,160 +1780,73 @@ export function PlanificacionPoolOtsTab() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {editingOt === r.ot && draft ? (
-                        <div className="space-y-1">
-                          <select
-                            className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs"
-                            value={draft.troquelModo}
-                            onChange={(e) =>
-                              setDraft({
-                                ...draft,
-                                troquelModo: e.target.value as TroquelModo,
-                                troquel: e.target.value === "informado" ? draft.troquel : "",
-                              })
-                            }
-                            onKeyDown={onDraftKeyDown}
-                          >
-                            <option value="sin_informar">Sin informar</option>
-                            <option value="no_aplica">No aplica</option>
-                            <option value="informado">Informado</option>
-                          </select>
-                          {draft.troquelModo === "informado" ? (
-                            <Input
-                              value={draft.troquel}
-                              onChange={(e) => setDraft({ ...draft, troquel: e.target.value })}
-                              onKeyDown={onDraftKeyDown}
-                              className="h-8"
-                              placeholder="Nº troquel"
-                            />
-                          ) : null}
-                        </div>
-                      ) : (
-                        <>
-                          {r.troquelStatus === "ok"
-                            ? statusPill("verde", "OK")
-                            : r.troquelStatus === "falta"
-                              ? statusPill("amarillo", "Falta")
-                              : r.troquelStatus === "no_aplica"
-                                ? statusPill("gris", "No aplica")
-                                : statusPill("gris", "Sin informar")}
-                          {r.troquelStatus === "ok" && r.troquelLabel.trim() ? (
-                            <div className="mt-1 flex items-center gap-1">
+                      <>
+                        {r.troquelStatus === "ok"
+                          ? statusPill("verde", "OK")
+                          : r.troquelStatus === "falta"
+                            ? statusPill("amarillo", "Falta")
+                            : r.troquelStatus === "no_aplica"
+                              ? statusPill("gris", "No aplica")
+                              : statusPill("gris", "Sin informar")}
+                        {r.troquelStatus === "ok" && r.troquelLabel.trim() ? (
+                          <div className="mt-1 flex items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-6 text-[#002147]/85 hover:bg-[#002147]/10 hover:text-[#002147]"
+                              title="Ver troquel"
+                              onClick={() => void openTroquelPdf(r.troquelLabel)}
+                            >
+                              <Eye className="size-3.5" aria-hidden />
+                            </Button>
+                            {cauchoAcrilicoShowsViewer(r.cauchoAcrilico) ? (
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="icon"
                                 className="size-6 text-[#002147]/85 hover:bg-[#002147]/10 hover:text-[#002147]"
-                                title="Ver troquel"
-                                onClick={() => void openTroquelPdf(r.troquelLabel)}
+                                title="Ver caucho"
+                                onClick={() => void openCauchoQuick(r.troquelLabel)}
                               >
-                                <Eye className="size-3.5" aria-hidden />
+                                <Droplet className="size-3.5" aria-hidden />
                               </Button>
-                              {cauchoAcrilicoShowsViewer(r.cauchoAcrilico) ? (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="size-6 text-[#002147]/85 hover:bg-[#002147]/10 hover:text-[#002147]"
-                                  title="Ver caucho"
-                                  onClick={() => void openCauchoQuick(r.troquelLabel)}
-                                >
-                                  <Droplet className="size-3.5" aria-hidden />
-                                </Button>
-                              ) : null}
-                            </div>
-                          ) : null}
-                          {r.troquelLabel ? (
-                            <p className="mt-1 font-mono text-[11px] text-slate-600">
-                              {r.troquelLabel}
-                              {r.poses != null ? (
-                                <span className="ml-1 text-[10px] text-slate-500">({r.poses})</span>
-                              ) : null}
-                            </p>
-                          ) : r.poses != null ? (
-                            <p className="mt-1 text-[10px] text-slate-500">({r.poses})</p>
-                          ) : null}
-                        </>
-                      )}
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {r.troquelLabel ? (
+                          <p className="mt-1 font-mono text-[11px] text-slate-600">
+                            {r.troquelLabel}
+                            {r.poses != null ? (
+                              <span className="ml-1 text-[10px] text-slate-500">({r.poses})</span>
+                            ) : null}
+                          </p>
+                        ) : r.poses != null ? (
+                          <p className="mt-1 text-[10px] text-slate-500">({r.poses})</p>
+                        ) : null}
+                      </>
                     </TableCell>
                     <TableCell className="text-right">
-                      {editingOt === r.ot && draft ? (
-                        <div className="flex items-center justify-end gap-1.5">
-                          <Input
-                            inputMode="decimal"
-                            value={draft.horasEntrada}
-                            onChange={(e) =>
-                              setDraft({ ...draft, horasEntrada: e.target.value })
-                            }
-                            onKeyDown={onDraftKeyDown}
-                            className="h-8 w-20 text-right"
-                            title="Horas entrada"
-                            placeholder="E"
-                          />
-                          <Input
-                            inputMode="decimal"
-                            value={draft.horasTiraje}
-                            onChange={(e) =>
-                              setDraft({ ...draft, horasTiraje: e.target.value })
-                            }
-                            onKeyDown={onDraftKeyDown}
-                            className="h-8 w-20 text-right"
-                            title="Horas tiraje"
-                            placeholder="T"
-                          />
-                        </div>
-                      ) : (
-                        <div className="space-y-0.5">
-                          <p className="text-[11px] text-slate-600">
-                            E {r.horasEntrada.toFixed(2)}h · T {r.horasTiraje.toFixed(2)}h
-                          </p>
-                          <span className="font-medium tabular-nums text-slate-900">
-                            {r.horasTotal.toFixed(2)} h
-                          </span>
-                        </div>
-                      )}
+                      <div className="space-y-0.5">
+                        <p className="text-[11px] text-slate-600">
+                          E {r.horasEntrada.toFixed(2)}h · T {r.horasTiraje.toFixed(2)}h
+                        </p>
+                        <span className="font-medium tabular-nums text-slate-900">
+                          {r.horasTotal.toFixed(2)} h
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell>
-                      {editingOt === r.ot ? (
-                        <div className="flex items-center gap-1">
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="h-7 bg-[#002147] px-2 text-white hover:bg-[#001735]"
-                            disabled={savingEdit}
-                            onMouseDown={() => {
-                              skipBlurSaveRef.current = true;
-                            }}
-                            onClick={() => void saveEdit()}
-                          >
-                            {savingEdit ? <Loader2 className="size-3.5 animate-spin" /> : "OK"}
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-7 px-2"
-                            disabled={savingEdit}
-                            onMouseDown={() => {
-                              skipBlurSaveRef.current = true;
-                            }}
-                            onClick={cancelEdit}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      ) : (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 text-slate-600 hover:text-[#002147]"
-                          onClick={() => startEdit(r)}
-                          title="Editar fila"
-                        >
-                          <Edit3 className="size-4" />
-                        </Button>
-                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 text-slate-600 hover:text-[#002147]"
+                        onClick={() => startEdit(r)}
+                        title="Editar despacho e itinerario"
+                      >
+                        <Edit3 className="size-4" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1544,6 +1855,198 @@ export function PlanificacionPoolOtsTab() {
           </div>
         )}
       </CardContent>
+      <Dialog
+        open={poolEditDialogOpen}
+        onOpenChange={(o) => {
+          if (!o) cancelEdit();
+        }}
+      >
+        <DialogContent className="flex max-h-[min(92vh,760px)] max-w-[min(96vw,560px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+          <DialogHeader className="shrink-0 border-b border-slate-100 px-4 py-3 sm:px-5">
+            <DialogTitle className="text-base text-[#002147]">
+              Editar pool · OT{" "}
+              <span className="font-mono text-sm font-semibold">{editingOt ?? ""}</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Despacho en{" "}
+              <code className="rounded bg-slate-100 px-1 text-[10px]">
+                {TABLE_DESPACHADAS}
+              </code>
+              . Itinerario en{" "}
+              <code className="rounded bg-slate-100 px-1 text-[10px]">prod_ot_pasos</code>.
+            </DialogDescription>
+          </DialogHeader>
+          {draft && editingOt ? (
+            <>
+              <div className="grid max-h-[min(52vh,440px)] gap-3 overflow-y-auto px-4 py-3 sm:px-5">
+                <div className="grid gap-1">
+                  <Label htmlFor="pool-edit-trabajo" className="text-xs">
+                    Trabajo (referencia)
+                  </Label>
+                  <Input
+                    id="pool-edit-trabajo"
+                    className="h-8 text-xs"
+                    value={draft.trabajo}
+                    onChange={(e) => setDraft({ ...draft, trabajo: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-1 sm:grid-cols-2 sm:gap-3">
+                  <div className="grid gap-1">
+                    <Label htmlFor="pool-edit-tintas" className="text-xs">
+                      Tintas
+                    </Label>
+                    <Input
+                      id="pool-edit-tintas"
+                      className="h-8 text-xs"
+                      value={draft.tintas}
+                      onChange={(e) => setDraft({ ...draft, tintas: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid gap-1">
+                    <Label htmlFor="pool-edit-acabado" className="text-xs">
+                      Acabado PRAL
+                    </Label>
+                    <Input
+                      id="pool-edit-acabado"
+                      className="h-8 text-xs"
+                      value={draft.acabadoPral}
+                      onChange={(e) => setDraft({ ...draft, acabadoPral: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-1">
+                  <Label className="text-xs">Troquel</Label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs"
+                      value={draft.troquelModo}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          troquelModo: e.target.value as TroquelModo,
+                          troquel:
+                            e.target.value === "informado" ? draft.troquel : "",
+                        })
+                      }
+                    >
+                      <option value="sin_informar">Sin informar</option>
+                      <option value="no_aplica">No aplica</option>
+                      <option value="informado">Informado</option>
+                    </select>
+                    {draft.troquelModo === "informado" ? (
+                      <Input
+                        className="h-8 max-w-[10rem] text-xs"
+                        value={draft.troquel}
+                        onChange={(e) =>
+                          setDraft({ ...draft, troquel: e.target.value })
+                        }
+                        placeholder="Nº troquel"
+                      />
+                    ) : null}
+                  </div>
+                </div>
+                <div className="grid gap-1 sm:grid-cols-2 sm:gap-3">
+                  <div className="grid gap-1">
+                    <Label htmlFor="pool-edit-he" className="text-xs">
+                      Horas entrada
+                    </Label>
+                    <Input
+                      id="pool-edit-he"
+                      inputMode="decimal"
+                      className="h-8 text-xs"
+                      value={draft.horasEntrada}
+                      onChange={(e) =>
+                        setDraft({ ...draft, horasEntrada: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="grid gap-1">
+                    <Label htmlFor="pool-edit-ht" className="text-xs">
+                      Horas tiraje
+                    </Label>
+                    <Input
+                      id="pool-edit-ht"
+                      inputMode="decimal"
+                      className="h-8 text-xs"
+                      value={draft.horasTiraje}
+                      onChange={(e) =>
+                        setDraft({ ...draft, horasTiraje: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="border-t border-slate-100 pt-2">
+                  <p className="text-xs font-semibold text-[#002147]">Itinerario</p>
+                  {poolEditItinerarioLoading ? (
+                    <p className="text-muted-foreground mt-1 flex items-center gap-2 text-[11px]">
+                      <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                      Cargando pasos…
+                    </p>
+                  ) : poolEditPasosVista.length === 0 ? (
+                    <p className="text-muted-foreground mt-1 text-[11px]">
+                      Sin pasos en base de datos.
+                    </p>
+                  ) : (
+                    <ol className="mt-1.5 list-decimal space-y-0.5 pl-4 text-[11px] text-slate-800">
+                      {poolEditPasosVista.map((p) => (
+                        <li key={p.id}>
+                          <span className="font-medium">{p.orden}.</span>{" "}
+                          {p.procesoNombre}{" "}
+                          <span className="text-slate-500">({p.estado})</span>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                  {!poolEditCanReplaceItinerario && poolEditPasosVista.length > 0 ? (
+                    <p className="mt-2 rounded border border-amber-200 bg-amber-50/80 px-2 py-1.5 text-[11px] text-amber-950">
+                      Hay pasos en marcha o finalizados: no se puede sustituir el
+                      itinerario desde aquí.
+                    </p>
+                  ) : null}
+                  <DespachoItinerarioPicker
+                    open={poolEditDialogOpen}
+                    supabase={supabase}
+                    disabled={
+                      savingEdit ||
+                      poolEditItinerarioLoading ||
+                      !poolEditCanReplaceItinerario
+                    }
+                    slots={poolEditItinerarioSlots}
+                    onSlotsChange={setPoolEditItinerarioSlots}
+                  />
+                </div>
+              </div>
+              <DialogFooter className="shrink-0 gap-2 border-t border-slate-100 px-4 py-3 sm:flex-row sm:px-5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={savingEdit}
+                  onClick={() => cancelEdit()}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="bg-[#002147] text-white hover:bg-[#001735]"
+                  disabled={savingEdit || !hasDraftChanges()}
+                  onClick={() => void saveEdit()}
+                >
+                  {savingEdit ? (
+                    <>
+                      <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden />
+                      Guardando…
+                    </>
+                  ) : (
+                    "Guardar"
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
       <Dialog open={pdfModalOpen} onOpenChange={closePdfModal}>
         <DialogContent
           showCloseButton

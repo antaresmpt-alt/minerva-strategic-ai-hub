@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   Anchor,
   FileCog,
+  GitBranch,
   Home,
   LayoutList,
   MessageCircle,
@@ -38,6 +39,13 @@ const NAV: NavItem[] = [
     match: (p) =>
       p === "/produccion/ejecucion" ||
       p.startsWith("/produccion/ejecucion/"),
+  },
+  {
+    href: "/produccion/pipeline",
+    label: "Pipeline",
+    icon: GitBranch,
+    match: (p) =>
+      p === "/produccion/pipeline" || p.startsWith("/produccion/pipeline/"),
   },
   {
     href: "/produccion/ots",

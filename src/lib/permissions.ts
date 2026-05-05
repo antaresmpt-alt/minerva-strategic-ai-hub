@@ -52,16 +52,45 @@ function hasDynamicAccess(
   return dynamic != null && dynamic.size > 0;
 }
 
+/** Roles (matriz estática) que pueden usar la pestaña Planificación OT's dentro de /produccion/ots. */
+const PLANIFICACION_OTS_TAB_ROLES = new Set([
+  "produccion",
+  "logistica",
+  "impresion",
+  "digital",
+  "troquelado",
+  "engomado",
+]);
+
+/**
+ * Pestaña "Planificación OT's" (pool, mesa, ejecución planificada): no todo el mundo con acceso a OTs.
+ * Con `role_permissions` activo: mismo criterio que el módulo `produccion` (admin/gerencia siempre).
+ */
+export function canAccessPlanificacionOtsTab(
+  role: string | null,
+  dynamic?: Map<string, boolean> | null,
+): boolean {
+  if (hasDynamicAccess(dynamic)) {
+    if (hasFullAccess(role)) return true;
+    return dynamic.get("produccion") === true;
+  }
+  const r = normalizeDbRole(role);
+  if (!r) return false;
+  if (hasFullAccess(r)) return true;
+  return PLANIFICACION_OTS_TAB_ROLES.has(r);
+}
+
 export function canAccessSettings(
   role: string | null,
   dynamic?: Map<string, boolean> | null
 ): boolean {
   const r = normalizeDbRole(role);
   if (!r) return false;
+  if (hasFullAccess(r)) return true;
   if (hasDynamicAccess(dynamic)) {
     return dynamic.get("settings") === true;
   }
-  return hasFullAccess(r);
+  return false;
 }
 
 export function canAccessHubModule(
@@ -71,13 +100,22 @@ export function canAccessHubModule(
 ): boolean {
   const r = normalizeDbRole(role);
   if (!r) return false;
+  if (hasFullAccess(r)) return true;
   if (hasDynamicAccess(dynamic)) {
     return dynamic.get(module) === true;
   }
-  if (hasFullAccess(r)) return true;
 
   if (r === "produccion" || r === "logistica") {
     return module === "chat" || module === "produccion";
+  }
+
+  /** Responsables de sección: planificación + ejecución en el mismo módulo Producción. */
+  if (r === "digital" || r === "troquelado" || r === "engomado") {
+    return (
+      module === "chat" ||
+      module === "produccion" ||
+      module === "produccion_ejecucion"
+    );
   }
 
   if (r === "impresion") {
@@ -113,6 +151,10 @@ export function canAccessPagePath(
   if (!normalizeDbRole(role)) return false;
   if (hasDynamicAccess(dynamic)) {
     const p = pathname.split("?")[0] ?? pathname;
+    /** Handoff post-login (middleware redirige aquí); no forma parte del mapa de módulos. */
+    if (p.startsWith("/auth/")) return true;
+    /** Misma regla que sin `role_permissions`: admin/gerencia no quedan bloqueados en rutas no listadas. */
+    if (hasFullAccess(role)) return true;
     if (p === "/" || p === "") return true;
     if (p.startsWith("/settings"))
       return canAccessSettings(role, dynamic);
@@ -133,6 +175,8 @@ export function canAccessPagePath(
   if (hasFullAccess(role)) return true;
 
   const p = pathname.split("?")[0] ?? pathname;
+
+  if (p.startsWith("/auth/")) return true;
 
   if (p === "/" || p === "") return true;
 
@@ -273,7 +317,10 @@ export const ROLE_LABELS: Record<string, string> = {
   gerencia: "Gerencia",
   comercial: "Comercial",
   produccion: "Producción",
-  impresion: "Impresión",
+  impresion: "Impresión offset",
+  digital: "Impresión digital",
+  troquelado: "Troquelado",
+  engomado: "Engomado",
   logistica: "Logística",
   almacen: "Almacén",
   oficina_tecnica: "Oficina técnica",
@@ -287,6 +334,9 @@ export const ASSIGNABLE_ROLES = [
   "comercial",
   "produccion",
   "impresion",
+  "digital",
+  "troquelado",
+  "engomado",
   "logistica",
   "almacen",
   "ctp",

@@ -1,6 +1,23 @@
-import { ProduccionOtsModulePage } from "@/components/produccion/ots/produccion-ots-module-page";
+import { ProduccionOtsRouteLazy } from "@/components/produccion/ots/produccion-ots-route-lazy";
+import { canAccessPlanificacionOtsTab } from "@/lib/permissions";
+import {
+  getCurrentProfileRole,
+  getModuleAccessForCurrentUser,
+} from "@/lib/supabase/server";
 
 /** Ruta bajo `app/produccion/` para heredar `produccion/layout.tsx` (ProduccionShell). */
-export default function ProduccionOtsPage() {
-  return <ProduccionOtsModulePage />;
+export default async function ProduccionOtsPage() {
+  const role = await getCurrentProfileRole();
+  const moduleAccess = await getModuleAccessForCurrentUser();
+  const dynamicMap =
+    moduleAccess && Object.keys(moduleAccess).length > 0
+      ? new Map(Object.entries(moduleAccess))
+      : null;
+  const canAccessPlanificacion = canAccessPlanificacionOtsTab(role, dynamicMap);
+
+  return (
+    <ProduccionOtsRouteLazy
+      canAccessPlanificacion={canAccessPlanificacion}
+    />
+  );
 }

@@ -1,4 +1,4 @@
-import { HubPortal } from "@/components/portal/hub-portal";
+import { HomePortalLazy } from "@/components/portal/home-portal-lazy";
 import {
   getCurrentProfileRole,
   getModuleAccessForCurrentUser,
@@ -35,7 +35,7 @@ export default async function Home({ searchParams }: HomeProps) {
   const showModuleDeniedNotice = permiso === "denegado";
 
   return (
-    <HubPortal
+    <HomePortalLazy
       role={role}
       moduleAccess={moduleAccess}
       showAccessRestrictedNotice={showAccessRestrictedNotice}

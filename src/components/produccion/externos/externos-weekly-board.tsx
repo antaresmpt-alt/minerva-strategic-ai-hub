@@ -276,10 +276,15 @@ export function ExternosWeeklyBoard({
     [weekMonday]
   );
 
-  const boardRows = useMemo(
-    () => rows.filter((r) => !isEstadoTerminal(r.estado)),
-    [rows]
-  );
+  const boardRows = useMemo(() => {
+    const filtered = rows.filter((r) => !isEstadoTerminal(r.estado));
+    const seen = new Set<string>();
+    return filtered.filter((r) => {
+      if (seen.has(r.id)) return false;
+      seen.add(r.id);
+      return true;
+    });
+  }, [rows]);
 
   const columns = useMemo(() => {
     const map = new Map<string, ExternosWeeklyBoardRow[]>();

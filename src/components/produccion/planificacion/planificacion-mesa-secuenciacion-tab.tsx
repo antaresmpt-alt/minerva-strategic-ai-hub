@@ -84,6 +84,16 @@ import {
   slotKey,
   toDayKey,
 } from "@/lib/planificacion-mesa";
+import {
+  draftScopeFromTipoFilter,
+  etiquetaAmbitoPlanificacion,
+  fetchProximoPasoDisponiblePorOt,
+  getPlanificacionTipoMaquinaFilter,
+  planificacionTipoFiltroEfectivo,
+  PLANIFICACION_TIPOS_MAQUINA,
+  sortMaquinasPlanificacionUiOrder,
+  type PlanificacionTipoMaquina,
+} from "@/lib/planificacion-ambito";
 import { reorderBoardWithIaRules } from "@/lib/planificacion-ia-reorder";
 import { mapRowsToIaSettings } from "@/lib/planificacion-ia-settings";
 import {
@@ -114,6 +124,7 @@ import type {
 // ---------------------------------------------------------------------------
 const TABLE_DESPACHADAS = "produccion_ot_despachadas";
 const TABLE_OTS_GENERAL = "prod_ots_general";
+const TABLE_OT_PASOS = "prod_ot_pasos";
 const TABLE_POOL = "prod_planificacion_pool";
 const TABLE_MESA = "prod_mesa_planificacion_trabajos";
 const TABLE_CAPACIDAD = "prod_mesa_capacidad_turnos";
@@ -309,7 +320,7 @@ function buildIaInsights(bySlot: Record<SlotKey, MesaTrabajo[]>): string[] {
   ];
 }
 
-type TipoMaquina = "impresion" | "troquelado" | "engomado";
+type TipoMaquina = "impresion" | "digital" | "troquelado" | "engomado";
 type MaquinaOption = {
   id: string;
   codigo: string;
@@ -320,9 +331,6 @@ type MaquinaOption = {
   capacidad_horas_default_manana: number;
   capacidad_horas_default_tarde: number;
 };
-
-const IMPRESION_SCOPE: TipoMaquina = "impresion";
-const DRAFT_SCOPE = "impresion" as const;
 
 const dragOverlayPointerFix: Modifier = ({ transform }) => transform;
 
@@ -370,6 +378,25 @@ export function PlanificacionMesaSecuenciacionTab() {
   // ---- Identidad
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [planificacionRole, setPlanificacionRole] = useState<string | null>(null);
+
+  const draftScope = useMemo(
+    () => draftScopeFromTipoFilter(getPlanificacionTipoMaquinaFilter(planificacionRole)),
+    [planificacionRole],
+  );
+
+  const etiquetaMesaTitulo = useMemo(
+    () => etiquetaAmbitoPlanificacion(getPlanificacionTipoMaquinaFilter(planificacionRole)),
+    [planificacionRole],
+  );
+
+  const emptyMaquinasMessage = useMemo(() => {
+    const t = getPlanificacionTipoMaquinaFilter(planificacionRole);
+    if (t) {
+      return `No hay máquinas activas de ${etiquetaAmbitoPlanificacion(t)} configuradas. Ve a Settings → Recursos Producción y activa al menos una.`;
+    }
+    return "No hay máquinas activas de planificación (offset, digital, troquel o engomado). Ve a Settings → Recursos Producción y activa al menos una.";
+  }, [planificacionRole]);
 
   useEffect(() => {
     let mounted = true;
@@ -497,10 +524,11 @@ export function PlanificacionMesaSecuenciacionTab() {
   // entre re-renders y cambios de semana).
   const [poolSearch, setPoolSearch] = useState("");
 
-  const machineUiStorageKey = useMemo(
-    () => `minerva_plan_machine_ui_${userId ?? "anon"}`,
-    [userId],
-  );
+  /** Sin `userId` no persistimos ni leemos máquina (evita clave `anon` y datos cruzados). */
+  const machineUiStorageKey = useMemo(() => {
+    const id = typeof userId === "string" ? userId.trim() : "";
+    return id.length > 0 ? `minerva_plan_machine_ui_${id}` : null;
+  }, [userId]);
 
   // ===== CARGA DE DATOS =====================================================
 
@@ -658,14 +686,20 @@ export function PlanificacionMesaSecuenciacionTab() {
     if (otsList.length > 0) {
       const { data: despData, error: despErr } = await supabase
         .from(TABLE_DESPACHADAS)
-        .select("ot_numero, horas_entrada, horas_tiraje, num_hojas_brutas")
+        .select(
+          "ot_numero, horas_entrada, horas_tiraje, horas_estimadas_troquelado, horas_estimadas_engomado, num_hojas_brutas"
+        )
         .in("ot_numero", otsList);
       if (despErr) throw despErr;
       for (const d of (despData ?? []) as Array<Record<string, unknown>>) {
         const ot = String(d.ot_numero ?? "").trim();
         if (!ot) continue;
         const prev = fallbackByOt.get(ot) ?? { horas: 0, numHojas: 0 };
-        prev.horas += parseNum(d.horas_entrada) + parseNum(d.horas_tiraje);
+        prev.horas +=
+          parseNum(d.horas_entrada) +
+          parseNum(d.horas_tiraje) +
+          parseNum(d.horas_estimadas_troquelado) +
+          parseNum(d.horas_estimadas_engomado);
         prev.numHojas = Math.max(prev.numHojas, Math.trunc(parseNum(d.num_hojas_brutas)));
         fallbackByOt.set(ot, prev);
       }
@@ -748,7 +782,22 @@ export function PlanificacionMesaSecuenciacionTab() {
     return dedupeMesaByOt(out);
   }, [supabase, weekStartKey, weekEndKey, selectedMaquinaId]);
 
-  const loadPool = useCallback(async () => {
+  const loadPool = useCallback(
+    async (roleForFilter: string | null) => {
+    let tipoMaquinaSeleccionada: string | null = null;
+    if (selectedMaquinaId) {
+      const { data: mrow, error: mErr } = await supabase
+        .from(TABLE_MAQUINAS)
+        .select("tipo_maquina")
+        .eq("id", selectedMaquinaId)
+        .maybeSingle();
+      if (mErr) throw mErr;
+      tipoMaquinaSeleccionada =
+        mrow && typeof (mrow as { tipo_maquina?: unknown }).tipo_maquina === "string"
+          ? String((mrow as { tipo_maquina: string }).tipo_maquina).trim() || null
+          : null;
+    }
+
     const { data: poolData, error: poolErr } = await supabase
       .from(TABLE_POOL)
       .select(
@@ -768,23 +817,76 @@ export function PlanificacionMesaSecuenciacionTab() {
     const poolOts = rows.map((r) => String(r.ot_numero ?? "").trim()).filter(Boolean);
     if (poolOts.length === 0) return [] as PoolOT[];
 
-    // Regla de negocio: una OT ya colocada en mesa (cualquier semana) no debe
-    // reaparecer en el Pool al navegar semanas.
-    let placedQuery = supabase
-      .from(TABLE_MESA)
-      .select("ot_numero")
-      .in("estado_mesa", ACTIVE_MESA_ESTADOS as unknown as string[])
-      .in("ot_numero", poolOts);
-    if (selectedMaquinaId) {
-      placedQuery = placedQuery.or(`maquina_id.eq.${selectedMaquinaId},maquina_id.is.null`);
-    }
-    const { data: placedData, error: placedErr } = await placedQuery;
-    if (placedErr) throw placedErr;
-    const otsPlacedAnywhere = new Set(
-      ((placedData ?? []) as Array<{ ot_numero: string | null }>)
-        .map((x) => String(x.ot_numero ?? "").trim())
-        .filter(Boolean),
+    const tipoEfectivo = planificacionTipoFiltroEfectivo(
+      getPlanificacionTipoMaquinaFilter(roleForFilter),
+      tipoMaquinaSeleccionada,
     );
+
+    // No reaparecer en el pool lateral: si hay ámbito por tipo (rol o máquina),
+    // ocultar OT ya planificada en CUALQUIER máquina de ese mismo tipo.
+    let otsPlacedAnywhere = new Set<string>();
+    if (tipoEfectivo) {
+      const { data: mesaPlacedRows, error: mpErr } = await supabase
+        .from(TABLE_MESA)
+        .select("ot_numero, maquina_id")
+        .in("estado_mesa", ACTIVE_MESA_ESTADOS as unknown as string[])
+        .in("ot_numero", poolOts);
+      if (mpErr) throw mpErr;
+      const rawPlaced = (mesaPlacedRows ?? []) as Array<{
+        ot_numero?: string | null;
+        maquina_id?: string | null;
+      }>;
+      const mids = new Set<string>();
+      for (const row of rawPlaced) {
+        const mid = String(row.maquina_id ?? "").trim();
+        if (mid) mids.add(mid);
+      }
+      const tipoByMaquinaId = new Map<string, PlanificacionTipoMaquina>();
+      if (mids.size > 0) {
+        const { data: maqs, error: maqPlErr } = await supabase
+          .from(TABLE_MAQUINAS)
+          .select("id, tipo_maquina")
+          .in("id", [...mids]);
+        if (maqPlErr) throw maqPlErr;
+        for (const m of maqs ?? []) {
+          const id = String((m as { id?: string | null }).id ?? "").trim();
+          const rawT = String((m as { tipo_maquina?: string | null }).tipo_maquina ?? "").trim();
+          if (!id) continue;
+          if ((PLANIFICACION_TIPOS_MAQUINA as readonly string[]).includes(rawT)) {
+            tipoByMaquinaId.set(id, rawT as PlanificacionTipoMaquina);
+          }
+        }
+      }
+      for (const row of rawPlaced) {
+        const ot = String(row.ot_numero ?? "").trim();
+        if (!ot) continue;
+        const mid = String(row.maquina_id ?? "").trim();
+        if (!mid) {
+          otsPlacedAnywhere.add(ot);
+          continue;
+        }
+        const tmaq = tipoByMaquinaId.get(mid);
+        if (tmaq === tipoEfectivo) {
+          otsPlacedAnywhere.add(ot);
+        }
+      }
+    } else {
+      let placedQuery = supabase
+        .from(TABLE_MESA)
+        .select("ot_numero")
+        .in("estado_mesa", ACTIVE_MESA_ESTADOS as unknown as string[])
+        .in("ot_numero", poolOts);
+      if (selectedMaquinaId) {
+        placedQuery = placedQuery.or(`maquina_id.eq.${selectedMaquinaId},maquina_id.is.null`);
+      }
+      const { data: placedData, error: placedErr } = await placedQuery;
+      if (placedErr) throw placedErr;
+      otsPlacedAnywhere = new Set(
+        ((placedData ?? []) as Array<{ ot_numero: string | null }>)
+          .map((x) => String(x.ot_numero ?? "").trim())
+          .filter(Boolean),
+      );
+    }
     const visibleRows = rows.filter((r) => !otsPlacedAnywhere.has(String(r.ot_numero ?? "").trim()));
 
     const otsList = visibleRows.map((r) => String(r.ot_numero ?? "").trim()).filter(Boolean);
@@ -794,7 +896,7 @@ export function PlanificacionMesaSecuenciacionTab() {
     const { data: despData, error: despErr } = await supabase
       .from(TABLE_DESPACHADAS)
       .select(
-        "ot_numero, tintas, material, num_hojas_brutas, horas_entrada, horas_tiraje, acabado_pral",
+        "ot_numero, tintas, material, num_hojas_brutas, horas_entrada, horas_tiraje, horas_estimadas_troquelado, horas_estimadas_engomado, acabado_pral",
       )
       .in("ot_numero", otsList);
     if (despErr) throw despErr;
@@ -812,7 +914,11 @@ export function PlanificacionMesaSecuenciacionTab() {
     for (const d of (despData ?? []) as Array<Record<string, unknown>>) {
       const ot = String(d.ot_numero ?? "").trim();
       if (!ot) continue;
-      const horas = parseNum(d.horas_entrada) + parseNum(d.horas_tiraje);
+      const horas =
+        parseNum(d.horas_entrada) +
+        parseNum(d.horas_tiraje) +
+        parseNum(d.horas_estimadas_troquelado) +
+        parseNum(d.horas_estimadas_engomado);
       const hojas = Math.max(0, Math.trunc(parseNum(d.num_hojas_brutas)));
       const tintas = String(d.tintas ?? "").trim();
       const material = String(d.material ?? "").trim();
@@ -906,38 +1012,101 @@ export function PlanificacionMesaSecuenciacionTab() {
         horasPlanificadas: desp.horas,
         materialStatus: matStatus,
         troquelStatus: troqStatus,
+        proximoPasoNombre: null,
+        proximoPasoSlug: null,
+        planificacionTipoPaso: null,
       });
     }
-    return out;
-  }, [supabase]);
+    let poolOut: PoolOT[] = [...out];
+    try {
+      const pasoMap = await fetchProximoPasoDisponiblePorOt(
+        supabase,
+        poolOut.map((p) => p.ot),
+      );
+      poolOut = poolOut.map((p) => {
+        const info = pasoMap.get(p.ot);
+        if (!info) return p;
+        return {
+          ...p,
+          proximoPasoNombre: info.nombre,
+          proximoPasoSlug: info.seccionSlug,
+          planificacionTipoPaso: info.tipoMaquina,
+        };
+      });
+    } catch (e) {
+      console.warn("[Mesa] pool itinerario", e);
+    }
+    if (tipoEfectivo) {
+      poolOut = poolOut.filter((p) => p.planificacionTipoPaso === tipoEfectivo);
+    }
+    return poolOut;
+  },
+  [supabase, selectedMaquinaId],
+);
 
-  const loadMaquinas = useCallback(async () => {
-    const { data, error: mqErr } = await supabase
+  const loadMaquinas = useCallback(async (roleForFilter: string | null) => {
+    const tipo = getPlanificacionTipoMaquinaFilter(roleForFilter);
+    let query = supabase
       .from(TABLE_MAQUINAS)
       .select(
         "id, codigo, nombre, tipo_maquina, activa, orden_visual, capacidad_horas_default_manana, capacidad_horas_default_tarde",
       )
-      .eq("tipo_maquina", IMPRESION_SCOPE)
       .eq("activa", true)
       .order("orden_visual")
       .order("nombre");
+    if (tipo) {
+      query = query.eq("tipo_maquina", tipo);
+    } else {
+      query = query.in("tipo_maquina", PLANIFICACION_TIPOS_MAQUINA);
+    }
+    const { data, error: mqErr } = await query;
     if (mqErr) throw mqErr;
-    return ((data ?? []) as MaquinaOption[]).filter(
-      (m) => m.tipo_maquina === IMPRESION_SCOPE,
+    return ((data ?? []) as MaquinaOption[]).filter((m) =>
+      PLANIFICACION_TIPOS_MAQUINA.includes(
+        m.tipo_maquina as (typeof PLANIFICACION_TIPOS_MAQUINA)[number],
+      ),
     );
   }, [supabase]);
 
   const reload = useCallback(async () => {
     setLoading(true);
     setError(null);
+    let roleRead: string | null = null;
     try {
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+      const uid =
+        typeof authUser?.id === "string" && authUser.id.trim().length > 0
+          ? authUser.id.trim()
+          : null;
+      if (uid) {
+        setUserId(uid);
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", uid)
+          .maybeSingle();
+        roleRead =
+          prof && typeof (prof as { role?: unknown }).role === "string"
+            ? String((prof as { role: string }).role).trim() || null
+            : null;
+      } else {
+        setUserId(null);
+      }
+      const emailRaw =
+        typeof authUser?.email === "string" ? authUser.email.trim() : "";
+      setUserEmail(emailRaw.length > 0 ? emailRaw : null);
+
+      setPlanificacionRole(roleRead);
+
       const [maqList, poolList, mesaList, capList] = await Promise.all([
-        loadMaquinas(),
-        loadPool(),
+        loadMaquinas(roleRead),
+        loadPool(roleRead),
         loadMesa(),
         loadCapacidades(),
       ]);
-      setMaquinas(maqList);
+      setMaquinas(sortMaquinasPlanificacionUiOrder(maqList));
       setPool(poolList);
       setMesaItems(mesaList);
       setCapacidades(capList);
@@ -949,11 +1118,27 @@ export function PlanificacionMesaSecuenciacionTab() {
     } finally {
       setLoading(false);
     }
-  }, [loadMaquinas, loadPool, loadMesa, loadCapacidades]);
+  }, [supabase, loadMaquinas, loadPool, loadMesa, loadCapacidades]);
 
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  /** Al cambiar máquina o rol, el pool lateral debe recalcularse (filtro por tipo de máquina). */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await loadPool(planificacionRole);
+        if (!cancelled) setPool(list);
+      } catch (e) {
+        console.warn("[Mesa] pool refresh", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedMaquinaId, planificacionRole, loadPool]);
 
   useEffect(() => {
     let cancelled = false;
@@ -981,13 +1166,13 @@ export function PlanificacionMesaSecuenciacionTab() {
   }, [supabase]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !machineUiStorageKey) return;
     try {
       const raw = window.localStorage.getItem(machineUiStorageKey);
       if (!raw) return;
       const parsed = JSON.parse(raw) as { maquinaId?: string | null };
       if (typeof parsed.maquinaId === "string" && parsed.maquinaId.trim()) {
-        setSelectedMaquinaId(parsed.maquinaId);
+        setSelectedMaquinaId(parsed.maquinaId.trim());
       }
     } catch {
       // ignore
@@ -995,7 +1180,7 @@ export function PlanificacionMesaSecuenciacionTab() {
   }, [machineUiStorageKey]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !machineUiStorageKey) return;
     try {
       window.localStorage.setItem(
         machineUiStorageKey,
@@ -1037,7 +1222,7 @@ export function PlanificacionMesaSecuenciacionTab() {
     }
   }, [maquinas, selectedMaquinaId]);
 
-  const hasImpresionMachine = maquinas.length > 0 && !!selectedMaquinaId;
+  const boardReady = maquinas.length > 0 && !!selectedMaquinaId;
 
   /** Mesa real agrupada por slotKey y ordenada por slot_orden. */
   const realBySlot = useMemo(() => {
@@ -1172,7 +1357,7 @@ export function PlanificacionMesaSecuenciacionTab() {
           parsed &&
           parsed.weekMondayKey === weekStartKey &&
           parsed.maquinaId === selectedMaquinaId &&
-          parsed.scope === DRAFT_SCOPE &&
+          parsed.scope === draftScope &&
           (!realBoardHasItems || boardHasItems(parsed.bySlot))
         ) {
           setDraftBySlot(normalizeBySlotPreservingLocked(parsed.bySlot, true));
@@ -1196,6 +1381,7 @@ export function PlanificacionMesaSecuenciacionTab() {
     simulationBaseBySlot,
     realBoardHasItems,
     normalizeBySlotPreservingLocked,
+    draftScope,
   ]);
 
   // Persistir draft a localStorage (debounced)
@@ -1208,7 +1394,7 @@ export function PlanificacionMesaSecuenciacionTab() {
         const payload: DraftBoardState = {
           weekMondayKey: weekStartKey,
           maquinaId: selectedMaquinaId ?? "",
-          scope: DRAFT_SCOPE,
+          scope: draftScope,
           bySlot: draftBySlot,
           updatedAt,
         };
@@ -1226,6 +1412,7 @@ export function PlanificacionMesaSecuenciacionTab() {
     draftKey,
     weekStartKey,
     selectedMaquinaId,
+    draftScope,
   ]);
 
   const clearDraft = useCallback(() => {
@@ -1405,6 +1592,31 @@ export function PlanificacionMesaSecuenciacionTab() {
       setStartingExecutionId(trabajo.id);
       try {
         const nowIso = new Date().toISOString();
+        const otKey = String(trabajo.ot ?? "").trim();
+        let otPasoId: string | null = null;
+        if (otKey) {
+          const { data: ogRow, error: ogErr } = await supabase
+            .from(TABLE_OTS_GENERAL)
+            .select("id")
+            .eq("num_pedido", otKey)
+            .maybeSingle();
+          if (ogErr) throw ogErr;
+          const ogId = ogRow && typeof (ogRow as { id?: unknown }).id === "string"
+            ? (ogRow as { id: string }).id
+            : null;
+          if (ogId) {
+            const { data: pasoRows, error: pasoErr } = await supabase
+              .from(TABLE_OT_PASOS)
+              .select("id")
+              .eq("ot_id", ogId)
+              .eq("estado", "disponible")
+              .order("orden", { ascending: true })
+              .limit(1);
+            if (pasoErr) throw pasoErr;
+            const first = pasoRows?.[0] as { id?: string } | undefined;
+            if (first?.id) otPasoId = first.id;
+          }
+        }
         const { error: insErr } = await supabase.from(TABLE_EJECUCIONES).insert({
           mesa_trabajo_id: trabajo.id,
           ot_numero: trabajo.ot,
@@ -1416,6 +1628,7 @@ export function PlanificacionMesaSecuenciacionTab() {
           inicio_real_at: null,
           estado_ejecucion: "pendiente_inicio",
           horas_planificadas_snapshot: trabajo.horasPlanificadasSnapshot,
+          ot_paso_id: otPasoId,
           created_by: userId,
           created_by_email: userEmail,
         });
@@ -1602,7 +1815,7 @@ export function PlanificacionMesaSecuenciacionTab() {
 
   const onDragStart = useCallback(
     (event: DragStartEvent) => {
-      if (!hasImpresionMachine) return;
+      if (!boardReady) return;
       setActiveId(String(event.active.id));
       if (simulationOn) {
         setDragStartDraftSnapshot(draftBySlot ?? realBySlot);
@@ -1610,7 +1823,7 @@ export function PlanificacionMesaSecuenciacionTab() {
         setDragStartDraftSnapshot(null);
       }
     },
-    [hasImpresionMachine, simulationOn, draftBySlot, realBySlot],
+    [boardReady, simulationOn, draftBySlot, realBySlot],
   );
 
   /**
@@ -1619,7 +1832,7 @@ export function PlanificacionMesaSecuenciacionTab() {
    */
   const onDragOver = useCallback(
     (event: DragOverEvent) => {
-      if (!hasImpresionMachine) return;
+      if (!boardReady) return;
       if (!simulationOn) return; // En modo Real, esperamos al drop
 
       const { active, over } = event;
@@ -1661,7 +1874,7 @@ export function PlanificacionMesaSecuenciacionTab() {
       setDraftBySlot(t.next);
     },
     [
-      hasImpresionMachine,
+      boardReady,
       simulationOn,
       draftBySlot,
       realBySlot,
@@ -1673,7 +1886,7 @@ export function PlanificacionMesaSecuenciacionTab() {
 
   const onDragEnd = useCallback(
     async (event: DragEndEvent) => {
-      if (!hasImpresionMachine) return;
+      if (!boardReady) return;
       const { active, over } = event;
       setActiveId(null);
       const isPoolDrag = String(active.id).startsWith("pool::");
@@ -1776,7 +1989,7 @@ export function PlanificacionMesaSecuenciacionTab() {
       });
     },
     [
-      hasImpresionMachine,
+      boardReady,
       simulationOn,
       dragStartDraftSnapshot,
       draftBySlot,
@@ -2273,7 +2486,7 @@ export function PlanificacionMesaSecuenciacionTab() {
       <CardHeader className="space-y-2 pb-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-lg text-[#002147]">
-            Mesa de Secuenciación - Impresión
+            Mesa de Secuenciación — {etiquetaMesaTitulo}
           </CardTitle>
           <div className="flex flex-wrap items-center gap-1.5">
             <Button
@@ -2314,7 +2527,7 @@ export function PlanificacionMesaSecuenciacionTab() {
               variant="outline"
               size="sm"
               onClick={() => setExportDialogOpen(true)}
-              disabled={!hasImpresionMachine || loading}
+              disabled={!boardReady || loading}
               title="Imprimir / Exportar"
             >
               <Printer className="mr-1 size-4" />
@@ -2325,7 +2538,7 @@ export function PlanificacionMesaSecuenciacionTab() {
               variant="ghost"
               size="sm"
               onClick={() => void reload()}
-              disabled={loading || savingChanges || publishing || !hasImpresionMachine}
+              disabled={loading || savingChanges || publishing || !boardReady}
               title="Recargar"
             >
               <RefreshCcw
@@ -2338,7 +2551,7 @@ export function PlanificacionMesaSecuenciacionTab() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700">
-              Ámbito: Impresión
+              Ámbito: {etiquetaMesaTitulo}
             </span>
             <span
               className={cn(
@@ -2358,7 +2571,7 @@ export function PlanificacionMesaSecuenciacionTab() {
               className="h-8 min-w-[13rem] rounded-md border border-slate-300 bg-white px-2 text-xs"
               value={selectedMaquinaId ?? ""}
               onChange={(e) => setSelectedMaquinaId(e.target.value || null)}
-              disabled={!hasImpresionMachine}
+              disabled={!boardReady}
             >
               {maquinasPorTipo.map((m) => (
                 <option key={m.id} value={m.id}>
@@ -2395,7 +2608,7 @@ export function PlanificacionMesaSecuenciacionTab() {
                 checked={simulationOn}
                 onChange={(e) => setSimulationOn(e.target.checked)}
                 aria-label="Modo simulación"
-                disabled={!hasImpresionMachine}
+                disabled={!boardReady}
               />
               Modo simulación
             </label>
@@ -2422,7 +2635,7 @@ export function PlanificacionMesaSecuenciacionTab() {
                 variant="outline"
                 size="sm"
                 onClick={resetDraftFromReal}
-                disabled={publishing || !hasImpresionMachine}
+                disabled={publishing || !boardReady}
               >
                 Cargar plan real en simulación
               </Button>
@@ -2454,7 +2667,7 @@ export function PlanificacionMesaSecuenciacionTab() {
                 variant="outline"
                 size="sm"
                 onClick={() => void orderDraftWithIa("rules")}
-                disabled={publishing || iaOrdering || !draftHydrated || !hasImpresionMachine}
+                disabled={publishing || iaOrdering || !draftHydrated || !boardReady}
                 title={iaSettings.promptBase}
               >
                 {iaOrdering ? (
@@ -2469,7 +2682,7 @@ export function PlanificacionMesaSecuenciacionTab() {
                 variant="outline"
                 size="sm"
                 onClick={() => void orderDraftWithIa("advanced")}
-                disabled={publishing || iaOrdering || !draftHydrated || !hasImpresionMachine}
+                disabled={publishing || iaOrdering || !draftHydrated || !boardReady}
                 title={`Usa el modelo global: ${globalModel}`}
               >
                 <Sparkles className="mr-1 size-4 text-[#C69C2B]" />
@@ -2481,7 +2694,7 @@ export function PlanificacionMesaSecuenciacionTab() {
                 size="sm"
                 className="border-[#C69C2B]/60 bg-[#C69C2B]/10 text-[#002147] hover:bg-[#C69C2B]/20"
                 onClick={() => void orderDraftWithIa("mixed")}
-                disabled={publishing || iaOrdering || !draftHydrated || !hasImpresionMachine}
+                disabled={publishing || iaOrdering || !draftHydrated || !boardReady}
                 title={`Reglas + refinado con ${globalModel}`}
               >
                 <Sparkles className="mr-1 size-4 text-[#C69C2B]" />
@@ -2491,7 +2704,7 @@ export function PlanificacionMesaSecuenciacionTab() {
                 type="button"
                 size="sm"
                 className="bg-[#002147] text-white hover:bg-[#001735]"
-                disabled={publishing || !draftHydrated || !hasImpresionMachine}
+                disabled={publishing || !draftHydrated || !boardReady}
                 onClick={() => void applySimulation()}
               >
                 {publishing ? (
@@ -2508,7 +2721,7 @@ export function PlanificacionMesaSecuenciacionTab() {
                 type="button"
                 variant="outline"
                 size="sm"
-                disabled={!hasImpresionMachine || loading}
+                disabled={!boardReady || loading}
                 onClick={() => {
                   setSimulationOn(true);
                   setDraftBySlot(simulationBaseBySlot);
@@ -2603,12 +2816,11 @@ export function PlanificacionMesaSecuenciacionTab() {
           </div>
         ) : null}
 
-        {!hasImpresionMachine ? (
+        {!boardReady ? (
           <div className="flex items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
             <span className="inline-flex items-center gap-1.5">
               <TriangleAlert className="size-4" />
-              No hay máquinas activas de impresión configuradas. Ve a Settings →
-              Recursos Producción y activa al menos una.
+              {emptyMaquinasMessage}
             </span>
           </div>
         ) : null}
@@ -2634,7 +2846,7 @@ export function PlanificacionMesaSecuenciacionTab() {
               search={poolSearch}
               onSearchChange={setPoolSearch}
               otsEnMesa={otsEnMesa}
-              disabled={publishing || !hasImpresionMachine}
+              disabled={publishing || !boardReady}
             />
 
             <div className="min-w-0">
@@ -2679,7 +2891,7 @@ export function PlanificacionMesaSecuenciacionTab() {
                         onEditCapacity={openCapacityDialog}
                         onStartExecution={startExecution}
                         startingExecutionId={startingExecutionId}
-                        disabled={publishing || !hasImpresionMachine}
+                        disabled={publishing || !boardReady}
                       />
                     );
                   })}

@@ -1,10 +1,11 @@
 "use client";
 
-import { PlayCircle, Rows3, Table2 } from "lucide-react";
+import { GitBranch, PlayCircle, Rows3, Table2 } from "lucide-react";
 import { useState } from "react";
 
 import { PlanificacionMesaSecuenciacionTab } from "@/components/produccion/planificacion/planificacion-mesa-secuenciacion-tab";
 import { PlanificacionOtsEjecucionTab } from "@/components/produccion/planificacion/planificacion-ots-ejecucion-tab";
+import { PlanificacionPipelineTab } from "@/components/produccion/planificacion/planificacion-pipeline-tab";
 import { PlanificacionPoolOtsTab } from "@/components/produccion/planificacion/planificacion-pool-ots-tab-v2";
 import {
   Tabs,
@@ -45,6 +46,10 @@ export function PlanificacionOtsPage() {
             <PlayCircle className="size-4 shrink-0 opacity-90" aria-hidden />
             OTs en ejecución
           </TabsTrigger>
+          <TabsTrigger value="pipeline" className={SUBTAB_TRIGGER_CLASS}>
+            <GitBranch className="size-4 shrink-0 opacity-90" aria-hidden />
+            Pipeline
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="pool" className="mt-0 space-y-3 outline-none">
@@ -57,6 +62,10 @@ export function PlanificacionOtsPage() {
 
         <TabsContent value="ejecucion" className="mt-0 space-y-3 outline-none">
           <PlanificacionOtsEjecucionTab />
+        </TabsContent>
+
+        <TabsContent value="pipeline" className="mt-0 space-y-3 outline-none">
+          <PlanificacionPipelineTab />
         </TabsContent>
       </Tabs>
     </section>

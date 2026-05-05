@@ -2,6 +2,8 @@
 export type OtsDespachadasTableRow = {
   id: string;
   ot_numero: string;
+  /** true cuando existe al menos un paso en `prod_ot_pasos` para la OT. */
+  has_itinerario: boolean;
   /** Fecha/hora de despacho desde `produccion_ot_despachadas.despachado_at`. */
   despachado_at: string | null;
   material: string | null;
@@ -12,6 +14,8 @@ export type OtsDespachadasTableRow = {
   num_hojas_brutas: number | null;
   horas_entrada: number | null;
   horas_tiraje: number | null;
+  horas_estimadas_troquelado: number | null;
+  horas_estimadas_engomado: number | null;
   tintas: string | null;
   /** Notas técnicas de despacho (columna `notas`). */
   notas: string | null;
