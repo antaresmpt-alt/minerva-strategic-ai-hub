@@ -8,6 +8,7 @@ import {
   ShoppingBag,
 } from "lucide-react";
 import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import {
@@ -67,6 +68,29 @@ export function ProduccionOtsModulePage({
   canAccessPlanificacion: boolean;
 }) {
   const [tab, setTab] = useState("maestro");
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+
+  useEffect(() => {
+    const v = (tabParam ?? "").trim().toLowerCase();
+    if (!v) return;
+
+    const allowed = new Set([
+      "maestro",
+      "despachadas",
+      "compras",
+      "planificacion",
+      "impresas",
+    ]);
+    if (!allowed.has(v)) return;
+
+    if (v === "planificacion" && !canAccessPlanificacion) {
+      setTab("maestro");
+      return;
+    }
+
+    setTab(v);
+  }, [tabParam, canAccessPlanificacion]);
 
   useEffect(() => {
     if (!canAccessPlanificacion && tab === "planificacion") {
