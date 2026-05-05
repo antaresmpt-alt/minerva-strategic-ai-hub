@@ -185,13 +185,12 @@ export function PlanificacionPipelineTab() {
   const navigateFromDetailShortcut = useCallback((href: string) => {
     shortcutNavigationRef.current = true;
     setDetailOpen(false);
-    void router.push(href);
 
-    // If navigation is interrupted, re-enable URL sync for this screen.
+    // Force hard navigation to avoid URL-sync race conditions in this view.
     window.setTimeout(() => {
-      shortcutNavigationRef.current = false;
-    }, 1200);
-  }, [router]);
+      window.location.assign(href);
+    }, 0);
+  }, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
