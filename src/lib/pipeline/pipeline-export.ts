@@ -20,6 +20,10 @@ type PipelineExportOptions = {
   }>;
 };
 
+const NAVY: [number, number, number] = [0, 33, 71];
+const SLATE: [number, number, number] = [71, 85, 105];
+const LIGHT_BG: [number, number, number] = [248, 250, 252];
+
 function fmtDate(v: string | null | undefined): string {
   if (!v) return "—";
   const d = new Date(v);
@@ -33,6 +37,10 @@ function fmtDate(v: string | null | undefined): string {
 function fmtHours(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return "—";
   return `${v.toFixed(1)}h`;
+}
+
+function lastTableY(doc: jsPDF, fallback: number): number {
+  return (doc as unknown as { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? fallback;
 }
 
 function listRows(rows: PipelineRowView): string[] {
@@ -74,17 +82,23 @@ export function exportPipelinePdf(options: PipelineExportOptions): void {
   const addHeader = (title: string, subtitle: string) => {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
+    doc.setTextColor(...NAVY);
     doc.text(title, 10, 10);
+    doc.setDrawColor(203, 213, 225);
+    doc.setFillColor(...LIGHT_BG);
+    doc.roundedRect(10, 13, 277, 15, 2, 2, "FD");
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.text(`${subtitle} · Generado: ${generatedAt}`, 10, 16);
-    doc.text(`Filtros: ${options.filtrosLabel || "sin filtros"}`, 10, 21);
+    doc.setFontSize(8.5);
+    doc.setTextColor(...SLATE);
+    doc.text(`${subtitle} · Generado: ${generatedAt}`, 13, 19);
+    doc.text(`Filtros: ${options.filtrosLabel || "sin filtros"}`, 13, 24);
+    doc.setTextColor(0, 0, 0);
   };
 
   if (options.mode === "listado" || options.mode === "ambas") {
     addHeader("Pipeline OT - Listado Operativo", `Registros: ${options.rows.length}`);
     autoTable(doc, {
-      startY: 26,
+      startY: 32,
       head: [[
         "OT",
         "Cliente",
@@ -107,17 +121,36 @@ export function exportPipelinePdf(options: PipelineExportOptions): void {
     addHeader("Pipeline OT - Resumen Analítico", `Registros: ${options.rows.length}`);
 
     autoTable(doc, {
-      startY: 26,
+      startY: 32,
       head: [["OT", "Plan", "Real", "Desv.", "ETA", "SLA", "Riesgo"]],
       body: options.rows.map((r) => analyticsRows(r)),
       styles: { fontSize: 7, cellPadding: 1.6 },
       headStyles: { fillColor: [0, 33, 71], textColor: [255, 255, 255] },
       margin: { left: 8, right: 8 },
+      didParseCell: (data) => {
+        if (data.section !== "body") return;
+        if (data.column.index === 3) {
+          const raw = String(data.cell.raw ?? "");
+          if (raw.startsWith("+")) {
+            data.cell.styles.textColor = [185, 28, 28];
+            data.cell.styles.fontStyle = "bold";
+          }
+        }
+        if (data.column.index === 5) {
+          const raw = String(data.cell.raw ?? "");
+          if (raw === "late") {
+            data.cell.styles.textColor = [185, 28, 28];
+            data.cell.styles.fontStyle = "bold";
+          } else if (raw === "at_risk") {
+            data.cell.styles.textColor = [146, 64, 14];
+          } else if (raw === "on_track") {
+            data.cell.styles.textColor = [21, 128, 61];
+          }
+        }
+      },
     });
 
-    const afterMain =
-      ((doc as unknown as { lastAutoTable?: { finalY?: number } }).lastAutoTable
-        ?.finalY ?? 26) + 6;
+    const afterMain = lastTableY(doc, 32) + 6;
 
     autoTable(doc, {
       startY: afterMain,
@@ -152,6 +185,16 @@ export function exportPipelinePdf(options: PipelineExportOptions): void {
       headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255] },
       margin: { left: 150, right: 8 },
     });
+  }
+
+  const totalPages = doc.getNumberOfPages();
+  for (let page = 1; page <= totalPages; page += 1) {
+    doc.setPage(page);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...SLATE);
+    doc.text("Parte operativo pipeline OTs", 8, 205);
+    doc.text(`Página ${page}/${totalPages}`, 288, 205, { align: "right" });
   }
 
   const dateTag = new Date().toISOString().slice(0, 10);
