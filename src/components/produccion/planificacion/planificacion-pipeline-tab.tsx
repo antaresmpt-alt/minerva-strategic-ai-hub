@@ -33,6 +33,11 @@ const STEP_BADGE_STYLES: Record<string, string> = {
   finalizado: "bg-emerald-100 text-emerald-800",
 };
 
+function fmtHours(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return "—";
+  return `${v.toFixed(1)}h`;
+}
+
 export function PlanificacionPipelineTab() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const router = useRouter();
@@ -360,6 +365,10 @@ export function PlanificacionPipelineTab() {
                     <TableHead>Paso actual</TableHead>
                     <TableHead>Siguiente</TableHead>
                     <TableHead>Timeline</TableHead>
+                    <TableHead>Plan/Real</TableHead>
+                    <TableHead>Desv.</TableHead>
+                    <TableHead>ETA</TableHead>
+                    <TableHead>SLA</TableHead>
                     <TableHead>Riesgo</TableHead>
                     <TableHead>Badges</TableHead>
                   </TableRow>
@@ -443,6 +452,35 @@ export function PlanificacionPipelineTab() {
                             </span>
                           ) : null}
                         </div>
+                      </TableCell>
+                      <TableCell className={compactMode ? "py-1 text-[11px]" : "text-xs"}>
+                        {fmtHours(row.analytics.horasPlanificadasTotal)} / {fmtHours(row.analytics.horasRealesTotal)}
+                      </TableCell>
+                      <TableCell className={compactMode ? "py-1 text-[11px]" : "text-xs"}>
+                        {row.analytics.desviacionHoras != null ? (
+                          <span className={row.analytics.desviacionHoras > 0 ? "text-red-700" : "text-emerald-700"}>
+                            {row.analytics.desviacionHoras > 0 ? "+" : ""}
+                            {row.analytics.desviacionHoras.toFixed(1)}h
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
+                      <TableCell className={compactMode ? "py-1 text-[11px]" : "text-xs"}>
+                        {row.analytics.etaPrevista ?? "—"}
+                      </TableCell>
+                      <TableCell>
+                        <span
+                          className={`rounded-md px-2 py-0.5 text-xs font-medium ${
+                            row.analytics.slaStatus === "late"
+                              ? "bg-red-100 text-red-800"
+                              : row.analytics.slaStatus === "at_risk"
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-emerald-100 text-emerald-800"
+                          }`}
+                        >
+                          {row.analytics.slaStatus}
+                        </span>
                       </TableCell>
                       <TableCell>
                         <span
@@ -542,6 +580,24 @@ export function PlanificacionPipelineTab() {
                         <span className="font-medium">
                           {detailOt.siguientePaso?.procesoNombre ?? "—"}
                         </span>
+                      </div>
+                      <div className="grid gap-1 rounded-md border border-slate-200 bg-white p-2 text-xs text-slate-700 sm:grid-cols-2">
+                        <div>
+                          <span className="font-medium">Plan / Real:</span>{" "}
+                          {fmtHours(detailOt.analytics.horasPlanificadasTotal)} / {fmtHours(detailOt.analytics.horasRealesTotal)}
+                        </div>
+                        <div>
+                          <span className="font-medium">Desviación:</span>{" "}
+                          {detailOt.analytics.desviacionHoras != null
+                            ? `${detailOt.analytics.desviacionHoras > 0 ? "+" : ""}${detailOt.analytics.desviacionHoras.toFixed(1)}h`
+                            : "—"}
+                        </div>
+                        <div>
+                          <span className="font-medium">ETA:</span> {detailOt.analytics.etaPrevista ?? "—"}
+                        </div>
+                        <div>
+                          <span className="font-medium">SLA:</span> {detailOt.analytics.slaStatus}
+                        </div>
                       </div>
                     </div>
 

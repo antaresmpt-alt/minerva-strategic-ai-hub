@@ -56,10 +56,14 @@ type DespRow = {
   gramaje: number | null;
   tamano_hoja: string | null;
   num_hojas_brutas: number | null;
+  horas_entrada: number | null;
+  horas_tiraje: number | null;
   tintas: string | null;
   troquel: string | null;
   poses: number | null;
   acabado_pral: string | null;
+  horas_estimadas_troquelado: number | null;
+  horas_estimadas_engomado: number | null;
 };
 
 type PasoRow = {
@@ -110,6 +114,8 @@ type EjecRow = {
   inicio_real_at: string | null;
   fin_real_at: string | null;
   horas_reales: number | null;
+  horas_reales_troquelado: number | null;
+  horas_reales_engomado: number | null;
   maquinista: string | null;
   incidencia: string | null;
   accion_correctiva: string | null;
@@ -179,6 +185,33 @@ function buildResumenCorto(step: PipelineStepView, desp: DespRow | null): string
   return chunks.join(" · ");
 }
 
+function computeEtaPrevista(
+  despachadoAt: string | null,
+  horasPlanificadasTotal: number | null,
+  horasRealesTotal: number | null,
+  now = new Date(),
+): string | null {
+  if (horasPlanificadasTotal == null || horasPlanificadasTotal <= 0) return null;
+  if (horasRealesTotal != null && horasRealesTotal >= horasPlanificadasTotal) {
+    return now.toISOString();
+  }
+  const despachoIso = normalizeDateIso(despachadoAt);
+  if (!despachoIso || horasRealesTotal == null || horasRealesTotal <= 0) return null;
+  const startMs = new Date(despachoIso).getTime();
+  const nowMs = now.getTime();
+  if (!Number.isFinite(startMs) || nowMs <= startMs) return null;
+  const progress = Math.min(0.99, Math.max(0.01, horasRealesTotal / horasPlanificadasTotal));
+  const elapsedMs = nowMs - startMs;
+  const totalMs = elapsedMs / progress;
+  return new Date(startMs + totalMs).toISOString();
+}
+
+function mapSlaStatus(riesgo: PipelineRowView["riesgo"]): PipelineRowView["analytics"]["slaStatus"] {
+  if (riesgo === "overdue") return "late";
+  if (riesgo === "warning") return "at_risk";
+  return "on_track";
+}
+
 export async function fetchPipelineRows(
   supabase: SupabaseClient,
   filters: FetchPipelineFilters = {},
@@ -189,7 +222,7 @@ export async function fetchPipelineRows(
   const { data: despData, error: despErr } = await supabase
     .from(TABLE_DESPACHADAS)
     .select(
-      "ot_numero, despachado_at, material, gramaje, tamano_hoja, num_hojas_brutas, tintas, troquel, poses, acabado_pral",
+      "ot_numero, despachado_at, material, gramaje, tamano_hoja, num_hojas_brutas, horas_entrada, horas_tiraje, tintas, troquel, poses, acabado_pral, horas_estimadas_troquelado, horas_estimadas_engomado",
     )
     .order("despachado_at", { ascending: false })
     .limit(limit);
@@ -252,7 +285,7 @@ export async function fetchPipelineRows(
     const { data: ejecData, error: ejecErr } = await supabase
       .from(TABLE_EJECUCIONES)
       .select(
-        "id, ot_paso_id, estado_ejecucion, inicio_real_at, fin_real_at, horas_reales, maquinista, incidencia, accion_correctiva, observaciones, updated_at",
+        "id, ot_paso_id, estado_ejecucion, inicio_real_at, fin_real_at, horas_reales, horas_reales_troquelado, horas_reales_engomado, maquinista, incidencia, accion_correctiva, observaciones, updated_at",
       )
       .in("ot_paso_id", uniquePasoIds)
       .order("updated_at", { ascending: false });
@@ -384,6 +417,48 @@ export async function fetchPipelineRows(
       pasos,
     });
 
+    const horasPlanificadasTotal = (() => {
+      if (!desp) return null;
+      const total =
+        (n(desp.horas_entrada) ?? 0) +
+        (n(desp.horas_tiraje) ?? 0) +
+        (n(desp.horas_estimadas_troquelado) ?? 0) +
+        (n(desp.horas_estimadas_engomado) ?? 0);
+      return total > 0 ? total : null;
+    })();
+    const horasRealesTotal = (() => {
+      let total = 0;
+      let has = false;
+      for (const p of pasoRows) {
+        const pasoId = str(p.id);
+        if (!pasoId) continue;
+        const ejec = ejecByPaso.get(pasoId);
+        if (!ejec) continue;
+        const seccion = str(pickJoin(p.prod_procesos_cat)?.seccion_slug)?.toLowerCase();
+        const v =
+          seccion === "troquelado"
+            ? n(ejec.horas_reales_troquelado)
+            : seccion === "engomado"
+              ? n(ejec.horas_reales_engomado)
+              : n(ejec.horas_reales);
+        if (v != null && v > 0) {
+          total += v;
+          has = true;
+        }
+      }
+      return has ? total : null;
+    })();
+    const desviacionHoras =
+      horasPlanificadasTotal != null && horasRealesTotal != null
+        ? horasRealesTotal - horasPlanificadasTotal
+        : null;
+    const etaPrevista =
+      computeEtaPrevista(
+        desp?.despachado_at ?? null,
+        horasPlanificadasTotal,
+        horasRealesTotal,
+      ) ?? normalizeDateIso(ot?.fecha_entrega ?? null);
+
     const row: PipelineRowView = {
       otNumero,
       otId,
@@ -398,6 +473,13 @@ export async function fetchPipelineRows(
       pasos,
       riesgo,
       badges: [],
+      analytics: {
+        horasPlanificadasTotal,
+        horasRealesTotal,
+        desviacionHoras,
+        etaPrevista,
+        slaStatus: mapSlaStatus(riesgo),
+      },
     };
 
     row.badges = computePipelineBadges({

@@ -127,6 +127,13 @@ test("ejemplo de PipelineRowView tipado", () => {
     siguientePaso: null,
     riesgo: "ok",
     badges: [],
+    analytics: {
+      horasPlanificadasTotal: null,
+      horasRealesTotal: null,
+      desviacionHoras: null,
+      etaPrevista: null,
+      slaStatus: "on_track",
+    },
   };
   assert.equal(row.otNumero, "99999");
 });

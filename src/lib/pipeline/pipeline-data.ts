@@ -15,6 +15,7 @@ export type PipelinePasoEstado =
   | "finalizado";
 
 export type PipelineRiesgo = "ok" | "warning" | "overdue";
+export type PipelineSlaStatus = "on_track" | "at_risk" | "late";
 
 export type OTRowBase = {
   otNumero: string;
@@ -72,6 +73,13 @@ export type PipelineRowView = OTRowBase & {
   pasos: PipelineStepView[];
   riesgo: PipelineRiesgo;
   badges: PipelineBadge[];
+  analytics: {
+    horasPlanificadasTotal: number | null;
+    horasRealesTotal: number | null;
+    desviacionHoras: number | null;
+    etaPrevista: string | null;
+    slaStatus: PipelineSlaStatus;
+  };
 };
 
 const STEP_STATE_SET = new Set<PipelinePasoEstado>([
