@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  FileDown,
   ExternalLink,
   Loader2,
   RefreshCcw,
@@ -25,6 +26,10 @@ import {
   fetchPipelineRows,
   type FetchPipelineFilters,
 } from "@/lib/pipeline/pipeline-query";
+import {
+  exportPipelinePdf,
+  type PipelinePdfMode,
+} from "@/lib/pipeline/pipeline-export";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 const STEP_BADGE_STYLES: Record<string, string> = {
@@ -67,6 +72,8 @@ export function PlanificacionPipelineTab() {
   const [quickSinItinerario, setQuickSinItinerario] = useState(false);
   const [compactMode, setCompactMode] = useState(false);
   const [showAnalyticsColumns, setShowAnalyticsColumns] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportMode, setExportMode] = useState<PipelinePdfMode>("listado");
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailOt, setDetailOt] = useState<Awaited<ReturnType<typeof fetchPipelineRows>>[number] | null>(null);
   const [selectedOtNumero, setSelectedOtNumero] = useState<string | null>(null);
@@ -268,6 +275,29 @@ export function PlanificacionPipelineTab() {
     [],
   );
 
+  const filtrosLabel = useMemo(() => {
+    const parts: string[] = [];
+    if (search) parts.push(`buscar="${search}"`);
+    if (estadoPasoActual !== "all") parts.push(`estado=${estadoPasoActual}`);
+    if (externoFilter !== "all")
+      parts.push(externoFilter === "yes" ? "externo=si" : "externo=no");
+    if (onlyIncidencias) parts.push("solo_incidencias=si");
+    if (quickRiesgo) parts.push("quick_riesgo=si");
+    if (quickBloqueado) parts.push("quick_bloqueado=si");
+    if (quickExternoActivo) parts.push("quick_externo=si");
+    if (quickSinItinerario) parts.push("quick_sin_itinerario=si");
+    return parts.join(" · ");
+  }, [
+    estadoPasoActual,
+    externoFilter,
+    onlyIncidencias,
+    quickBloqueado,
+    quickExternoActivo,
+    quickRiesgo,
+    quickSinItinerario,
+    search,
+  ]);
+
   return (
     <TooltipProvider>
       <Card className="border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
@@ -288,6 +318,16 @@ export function PlanificacionPipelineTab() {
             >
               <RefreshCcw className={`mr-1.5 size-4 ${loading ? "animate-spin" : ""}`} />
               Recargar
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setExportOpen(true)}
+              disabled={loading || visibleRows.length === 0}
+            >
+              <FileDown className="mr-1.5 size-4" />
+              Exportar PDF
             </Button>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -380,70 +420,74 @@ export function PlanificacionPipelineTab() {
               Sin itinerario
             </Button>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-              <p className="text-[11px] text-slate-500">OTs visibles</p>
-              <p className="text-sm font-semibold text-[#002147]">{kpis.total}</p>
-            </div>
-            <div className="rounded-md border border-slate-200 bg-amber-50 px-3 py-2">
-              <p className="text-[11px] text-amber-700">En marcha</p>
-              <p className="text-sm font-semibold text-amber-900">{kpis.enMarcha}</p>
-            </div>
-            <div className="rounded-md border border-slate-200 bg-red-50 px-3 py-2">
-              <p className="text-[11px] text-red-700">Con riesgo</p>
-              <p className="text-sm font-semibold text-red-900">{kpis.enRiesgo}</p>
-            </div>
-            <div className="rounded-md border border-slate-200 bg-amber-50 px-3 py-2">
-              <p className="text-[11px] text-amber-700">Bloqueadas</p>
-              <p className="text-sm font-semibold text-amber-900">{kpis.bloqueadas}</p>
-            </div>
-          </div>
-          <div className="grid gap-2 lg:grid-cols-2">
-            <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
-              <p className="text-[11px] font-semibold text-[#002147]">
-                WIP por sección
-              </p>
-              <div className="mt-2 space-y-1.5">
-                {sectionStats.wip.slice(0, 6).map((s) => (
-                  <div
-                    key={s.seccion}
-                    className="flex items-center justify-between text-xs"
-                  >
-                    <span className="font-medium text-slate-700">{s.seccion}</span>
-                    <span className="text-slate-600">
-                      Curso {s.enCurso} · Cola {s.enCola}
-                    </span>
-                  </div>
-                ))}
-                {sectionStats.wip.length === 0 ? (
-                  <p className="text-xs text-slate-500">Sin datos de WIP.</p>
-                ) : null}
+          {!compactMode ? (
+            <>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                  <p className="text-[11px] text-slate-500">OTs visibles</p>
+                  <p className="text-sm font-semibold text-[#002147]">{kpis.total}</p>
+                </div>
+                <div className="rounded-md border border-slate-200 bg-amber-50 px-3 py-2">
+                  <p className="text-[11px] text-amber-700">En marcha</p>
+                  <p className="text-sm font-semibold text-amber-900">{kpis.enMarcha}</p>
+                </div>
+                <div className="rounded-md border border-slate-200 bg-red-50 px-3 py-2">
+                  <p className="text-[11px] text-red-700">Con riesgo</p>
+                  <p className="text-sm font-semibold text-red-900">{kpis.enRiesgo}</p>
+                </div>
+                <div className="rounded-md border border-slate-200 bg-amber-50 px-3 py-2">
+                  <p className="text-[11px] text-amber-700">Bloqueadas</p>
+                  <p className="text-sm font-semibold text-amber-900">{kpis.bloqueadas}</p>
+                </div>
               </div>
-            </div>
-            <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
-              <p className="text-[11px] font-semibold text-[#002147]">
-                Top cuellos de botella
-              </p>
-              <div className="mt-2 space-y-1.5">
-                {sectionStats.bottlenecks.map((s) => (
-                  <div
-                    key={s.seccion}
-                    className="flex items-center justify-between text-xs"
-                  >
-                    <span className="font-medium text-slate-700">{s.seccion}</span>
-                    <span className="text-slate-600">
-                      Cola {s.enCola} · Bloq {s.bloqueadas} · Riesgo {s.riesgo}
-                    </span>
-                  </div>
-                ))}
-                {sectionStats.bottlenecks.length === 0 ? (
-                  <p className="text-xs text-slate-500">
-                    Sin secciones críticas.
+              <div className="grid gap-2 lg:grid-cols-2">
+                <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
+                  <p className="text-[11px] font-semibold text-[#002147]">
+                    WIP por sección
                   </p>
-                ) : null}
+                  <div className="mt-2 space-y-1.5">
+                    {sectionStats.wip.slice(0, 6).map((s) => (
+                      <div
+                        key={s.seccion}
+                        className="flex items-center justify-between text-xs"
+                      >
+                        <span className="font-medium text-slate-700">{s.seccion}</span>
+                        <span className="text-slate-600">
+                          Curso {s.enCurso} · Cola {s.enCola}
+                        </span>
+                      </div>
+                    ))}
+                    {sectionStats.wip.length === 0 ? (
+                      <p className="text-xs text-slate-500">Sin datos de WIP.</p>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
+                  <p className="text-[11px] font-semibold text-[#002147]">
+                    Top cuellos de botella
+                  </p>
+                  <div className="mt-2 space-y-1.5">
+                    {sectionStats.bottlenecks.map((s) => (
+                      <div
+                        key={s.seccion}
+                        className="flex items-center justify-between text-xs"
+                      >
+                        <span className="font-medium text-slate-700">{s.seccion}</span>
+                        <span className="text-slate-600">
+                          Cola {s.enCola} · Bloq {s.bloqueadas} · Riesgo {s.riesgo}
+                        </span>
+                      </div>
+                    ))}
+                    {sectionStats.bottlenecks.length === 0 ? (
+                      <p className="text-xs text-slate-500">
+                        Sin secciones críticas.
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            </>
+          ) : null}
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -654,6 +698,75 @@ export function PlanificacionPipelineTab() {
             </div>
           )}
         </CardContent>
+        <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Exportar Pipeline a PDF</DialogTitle>
+              <DialogDescription>
+                Se exporta exactamente el listado filtrado actual.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 rounded-md border border-slate-200 p-2 text-sm">
+                <input
+                  type="radio"
+                  name="pipeline-export-mode"
+                  checked={exportMode === "listado"}
+                  onChange={() => setExportMode("listado")}
+                />
+                Listado principal (operativo)
+              </label>
+              <label className="flex items-center gap-2 rounded-md border border-slate-200 p-2 text-sm">
+                <input
+                  type="radio"
+                  name="pipeline-export-mode"
+                  checked={exportMode === "analitica"}
+                  onChange={() => setExportMode("analitica")}
+                />
+                Hoja analítica
+              </label>
+              <label className="flex items-center gap-2 rounded-md border border-slate-200 p-2 text-sm">
+                <input
+                  type="radio"
+                  name="pipeline-export-mode"
+                  checked={exportMode === "ambas"}
+                  onChange={() => setExportMode("ambas")}
+                />
+                Ambas (2 hojas)
+              </label>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setExportOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="bg-[#002147] text-white hover:bg-[#001a38]"
+                onClick={() => {
+                  exportPipelinePdf({
+                    rows: visibleRows,
+                    mode: exportMode,
+                    filtrosLabel,
+                    generatedAtIso: new Date().toISOString(),
+                    wipRows: sectionStats.wip.map((s) => ({
+                      seccion: s.seccion,
+                      enCurso: s.enCurso,
+                      enCola: s.enCola,
+                    })),
+                    bottleneckRows: sectionStats.bottlenecks,
+                  });
+                  setExportOpen(false);
+                }}
+              >
+                Generar PDF
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         <Dialog
           open={detailOpen}
           onOpenChange={(o) => {
