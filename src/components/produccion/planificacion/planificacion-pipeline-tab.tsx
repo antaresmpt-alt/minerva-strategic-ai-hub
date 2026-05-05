@@ -456,8 +456,8 @@ export function PlanificacionPipelineTab() {
               No hay OTs para los filtros seleccionados.
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-slate-200/90">
-              <Table className={showAnalyticsColumns ? (compactMode ? "min-w-[68rem]" : "min-w-[72rem]") : (compactMode ? "min-w-[56rem]" : "min-w-[60rem]")}>
+            <div className="overflow-x-auto rounded-lg border border-slate-200/90 transition-all duration-300 ease-out">
+              <Table className={`transition-all duration-300 ease-out ${showAnalyticsColumns ? (compactMode ? "min-w-[68rem]" : "min-w-[72rem]") : (compactMode ? "min-w-[56rem]" : "min-w-[60rem]")}`}>
                 <TableHeader>
                   <TableRow className="bg-slate-50/90">
                     <TableHead>OT</TableHead>
@@ -468,23 +468,32 @@ export function PlanificacionPipelineTab() {
                     <TableHead>
                       <div className="flex items-center gap-2">
                         <span>Timeline</span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-6"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setShowAnalyticsColumns((v) => !v);
-                          }}
-                          title={showAnalyticsColumns ? "Ocultar analítica" : "Mostrar analítica"}
-                        >
-                          {showAnalyticsColumns ? (
-                            <ChevronLeft className="size-3.5" />
-                          ) : (
-                            <ChevronRight className="size-3.5" />
-                          )}
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-6 transition-transform duration-200 hover:scale-105"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowAnalyticsColumns((v) => !v);
+                              }}
+                              aria-label={showAnalyticsColumns ? "Volver a vista compacta" : "Mostrar vista analítica"}
+                            >
+                              {showAnalyticsColumns ? (
+                                <ChevronLeft className="size-3.5" />
+                              ) : (
+                                <ChevronRight className="size-3.5" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {showAnalyticsColumns
+                              ? "Volver a vista compacta"
+                              : "Mostrar vista analítica"}
+                          </TooltipContent>
+                        </Tooltip>
                       </div>
                     </TableHead>
                     {showAnalyticsColumns ? (
