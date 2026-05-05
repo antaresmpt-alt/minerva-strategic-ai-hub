@@ -38,6 +38,12 @@ function fmtHours(v: number | null | undefined): string {
   return `${v.toFixed(1)}h`;
 }
 
+function sectionLabel(v: string | null | undefined): string {
+  const t = String(v ?? "").trim();
+  if (!t) return "sin_seccion";
+  return t;
+}
+
 export function PlanificacionPipelineTab() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const router = useRouter();
@@ -204,6 +210,49 @@ export function PlanificacionPipelineTab() {
     return { total, enMarcha, enRiesgo, bloqueadas };
   }, [visibleRows]);
 
+  const sectionStats = useMemo(() => {
+    const bySection = new Map<
+      string,
+      {
+        seccion: string;
+        enCurso: number;
+        enCola: number;
+        bloqueadas: number;
+        riesgo: number;
+      }
+    >();
+
+    for (const row of visibleRows) {
+      const refPaso = row.pasoActual ?? row.siguientePaso;
+      const sec = sectionLabel(refPaso?.seccionSlug);
+      const cur = bySection.get(sec) ?? {
+        seccion: sec,
+        enCurso: 0,
+        enCola: 0,
+        bloqueadas: 0,
+        riesgo: 0,
+      };
+      const estado = refPaso?.estadoPaso;
+      if (estado === "en_marcha" || estado === "pausado") cur.enCurso += 1;
+      if (estado === "disponible" || estado === "pendiente") cur.enCola += 1;
+      if (row.badges.includes("bloqueado")) cur.bloqueadas += 1;
+      if (row.riesgo !== "ok") cur.riesgo += 1;
+      bySection.set(sec, cur);
+    }
+
+    const wip = [...bySection.values()].sort(
+      (a, b) => b.enCurso + b.enCola - (a.enCurso + a.enCola),
+    );
+    const bottlenecks = [...bySection.values()]
+      .map((s) => ({
+        ...s,
+        score: s.enCola * 2 + s.bloqueadas * 2 + s.riesgo,
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 4);
+    return { wip, bottlenecks };
+  }, [visibleRows]);
+
   const openDetail = useCallback(
     (row: Awaited<ReturnType<typeof fetchPipelineRows>>[number]) => {
       setDetailOt(row);
@@ -341,6 +390,52 @@ export function PlanificacionPipelineTab() {
             <div className="rounded-md border border-slate-200 bg-amber-50 px-3 py-2">
               <p className="text-[11px] text-amber-700">Bloqueadas</p>
               <p className="text-sm font-semibold text-amber-900">{kpis.bloqueadas}</p>
+            </div>
+          </div>
+          <div className="grid gap-2 lg:grid-cols-2">
+            <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
+              <p className="text-[11px] font-semibold text-[#002147]">
+                WIP por sección
+              </p>
+              <div className="mt-2 space-y-1.5">
+                {sectionStats.wip.slice(0, 6).map((s) => (
+                  <div
+                    key={s.seccion}
+                    className="flex items-center justify-between text-xs"
+                  >
+                    <span className="font-medium text-slate-700">{s.seccion}</span>
+                    <span className="text-slate-600">
+                      Curso {s.enCurso} · Cola {s.enCola}
+                    </span>
+                  </div>
+                ))}
+                {sectionStats.wip.length === 0 ? (
+                  <p className="text-xs text-slate-500">Sin datos de WIP.</p>
+                ) : null}
+              </div>
+            </div>
+            <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
+              <p className="text-[11px] font-semibold text-[#002147]">
+                Top cuellos de botella
+              </p>
+              <div className="mt-2 space-y-1.5">
+                {sectionStats.bottlenecks.map((s) => (
+                  <div
+                    key={s.seccion}
+                    className="flex items-center justify-between text-xs"
+                  >
+                    <span className="font-medium text-slate-700">{s.seccion}</span>
+                    <span className="text-slate-600">
+                      Cola {s.enCola} · Bloq {s.bloqueadas} · Riesgo {s.riesgo}
+                    </span>
+                  </div>
+                ))}
+                {sectionStats.bottlenecks.length === 0 ? (
+                  <p className="text-xs text-slate-500">
+                    Sin secciones críticas.
+                  </p>
+                ) : null}
+              </div>
             </div>
           </div>
         </CardHeader>
