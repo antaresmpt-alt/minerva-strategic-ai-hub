@@ -23,13 +23,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tabs,
@@ -533,12 +533,11 @@ export function MuelleRecepcionPage() {
     return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
   }, [palets]);
 
-  /** Cierre operativo: albarán + hojas informadas (≥ 0); no se exige igualar el total pedido. */
+  /** Cierre operativo: hojas informadas (≥ 0); no se exige albarán ni igualar el total pedido. */
   const puedeFinalizarRecepcionMaterial = useMemo(() => {
-    if (!albaran.trim()) return false;
     if (hojasRecNum === null || hojasRecNum < 0) return false;
     return true;
-  }, [albaran, hojasRecNum]);
+  }, [hojasRecNum]);
 
   const esCompraRecibidoParcial = useMemo(
     () =>
@@ -547,13 +546,12 @@ export function MuelleRecepcionPage() {
     [activeMaterial]
   );
 
-  /** Parcial: albarán + hojas &gt; 0 y menores que el pendiente (si hay total esperado). */
+  /** Parcial: hojas &gt; 0 y menores que el pendiente (si hay total esperado). */
   const puedeRecepcionParcial = useMemo(() => {
-    if (!albaran.trim()) return false;
     if (hojasRecNum === null || hojasRecNum <= 0) return false;
     if (hojasEsperadas == null) return true;
     return hojasRecNum < hojasEsperadas;
-  }, [albaran, hojasRecNum, hojasEsperadas]);
+  }, [hojasRecNum, hojasEsperadas]);
 
   const externoCantEsperada = activeExterno?.unidades ?? null;
   const externoCantRecNum = useMemo(() => {
@@ -563,20 +561,18 @@ export function MuelleRecepcionPage() {
     return Number.isFinite(n) ? Math.trunc(n) : null;
   }, [externoCantidadRecibida]);
 
-  /** Parcial: albarán + cantidad recibida &gt; 0 y menor que la pedida (si hay pedido). */
+  /** Parcial: cantidad recibida &gt; 0 y menor que la pedida (si hay pedido). */
   const puedeExternoParcial = useMemo(() => {
-    if (!externoAlbaran.trim()) return false;
     if (externoCantRecNum === null || externoCantRecNum <= 0) return false;
     if (externoCantEsperada == null) return true;
     return externoCantRecNum < externoCantEsperada;
-  }, [externoAlbaran, externoCantRecNum, externoCantEsperada]);
+  }, [externoCantRecNum, externoCantEsperada]);
 
-  /** Finalizar: albarán + cantidad recibida informada (≥ 0); cierre manual sin exigir cuadrar. */
+  /** Finalizar: cantidad recibida informada (≥ 0); cierre manual sin exigir albarán ni cuadrar. */
   const puedeExternoFinalizar = useMemo(() => {
-    if (!externoAlbaran.trim()) return false;
     if (externoCantRecNum === null || externoCantRecNum < 0) return false;
     return true;
-  }, [externoAlbaran, externoCantRecNum]);
+  }, [externoCantRecNum]);
 
   const esExternoEnParcial = useMemo(
     () => activeExterno != null && activeExterno.estado === "Parcial",
@@ -609,23 +605,19 @@ export function MuelleRecepcionPage() {
   const guardarRecepcion = async (modo: "total" | "parcial") => {
     if (!activeMaterial) return;
     const alb = albaran.trim();
-    if (!alb) {
-      toast.error("El nº de albarán es obligatorio.");
-      return;
-    }
     if (hojasRecNum === null || hojasRecNum < 0) {
       toast.error("Indica las hojas recibidas (número entero ≥ 0).");
       return;
     }
     if (modo === "total" && !puedeFinalizarRecepcionMaterial) {
       toast.error(
-        "Para finalizar la recepción indica albarán y hojas recibidas (entero ≥ 0)."
+        "Para finalizar la recepción indica hojas recibidas (entero ≥ 0)."
       );
       return;
     }
     if (modo === "parcial" && !puedeRecepcionParcial) {
       toast.error(
-        "Recepción parcial: indica albarán y hojas recibidas (mayor que 0 y menores que las esperadas si hay total)."
+        "Recepción parcial: indica hojas recibidas (mayor que 0 y menores que las esperadas si hay total)."
       );
       return;
     }
@@ -672,7 +664,7 @@ export function MuelleRecepcionPage() {
       const insertRow = {
         compra_id: activeMaterial.id,
         fecha_recepcion: ahora,
-        albaran_proveedor: alb,
+        albaran_proveedor: alb || null,
         hojas_recibidas: hojasInt,
         palets_recibidos: paletsInt,
         estado_recepcion: estadoRecepcion,
@@ -719,7 +711,7 @@ export function MuelleRecepcionPage() {
           .from(TABLE_COMPRA)
           .update({
             estado: "Recibido",
-            albaran_proveedor: alb,
+            albaran_proveedor: alb || null,
             fecha_recepcion: ahora,
           })
           .eq("id", activeMaterial.id);
@@ -729,7 +721,7 @@ export function MuelleRecepcionPage() {
           .from(TABLE_COMPRA)
           .update({
             estado: "Recibido Parcial",
-            albaran_proveedor: alb,
+            albaran_proveedor: alb || null,
           })
           .eq("id", activeMaterial.id);
         if (upErr) throw upErr;
@@ -761,7 +753,7 @@ export function MuelleRecepcionPage() {
     if (!activeExterno) return;
     if (!puedeExternoParcial) {
       toast.error(
-        "Recepción parcial: indica albarán y cantidad recibida (mayor que 0 y menor que la esperada si hay cantidad pedida)."
+        "Recepción parcial: indica cantidad recibida (mayor que 0 y menor que la esperada si hay cantidad pedida)."
       );
       return;
     }
@@ -809,7 +801,7 @@ export function MuelleRecepcionPage() {
     if (!activeExterno) return;
     if (!puedeExternoFinalizar) {
       toast.error(
-        "Para finalizar indica albarán y cantidad recibida (número entero ≥ 0)."
+        "Para finalizar indica cantidad recibida (número entero ≥ 0)."
       );
       return;
     }
@@ -821,7 +813,7 @@ export function MuelleRecepcionPage() {
       const prev = (activeExterno.notas_logistica ?? "").trim();
       const bloques: string[] = [];
       if (prev) bloques.push(prev);
-      bloques.push(`[Muelle] Albarán: ${alb}`);
+      if (alb) bloques.push(`[Muelle] Albarán: ${alb}`);
       bloques.push(`[Muelle] Cant. recibida: ${rec} uds`);
       if (activeExterno.estado === "Parcial") {
         bloques.push(
@@ -965,7 +957,11 @@ export function MuelleRecepcionPage() {
                                 otNumero={row.ot_numero}
                                 fechaEntregaIso={row.fecha_entrega_maestro}
                                 umbrales={umbralesOtsCompras}
+                                className="[&>span:first-child]:text-[15px]"
                               />
+                              <span className="max-w-full truncate text-xs font-medium text-slate-600 sm:text-sm">
+                                - {row.cliente_nombre?.trim() || "—"}
+                              </span>
                               <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-600">
                                 {row.estado?.trim() || "—"}
                               </span>
@@ -1146,28 +1142,30 @@ export function MuelleRecepcionPage() {
         }}
       />
 
-      <Sheet open={sheetOpen} onOpenChange={onSheetOpenChange}>
-        <SheetContent
-          side="bottom"
-          className="max-h-[min(92vh,720px)] overflow-y-auto rounded-t-2xl sm:max-w-lg sm:rounded-t-2xl md:left-auto md:right-4 md:top-4 md:h-[min(92vh,680px)] md:max-h-none md:w-full md:max-w-md md:rounded-xl"
+      <Dialog open={sheetOpen} onOpenChange={onSheetOpenChange}>
+        <DialogContent
+          className="max-h-[min(92vh,720px)] w-[calc(100%-1.5rem)] overflow-y-auto rounded-xl sm:max-w-2xl"
         >
           {sheetKind === "material" && activeMaterial ? (
             <>
-              <SheetHeader className="border-b border-slate-100 pb-3 text-left">
-                <SheetTitle className="text-lg">
+              <DialogHeader className="border-b border-slate-100 pb-3 text-left">
+                <DialogTitle className="text-lg">
                   Recepción · OT{" "}
                   <span className="font-mono font-semibold text-[#002147]">
                     {activeMaterial.ot_numero}
                   </span>
-                </SheetTitle>
-                <SheetDescription className="text-left text-xs sm:text-sm">
+                  <span className="ml-2 text-sm font-medium text-slate-600">
+                    - {activeMaterial.cliente_nombre?.trim() || "—"}
+                  </span>
+                </DialogTitle>
+                <DialogDescription className="text-left text-xs sm:text-sm">
                   {activeMaterial.material?.trim() || "—"} · Esperadas:{" "}
                   {activeMaterial.num_hojas_brutas != null
                     ? activeMaterial.num_hojas_brutas
                     : "—"}{" "}
                   hojas
-                </SheetDescription>
-              </SheetHeader>
+                </DialogDescription>
+              </DialogHeader>
 
               <div
                 className="mx-1 mt-3 rounded-lg border border-[#002147]/20 bg-[#002147]/[0.04] px-3 py-2.5 text-sm leading-snug text-[#002147] shadow-inner"
@@ -1209,7 +1207,7 @@ export function MuelleRecepcionPage() {
                     id="muelle-albaran"
                     value={albaran}
                     onChange={(e) => setAlbaran(e.target.value)}
-                    placeholder="Obligatorio"
+                    placeholder="Opcional"
                     autoComplete="off"
                     className="text-base"
                   />
@@ -1312,7 +1310,7 @@ export function MuelleRecepcionPage() {
                 </div>
               </div>
 
-              <SheetFooter className="flex-col gap-2 border-t border-slate-100 pt-4 sm:flex-col">
+              <DialogFooter className="flex-col gap-2 border-t border-slate-100 pt-4 sm:flex-col">
                 <Button
                   type="button"
                   className="w-full bg-emerald-700 text-white hover:bg-emerald-800"
@@ -1336,24 +1334,24 @@ export function MuelleRecepcionPage() {
                 >
                   Recepción parcial
                 </Button>
-              </SheetFooter>
+              </DialogFooter>
             </>
           ) : null}
 
           {sheetKind === "externo" && activeExterno ? (
             <>
-              <SheetHeader className="border-b border-slate-100 pb-3 text-left">
-                <SheetTitle className="text-lg">
+              <DialogHeader className="border-b border-slate-100 pb-3 text-left">
+                <DialogTitle className="text-lg">
                   Recepción externo · OT{" "}
                   <span className="font-mono font-semibold text-[#002147]">
                     {activeExterno.ot_numero}
                   </span>
-                </SheetTitle>
-                <SheetDescription className="text-left text-xs sm:text-sm">
+                </DialogTitle>
+                <DialogDescription className="text-left text-xs sm:text-sm">
                   {activeExterno.trabajo_titulo?.trim() || "—"} ·{" "}
                   {activeExterno.cliente_nombre?.trim() || "—"}
-                </SheetDescription>
-              </SheetHeader>
+                </DialogDescription>
+              </DialogHeader>
 
               <div
                 className="mx-1 mt-3 rounded-lg border border-[#002147]/20 bg-[#002147]/[0.04] px-3 py-2.5 text-sm leading-snug text-[#002147] shadow-inner"
@@ -1376,7 +1374,7 @@ export function MuelleRecepcionPage() {
                     id="muelle-ext-alb"
                     value={externoAlbaran}
                     onChange={(e) => setExternoAlbaran(e.target.value)}
-                    placeholder="Obligatorio"
+                    placeholder="Opcional"
                     autoComplete="off"
                     className="text-base"
                   />
@@ -1428,7 +1426,7 @@ export function MuelleRecepcionPage() {
                   )}
                 </div>
               </div>
-              <SheetFooter className="flex-col gap-2 border-t border-slate-100 pt-4 sm:flex-col">
+              <DialogFooter className="flex-col gap-2 border-t border-slate-100 pt-4 sm:flex-col">
                 <Button
                   type="button"
                   className="w-full bg-emerald-700 text-white hover:bg-emerald-800"
@@ -1452,11 +1450,11 @@ export function MuelleRecepcionPage() {
                 >
                   Recepción parcial
                 </Button>
-              </SheetFooter>
+              </DialogFooter>
             </>
           ) : null}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

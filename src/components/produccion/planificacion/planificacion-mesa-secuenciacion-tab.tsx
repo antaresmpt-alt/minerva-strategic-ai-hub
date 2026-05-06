@@ -4,6 +4,7 @@ import {
   closestCorners,
   DndContext,
   DragOverlay,
+  pointerWithin,
   type Modifier,
   type DragEndEvent,
   type DragOverEvent,
@@ -431,6 +432,14 @@ export function PlanificacionMesaSecuenciacionTab() {
   const [showSaturday, setShowSaturday] = useState(false);
   const [maquinas, setMaquinas] = useState<MaquinaOption[]>([]);
   const [selectedMaquinaId, setSelectedMaquinaId] = useState<string | null>(null);
+  const collisionDetectionStrategy = useCallback(
+    (...args: Parameters<typeof closestCorners>) => {
+      const pointerCollisions = pointerWithin(...args);
+      if (pointerCollisions.length > 0) return pointerCollisions;
+      return closestCorners(...args);
+    },
+    [],
+  );
 
   const weekDays = useMemo(
     () => getWeekDays(weekMonday, showSaturday),
@@ -1537,6 +1546,20 @@ export function PlanificacionMesaSecuenciacionTab() {
     [persistRealSlot, reload],
   );
 
+  /** Al devolver OT al Pool, garantizamos visibilidad en mesa (`enviada_mesa`). */
+  const ensurePoolStateForOt = useCallback(
+    async (otNumero: string) => {
+      const ot = otNumero.trim();
+      if (!ot) return;
+      const { error } = await supabase
+        .from(TABLE_POOL)
+        .update({ estado_pool: "enviada_mesa" })
+        .eq("ot_numero", ot);
+      if (error) throw error;
+    },
+    [supabase],
+  );
+
   const confirmPlanificacion = useCallback(async () => {
     if (!selectedMaquinaId) {
       toast.error("Selecciona una máquina para confirmar la planificación.");
@@ -1933,6 +1956,18 @@ export function PlanificacionMesaSecuenciacionTab() {
         visibleSlotKeys,
         poolOtsSet,
       );
+      const movingMesaId = aId.startsWith("mesa::")
+        ? aId.slice("mesa::".length)
+        : "";
+      const movingItem =
+        movingMesaId && fromContainer?.startsWith("slot::")
+          ? (() => {
+              const fromSk = containerToSlotKey(fromContainer);
+              if (!fromSk) return null;
+              const list = current[fromSk] ?? [];
+              return list.find((it) => it.id === movingMesaId) ?? null;
+            })()
+          : null;
       if (!fromContainer || !toContainer) {
         if (
           simulationOn &&
@@ -1954,6 +1989,16 @@ export function PlanificacionMesaSecuenciacionTab() {
         current,
       );
       if (!t) {
+        if (
+          fromContainer.startsWith("slot::") &&
+          toContainer === POOL_CONTAINER_ID &&
+          movingItem &&
+          isMesaTrabajoLocked(movingItem)
+        ) {
+          toast.error(
+            "No puedes devolver al pool una OT en ejecución o finalizada.",
+          );
+        }
         // Sin transición: si hubo pre-aplicación visual en simulación, revertir.
         if (
           simulationOn &&
@@ -1984,6 +2029,26 @@ export function PlanificacionMesaSecuenciacionTab() {
       const newMesa = flattenBoard(t.next);
       setMesaItems(newMesa);
       setDragStartDraftSnapshot(null);
+      if (
+        fromContainer.startsWith("slot::") &&
+        toContainer === POOL_CONTAINER_ID &&
+        movingItem?.ot
+      ) {
+        try {
+          await ensurePoolStateForOt(movingItem.ot);
+        } catch (e) {
+          const msg = getErrorMessage(
+            e,
+            "No se pudo sincronizar la OT con el pool.",
+          );
+          console.error("[Mesa] ensurePoolStateForOt", {
+            ot: movingItem.ot,
+            msg,
+            error: toDebugError(e),
+          });
+          toast.error(msg);
+        }
+      }
       void persistRealAffectedSlots(t.next, t.affected).then(() => {
         void reload();
       });
@@ -1997,6 +2062,7 @@ export function PlanificacionMesaSecuenciacionTab() {
       visibleSlotKeys,
       poolOtsSet,
       applyTransition,
+      ensurePoolStateForOt,
       persistRealAffectedSlots,
       reload,
     ],
@@ -2829,7 +2895,7 @@ export function PlanificacionMesaSecuenciacionTab() {
       <CardContent className="px-3 pb-4">
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={collisionDetectionStrategy}
           onDragStart={onDragStart}
           onDragOver={onDragOver}
           onDragEnd={(e) => void onDragEnd(e)}

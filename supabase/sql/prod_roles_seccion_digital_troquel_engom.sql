@@ -44,7 +44,8 @@ create policy prod_ot_pasos_select_authenticated
             'impresion',
             'digital',
             'troquelado',
-            'engomado'
+            'engomado',
+            'logistica'
           ]
         )
     )
