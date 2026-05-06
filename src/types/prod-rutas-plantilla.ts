@@ -3,6 +3,7 @@ export type ProdProcesoCatRow = {
   id: number;
   nombre: string;
   seccion_slug: string;
+  tipo_planificacion: "impresion" | "digital" | "troquelado" | "engomado" | null;
   es_externo: boolean | null;
   orden_sugerido: number | null;
   activo: boolean | null;

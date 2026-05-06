@@ -137,6 +137,7 @@ export function etiquetaAmbitoPlanificacion(
 export type ProximoPasoInfo = {
   nombre: string;
   seccionSlug: string | null;
+  tipoPlanificacionDb: string | null;
   tipoMaquina: PlanificacionTipoMaquina | null;
 };
 
@@ -175,7 +176,7 @@ export async function fetchProximoPasoDisponiblePorOt(
   const { data: pasos, error: pErr } = await supabase
     .from("prod_ot_pasos")
     .select(
-      "ot_id, orden, estado, prod_procesos_cat(nombre, seccion_slug)",
+      "ot_id, orden, estado, prod_procesos_cat(nombre, seccion_slug, tipo_planificacion)",
     )
     .in("ot_id", otIds)
     .eq("estado", "disponible")
@@ -187,6 +188,7 @@ export async function fetchProximoPasoDisponiblePorOt(
     prod_procesos_cat?: {
       nombre?: string | null;
       seccion_slug?: string | null;
+      tipo_planificacion?: string | null;
     } | null;
   };
 
@@ -209,8 +211,24 @@ export async function fetchProximoPasoDisponiblePorOt(
       cat?.seccion_slug != null && String(cat.seccion_slug).trim()
         ? String(cat.seccion_slug).trim()
         : null;
-    const tipoMaquina = inferPlanificacionTipoFromProceso(slug, nombre);
-    out.set(num, { nombre, seccionSlug: slug, tipoMaquina });
+    const tipoFromDb =
+      cat?.tipo_planificacion != null &&
+      String(cat.tipo_planificacion).trim().length > 0
+        ? String(cat.tipo_planificacion).trim().toLowerCase()
+        : null;
+    const tipoMaquina =
+      tipoFromDb === "impresion" ||
+      tipoFromDb === "digital" ||
+      tipoFromDb === "troquelado" ||
+      tipoFromDb === "engomado"
+        ? (tipoFromDb as PlanificacionTipoMaquina)
+        : inferPlanificacionTipoFromProceso(slug, nombre);
+    out.set(num, {
+      nombre,
+      seccionSlug: slug,
+      tipoPlanificacionDb: tipoFromDb,
+      tipoMaquina,
+    });
   }
 
   return out;

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { requireSettingsAdmin } from "@/lib/api/require-settings-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
-type TipoMaquina = "impresion" | "troquelado" | "engomado";
+type TipoMaquina = "impresion" | "digital" | "troquelado" | "engomado";
 
 type MaquinaPayload = {
   id?: string;
@@ -19,7 +19,14 @@ type MaquinaPayload = {
 
 function normalizeTipo(raw: unknown): TipoMaquina | null {
   const t = String(raw ?? "").trim().toLowerCase();
-  if (t === "impresion" || t === "troquelado" || t === "engomado") return t;
+  if (
+    t === "impresion" ||
+    t === "digital" ||
+    t === "troquelado" ||
+    t === "engomado"
+  ) {
+    return t;
+  }
   return null;
 }
 
@@ -159,6 +166,28 @@ export async function PUT(request: Request) {
   try {
     const admin = createSupabaseAdminClient();
     const { error } = await admin.from("prod_maquinas").update(patch).eq("id", id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Error interno";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  const gate = await requireSettingsAdmin();
+  if (!gate.ok) return gate.response;
+  let body: { id?: string };
+  try {
+    body = (await request.json()) as { id?: string };
+  } catch {
+    return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
+  }
+  const id = String(body.id ?? "").trim();
+  if (!id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
+  try {
+    const admin = createSupabaseAdminClient();
+    const { error } = await admin.from("prod_maquinas").delete().eq("id", id);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ ok: true });
   } catch (e) {
