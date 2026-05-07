@@ -263,26 +263,10 @@ function SortableMesaCard({
               <span className="inline-flex items-center rounded-full bg-slate-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
                 Terminada
               </span>
-            ) : availableActions.length > 0 ? (
-              <button
-                type="button"
-                className="inline-flex items-center rounded-md border border-[#002147]/25 bg-[#002147]/5 px-1.5 py-0.5 text-[10px] font-semibold text-[#002147] hover:bg-[#002147]/10"
-                disabled={disabled || isSavingThis}
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActionOpen(true);
-                }}
-              >
-                {isSavingThis ? (
-                  <Loader2 className="mr-1 size-3 animate-spin" />
-                ) : (
-                  <span className="mr-1 inline-flex size-3 items-center justify-center rounded-full bg-[#002147] text-[8px] font-bold text-white">
-                    A
-                  </span>
-                )}
-                Acción
-              </button>
+            ) : trabajo.estadoMesa === "confirmado" ? (
+              <span className="inline-flex items-center rounded-full bg-[#002147]/85 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                Confirmada
+              </span>
             ) : (
               <span className="text-[9px] font-medium uppercase tracking-wide text-amber-700">
                 Borrador

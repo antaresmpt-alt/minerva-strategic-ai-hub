@@ -140,6 +140,7 @@ const ACTIVE_MESA_ESTADOS = [
   "en_ejecucion",
   "finalizada",
 ] as const;
+const POOL_BLOCKING_MESA_ESTADOS = ["borrador", "confirmado", "en_ejecucion"] as const;
 const EDITABLE_PLAN_ESTADOS = ["borrador", "confirmado"] as const;
 
 // ---------------------------------------------------------------------------
@@ -884,7 +885,7 @@ export function PlanificacionMesaSecuenciacionTab() {
       const { data: mesaPlacedRows, error: mpErr } = await supabase
         .from(TABLE_MESA)
         .select("ot_numero, maquina_id")
-        .in("estado_mesa", ACTIVE_MESA_ESTADOS as unknown as string[])
+        .in("estado_mesa", POOL_BLOCKING_MESA_ESTADOS as unknown as string[])
         .in("ot_numero", poolOts);
       if (mpErr) throw mpErr;
       const rawPlaced = (mesaPlacedRows ?? []) as Array<{
@@ -929,7 +930,7 @@ export function PlanificacionMesaSecuenciacionTab() {
       let placedQuery = supabase
         .from(TABLE_MESA)
         .select("ot_numero")
-        .in("estado_mesa", ACTIVE_MESA_ESTADOS as unknown as string[])
+        .in("estado_mesa", POOL_BLOCKING_MESA_ESTADOS as unknown as string[])
         .in("ot_numero", poolOts);
       if (selectedMaquinaId) {
         placedQuery = placedQuery.or(`maquina_id.eq.${selectedMaquinaId},maquina_id.is.null`);
