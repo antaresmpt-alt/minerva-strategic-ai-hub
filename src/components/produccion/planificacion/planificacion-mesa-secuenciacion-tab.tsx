@@ -595,6 +595,35 @@ export function PlanificacionMesaSecuenciacionTab() {
     const otsList = rows
       .map((r) => String(r.ot_numero ?? "").trim())
       .filter((ot) => ot.length > 0);
+    let tipoMaquinaSeleccionada: string | null = null;
+    if (selectedMaquinaId) {
+      const { data: mrow, error: mErr } = await supabase
+        .from(TABLE_MAQUINAS)
+        .select("tipo_maquina")
+        .eq("id", selectedMaquinaId)
+        .maybeSingle();
+      if (mErr) throw mErr;
+      tipoMaquinaSeleccionada =
+        mrow && typeof (mrow as { tipo_maquina?: unknown }).tipo_maquina === "string"
+          ? String((mrow as { tipo_maquina: string }).tipo_maquina).trim() || null
+          : null;
+    }
+    const tipoEfectivo = planificacionTipoFiltroEfectivo(
+      getPlanificacionTipoMaquinaFilter(planificacionRole),
+      tipoMaquinaSeleccionada,
+    );
+    const horasByTipo = (d: Record<string, unknown>): number => {
+      const hEntrada = parseNum(d.horas_entrada);
+      const hTiraje = parseNum(d.horas_tiraje);
+      const hTroquelado = parseNum(d.horas_estimadas_troquelado);
+      const hEngomado = parseNum(d.horas_estimadas_engomado);
+      if (tipoEfectivo === "impresion" || tipoEfectivo === "digital") {
+        return hEntrada + hTiraje;
+      }
+      if (tipoEfectivo === "troquelado") return hTroquelado;
+      if (tipoEfectivo === "engomado") return hEngomado;
+      return hEntrada + hTiraje + hTroquelado + hEngomado;
+    };
     const ejecByMesaId = new Map<
       string,
       { id: string; estado: EstadoEjecucionMesa; minutosAcum: number; updatedAt: string }
@@ -709,11 +738,7 @@ export function PlanificacionMesaSecuenciacionTab() {
         const ot = String(d.ot_numero ?? "").trim();
         if (!ot) continue;
         const prev = fallbackByOt.get(ot) ?? { horas: 0, numHojas: 0 };
-        prev.horas +=
-          parseNum(d.horas_entrada) +
-          parseNum(d.horas_tiraje) +
-          parseNum(d.horas_estimadas_troquelado) +
-          parseNum(d.horas_estimadas_engomado);
+        prev.horas += horasByTipo(d);
         prev.numHojas = Math.max(prev.numHojas, Math.trunc(parseNum(d.num_hojas_brutas)));
         fallbackByOt.set(ot, prev);
       }
@@ -824,7 +849,7 @@ export function PlanificacionMesaSecuenciacionTab() {
       });
     }
     return dedupeMesaByOt(out);
-  }, [supabase, weekStartKey, weekEndKey, selectedMaquinaId]);
+  }, [supabase, weekStartKey, weekEndKey, selectedMaquinaId, planificacionRole]);
 
   const loadPool = useCallback(
     async (roleForFilter: string | null) => {
