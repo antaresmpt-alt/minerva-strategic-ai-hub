@@ -7,8 +7,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Info, Loader2, Pencil, PlayCircle, Sun, Sunrise } from "lucide-react";
-import { useMemo } from "react";
+import { Info, Loader2, Pencil, Sun, Sunrise } from "lucide-react";
+import { useMemo, useState } from "react";
 
 import {
   PlanificacionCard,
@@ -16,12 +16,24 @@ import {
 } from "@/components/produccion/planificacion/mesa/planificacion-card";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
   computeTurnLoad,
   detectAdjacentLinks,
   loadBarClass,
   loadTextClass,
   slotKey,
 } from "@/lib/planificacion-mesa";
+import type { PlanificacionTipoMaquina } from "@/lib/planificacion-ambito";
 import { cn } from "@/lib/utils";
 import type {
   DayKey,
@@ -42,8 +54,27 @@ interface TurnoColumnProps {
   items: MesaTrabajo[];
   capacityHoras: number;
   onEditCapacity: () => void;
-  onStartExecution: (trabajo: MesaTrabajo) => void;
-  startingExecutionId: string | null;
+  maquinaTipo: PlanificacionTipoMaquina | null;
+  onAction: (
+    trabajo: MesaTrabajo,
+    action:
+      | "lanzar"
+      | "iniciar"
+      | "pausar"
+      | "reanudar"
+      | "cancelar"
+      | "finalizar",
+    payload?: {
+      horasEntrada: number | null;
+      horasTiraje: number | null;
+      horasTroquelado: number | null;
+      horasEngomado: number | null;
+      numHojas: number | null;
+      cantidadUnidades: number | null;
+      notas: string | null;
+    },
+  ) => void;
+  actionLoadingId: string | null;
   disabled?: boolean;
 }
 
@@ -71,17 +102,25 @@ function readableTextColor(hex: string): "#0f172a" | "#ffffff" {
   return luminance > 0.62 ? "#0f172a" : "#ffffff";
 }
 
+function fmtHoras(v: number | null | undefined): string {
+  const n = Number(v ?? 0);
+  if (!Number.isFinite(n) || n <= 0) return "0";
+  return n.toFixed(1).replace(/\.0$/, "");
+}
+
 function SortableMesaCard({
   trabajo,
   linkedToNext,
-  onStartExecution,
-  startingExecutionId,
+  maquinaTipo,
+  onAction,
+  actionLoadingId,
   disabled,
 }: {
   trabajo: MesaTrabajo;
   linkedToNext: boolean;
-  onStartExecution: (trabajo: MesaTrabajo) => void;
-  startingExecutionId: string | null;
+  maquinaTipo: PlanificacionTipoMaquina | null;
+  onAction: TurnoColumnProps["onAction"];
+  actionLoadingId: string | null;
   disabled?: boolean;
 }) {
   const sortableId = itemIdForMesa(trabajo.id);
@@ -89,6 +128,7 @@ function SortableMesaCard({
   const isFinished = trabajo.estadoMesa === "finalizada";
   const isPendingStart = trabajo.estadoEjecucionActual === "pendiente_inicio";
   const isPaused = trabajo.estadoEjecucionActual === "pausada";
+  const isInCourse = trabajo.estadoEjecucionActual === "en_curso";
   const pausedMinutes = Math.max(0, Math.trunc(trabajo.minutosPausadaAcumActual ?? 0));
   const pauseReason = trabajo.motivoPausaActivaActual?.trim() || null;
   const pauseColor = isValidHexColor(trabajo.motivoPausaColorHexActual)
@@ -115,6 +155,42 @@ function SortableMesaCard({
     numHojas: trabajo.numHojasBrutasSnapshot,
     horas: trabajo.horasPlanificadasSnapshot,
     materialStatus: trabajo.materialStatus,
+  };
+
+  const [actionOpen, setActionOpen] = useState(false);
+  const [showFinalizeForm, setShowFinalizeForm] = useState(false);
+  const [horasEntrada, setHorasEntrada] = useState("");
+  const [horasTiraje, setHorasTiraje] = useState("");
+  const [horasTroquelado, setHorasTroquelado] = useState("");
+  const [horasEngomado, setHorasEngomado] = useState("");
+  const [numHojas, setNumHojas] = useState("");
+  const [cantidadUnidades, setCantidadUnidades] = useState("");
+  const [notas, setNotas] = useState("");
+
+  const parseNumber = (v: string): number | null => {
+    const n = Number(v.replace(",", ".").trim());
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const availableActions = useMemo(() => {
+    if (trabajo.estadoMesa === "confirmado" && !trabajo.estadoEjecucionActual) {
+      return ["lanzar"] as const;
+    }
+    if (isPendingStart) return ["iniciar", "cancelar"] as const;
+    if (isInCourse) return ["pausar", "finalizar", "cancelar"] as const;
+    if (isPaused) return ["reanudar", "finalizar", "cancelar"] as const;
+    return [] as const;
+  }, [isInCourse, isPaused, isPendingStart, trabajo.estadoEjecucionActual, trabajo.estadoMesa]);
+
+  const isSavingThis = actionLoadingId === trabajo.id;
+
+  const highlightClass = (field: "hojas" | "unidades" | "entrada_tiraje" | "troquelado" | "engomado") => {
+    if (maquinaTipo === "engomado" && field === "unidades") return "ring-2 ring-emerald-300";
+    if (maquinaTipo === "troquelado" && (field === "hojas" || field === "troquelado")) return "ring-2 ring-indigo-300";
+    if ((maquinaTipo === "digital" || maquinaTipo === "impresion") && (field === "hojas" || field === "entrada_tiraje")) {
+      return "ring-2 ring-sky-300";
+    }
+    return "";
   };
 
   return (
@@ -147,7 +223,8 @@ function SortableMesaCard({
           </span>
         }
         footerSlot={
-          <div className="mt-1 flex flex-wrap items-center gap-1">
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-1">
             {isRunning ? (
               isPendingStart ? (
                 <span className="inline-flex shrink-0 items-center rounded-full bg-sky-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
@@ -186,32 +263,173 @@ function SortableMesaCard({
               <span className="inline-flex items-center rounded-full bg-slate-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
                 Terminada
               </span>
-            ) : trabajo.estadoMesa === "confirmado" ? (
+            ) : availableActions.length > 0 ? (
               <button
                 type="button"
-                className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 hover:bg-emerald-100"
-                disabled={disabled || startingExecutionId === trabajo.id}
+                className="inline-flex items-center rounded-md border border-[#002147]/25 bg-[#002147]/5 px-1.5 py-0.5 text-[10px] font-semibold text-[#002147] hover:bg-[#002147]/10"
+                disabled={disabled || isSavingThis}
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onStartExecution(trabajo);
+                  setActionOpen(true);
                 }}
               >
-                {startingExecutionId === trabajo.id ? (
+                {isSavingThis ? (
                   <Loader2 className="mr-1 size-3 animate-spin" />
                 ) : (
-                  <PlayCircle className="mr-1 size-3" />
+                  <span className="mr-1 inline-flex size-3 items-center justify-center rounded-full bg-[#002147] text-[8px] font-bold text-white">
+                    A
+                  </span>
                 )}
-                Liberar a máquina
+                Acción
               </button>
             ) : (
               <span className="text-[9px] font-medium uppercase tracking-wide text-amber-700">
                 Borrador
               </span>
             )}
+            </div>
+            {availableActions.length > 0 ? (
+              <button
+                type="button"
+                className="inline-flex shrink-0 items-center rounded-md border border-[#002147]/25 bg-[#002147]/5 px-1.5 py-0.5 text-[10px] font-semibold text-[#002147] hover:bg-[#002147]/10"
+                disabled={disabled || isSavingThis}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActionOpen(true);
+                }}
+              >
+                {isSavingThis ? (
+                  <Loader2 className="mr-1 size-3 animate-spin" />
+                ) : (
+                  <span className="mr-1 inline-flex size-3 items-center justify-center rounded-full bg-[#002147] text-[8px] font-bold text-white">
+                    A
+                  </span>
+                )}
+                Acción
+              </button>
+            ) : null}
           </div>
         }
       />
+      <Dialog open={actionOpen} onOpenChange={setActionOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Acción OT {trabajo.ot}</DialogTitle>
+            <DialogDescription>
+              Selecciona el siguiente paso operativo.
+            </DialogDescription>
+          </DialogHeader>
+          {!showFinalizeForm ? (
+            <div className="grid grid-cols-2 gap-2 px-6 pb-2">
+              {availableActions.map((action) => (
+                <Button
+                  key={action}
+                  type="button"
+                  variant={action === "finalizar" || action === "cancelar" ? "outline" : "default"}
+                  className={cn(
+                    "justify-center",
+                    action === "cancelar" && "border-red-200 text-red-700 hover:bg-red-50",
+                    action === "finalizar" && "border-[#002147]/30 text-[#002147]",
+                    action !== "cancelar" && action !== "finalizar" && "bg-[#002147] text-white hover:bg-[#001735]",
+                  )}
+                  disabled={isSavingThis}
+                  onClick={() => {
+                    if (action === "finalizar") {
+                      setShowFinalizeForm(true);
+                      return;
+                    }
+                    onAction(trabajo, action);
+                    setActionOpen(false);
+                  }}
+                >
+                  {action[0]!.toUpperCase() + action.slice(1)}
+                </Button>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-3 px-6 pb-2">
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-2 text-[11px] text-slate-700">
+                <p className="font-semibold text-[#002147]">Horas ya registradas (pasos previos)</p>
+                <p>
+                  Entrada: <span className="font-medium">{fmtHoras(trabajo.horasPreviasEntrada)}h</span>
+                  {" · "}
+                  Tiraje: <span className="font-medium">{fmtHoras(trabajo.horasPreviasTiraje)}h</span>
+                </p>
+                <p>
+                  Troquelado: <span className="font-medium">{fmtHoras(trabajo.horasPreviasTroquelado)}h</span>
+                  {" · "}
+                  Engomado: <span className="font-medium">{fmtHoras(trabajo.horasPreviasEngomado)}h</span>
+                </p>
+              </div>
+              <div className={cn("grid gap-1 rounded-md p-2", highlightClass("entrada_tiraje"))}>
+                <Label className="text-xs">Horas entrada</Label>
+                <Input value={horasEntrada} onChange={(e) => setHorasEntrada(e.target.value)} />
+                <Label className="text-xs">Horas tiraje</Label>
+                <Input value={horasTiraje} onChange={(e) => setHorasTiraje(e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className={cn("rounded-md p-2", highlightClass("troquelado"))}>
+                  <Label className="text-xs">Horas troquelado</Label>
+                  <Input value={horasTroquelado} onChange={(e) => setHorasTroquelado(e.target.value)} />
+                </div>
+                <div className={cn("rounded-md p-2", highlightClass("engomado"))}>
+                  <Label className="text-xs">Horas engomado</Label>
+                  <Input value={horasEngomado} onChange={(e) => setHorasEngomado(e.target.value)} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className={cn("rounded-md p-2", highlightClass("hojas"))}>
+                  <Label className="text-xs">Núm. hojas</Label>
+                  <Input value={numHojas} onChange={(e) => setNumHojas(e.target.value)} />
+                </div>
+                <div className={cn("rounded-md p-2", highlightClass("unidades"))}>
+                  <Label className="text-xs">Cantidad unidades</Label>
+                  <Input value={cantidadUnidades} onChange={(e) => setCantidadUnidades(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs">Notas</Label>
+                <Textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={3} />
+              </div>
+            </div>
+          )}
+          <DialogFooter className="sm:flex-row sm:justify-between">
+            {showFinalizeForm ? (
+              <>
+                <Button type="button" variant="outline" onClick={() => setShowFinalizeForm(false)}>
+                  Volver
+                </Button>
+                <Button
+                  type="button"
+                  className="bg-[#002147] text-white hover:bg-[#001735]"
+                  disabled={isSavingThis}
+                  onClick={() => {
+                    onAction(trabajo, "finalizar", {
+                      horasEntrada: parseNumber(horasEntrada),
+                      horasTiraje: parseNumber(horasTiraje),
+                      horasTroquelado: parseNumber(horasTroquelado),
+                      horasEngomado: parseNumber(horasEngomado),
+                      numHojas: parseNumber(numHojas),
+                      cantidadUnidades: parseNumber(cantidadUnidades),
+                      notas: notas.trim() || null,
+                    });
+                    setActionOpen(false);
+                    setShowFinalizeForm(false);
+                  }}
+                >
+                  Finalizar OT
+                </Button>
+              </>
+            ) : (
+              <Button type="button" variant="outline" onClick={() => setActionOpen(false)}>
+                Cerrar
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -222,8 +440,9 @@ export function TurnoColumn({
   items,
   capacityHoras,
   onEditCapacity,
-  onStartExecution,
-  startingExecutionId,
+  maquinaTipo,
+  onAction,
+  actionLoadingId,
   disabled,
 }: TurnoColumnProps) {
   const containerId = containerIdForSlot(day, turno);
@@ -312,8 +531,9 @@ export function TurnoColumn({
                 key={trabajo.id}
                 trabajo={trabajo}
                 linkedToNext={!!links[idx]}
-                onStartExecution={onStartExecution}
-                startingExecutionId={startingExecutionId}
+                maquinaTipo={maquinaTipo}
+                onAction={onAction}
+                actionLoadingId={actionLoadingId}
                 disabled={disabled}
               />
             ))

@@ -23,6 +23,14 @@ const SUBTAB_TRIGGER_CLASS =
   "flex h-full min-h-8 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs data-active:bg-[#C69C2B]/20 data-active:font-semibold data-active:text-[#002147] data-active:shadow-sm data-active:ring-2 data-active:ring-[#C69C2B]/45 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm";
 
 type TipoMaquina = "impresion" | "digital" | "troquelado" | "engomado";
+type CatalogTipo = "material" | "acabado_pral";
+type DespachoCatalogRow = {
+  id: string;
+  tipo: CatalogTipo;
+  label: string;
+  activo: boolean;
+  orden: number;
+};
 type MaquinaRow = {
   id: string;
   codigo: string;
@@ -76,6 +84,16 @@ export function RecursosProduccionTab() {
   });
   const [procesoEditing, setProcesoEditing] = useState<
     Record<number, Omit<ProdProcesoCatRow, "id">>
+  >({});
+  const [catalogRows, setCatalogRows] = useState<DespachoCatalogRow[]>([]);
+  const [catalogDraft, setCatalogDraft] = useState({
+    tipo: "material" as CatalogTipo,
+    label: "",
+    orden: 0,
+    activo: true,
+  });
+  const [catalogEditing, setCatalogEditing] = useState<
+    Record<string, { label: string; orden: number; activo: boolean }>
   >({});
 
   const fetchRows = useCallback(async () => {
@@ -132,10 +150,25 @@ export function RecursosProduccionTab() {
           ]),
         ),
       );
+      const resCatalog = await fetch("/api/admin/prod-despacho-catalogo");
+      const dataCatalog = (await resCatalog.json()) as {
+        rows?: DespachoCatalogRow[];
+      };
+      const nextCatalog = Array.isArray(dataCatalog.rows) ? dataCatalog.rows : [];
+      setCatalogRows(nextCatalog);
+      setCatalogEditing(
+        Object.fromEntries(
+          nextCatalog.map((r) => [
+            r.id,
+            { label: r.label, orden: r.orden ?? 0, activo: r.activo ?? true },
+          ]),
+        ),
+      );
     } catch {
       setLoadError("No se pudo cargar recursos de producción.");
       setRows([]);
       setProcesos([]);
+      setCatalogRows([]);
     } finally {
       setLoading(false);
     }
@@ -369,6 +402,9 @@ export function RecursosProduccionTab() {
             </TabsTrigger>
             <TabsTrigger value="procesos" className={SUBTAB_TRIGGER_CLASS}>
               Procesos
+            </TabsTrigger>
+            <TabsTrigger value="catalogos" className={SUBTAB_TRIGGER_CLASS}>
+              Catálogos de despacho
             </TabsTrigger>
           </TabsList>
 
@@ -790,6 +826,206 @@ export function RecursosProduccionTab() {
                   </div>
                 );
               })}
+            </section>
+          </TabsContent>
+          <TabsContent value="catalogos" className="mt-0 space-y-4 outline-none">
+            <section className="space-y-3 rounded-md border border-slate-200 p-3">
+              <h3 className="text-sm font-semibold">Nuevo valor de catálogo</h3>
+              <div className="grid gap-2 md:grid-cols-5">
+                <select
+                  className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm"
+                  value={catalogDraft.tipo}
+                  onChange={(e) =>
+                    setCatalogDraft((p) => ({
+                      ...p,
+                      tipo: e.target.value as CatalogTipo,
+                    }))
+                  }
+                >
+                  <option value="material">Material</option>
+                  <option value="acabado_pral">Acabado PRAL</option>
+                </select>
+                <Input
+                  placeholder="Valor"
+                  value={catalogDraft.label}
+                  onChange={(e) =>
+                    setCatalogDraft((p) => ({ ...p, label: e.target.value }))
+                  }
+                  className="md:col-span-2"
+                />
+                <Input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={catalogDraft.orden}
+                  onChange={(e) =>
+                    setCatalogDraft((p) => ({
+                      ...p,
+                      orden: Number(e.target.value) || 0,
+                    }))
+                  }
+                />
+                <Button
+                  type="button"
+                  onClick={async () => {
+                    const label = catalogDraft.label.trim();
+                    if (!label) {
+                      toast.error("El valor es obligatorio.");
+                      return;
+                    }
+                    setSaving(true);
+                    try {
+                      const res = await fetch("/api/admin/prod-despacho-catalogo", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(catalogDraft),
+                      });
+                      const data = (await res.json()) as { error?: string };
+                      if (!res.ok) {
+                        toast.error(data.error ?? "No se pudo crear.");
+                        return;
+                      }
+                      toast.success("Valor de catálogo creado.");
+                      setCatalogDraft({
+                        tipo: catalogDraft.tipo,
+                        label: "",
+                        orden: 0,
+                        activo: true,
+                      });
+                      await fetchRows();
+                    } catch {
+                      toast.error("No se pudo crear.");
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                  disabled={saving}
+                >
+                  <Plus className="mr-1 size-4" /> Crear
+                </Button>
+              </div>
+            </section>
+
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold">Valores existentes</h3>
+              {catalogRows.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Sin valores registrados.</p>
+              ) : (
+                <div className="space-y-2">
+                  {catalogRows.map((row) => {
+                    const d = catalogEditing[row.id];
+                    if (!d) return null;
+                    return (
+                      <div key={row.id} className="rounded-md border border-slate-200 p-3">
+                        <div className="grid gap-2 md:grid-cols-8">
+                          <Input
+                            value={row.tipo === "material" ? "Material" : "Acabado PRAL"}
+                            readOnly
+                          />
+                          <Input
+                            className="md:col-span-3"
+                            value={d.label}
+                            onChange={(e) =>
+                              setCatalogEditing((p) => ({
+                                ...p,
+                                [row.id]: { ...p[row.id]!, label: e.target.value },
+                              }))
+                            }
+                          />
+                          <Input
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={d.orden}
+                            onChange={(e) =>
+                              setCatalogEditing((p) => ({
+                                ...p,
+                                [row.id]: { ...p[row.id]!, orden: Number(e.target.value) || 0 },
+                              }))
+                            }
+                          />
+                          <label className="inline-flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={d.activo}
+                              onChange={(e) =>
+                                setCatalogEditing((p) => ({
+                                  ...p,
+                                  [row.id]: { ...p[row.id]!, activo: e.target.checked },
+                                }))
+                              }
+                            />
+                            Activo
+                          </label>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={async () => {
+                              const payload = catalogEditing[row.id];
+                              if (!payload?.label.trim()) {
+                                toast.error("El valor es obligatorio.");
+                                return;
+                              }
+                              setSaving(true);
+                              try {
+                                const res = await fetch("/api/admin/prod-despacho-catalogo", {
+                                  method: "PUT",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ id: row.id, ...payload }),
+                                });
+                                const data = (await res.json()) as { error?: string };
+                                if (!res.ok) {
+                                  toast.error(data.error ?? "No se pudo guardar.");
+                                  return;
+                                }
+                                toast.success("Valor actualizado.");
+                                await fetchRows();
+                              } catch {
+                                toast.error("No se pudo guardar.");
+                              } finally {
+                                setSaving(false);
+                              }
+                            }}
+                            disabled={saving}
+                          >
+                            <Save className="mr-1 size-4" /> Guardar
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            onClick={async () => {
+                              if (!window.confirm("¿Eliminar valor de catálogo?")) return;
+                              setSaving(true);
+                              try {
+                                const res = await fetch("/api/admin/prod-despacho-catalogo", {
+                                  method: "DELETE",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ id: row.id }),
+                                });
+                                const data = (await res.json()) as { error?: string };
+                                if (!res.ok) {
+                                  toast.error(data.error ?? "No se pudo eliminar.");
+                                  return;
+                                }
+                                toast.success("Valor eliminado.");
+                                await fetchRows();
+                              } catch {
+                                toast.error("No se pudo eliminar.");
+                              } finally {
+                                setSaving(false);
+                              }
+                            }}
+                            disabled={saving}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </section>
           </TabsContent>
         </Tabs>

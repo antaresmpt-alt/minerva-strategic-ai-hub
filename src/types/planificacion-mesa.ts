@@ -82,6 +82,13 @@ export interface MesaTrabajo {
   motivoPausaColorHexActual?: string | null;
   motivoPausaCategoriaActual?: MotivoPausaCategoria | null;
   observacionesPausaActivaActual?: string | null;
+  /** Ejecución activa enlazada al trabajo de mesa, si existe. */
+  ejecucionIdActual?: string | null;
+  /** Horas ya informadas en pasos previos de la misma OT. */
+  horasPreviasEntrada?: number;
+  horasPreviasTiraje?: number;
+  horasPreviasTroquelado?: number;
+  horasPreviasEngomado?: number;
 }
 
 /** Capacidad horaria por día y turno (config). */
@@ -124,6 +131,7 @@ export interface MesaEjecucion {
   ot: string;
   maquinaId: string;
   maquinaNombre: string;
+  maquinaTipo: string | null;
   fechaPlanificada: DayKey | null;
   turno: TurnoKey | null;
   slotOrden: number | null;
@@ -140,8 +148,12 @@ export interface MesaEjecucion {
   minutosPausadaAcum: number;
   horasPlanificadasSnapshot: number | null;
   horasReales: number | null;
+  horasRealesEntrada: number | null;
+  horasRealesTiraje: number | null;
   horasRealesTroquelado: number | null;
   horasRealesEngomado: number | null;
+  numHojasProducidas: number | null;
+  cantidadUnidades: number | null;
   incidencia: string | null;
   accionCorrectiva: string | null;
   maquinista: string | null;

@@ -1,7 +1,7 @@
 "use client";
 
 import { GitBranch, PlayCircle, Rows3, Table2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { PlanificacionMesaSecuenciacionTab } from "@/components/produccion/planificacion/planificacion-mesa-secuenciacion-tab";
 import { PlanificacionOtsEjecucionTab } from "@/components/produccion/planificacion/planificacion-ots-ejecucion-tab";
@@ -13,12 +13,55 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 const SUBTAB_TRIGGER_CLASS =
   "flex h-full min-h-8 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs data-active:bg-[#C69C2B]/20 data-active:font-semibold data-active:text-[#002147] data-active:shadow-sm data-active:ring-2 data-active:ring-[#C69C2B]/45 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm";
 
 export function PlanificacionOtsPage() {
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [subtab, setSubtab] = useState("pool");
+  const [showEjecucionTab, setShowEjecucionTab] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const uid = typeof user?.id === "string" && user.id.trim() ? user.id.trim() : null;
+      let role: string | null = null;
+      if (uid) {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", uid)
+          .maybeSingle();
+        role =
+          prof && typeof (prof as { role?: unknown }).role === "string"
+            ? String((prof as { role: string }).role).trim() || null
+            : null;
+      }
+      const { data: rows } = await supabase
+        .from("sys_parametros")
+        .select("valor_num")
+        .eq("clave", "planificacion_ots_ejecucion_enabled")
+        .limit(1);
+      const enabledValue = Number(rows?.[0]?.valor_num ?? 0);
+      const enabledForAll = Number.isFinite(enabledValue) && enabledValue > 0;
+      const isAdmin = role === "admin";
+      if (!mounted) return;
+      setShowEjecucionTab(enabledForAll || isAdmin);
+      if (!(enabledForAll || isAdmin) && subtab === "ejecucion") {
+        setSubtab("mesa");
+      }
+    })().catch(() => {
+      if (mounted) setShowEjecucionTab(true);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [subtab, supabase]);
 
   return (
     <section className="space-y-3">
@@ -42,7 +85,16 @@ export function PlanificacionOtsPage() {
             <Rows3 className="size-4 shrink-0 opacity-90" aria-hidden />
             Mesa de Secuenciación
           </TabsTrigger>
-          <TabsTrigger value="ejecucion" className={SUBTAB_TRIGGER_CLASS}>
+          <TabsTrigger
+            value="ejecucion"
+            className={SUBTAB_TRIGGER_CLASS}
+            disabled={!showEjecucionTab}
+            title={
+              showEjecucionTab
+                ? "OTs en ejecución"
+                : "Pestaña deshabilitada por configuración"
+            }
+          >
             <PlayCircle className="size-4 shrink-0 opacity-90" aria-hidden />
             OTs en ejecución
           </TabsTrigger>

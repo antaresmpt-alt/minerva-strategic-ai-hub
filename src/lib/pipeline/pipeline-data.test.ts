@@ -133,6 +133,9 @@ test("ejemplo de PipelineRowView tipado", () => {
       desviacionHoras: null,
       etaPrevista: null,
       slaStatus: "on_track",
+      cantidadPedida: null,
+      cantidadProducida: null,
+      cumplimientoPct: null,
     },
   };
   assert.equal(row.otNumero, "99999");

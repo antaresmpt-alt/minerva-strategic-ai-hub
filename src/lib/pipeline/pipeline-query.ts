@@ -44,6 +44,7 @@ type OtRow = {
   num_pedido: string;
   cliente: string | null;
   titulo: string | null;
+  cantidad: number | null;
   prioridad: number | null;
   fecha_entrega: string | null;
   estado_desc: string | null;
@@ -114,6 +115,8 @@ type EjecRow = {
   inicio_real_at: string | null;
   fin_real_at: string | null;
   horas_reales: number | null;
+  num_hojas_producidas: number | null;
+  cantidad_unidades: number | null;
   horas_reales_troquelado: number | null;
   horas_reales_engomado: number | null;
   maquinista: string | null;
@@ -234,7 +237,7 @@ export async function fetchPipelineRows(
 
   const { data: otData, error: otErr } = await supabase
     .from(TABLE_OTS)
-    .select("id, num_pedido, cliente, titulo, prioridad, fecha_entrega, estado_desc")
+    .select("id, num_pedido, cliente, titulo, cantidad, prioridad, fecha_entrega, estado_desc")
     .in("num_pedido", otNumeros);
   if (otErr) throw otErr;
   const ots = (otData ?? []) as OtRow[];
@@ -285,7 +288,7 @@ export async function fetchPipelineRows(
     const { data: ejecData, error: ejecErr } = await supabase
       .from(TABLE_EJECUCIONES)
       .select(
-        "id, ot_paso_id, estado_ejecucion, inicio_real_at, fin_real_at, horas_reales, horas_reales_troquelado, horas_reales_engomado, maquinista, incidencia, accion_correctiva, observaciones, updated_at",
+        "id, ot_paso_id, estado_ejecucion, inicio_real_at, fin_real_at, horas_reales, num_hojas_producidas, cantidad_unidades, horas_reales_troquelado, horas_reales_engomado, maquinista, incidencia, accion_correctiva, observaciones, updated_at",
       )
       .in("ot_paso_id", uniquePasoIds)
       .order("updated_at", { ascending: false });
@@ -390,6 +393,8 @@ export async function fetchPipelineRows(
               inicioRealAt: normalizeDateIso(ejec.inicio_real_at),
               finRealAt: normalizeDateIso(ejec.fin_real_at),
               horasReales: n(ejec.horas_reales),
+              cantidadUnidades: n(ejec.cantidad_unidades),
+              numHojasProducidas: n(ejec.num_hojas_producidas),
               maquinista: str(ejec.maquinista),
               incidencia: str(ejec.incidencia),
               accionCorrectiva: str(ejec.accion_correctiva),
@@ -458,6 +463,20 @@ export async function fetchPipelineRows(
         horasPlanificadasTotal,
         horasRealesTotal,
       ) ?? normalizeDateIso(ot?.fecha_entrega ?? null);
+    const cantidadPedida = n(ot?.cantidad);
+    const cantidadProducida = (() => {
+      let maxValue: number | null = null;
+      for (const p of pasos) {
+        const qty = p.ejecucion?.cantidadUnidades;
+        if (qty == null || qty < 0) continue;
+        maxValue = maxValue == null ? qty : Math.max(maxValue, qty);
+      }
+      return maxValue;
+    })();
+    const cumplimientoPct =
+      cantidadPedida != null && cantidadPedida > 0 && cantidadProducida != null
+        ? (cantidadProducida / cantidadPedida) * 100
+        : null;
 
     const row: PipelineRowView = {
       otNumero,
@@ -479,6 +498,9 @@ export async function fetchPipelineRows(
         desviacionHoras,
         etaPrevista,
         slaStatus: mapSlaStatus(riesgo),
+        cantidadPedida,
+        cantidadProducida,
+        cumplimientoPct,
       },
     };
 
@@ -492,6 +514,15 @@ export async function fetchPipelineRows(
     if (poolEstado === "cerrada" && !row.badges.includes("cerrada")) {
       row.badges.push("cerrada");
     }
+    if (cumplimientoPct != null) {
+      if (cumplimientoPct >= 100) row.badges.push("cumplimiento_ok");
+      else if (cumplimientoPct >= 95) row.badges.push("cumplimiento_warning");
+      else row.badges.push("cumplimiento_bajo");
+    }
+    const hasOperarioNotes = row.pasos.some(
+      (p) => (p.ejecucion?.observaciones ?? "").trim().length > 0,
+    );
+    if (hasOperarioNotes) row.badges.push("con_notas");
 
     if (search) {
       const hayMatch = [row.otNumero, row.cliente, row.trabajo]

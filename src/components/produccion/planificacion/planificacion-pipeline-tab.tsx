@@ -2,10 +2,14 @@
 
 import {
   AlertTriangle,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  CircleAlert,
+  CircleX,
   Clock,
   FileDown,
+  FileText,
   ExternalLink,
   Loader2,
   RefreshCcw,
@@ -45,10 +49,48 @@ function fmtHours(v: number | null | undefined): string {
   return `${v.toFixed(1)}h`;
 }
 
+function fmtDateShort(v: string | null | undefined): string {
+  const raw = String(v ?? "").trim();
+  if (!raw) return "—";
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return "—";
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(d);
+}
+
+function tipoMaquinaLabel(v: string | null | undefined): string {
+  const t = String(v ?? "").trim().toLowerCase();
+  if (t === "impresion") return "Impresión";
+  if (t === "digital") return "Digital";
+  if (t === "troquelado") return "Troquelado";
+  if (t === "engomado") return "Engomado";
+  return "—";
+}
+
+function machineLabel(maquinaNombre: string | null | undefined, tipoMaquina: string | null | undefined): string {
+  const nombre = String(maquinaNombre ?? "").trim();
+  const tipo = tipoMaquinaLabel(tipoMaquina);
+  if (nombre && tipo !== "—") return `${nombre} · ${tipo}`;
+  if (nombre) return nombre;
+  if (tipo !== "—") return tipo;
+  return "Sin máquina asignada";
+}
+
 function sectionLabel(v: string | null | undefined): string {
   const t = String(v ?? "").trim();
   if (!t) return "sin_seccion";
   return t;
+}
+
+function cumplimientoBadge(badges: string[]): "ok" | "warning" | "low" | null {
+  if (badges.includes("cumplimiento_ok")) return "ok";
+  if (badges.includes("cumplimiento_warning")) return "warning";
+  if (badges.includes("cumplimiento_bajo")) return "low";
+  return null;
 }
 
 export function PlanificacionPipelineTab() {
@@ -568,7 +610,21 @@ export function PlanificacionPipelineTab() {
                       }}
                     >
                       <TableCell className={compactMode ? "py-1 font-mono text-[11px] font-semibold text-[#002147]" : "font-mono text-xs font-semibold text-[#002147]"}>
-                        {row.otNumero}
+                        <span className="inline-flex items-center gap-1">
+                          {row.otNumero}
+                          {cumplimientoBadge(row.badges) === "ok" ? (
+                            <CheckCircle2 className="size-3 text-emerald-600" />
+                          ) : null}
+                          {cumplimientoBadge(row.badges) === "warning" ? (
+                            <CircleAlert className="size-3 text-amber-600" />
+                          ) : null}
+                          {cumplimientoBadge(row.badges) === "low" ? (
+                            <CircleX className="size-3 text-red-600" />
+                          ) : null}
+                          {row.badges.includes("con_notas") ? (
+                            <FileText className="size-3 text-slate-500" />
+                          ) : null}
+                        </span>
                       </TableCell>
                       <TableCell className={compactMode ? "max-w-[10rem] truncate py-1 text-[11px]" : "max-w-[12rem] truncate text-xs"} title={row.cliente ?? ""}>
                         {row.cliente ?? "—"}
@@ -604,7 +660,7 @@ export function PlanificacionPipelineTab() {
                                 `Ejecución: ${p.ejecucion.estado}${p.ejecucion.maquinista ? ` · ${p.ejecucion.maquinista}` : ""}`,
                               );
                               if (p.ejecucion.horasReales != null) tooltipLines.push(`Horas reales: ${p.ejecucion.horasReales}`);
-                              if (p.ejecucion.inicioRealAt) tooltipLines.push(`Inicio real: ${p.ejecucion.inicioRealAt}`);
+                              if (p.ejecucion.inicioRealAt) tooltipLines.push(`Inicio real: ${fmtDateShort(p.ejecucion.inicioRealAt)}`);
                             }
                             if (p.resumenCorto) tooltipLines.push(p.resumenCorto);
                             return (
@@ -648,7 +704,7 @@ export function PlanificacionPipelineTab() {
                             )}
                           </TableCell>
                           <TableCell className={compactMode ? "py-1 text-[11px]" : "text-xs"}>
-                            {row.analytics.etaPrevista ?? "—"}
+                            {fmtDateShort(row.analytics.etaPrevista)}
                           </TableCell>
                           <TableCell>
                             <span
@@ -820,7 +876,7 @@ export function PlanificacionPipelineTab() {
                       <div className="text-sm text-slate-700">
                         <div className="font-semibold">{detailOt.cliente ?? "—"} · {detailOt.trabajo ?? "—"}</div>
                         <div className="text-xs text-slate-500">
-                          Entrega: {detailOt.fechaCompromiso ?? "—"} · Estado OT: {detailOt.estadoOt ?? "—"}
+                          Entrega: {fmtDateShort(detailOt.fechaCompromiso)} · Estado OT: {detailOt.estadoOt ?? "—"}
                         </div>
                       </div>
                       <div className="text-xs text-slate-600">
@@ -845,7 +901,7 @@ export function PlanificacionPipelineTab() {
                             : "—"}
                         </div>
                         <div>
-                          <span className="font-medium">ETA:</span> {detailOt.analytics.etaPrevista ?? "—"}
+                          <span className="font-medium">ETA:</span> {fmtDateShort(detailOt.analytics.etaPrevista)}
                         </div>
                         <div>
                           <span className="font-medium">SLA:</span> {detailOt.analytics.slaStatus}
@@ -882,12 +938,12 @@ export function PlanificacionPipelineTab() {
                                 <div className="mt-2 grid gap-1 sm:grid-cols-2">
                                   <div className="text-xs text-slate-700">
                                     <div className="font-medium">Máquina</div>
-                                    <div className="text-slate-600">{p.maquinaNombre ?? "—"}{p.tipoMaquina ? ` · ${p.tipoMaquina}` : ""}</div>
+                                    <div className="text-slate-600">{machineLabel(p.maquinaNombre, p.tipoMaquina)}</div>
                                   </div>
                                   <div className="text-xs text-slate-700">
                                     <div className="font-medium">Fechas</div>
                                     <div className="text-slate-600">
-                                      Disp.: {p.fechaDisponible ?? "—"} · Inicio: {p.fechaInicio ?? "—"} · Fin: {p.fechaFin ?? "—"}
+                                      Disp.: {fmtDateShort(p.fechaDisponible)} · Inicio: {fmtDateShort(p.fechaInicio)} · Fin: {fmtDateShort(p.fechaFin)}
                                     </div>
                                   </div>
                                 </div>
@@ -904,7 +960,7 @@ export function PlanificacionPipelineTab() {
                                       {p.ejecucion.horasReales != null ? ` · Horas reales: ${p.ejecucion.horasReales}` : ""}
                                     </p>
                                     <p className="text-xs text-slate-500">
-                                      Inicio real: {p.ejecucion.inicioRealAt ?? "—"} · Fin real: {p.ejecucion.finRealAt ?? "—"}
+                                      Inicio real: {fmtDateShort(p.ejecucion.inicioRealAt)} · Fin real: {fmtDateShort(p.ejecucion.finRealAt)}
                                     </p>
                                     {p.ejecucion.incidencia ? <p className="text-xs text-red-800">Incidencia: {p.ejecucion.incidencia}</p> : null}
                                     {p.ejecucion.observaciones ? <p className="text-xs text-slate-600">Obs: {p.ejecucion.observaciones}</p> : null}
@@ -918,7 +974,7 @@ export function PlanificacionPipelineTab() {
                                       {p.externo.proveedorNombre ? ` · Proveedor: ${p.externo.proveedorNombre}` : ""}
                                     </p>
                                     <p className="text-xs text-slate-600">
-                                      Envio: {p.externo.fechaEnvio ?? "—"} · Previsto: {p.externo.fechaPrevista ?? "—"}
+                                      Envio: {fmtDateShort(p.externo.fechaEnvio)} · Previsto: {fmtDateShort(p.externo.fechaPrevista)}
                                     </p>
                                     {p.externo.observaciones ? <p className="text-xs text-slate-600">Obs: {p.externo.observaciones}</p> : null}
                                   </div>
@@ -957,7 +1013,7 @@ export function PlanificacionPipelineTab() {
                           className="w-full justify-start"
                         >
                           <Route className="mr-2 size-4" />
-                          Ver en Planificacion OT's
+                          Ver en Planificacion OTs
                         </Button>
                         <Button
                           type="button"

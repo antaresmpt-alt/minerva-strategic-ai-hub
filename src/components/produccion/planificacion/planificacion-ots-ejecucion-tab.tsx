@@ -55,7 +55,7 @@ type EjecucionRow = {
   ot_paso_id: string | null;
   ot_numero: string;
   maquina_id: string;
-  prod_maquinas?: { nombre: string | null } | null;
+  prod_maquinas?: { nombre: string | null; tipo_maquina: string | null } | null;
   fecha_planificada: string | null;
   turno: string | null;
   slot_orden: number | null;
@@ -68,8 +68,12 @@ type EjecucionRow = {
   minutos_pausada_acum: number | string | null;
   horas_planificadas_snapshot: number | string | null;
   horas_reales: number | string | null;
+  horas_reales_entrada: number | string | null;
+  horas_reales_tiraje: number | string | null;
   horas_reales_troquelado: number | string | null;
   horas_reales_engomado: number | string | null;
+  num_hojas_producidas: number | string | null;
+  cantidad_unidades: number | string | null;
   incidencia: string | null;
   accion_correctiva: string | null;
   maquinista: string | null;
@@ -136,6 +140,7 @@ function mapRow(
     ot: r.ot_numero,
     maquinaId: r.maquina_id,
     maquinaNombre: r.prod_maquinas?.nombre ?? "—",
+    maquinaTipo: r.prod_maquinas?.tipo_maquina ?? null,
     fechaPlanificada: r.fecha_planificada,
     turno: r.turno === "manana" || r.turno === "tarde" ? r.turno : null,
     slotOrden: r.slot_orden,
@@ -152,8 +157,12 @@ function mapRow(
     minutosPausadaAcum: Number(parseNum(r.minutos_pausada_acum) ?? 0),
     horasPlanificadasSnapshot: parseNum(r.horas_planificadas_snapshot),
     horasReales: parseNum(r.horas_reales),
+    horasRealesEntrada: parseNum(r.horas_reales_entrada),
+    horasRealesTiraje: parseNum(r.horas_reales_tiraje),
     horasRealesTroquelado: parseNum(r.horas_reales_troquelado),
     horasRealesEngomado: parseNum(r.horas_reales_engomado),
+    numHojasProducidas: parseNum(r.num_hojas_producidas),
+    cantidadUnidades: parseNum(r.cantidad_unidades),
     incidencia: r.incidencia,
     accionCorrectiva: r.accion_correctiva,
     maquinista: r.maquinista,
@@ -232,7 +241,7 @@ export function PlanificacionOtsEjecucionTab({
       const [execRes, maqRes, motivosRes] = await Promise.all([
         supabase
           .from(TABLE_EJECUCIONES)
-          .select("*, prod_maquinas(nombre)")
+          .select("*, prod_maquinas(nombre,tipo_maquina)")
           .order("updated_at", { ascending: false }),
         maqQuery,
         supabase
@@ -694,11 +703,23 @@ function ExecutionCard({
   onResume: (pauses: MesaEjecucionPausa[]) => void;
 }) {
   const [horas, setHoras] = useState(row.horasReales != null ? String(row.horasReales) : "");
+  const [horasEntrada, setHorasEntrada] = useState(
+    row.horasRealesEntrada != null ? String(row.horasRealesEntrada) : "",
+  );
+  const [horasTiraje, setHorasTiraje] = useState(
+    row.horasRealesTiraje != null ? String(row.horasRealesTiraje) : "",
+  );
   const [horasTroquelado, setHorasTroquelado] = useState(
     row.horasRealesTroquelado != null ? String(row.horasRealesTroquelado) : "",
   );
   const [horasEngomado, setHorasEngomado] = useState(
     row.horasRealesEngomado != null ? String(row.horasRealesEngomado) : "",
+  );
+  const [numHojas, setNumHojas] = useState(
+    row.numHojasProducidas != null ? String(row.numHojasProducidas) : "",
+  );
+  const [cantidadUnidades, setCantidadUnidades] = useState(
+    row.cantidadUnidades != null ? String(row.cantidadUnidades) : "",
   );
   const [incidencia, setIncidencia] = useState(row.incidencia ?? "");
   const [accion, setAccion] = useState(row.accionCorrectiva ?? "");
@@ -753,6 +774,17 @@ function ExecutionCard({
       </div>
       <div className="mt-2 grid gap-2 sm:grid-cols-2">
         <div>
+          <Label className="text-xs">Horas entrada</Label>
+          <Input value={horasEntrada} onChange={(e) => setHorasEntrada(e.target.value)} disabled={!canEdit || saving} />
+        </div>
+        <div>
+          <Label className="text-xs">Horas tiraje</Label>
+          <Input value={horasTiraje} onChange={(e) => setHorasTiraje(e.target.value)} disabled={!canEdit || saving} />
+        </div>
+      </div>
+
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        <div>
           <Label className="text-xs">Horas reales troquelado</Label>
           <Input
             value={horasTroquelado}
@@ -767,6 +799,16 @@ function ExecutionCard({
             onChange={(e) => setHorasEngomado(e.target.value)}
             disabled={!canEdit || saving}
           />
+        </div>
+      </div>
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        <div>
+          <Label className="text-xs">Núm. hojas producidas</Label>
+          <Input value={numHojas} onChange={(e) => setNumHojas(e.target.value)} disabled={!canEdit || saving} />
+        </div>
+        <div>
+          <Label className="text-xs">Cantidad unidades</Label>
+          <Input value={cantidadUnidades} onChange={(e) => setCantidadUnidades(e.target.value)} disabled={!canEdit || saving} />
         </div>
       </div>
 
@@ -921,10 +963,18 @@ function ExecutionCard({
               onClick={() =>
                 onPatch({
                   horas_reales: Number(horas.replace(",", ".")) || null,
+                  horas_reales_entrada:
+                    Number(horasEntrada.replace(",", ".")) || null,
+                  horas_reales_tiraje:
+                    Number(horasTiraje.replace(",", ".")) || null,
                   horas_reales_troquelado:
                     Number(horasTroquelado.replace(",", ".")) || null,
                   horas_reales_engomado:
                     Number(horasEngomado.replace(",", ".")) || null,
+                  num_hojas_producidas:
+                    Number(numHojas.replace(",", ".")) || null,
+                  cantidad_unidades:
+                    Number(cantidadUnidades.replace(",", ".")) || null,
                   maquinista: maquinista.trim() || null,
                   incidencia: incidencia.trim() || null,
                   accion_correctiva: accion.trim() || null,
@@ -986,10 +1036,18 @@ function ExecutionCard({
                   estado_ejecucion: "finalizada",
                   fin_real_at: new Date().toISOString(),
                   horas_reales: Number(horas.replace(",", ".")) || null,
+                  horas_reales_entrada:
+                    Number(horasEntrada.replace(",", ".")) || null,
+                  horas_reales_tiraje:
+                    Number(horasTiraje.replace(",", ".")) || null,
                   horas_reales_troquelado:
                     Number(horasTroquelado.replace(",", ".")) || null,
                   horas_reales_engomado:
                     Number(horasEngomado.replace(",", ".")) || null,
+                  num_hojas_producidas:
+                    Number(numHojas.replace(",", ".")) || null,
+                  cantidad_unidades:
+                    Number(cantidadUnidades.replace(",", ".")) || null,
                   maquinista: maquinista.trim() || null,
                   incidencia: incidencia.trim() || null,
                   accion_correctiva: accion.trim() || null,

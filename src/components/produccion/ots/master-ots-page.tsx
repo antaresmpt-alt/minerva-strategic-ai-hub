@@ -106,10 +106,13 @@ function masterOtsPrimaryOrder(sorting: SortingState): {
 }
 const TABLE_OT_DESPACHADAS = "produccion_ot_despachadas";
 const TABLE_OT_PASOS = "prod_ot_pasos";
+const TABLE_COMPRA = "prod_compra_material";
 /** Seguimiento externo: columna `OT` e `id_pedido` (equivalente a `num_pedido` / OT). */
 const SEGUIMIENTO_EXTERNOS = "prod_seguimiento_externos";
 
 type DespachoSeleccion = { id: string; num_pedido: string };
+type DespachoMeta = { cliente: string; trabajo: string; cantidad: string };
+type DespachoCatalogItem = { id: string; tipo: "material" | "acabado_pral"; label: string };
 
 type DespachoFormState = {
   tintas: string;
@@ -293,6 +296,22 @@ export function MasterOtsPage() {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const despachoSeleccionCacheRef = useRef<DespachoSeleccion | null>(null);
   const [despachoOpen, setDespachoOpen] = useState(false);
+  const [despachoExpressMode, setDespachoExpressMode] = useState(false);
+  const [despachoEntradaMultiple, setDespachoEntradaMultiple] = useState(false);
+  const [despachoExpressOtInput, setDespachoExpressOtInput] = useState("");
+  const [despachoExpressSeleccion, setDespachoExpressSeleccion] =
+    useState<DespachoSeleccion | null>(null);
+  const [despachoExpressMeta, setDespachoExpressMeta] = useState<DespachoMeta>({
+    cliente: "",
+    trabajo: "",
+    cantidad: "",
+  });
+  const [despachoExpressYaDespachada, setDespachoExpressYaDespachada] =
+    useState(false);
+  const [despachoExpressCompraGenerada, setDespachoExpressCompraGenerada] =
+    useState(false);
+  const [despachoCatalog, setDespachoCatalog] = useState<DespachoCatalogItem[]>([]);
+  const [despachoLoadingOt, setDespachoLoadingOt] = useState(false);
   const [despachoForm, setDespachoForm] = useState<DespachoFormState>(() =>
     emptyDespachoForm()
   );
@@ -300,6 +319,7 @@ export function MasterOtsPage() {
     DespachoItinerarioSlot[]
   >([]);
   const [despachoSaving, setDespachoSaving] = useState(false);
+  const despachoOtInputRef = useRef<HTMLInputElement | null>(null);
 
   const estadoEditSelectOptions = useMemo((): Option[] => {
     const merged = new Set<string>([...ESTADO_PRESETS_LIST, ...estadoOptions]);
@@ -335,6 +355,32 @@ export function MasterOtsPage() {
   useEffect(() => {
     if (!despachoOpen) setDespachoItinerarioSlots([]);
   }, [despachoOpen]);
+
+  useEffect(() => {
+    if (!despachoOpen || !despachoExpressMode) return;
+    const t = window.setTimeout(() => despachoOtInputRef.current?.focus(), 80);
+    return () => window.clearTimeout(t);
+  }, [despachoOpen, despachoExpressMode]);
+
+  useEffect(() => {
+    if (!despachoOpen) return;
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase
+        .from("prod_despacho_catalogo")
+        .select("id, tipo, label")
+        .eq("activo", true)
+        .order("tipo", { ascending: true })
+        .order("orden", { ascending: true })
+        .order("label", { ascending: true });
+      if (cancelled) return;
+      if (error) return;
+      setDespachoCatalog((data ?? []) as DespachoCatalogItem[]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [despachoOpen, supabase]);
 
   const applyFilters = useCallback(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -595,6 +641,174 @@ export function MasterOtsPage() {
     return despachoRegistradoOtSet.has(ot);
   }, [despachoSeleccion, rows, despachoRegistradoOtSet]);
 
+  const activeDespachoSeleccion = useMemo(
+    () => (despachoExpressMode ? despachoExpressSeleccion : despachoSeleccion),
+    [despachoExpressMode, despachoExpressSeleccion, despachoSeleccion]
+  );
+
+  const activeDespachoStatus = useMemo(() => {
+    if (!activeDespachoSeleccion) return "none" as const;
+    if (despachoExpressMode) {
+      if (!despachoExpressYaDespachada) return "none" as const;
+      return despachoExpressCompraGenerada
+        ? ("despachada_con_compra" as const)
+        : ("despachada_sin_compra" as const);
+    }
+    const ot = activeDespachoSeleccion.num_pedido.trim();
+    if (!ot) return "none" as const;
+    const row = rows.find((x) => x.id === activeDespachoSeleccion.id);
+    const isDespachada = Boolean(
+      row?.despachado === true || despachoRegistradoOtSet.has(ot)
+    );
+    if (!isDespachada) return "none" as const;
+    return "despachada_sin_compra" as const;
+  }, [
+    activeDespachoSeleccion,
+    despachoExpressCompraGenerada,
+    despachoExpressMode,
+    despachoExpressYaDespachada,
+    despachoRegistradoOtSet,
+    rows,
+  ]);
+
+  const despachoMaterialSuggestions = useMemo(
+    () =>
+      despachoCatalog
+        .filter((x) => x.tipo === "material")
+        .map((x) => x.label),
+    [despachoCatalog],
+  );
+  const despachoAcabadoSuggestions = useMemo(
+    () =>
+      despachoCatalog
+        .filter((x) => x.tipo === "acabado_pral")
+        .map((x) => x.label),
+    [despachoCatalog],
+  );
+
+  const hydrateDespachoForOt = useCallback(
+    async (otRaw: string) => {
+      const ot = String(otRaw ?? "").trim();
+      if (!ot) {
+        toast.error("Indica una OT válida.");
+        return;
+      }
+      setDespachoLoadingOt(true);
+      try {
+        const { data: masterRow, error: masterErr } = await supabase
+          .from(TABLE)
+          .select("id, num_pedido, despachado, cliente, titulo, cantidad")
+          .eq("num_pedido", ot)
+          .maybeSingle();
+        if (masterErr) throw masterErr;
+        if (!masterRow || typeof masterRow.id !== "string") {
+          toast.error(`No existe la OT ${ot} en maestro.`);
+          setDespachoExpressSeleccion(null);
+          setDespachoExpressYaDespachada(false);
+          setDespachoExpressCompraGenerada(false);
+          setDespachoExpressMeta({ cliente: "", trabajo: "", cantidad: "" });
+          setDespachoItinerarioSlots([]);
+          setDespachoForm(emptyDespachoForm());
+          return;
+        }
+        const sel: DespachoSeleccion = {
+          id: String(masterRow.id),
+          num_pedido: String(masterRow.num_pedido ?? ot).trim(),
+        };
+        setDespachoExpressSeleccion(sel);
+        setDespachoExpressMeta({
+          cliente: String(
+            (masterRow as { cliente?: string | null }).cliente ?? ""
+          ).trim(),
+          trabajo: String(
+            (masterRow as { titulo?: string | null }).titulo ?? ""
+          ).trim(),
+          cantidad:
+            (masterRow as { cantidad?: number | null }).cantidad == null
+              ? ""
+              : String((masterRow as { cantidad?: number | null }).cantidad),
+        });
+
+        const [
+          { data: despachoRow, error: despachoErr },
+          { data: pasosRows, error: pasosErr },
+          { data: catRows, error: catErr },
+          { data: compraRows, error: compraErr },
+        ] = await Promise.all([
+          supabase
+            .from(TABLE_OT_DESPACHADAS)
+            .select(
+              "tintas, material, tamano_hoja, gramaje, num_hojas_brutas, num_hojas_netas, horas_entrada, horas_tiraje, horas_estimadas_troquelado, horas_estimadas_engomado, troquel, poses, acabado_pral, notas"
+            )
+            .eq("ot_numero", sel.num_pedido)
+            .maybeSingle(),
+          supabase
+            .from(TABLE_OT_PASOS)
+            .select("proceso_id, orden")
+            .eq("ot_id", sel.id)
+            .order("orden", { ascending: true }),
+          supabase.from("prod_procesos_cat").select("id, nombre"),
+          supabase
+            .from(TABLE_COMPRA)
+            .select("id")
+            .eq("ot_numero", sel.num_pedido)
+            .limit(1),
+        ]);
+        if (despachoErr) throw despachoErr;
+        if (pasosErr) throw pasosErr;
+        if (catErr) throw catErr;
+        if (compraErr) throw compraErr;
+
+        const d = (despachoRow ?? {}) as Record<string, unknown>;
+        setDespachoExpressYaDespachada(
+          Boolean((masterRow as { despachado?: boolean | null }).despachado) ||
+            despachoRow != null
+        );
+        setDespachoExpressCompraGenerada(Boolean((compraRows ?? []).length > 0));
+        setDespachoForm({
+          tintas: String(d.tintas ?? ""),
+          material: String(d.material ?? ""),
+          tamano_hoja: String(d.tamano_hoja ?? ""),
+          gramaje: d.gramaje == null ? "" : String(d.gramaje),
+          num_hojas_brutas: d.num_hojas_brutas == null ? "" : String(d.num_hojas_brutas),
+          num_hojas_netas: d.num_hojas_netas == null ? "" : String(d.num_hojas_netas),
+          horas_entrada: d.horas_entrada == null ? "" : String(d.horas_entrada),
+          horas_tiraje: d.horas_tiraje == null ? "" : String(d.horas_tiraje),
+          horas_estimadas_troquelado:
+            d.horas_estimadas_troquelado == null
+              ? ""
+              : String(d.horas_estimadas_troquelado),
+          horas_estimadas_engomado:
+            d.horas_estimadas_engomado == null
+              ? ""
+              : String(d.horas_estimadas_engomado),
+          troquel: String(d.troquel ?? ""),
+          poses: d.poses == null ? "" : String(d.poses),
+          acabado_pral: String(d.acabado_pral ?? ""),
+          notas: String(d.notas ?? ""),
+        });
+
+        const nombreById = new Map<number, string>();
+        for (const c of (catRows ?? []) as Array<{ id: number; nombre: string | null }>) {
+          nombreById.set(c.id, String(c.nombre ?? `Proceso #${c.id}`));
+        }
+        const nextSlots: DespachoItinerarioSlot[] = ((pasosRows ?? []) as Array<{ proceso_id: number; orden: number }>)
+          .sort((a, b) => a.orden - b.orden)
+          .map((p) => ({
+            key: crypto.randomUUID(),
+            procesoId: p.proceso_id,
+            nombre: nombreById.get(p.proceso_id) ?? `Proceso #${p.proceso_id}`,
+          }));
+        setDespachoItinerarioSlots(nextSlots);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "No se pudo cargar la OT.");
+      } finally {
+        setDespachoLoadingOt(false);
+      }
+    },
+    [supabase]
+  );
+
   const despachadoColumnFilters = useMemo<ColumnFiltersState>(
     () =>
       despachadoFilter === "todos"
@@ -688,10 +902,16 @@ export function MasterOtsPage() {
   }
 
   async function submitDespacho() {
-    if (!despachoSeleccion) return;
+    if (!activeDespachoSeleccion) return;
+    if (activeDespachoStatus === "despachada_con_compra") {
+      toast.error(
+        "OT despachada con compra generada. Modifica desde Compras."
+      );
+      return;
+    }
     setDespachoSaving(true);
-    const selectedRowId = despachoSeleccion.id;
-    const selectedOt = despachoSeleccion.num_pedido.trim();
+    const selectedRowId = activeDespachoSeleccion.id;
+    const selectedOt = activeDespachoSeleccion.num_pedido.trim();
     try {
       if (!selectedOt) throw new Error("OT inválida.");
 
@@ -762,9 +982,24 @@ export function MasterOtsPage() {
       toast.success("OT Despachada correctamente");
 
       setDespachoForm(emptyDespachoForm());
-      setDespachoOpen(false);
-      setRowSelection({});
-      despachoSeleccionCacheRef.current = null;
+      if (despachoExpressMode && despachoEntradaMultiple) {
+        setDespachoExpressSeleccion(null);
+        setDespachoExpressYaDespachada(false);
+        setDespachoExpressCompraGenerada(false);
+        setDespachoExpressMeta({ cliente: "", trabajo: "", cantidad: "" });
+        setDespachoExpressOtInput("");
+        setDespachoItinerarioSlots([]);
+        window.setTimeout(() => despachoOtInputRef.current?.focus(), 80);
+      } else {
+        setDespachoOpen(false);
+        setRowSelection({});
+        despachoSeleccionCacheRef.current = null;
+        setDespachoExpressSeleccion(null);
+        setDespachoExpressYaDespachada(false);
+        setDespachoExpressCompraGenerada(false);
+        setDespachoExpressMeta({ cliente: "", trabajo: "", cantidad: "" });
+        setDespachoExpressOtInput("");
+      }
 
       await loadPage({ silent: true });
       await loadFilterOptions();
@@ -976,13 +1211,26 @@ ${otsContextJson}
         </DialogContent>
       </Dialog>
 
-      <Dialog open={despachoOpen} onOpenChange={setDespachoOpen}>
+      <Dialog
+        open={despachoOpen}
+        onOpenChange={(o) => {
+          setDespachoOpen(o);
+          if (!o) {
+            setDespachoExpressMode(false);
+            setDespachoExpressSeleccion(null);
+            setDespachoExpressOtInput("");
+            setDespachoExpressYaDespachada(false);
+            setDespachoExpressCompraGenerada(false);
+            setDespachoExpressMeta({ cliente: "", trabajo: "", cantidad: "" });
+          }
+        }}
+      >
         <DialogContent className="flex max-h-[min(94vh,880px)] max-w-[min(96vw,920px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
           <DialogHeader className="shrink-0 border-b border-slate-100 px-4 py-3 sm:px-5">
             <DialogTitle className="text-base">
               Despachar OT{" "}
               <span className="font-mono text-sm font-semibold text-[#002147]">
-                {despachoSeleccion?.num_pedido ?? ""}
+                {activeDespachoSeleccion?.num_pedido ?? ""}
               </span>
             </DialogTitle>
             <DialogDescription className="text-xs">
@@ -991,7 +1239,74 @@ ${otsContextJson}
               despachada.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid max-h-[min(82vh,700px)] gap-3 overflow-y-auto px-4 py-3 sm:grid-cols-2 sm:px-5">
+          <div
+            className="grid max-h-[min(82vh,700px)] gap-3 overflow-y-auto px-4 py-3 sm:grid-cols-2 sm:px-5"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !despachoSaving) {
+                e.preventDefault();
+                void submitDespacho();
+              }
+            }}
+          >
+            {despachoExpressMode ? (
+              <div className="grid gap-2 rounded-lg border border-[#C69C2B]/35 bg-amber-50/40 p-3 sm:col-span-2">
+                <Label htmlFor="despacho-express-ot" className="text-xs font-semibold text-[#002147]">
+                  OT (modo despacho express)
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="despacho-express-ot"
+                    ref={despachoOtInputRef}
+                    className="h-8 text-xs font-mono"
+                    value={despachoExpressOtInput}
+                    onChange={(e) => setDespachoExpressOtInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void hydrateDespachoForOt(despachoExpressOtInput);
+                      }
+                    }}
+                    placeholder="Escribe nº OT y pulsa Enter"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={despachoLoadingOt || !despachoExpressOtInput.trim()}
+                    onClick={() => void hydrateDespachoForOt(despachoExpressOtInput)}
+                  >
+                    {despachoLoadingOt ? <Loader2 className="size-4 animate-spin" /> : "Cargar OT"}
+                  </Button>
+                </div>
+                <p className="text-[11px] text-slate-600">
+                  Enter carga OT · Ctrl+Enter guarda despacho.
+                </p>
+                <div className="grid gap-1 text-[11px] text-slate-700 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto] sm:items-center">
+                  <p className="truncate">
+                    <span className="font-semibold text-[#002147]">Cliente:</span>{" "}
+                    {despachoExpressMeta.cliente || "—"}
+                  </p>
+                  <p className="truncate">
+                    <span className="font-semibold text-[#002147]">Trabajo:</span>{" "}
+                    {despachoExpressMeta.trabajo || "—"}
+                  </p>
+                  <p className="truncate sm:justify-self-end">
+                    <span className="font-semibold text-[#002147]">Cantidad:</span>{" "}
+                    {despachoExpressMeta.cantidad || "—"}
+                  </p>
+                </div>
+                {activeDespachoStatus === "despachada_sin_compra" ? (
+                  <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-900">
+                    OT ya despachada sin compra generada: puedes modificar despacho.
+                  </p>
+                ) : null}
+                {activeDespachoStatus === "despachada_con_compra" ? (
+                  <p className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-800">
+                    OT despachada con compra generada: despacho bloqueado. Modifica desde Compras.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             <div className="grid gap-1">
               <Label htmlFor="despacho-tintas" className="text-xs">
                 Tintas
@@ -1006,21 +1321,30 @@ ${otsContextJson}
               />
             </div>
             <div className="grid gap-1">
-              <Label htmlFor="despacho-material" className="text-xs">
-                Material
+              <Label htmlFor="despacho-acabado" className="text-xs">
+                Acabado PRAL
               </Label>
               <Input
-                id="despacho-material"
+                id="despacho-acabado"
                 className="h-8 text-xs"
-                value={despachoForm.material}
+                list="despacho-acabado-suggestions"
+                value={despachoForm.acabado_pral}
                 onChange={(e) =>
-                  setDespachoForm((f) => ({ ...f, material: e.target.value }))
+                  setDespachoForm((f) => ({
+                    ...f,
+                    acabado_pral: e.target.value,
+                  }))
                 }
               />
+              <datalist id="despacho-acabado-suggestions">
+                {despachoAcabadoSuggestions.map((v) => (
+                  <option key={v} value={v} />
+                ))}
+              </datalist>
             </div>
             <div className="grid gap-1">
               <Label htmlFor="despacho-tamano" className="text-xs">
-                Tamaño hoja
+                Formato / Tamaño papel
               </Label>
               <Input
                 id="despacho-tamano"
@@ -1035,6 +1359,25 @@ ${otsContextJson}
               />
             </div>
             <div className="grid gap-1">
+              <Label htmlFor="despacho-material" className="text-xs">
+                Material
+              </Label>
+              <Input
+                id="despacho-material"
+                className="h-8 text-xs"
+                list="despacho-material-suggestions"
+                value={despachoForm.material}
+                onChange={(e) =>
+                  setDespachoForm((f) => ({ ...f, material: e.target.value }))
+                }
+              />
+              <datalist id="despacho-material-suggestions">
+                {despachoMaterialSuggestions.map((v) => (
+                  <option key={v} value={v} />
+                ))}
+              </datalist>
+            </div>
+            <div className="grid gap-1">
               <Label htmlFor="despacho-gramaje" className="text-xs">
                 Gramaje
               </Label>
@@ -1045,24 +1388,6 @@ ${otsContextJson}
                 value={despachoForm.gramaje}
                 onChange={(e) =>
                   setDespachoForm((f) => ({ ...f, gramaje: e.target.value }))
-                }
-              />
-            </div>
-            <div className="grid gap-1">
-              <Label htmlFor="despacho-brutas" className="text-xs">
-                Hojas brutas
-              </Label>
-              <Input
-                id="despacho-brutas"
-                className="h-8 text-xs"
-                type="number"
-                inputMode="numeric"
-                value={despachoForm.num_hojas_brutas}
-                onChange={(e) =>
-                  setDespachoForm((f) => ({
-                    ...f,
-                    num_hojas_brutas: e.target.value,
-                  }))
                 }
               />
             </div>
@@ -1080,6 +1405,24 @@ ${otsContextJson}
                   setDespachoForm((f) => ({
                     ...f,
                     num_hojas_netas: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="despacho-brutas" className="text-xs">
+                Hojas brutas
+              </Label>
+              <Input
+                id="despacho-brutas"
+                className="h-8 text-xs"
+                type="number"
+                inputMode="numeric"
+                value={despachoForm.num_hojas_brutas}
+                onChange={(e) =>
+                  setDespachoForm((f) => ({
+                    ...f,
+                    num_hojas_brutas: e.target.value,
                   }))
                 }
               />
@@ -1187,22 +1530,7 @@ ${otsContextJson}
                 }
               />
             </div>
-            <div className="grid gap-1">
-              <Label htmlFor="despacho-acabado" className="text-xs">
-                Acabado PRAL
-              </Label>
-              <Input
-                id="despacho-acabado"
-                className="h-8 text-xs"
-                value={despachoForm.acabado_pral}
-                onChange={(e) =>
-                  setDespachoForm((f) => ({
-                    ...f,
-                    acabado_pral: e.target.value,
-                  }))
-                }
-              />
-            </div>
+            <div className="grid gap-1" />
             <div className="grid gap-1 sm:col-span-2">
               <Label htmlFor="despacho-notas" className="text-xs">
                 Notas
@@ -1226,6 +1554,20 @@ ${otsContextJson}
             />
           </div>
           <DialogFooter className="shrink-0 gap-2 border-t border-slate-100 px-4 py-3 sm:flex-row sm:px-5">
+            {despachoExpressMode ? (
+              <div className="mr-auto flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
+                <input
+                  id="despacho-entrada-multiple"
+                  type="checkbox"
+                  className="mt-0.5 size-4 rounded border-input"
+                  checked={despachoEntradaMultiple}
+                  onChange={(e) => setDespachoEntradaMultiple(e.target.checked)}
+                />
+                <Label htmlFor="despacho-entrada-multiple" className="cursor-pointer text-xs font-normal text-slate-700">
+                  Entrada múltiple (mantener modal y pasar a siguiente OT)
+                </Label>
+              </div>
+            ) : null}
             <Button
               type="button"
               variant="outline"
@@ -1238,7 +1580,11 @@ ${otsContextJson}
             <Button
               type="button"
               size="sm"
-              disabled={despachoSaving || !despachoSeleccion}
+              disabled={
+                despachoSaving ||
+                !activeDespachoSeleccion ||
+                activeDespachoStatus === "despachada_con_compra"
+              }
               className="gap-2 bg-[#002147] text-white hover:bg-[#001a38]"
               onClick={() => void submitDespacho()}
             >
@@ -1306,6 +1652,7 @@ ${otsContextJson}
                   : undefined
             }
             onClick={() => {
+              setDespachoExpressMode(false);
               if (despachoYaProcesado) return;
               setDespachoForm(emptyDespachoForm());
               setDespachoItinerarioSlots([]);
@@ -1314,6 +1661,27 @@ ${otsContextJson}
           >
             <ClipboardCheck className="size-4 text-emerald-700" aria-hidden />
             {despachoYaProcesado ? "Ya despachada" : "Despachar OT"}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => {
+              setDespachoExpressMode(true);
+              setDespachoEntradaMultiple(true);
+              setDespachoExpressOtInput("");
+              setDespachoExpressSeleccion(null);
+              setDespachoExpressYaDespachada(false);
+              setDespachoExpressCompraGenerada(false);
+              setDespachoExpressMeta({ cliente: "", trabajo: "", cantidad: "" });
+              setDespachoForm(emptyDespachoForm());
+              setDespachoItinerarioSlots([]);
+              setDespachoOpen(true);
+            }}
+          >
+            <ClipboardCheck className="size-4 text-[#002147]" aria-hidden />
+            Despacho express
           </Button>
         </div>
       </div>

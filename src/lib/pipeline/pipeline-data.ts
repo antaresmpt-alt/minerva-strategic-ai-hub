@@ -5,7 +5,11 @@ export type PipelineBadge =
   | "externo_activo"
   | "bloqueado"
   | "en_riesgo"
-  | "cerrada";
+  | "cerrada"
+  | "cumplimiento_ok"
+  | "cumplimiento_warning"
+  | "cumplimiento_bajo"
+  | "con_notas";
 
 export type PipelinePasoEstado =
   | "pendiente"
@@ -53,6 +57,8 @@ export type PipelineStepView = {
     inicioRealAt: string | null;
     finRealAt: string | null;
     horasReales: number | null;
+    cantidadUnidades: number | null;
+    numHojasProducidas: number | null;
     maquinista: string | null;
     incidencia: string | null;
     accionCorrectiva: string | null;
@@ -79,6 +85,9 @@ export type PipelineRowView = OTRowBase & {
     desviacionHoras: number | null;
     etaPrevista: string | null;
     slaStatus: PipelineSlaStatus;
+    cantidadPedida: number | null;
+    cantidadProducida: number | null;
+    cumplimientoPct: number | null;
   };
 };
 

@@ -527,7 +527,7 @@ export function PlanificacionMesaSecuenciacionTab() {
   // ---- Saving / publishing
   const [savingChanges, setSavingChanges] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const [startingExecutionId, setStartingExecutionId] = useState<string | null>(null);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
   // ---- Búsqueda en el sidebar (controlada desde el tab para preservarla
   // entre re-renders y cambios de semana).
@@ -692,6 +692,10 @@ export function PlanificacionMesaSecuenciacionTab() {
       }
     }
     const fallbackByOt = new Map<string, { horas: number; numHojas: number }>();
+    const resumenHorasPreviasByOt = new Map<
+      string,
+      { entrada: number; tiraje: number; troquelado: number; engomado: number }
+    >();
     if (otsList.length > 0) {
       const { data: despData, error: despErr } = await supabase
         .from(TABLE_DESPACHADAS)
@@ -712,11 +716,36 @@ export function PlanificacionMesaSecuenciacionTab() {
         prev.numHojas = Math.max(prev.numHojas, Math.trunc(parseNum(d.num_hojas_brutas)));
         fallbackByOt.set(ot, prev);
       }
+
+      const { data: resumenEjecData, error: resumenEjecErr } = await supabase
+        .from(TABLE_EJECUCIONES)
+        .select(
+          "ot_numero, horas_reales_entrada, horas_reales_tiraje, horas_reales_troquelado, horas_reales_engomado",
+        )
+        .in("ot_numero", otsList)
+        .eq("estado_ejecucion", "finalizada");
+      if (resumenEjecErr && !isMissingColumnError(resumenEjecErr)) throw resumenEjecErr;
+      for (const row of (resumenEjecData ?? []) as Array<Record<string, unknown>>) {
+        const ot = String(row.ot_numero ?? "").trim();
+        if (!ot) continue;
+        const prev = resumenHorasPreviasByOt.get(ot) ?? {
+          entrada: 0,
+          tiraje: 0,
+          troquelado: 0,
+          engomado: 0,
+        };
+        prev.entrada += Math.max(0, parseNum(row.horas_reales_entrada));
+        prev.tiraje += Math.max(0, parseNum(row.horas_reales_tiraje));
+        prev.troquelado += Math.max(0, parseNum(row.horas_reales_troquelado));
+        prev.engomado += Math.max(0, parseNum(row.horas_reales_engomado));
+        resumenHorasPreviasByOt.set(ot, prev);
+      }
     }
     const out: MesaTrabajo[] = [];
     for (const r of rows) {
       const ot = String(r.ot_numero ?? "").trim();
       const fallback = fallbackByOt.get(ot);
+      const resumenPrevio = resumenHorasPreviasByOt.get(ot);
       const numHojasSnapshot = Math.trunc(parseNum(r.num_hojas_brutas_snapshot));
       const horasSnapshot = parseNum(r.horas_planificadas_snapshot);
       const estadoMesa = String(r.estado_mesa ?? "borrador");
@@ -786,6 +815,11 @@ export function PlanificacionMesaSecuenciacionTab() {
         motivoPausaColorHexActual: openPause?.motivoColorHex ?? null,
         motivoPausaCategoriaActual: openPause?.motivoCategoria ?? null,
         observacionesPausaActivaActual: openPause?.observaciones ?? null,
+        ejecucionIdActual: ejec?.id ?? null,
+        horasPreviasEntrada: resumenPrevio?.entrada ?? 0,
+        horasPreviasTiraje: resumenPrevio?.tiraje ?? 0,
+        horasPreviasTroquelado: resumenPrevio?.troquelado ?? 0,
+        horasPreviasEngomado: resumenPrevio?.engomado ?? 0,
       });
     }
     return dedupeMesaByOt(out);
@@ -1602,7 +1636,7 @@ export function PlanificacionMesaSecuenciacionTab() {
     reload,
   ]);
 
-  const startExecution = useCallback(
+  const launchExecution = useCallback(
     async (trabajo: MesaTrabajo) => {
       if (!selectedMaquinaId) {
         toast.error("Selecciona una máquina para liberar la OT.");
@@ -1612,7 +1646,7 @@ export function PlanificacionMesaSecuenciacionTab() {
         toast.error("Solo se pueden liberar OTs confirmadas.");
         return;
       }
-      setStartingExecutionId(trabajo.id);
+      setActionLoadingId(trabajo.id);
       try {
         const nowIso = new Date().toISOString();
         const otKey = String(trabajo.ot ?? "").trim();
@@ -1671,10 +1705,111 @@ export function PlanificacionMesaSecuenciacionTab() {
         toast.error(msg);
         await reload();
       } finally {
-        setStartingExecutionId(null);
+        setActionLoadingId(null);
       }
     },
     [selectedMaquinaId, supabase, userId, userEmail, reload],
+  );
+
+  const runMesaAction = useCallback(
+    async (
+      trabajo: MesaTrabajo,
+      action: "lanzar" | "iniciar" | "pausar" | "reanudar" | "cancelar" | "finalizar",
+      payload?: {
+        horasEntrada: number | null;
+        horasTiraje: number | null;
+        horasTroquelado: number | null;
+        horasEngomado: number | null;
+        numHojas: number | null;
+        cantidadUnidades: number | null;
+        notas: string | null;
+      },
+    ) => {
+      if (action === "lanzar") {
+        await launchExecution(trabajo);
+        return;
+      }
+      const ejecucionId = trabajo.ejecucionIdActual?.trim() || null;
+      if (!ejecucionId) {
+        toast.error("No se encontró ejecución activa para esta OT.");
+        return;
+      }
+      setActionLoadingId(trabajo.id);
+      try {
+        const now = new Date();
+        const nowIso = now.toISOString();
+        if (action === "iniciar") {
+          const { error } = await supabase
+            .from(TABLE_EJECUCIONES)
+            .update({ estado_ejecucion: "en_curso", inicio_real_at: nowIso, updated_at: nowIso })
+            .eq("id", ejecucionId);
+          if (error) throw error;
+        } else if (action === "pausar") {
+          const { error } = await supabase
+            .from(TABLE_EJECUCIONES)
+            .update({ estado_ejecucion: "pausada", updated_at: nowIso })
+            .eq("id", ejecucionId);
+          if (error) throw error;
+        } else if (action === "reanudar") {
+          const { error } = await supabase
+            .from(TABLE_EJECUCIONES)
+            .update({ estado_ejecucion: "en_curso", updated_at: nowIso })
+            .eq("id", ejecucionId);
+          if (error) throw error;
+        } else if (action === "cancelar") {
+          const { error: execErr } = await supabase
+            .from(TABLE_EJECUCIONES)
+            .update({ estado_ejecucion: "cancelada", fin_real_at: nowIso, updated_at: nowIso })
+            .eq("id", ejecucionId);
+          if (execErr) throw execErr;
+          const { error: mesaErr } = await supabase
+            .from(TABLE_MESA)
+            .update({ estado_mesa: "finalizada" })
+            .eq("id", trabajo.id);
+          if (mesaErr) throw mesaErr;
+        } else if (action === "finalizar") {
+          const horasEntrada = payload?.horasEntrada ?? null;
+          const horasTiraje = payload?.horasTiraje ?? null;
+          const horasTroquelado = payload?.horasTroquelado ?? null;
+          const horasEngomado = payload?.horasEngomado ?? null;
+          const horasTotal =
+            (horasEntrada ?? 0) +
+            (horasTiraje ?? 0) +
+            (horasTroquelado ?? 0) +
+            (horasEngomado ?? 0);
+          const { error: execErr } = await supabase
+            .from(TABLE_EJECUCIONES)
+            .update({
+              estado_ejecucion: "finalizada",
+              fin_real_at: nowIso,
+              updated_at: nowIso,
+              horas_reales: horasTotal > 0 ? horasTotal : null,
+              horas_reales_entrada: horasEntrada,
+              horas_reales_tiraje: horasTiraje,
+              horas_reales_troquelado: horasTroquelado,
+              horas_reales_engomado: horasEngomado,
+              num_hojas_producidas: payload?.numHojas ?? null,
+              cantidad_unidades: payload?.cantidadUnidades ?? null,
+              observaciones: payload?.notas ?? null,
+            })
+            .eq("id", ejecucionId);
+          if (execErr) throw execErr;
+          const { error: mesaErr } = await supabase
+            .from(TABLE_MESA)
+            .update({ estado_mesa: "finalizada" })
+            .eq("id", trabajo.id);
+          if (mesaErr) throw mesaErr;
+        }
+        toast.success("Acción aplicada.");
+        await reload();
+      } catch (e) {
+        toast.error(getErrorMessage(e, "No se pudo aplicar la acción."));
+        await reload();
+      } finally {
+        setActionLoadingId(null);
+      }
+    },
+    [launchExecution, reload, supabase],
   );
 
   // ===== DnD ================================================================
@@ -2955,8 +3090,9 @@ export function PlanificacionMesaSecuenciacionTab() {
                           maquinaSeleccionada?.capacidad_horas_default_tarde ?? 8
                         }
                         onEditCapacity={openCapacityDialog}
-                        onStartExecution={startExecution}
-                        startingExecutionId={startingExecutionId}
+                        maquinaTipo={maquinaSeleccionada?.tipo_maquina ?? null}
+                        onAction={runMesaAction}
+                        actionLoadingId={actionLoadingId}
                         disabled={publishing || !boardReady}
                       />
                     );
@@ -3021,8 +3157,9 @@ function DayCard({
   defaultHorasManana,
   defaultHorasTarde,
   onEditCapacity,
-  onStartExecution,
-  startingExecutionId,
+  maquinaTipo,
+  onAction,
+  actionLoadingId,
   disabled,
 }: {
   date: Date;
@@ -3032,8 +3169,27 @@ function DayCard({
   defaultHorasManana: number;
   defaultHorasTarde: number;
   onEditCapacity: (day: DayKey, turno: TurnoKey) => void;
-  onStartExecution: (trabajo: MesaTrabajo) => void;
-  startingExecutionId: string | null;
+  maquinaTipo: PlanificacionTipoMaquina | null;
+  onAction: (
+    trabajo: MesaTrabajo,
+    action:
+      | "lanzar"
+      | "iniciar"
+      | "pausar"
+      | "reanudar"
+      | "cancelar"
+      | "finalizar",
+    payload?: {
+      horasEntrada: number | null;
+      horasTiraje: number | null;
+      horasTroquelado: number | null;
+      horasEngomado: number | null;
+      numHojas: number | null;
+      cantidadUnidades: number | null;
+      notas: string | null;
+    },
+  ) => void;
+  actionLoadingId: string | null;
   disabled?: boolean;
 }) {
   const dayKey = toDayKey(date);
@@ -3101,8 +3257,9 @@ function DayCard({
         items={bySlot[skManana] ?? []}
         capacityHoras={capManana}
         onEditCapacity={() => onEditCapacity(dayKey, "manana")}
-        onStartExecution={onStartExecution}
-        startingExecutionId={startingExecutionId}
+        maquinaTipo={maquinaTipo}
+        onAction={onAction}
+        actionLoadingId={actionLoadingId}
         disabled={disabled}
       />
       {motivoManana ? (
@@ -3120,8 +3277,9 @@ function DayCard({
         items={bySlot[skTarde] ?? []}
         capacityHoras={capTarde}
         onEditCapacity={() => onEditCapacity(dayKey, "tarde")}
-        onStartExecution={onStartExecution}
-        startingExecutionId={startingExecutionId}
+        maquinaTipo={maquinaTipo}
+        onAction={onAction}
+        actionLoadingId={actionLoadingId}
         disabled={disabled}
       />
       {motivoTarde ? (
