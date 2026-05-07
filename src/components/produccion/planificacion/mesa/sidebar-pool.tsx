@@ -61,6 +61,7 @@ function SortablePoolCard({
     horas: pool.horasPlanificadas,
     materialStatus: pool.materialStatus,
   };
+  const sinRuta = (pool.proximoPasoNombre ?? "").toLowerCase().includes("sin ruta");
 
   return (
     <div
@@ -76,7 +77,21 @@ function SortablePoolCard({
         disabled && "pointer-events-none opacity-60",
       )}
     >
-      <PlanificacionCard data={data} fixedHeight isDragging={isDragging} />
+      <PlanificacionCard
+        data={data}
+        fixedHeight
+        isDragging={isDragging}
+        badgeStart={
+          sinRuta ? (
+            <span
+              className="inline-flex shrink-0 items-center rounded bg-amber-100 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-800"
+              title={pool.proximoPasoNombre ?? "Sin ruta (OT antigua)"}
+            >
+              Sin ruta
+            </span>
+          ) : undefined
+        }
+      />
     </div>
   );
 }

@@ -864,6 +864,18 @@ export function PlanificacionMesaSecuenciacionTab() {
       getPlanificacionTipoMaquinaFilter(roleForFilter),
       tipoMaquinaSeleccionada,
     );
+    const horasByTipo = (d: Record<string, unknown>): number => {
+      const hEntrada = parseNum(d.horas_entrada);
+      const hTiraje = parseNum(d.horas_tiraje);
+      const hTroquelado = parseNum(d.horas_estimadas_troquelado);
+      const hEngomado = parseNum(d.horas_estimadas_engomado);
+      if (tipoEfectivo === "impresion" || tipoEfectivo === "digital") {
+        return hEntrada + hTiraje;
+      }
+      if (tipoEfectivo === "troquelado") return hTroquelado;
+      if (tipoEfectivo === "engomado") return hEngomado;
+      return hEntrada + hTiraje + hTroquelado + hEngomado;
+    };
 
     // No reaparecer en el pool lateral: si hay ámbito por tipo (rol o máquina),
     // ocultar OT ya planificada en CUALQUIER máquina de ese mismo tipo.
@@ -957,11 +969,7 @@ export function PlanificacionMesaSecuenciacionTab() {
     for (const d of (despData ?? []) as Array<Record<string, unknown>>) {
       const ot = String(d.ot_numero ?? "").trim();
       if (!ot) continue;
-      const horas =
-        parseNum(d.horas_entrada) +
-        parseNum(d.horas_tiraje) +
-        parseNum(d.horas_estimadas_troquelado) +
-        parseNum(d.horas_estimadas_engomado);
+      const horas = horasByTipo(d);
       const hojas = Math.max(0, Math.trunc(parseNum(d.num_hojas_brutas)));
       const tintas = String(d.tintas ?? "").trim();
       const material = String(d.material ?? "").trim();
@@ -1068,7 +1076,14 @@ export function PlanificacionMesaSecuenciacionTab() {
       );
       poolOut = poolOut.map((p) => {
         const info = pasoMap.get(p.ot);
-        if (!info) return p;
+        if (!info) {
+          return {
+            ...p,
+            proximoPasoNombre: "Sin ruta (OT antigua)",
+            proximoPasoSlug: null,
+            planificacionTipoPaso: null,
+          };
+        }
         return {
           ...p,
           proximoPasoNombre: info.nombre,
@@ -1078,9 +1093,17 @@ export function PlanificacionMesaSecuenciacionTab() {
       });
     } catch (e) {
       console.warn("[Mesa] pool itinerario", e);
+      poolOut = poolOut.map((p) => ({
+        ...p,
+        proximoPasoNombre: p.proximoPasoNombre ?? "Sin ruta (OT antigua)",
+        proximoPasoSlug: p.proximoPasoSlug ?? null,
+        planificacionTipoPaso: p.planificacionTipoPaso ?? null,
+      }));
     }
     if (tipoEfectivo) {
-      poolOut = poolOut.filter((p) => p.planificacionTipoPaso === tipoEfectivo);
+      poolOut = poolOut.filter(
+        (p) => p.planificacionTipoPaso === tipoEfectivo || p.planificacionTipoPaso == null,
+      );
     }
     return poolOut;
   },
