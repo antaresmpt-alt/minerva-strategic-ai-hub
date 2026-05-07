@@ -53,7 +53,7 @@ type EjecucionRow = {
   ot_paso_id: string | null;
   ot_numero: string;
   maquina_id: string;
-  prod_maquinas?: { nombre: string | null } | null;
+  prod_maquinas?: { nombre: string | null; tipo_maquina: string | null } | null;
   prod_mesa_planificacion_trabajos?: MesaTrabajoJoin | MesaTrabajoJoin[] | null;
   fecha_planificada: string | null;
   turno: string | null;
@@ -67,8 +67,12 @@ type EjecucionRow = {
   minutos_pausada_acum: number | string | null;
   horas_planificadas_snapshot: number | string | null;
   horas_reales: number | string | null;
+  horas_reales_entrada: number | string | null;
+  horas_reales_tiraje: number | string | null;
   horas_reales_troquelado: number | string | null;
   horas_reales_engomado: number | string | null;
+  num_hojas_producidas: number | string | null;
+  cantidad_unidades: number | string | null;
   incidencia: string | null;
   accion_correctiva: string | null;
   maquinista: string | null;
@@ -138,6 +142,7 @@ function mapExecution(
     cliente: mesa?.cliente_snapshot?.trim() || null,
     maquinaId: row.maquina_id,
     maquinaNombre: row.prod_maquinas?.nombre ?? "—",
+    maquinaTipo: row.prod_maquinas?.tipo_maquina ?? null,
     fechaPlanificada: row.fecha_planificada,
     turno: row.turno === "manana" || row.turno === "tarde" ? row.turno : null,
     slotOrden: row.slot_orden,
@@ -154,8 +159,12 @@ function mapExecution(
     minutosPausadaAcum: Number(parseNum(row.minutos_pausada_acum) ?? 0),
     horasPlanificadasSnapshot: parseNum(row.horas_planificadas_snapshot),
     horasReales: parseNum(row.horas_reales),
+    horasRealesEntrada: parseNum(row.horas_reales_entrada),
+    horasRealesTiraje: parseNum(row.horas_reales_tiraje),
     horasRealesTroquelado: parseNum(row.horas_reales_troquelado),
     horasRealesEngomado: parseNum(row.horas_reales_engomado),
+    numHojasProducidas: parseNum(row.num_hojas_producidas),
+    cantidadUnidades: parseNum(row.cantidad_unidades),
     incidencia: row.incidencia,
     accionCorrectiva: row.accion_correctiva,
     maquinista: row.maquinista,
@@ -182,7 +191,7 @@ export async function loadAnaliticaPlantaData(
       let query = supabase
         .from(TABLE_EJECUCIONES)
         .select(
-          "id, mesa_trabajo_id, ot_paso_id, ot_numero, maquina_id, fecha_planificada, turno, slot_orden, liberada_at, inicio_real_at, fin_real_at, estado_ejecucion, ha_estado_pausada, num_pausas, minutos_pausada_acum, horas_planificadas_snapshot, horas_reales, horas_reales_troquelado, horas_reales_engomado, incidencia, accion_correctiva, maquinista, densidades_json, observaciones, created_at, updated_at, prod_maquinas(nombre), prod_mesa_planificacion_trabajos(cliente_snapshot)",
+          "id, mesa_trabajo_id, ot_paso_id, ot_numero, maquina_id, fecha_planificada, turno, slot_orden, liberada_at, inicio_real_at, fin_real_at, estado_ejecucion, ha_estado_pausada, num_pausas, minutos_pausada_acum, horas_planificadas_snapshot, horas_reales, horas_reales_entrada, horas_reales_tiraje, horas_reales_troquelado, horas_reales_engomado, num_hojas_producidas, cantidad_unidades, incidencia, accion_correctiva, maquinista, densidades_json, observaciones, created_at, updated_at, prod_maquinas(nombre,tipo_maquina), prod_mesa_planificacion_trabajos(cliente_snapshot)",
         )
         .lte("inicio_real_at", filters.endIso)
         .or(`fin_real_at.gte.${filters.startIso},fin_real_at.is.null`)
