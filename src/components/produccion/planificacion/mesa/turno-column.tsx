@@ -76,6 +76,12 @@ interface TurnoColumnProps {
   ) => void;
   actionLoadingId: string | null;
   disabled?: boolean;
+  /**
+   * Si se proporciona, sobreescribe el container id por defecto
+   * (`slot::${day}::${turno}`). Útil para reutilizar el componente en la mesa
+   * diaria, donde la dimensión cambia (máquina en vez de día).
+   */
+  containerIdOverride?: string;
 }
 
 function turnoLabel(t: TurnoKey): string {
@@ -428,8 +434,9 @@ export function TurnoColumn({
   onAction,
   actionLoadingId,
   disabled,
+  containerIdOverride,
 }: TurnoColumnProps) {
-  const containerId = containerIdForSlot(day, turno);
+  const containerId = containerIdOverride ?? containerIdForSlot(day, turno);
   const { setNodeRef, isOver } = useDroppable({ id: containerId });
 
   const load = useMemo(

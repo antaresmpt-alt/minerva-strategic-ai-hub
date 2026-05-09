@@ -1623,35 +1623,45 @@ export function GestionExternosPage() {
     }
   }, [tab, loadSeguimientosCompra]);
 
-  useEffect(() => {
-    const ot = normalizeOtRawToString(envIdPedido);
-    if (!/^\d{5}$/.test(ot)) return;
-    let cancelled = false;
-    void (async () => {
+  /**
+   * Hidrata Cliente, Pedido cliente, Título y F. entrega OT desde el maestro
+   * `prod_ots_general` para la OT indicada. SIEMPRE sobrescribe los campos
+   * (estilo «entrada rápida de despacho»). Si la OT no existe, los limpia.
+   * Disparado por Enter en el campo OT del alta manual.
+   */
+  const hydrateEnvioFromOt = useCallback(
+    async (otRaw: string) => {
+      const ot = normalizeOtRawToString(otRaw);
+      if (!/^\d{5}$/.test(ot)) {
+        toast.error("Indica una OT de 5 dígitos.");
+        return;
+      }
       const { data, error } = await supabase
         .from("prod_ots_general")
         .select("num_pedido,cliente,pedido_cliente,titulo,fecha_entrega")
         .eq("num_pedido", ot)
         .maybeSingle();
-      if (cancelled || error || !data) return;
+      if (error) {
+        toast.error("No se pudo consultar la OT en maestro.");
+        return;
+      }
+      if (!data) {
+        setEnvCliente("");
+        setEnvPedidoCliente("");
+        setEnvTrabajo("");
+        setEnvFechaEntregaOt("");
+        toast.warning(`OT ${ot} no encontrada en maestro.`);
+        return;
+      }
       const master = data as OtGeneralLookupRow;
-      const cliente = String(master.cliente ?? "").trim();
-      const pedidoCliente = String(master.pedido_cliente ?? "").trim();
-      const titulo = String(master.titulo ?? "").trim();
-      const fEntrega = maestroFechaEntregaToYmd(master.fecha_entrega);
-      if (cliente) setEnvCliente((prev) => (prev.trim() ? prev : cliente));
-      if (pedidoCliente) {
-        setEnvPedidoCliente((prev) => (prev.trim() ? prev : pedidoCliente));
-      }
-      if (titulo) setEnvTrabajo((prev) => (prev.trim() ? prev : titulo));
-      if (fEntrega) {
-        setEnvFechaEntregaOt((prev) => (prev.trim() ? prev : fEntrega));
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [envIdPedido, supabase]);
+      setEnvCliente(String(master.cliente ?? "").trim());
+      setEnvPedidoCliente(String(master.pedido_cliente ?? "").trim());
+      setEnvTrabajo(String(master.titulo ?? "").trim());
+      setEnvFechaEntregaOt(maestroFechaEntregaToYmd(master.fecha_entrega));
+      toast.success(`OT ${ot} cargada.`);
+    },
+    [supabase]
+  );
 
   useEffect(() => {
     void (async () => {
@@ -4369,6 +4379,18 @@ export function GestionExternosPage() {
             <CardContent>
               <form
                 onSubmit={handleCreateEnvio}
+                onKeyDown={(e) => {
+                  if (
+                    e.key === "Enter" &&
+                    (e.ctrlKey || e.metaKey) &&
+                    !saving
+                  ) {
+                    e.preventDefault();
+                    void handleCreateEnvio(
+                      e as unknown as React.FormEvent<HTMLFormElement>
+                    );
+                  }
+                }}
                 className="grid gap-3"
               >
                 {/* Fila 1: OT + Cliente + Pedido cliente */}
@@ -4386,9 +4408,24 @@ export function GestionExternosPage() {
                       placeholder="Ej. 24001"
                       value={envIdPedido}
                       onChange={(e) => setEnvIdPedido(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (
+                          e.key === "Enter" &&
+                          !e.ctrlKey &&
+                          !e.metaKey &&
+                          !e.shiftKey &&
+                          !e.altKey
+                        ) {
+                          e.preventDefault();
+                          void hydrateEnvioFromOt(envIdPedido);
+                        }
+                      }}
                       disabled={!proveedores.length}
                       className="font-mono text-sm"
                     />
+                    <p className="text-[11px] leading-tight text-slate-600">
+                      Enter carga OT · Ctrl+Enter graba envío.
+                    </p>
                   </div>
                   <div className="grid min-w-0 gap-1.5 sm:col-span-5">
                     <Label htmlFor="cli" className="text-xs">
