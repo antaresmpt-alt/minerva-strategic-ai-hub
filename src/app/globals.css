@@ -258,4 +258,29 @@
   body.print-externos-planificacion .externos-print-parte {
     display: none !important;
   }
+
+  /* ─────────────────────────────────────────────────────────────────────
+   * Mesa diaria + Mesa semanal — Plantillas de impresión dedicadas.
+   * Se renderizan offscreen con `useReactToPrint` (ver
+   *   mesa-diaria-print-template.tsx
+   *   mesa-semanal-print-template.tsx
+   * ) por lo que la UI viva no necesita reglas @media print.
+   * Solo conservamos la preservación de colores cuando esas plantillas
+   * se hacen visibles bajo print.
+   * ───────────────────────────────────────────────────────────────────── */
+  .mesa-diaria-print-root,
+  .mesa-semanal-print-root {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .mesa-diaria-print-root [class*="bg-"],
+  .mesa-diaria-print-root [class*="border-"],
+  .mesa-diaria-print-root [class*="text-"],
+  .mesa-semanal-print-root [class*="bg-"],
+  .mesa-semanal-print-root [class*="border-"],
+  .mesa-semanal-print-root [class*="text-"] {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }

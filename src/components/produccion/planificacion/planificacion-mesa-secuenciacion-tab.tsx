@@ -33,8 +33,10 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
+import { useReactToPrint } from "react-to-print";
 import { toast } from "sonner";
 
 import {
@@ -43,6 +45,9 @@ import {
 import {
   ExportDialog,
 } from "@/components/produccion/planificacion/mesa/export-dialog";
+import {
+  MesaSemanalPrintTemplate,
+} from "@/components/produccion/planificacion/mesa/mesa-semanal-print-template";
 import {
   PlanificacionCard,
   type PlanificacionCardData,
@@ -103,6 +108,7 @@ import {
 } from "@/lib/planificacion-ia-validate";
 import { useHubStore } from "@/lib/store";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
 import { cn } from "@/lib/utils";
 import type {
   CapacidadTurno,
@@ -518,6 +524,20 @@ export function PlanificacionMesaSecuenciacionTab() {
 
   // ---- Export dialog
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+
+  // ---- Impresión visual del tablón semanal (PDF #2 — para reuniones).
+  // Patrón react-to-print: template offscreen + handler aislado, igual que
+  // el botón "PDF" de Gestión Externos. No usa `window.print()` sobre la UI viva.
+  const printSemanalRef = useRef<HTMLDivElement>(null);
+  const { umbrales: umbralesOtsCompras } = useSysParametrosOtsCompras();
+  const handlePrintTablonSemanal = useReactToPrint({
+    contentRef: printSemanalRef,
+    documentTitle: `Minerva-Tablon-Semanal-${weekStartKey}`,
+    pageStyle: `
+      @page { size: A4 landscape; margin: 10mm 10mm; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    `,
+  });
 
   // ---- Edición de capacidad
   const [capDialogOpen, setCapDialogOpen] = useState(false);
@@ -2778,10 +2798,21 @@ export function PlanificacionMesaSecuenciacionTab() {
               size="sm"
               onClick={() => setExportDialogOpen(true)}
               disabled={!boardReady || loading}
-              title="Imprimir / Exportar"
+              title="Hoja operario por máquina (PDF / Excel)"
             >
               <Printer className="mr-1 size-4" />
-              Imprimir
+              Hoja operario
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => handlePrintTablonSemanal()}
+              disabled={loading || !boardReady}
+              title="Imprimir / Guardar como PDF el tablón visual de la semana (para reuniones)"
+            >
+              <Printer className="mr-1 size-4" />
+              Imprimir tablón
             </Button>
             <Button
               type="button"
@@ -3190,6 +3221,28 @@ export function PlanificacionMesaSecuenciacionTab() {
       <PlanificacionIaProgressDialog
         state={iaDialog}
         onClose={() => setIaDialog((prev) => ({ ...prev, open: false }))}
+      />
+
+      <MesaSemanalPrintTemplate
+        ref={printSemanalRef}
+        ambitoLabel={etiquetaMesaTitulo}
+        weekRangeLabel={weekRangeLabel}
+        weekDays={weekDays}
+        maquinaNombre={maquinaSeleccionada?.nombre ?? "—"}
+        maquinaTipo={maquinaSeleccionada?.tipo_maquina ?? null}
+        defaultHorasManana={
+          maquinaSeleccionada?.capacidad_horas_default_manana ?? 8
+        }
+        defaultHorasTarde={
+          maquinaSeleccionada?.capacidad_horas_default_tarde ?? 8
+        }
+        bySlot={effectiveBySlot}
+        capacityBySlot={capacityBySlot}
+        capacities={capacidades}
+        trabajoByOt={trabajoByOt}
+        umbrales={umbralesOtsCompras}
+        generadoPor={userEmail}
+        planStatusLabel={planStatusLabel}
       />
     </Card>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, EyeOff, Loader2 } from "lucide-react";
+import { CheckCircle2, EyeOff, Loader2, Printer } from "lucide-react";
 import { useMemo } from "react";
 
 import {
@@ -73,6 +73,8 @@ interface MaquinaColumnProps {
   confirmingColumn?: boolean;
   /** Ocultar columna (la persistencia la gestiona el padre). */
   onHideColumn?: () => void;
+  /** Exportar la hoja operativa PDF de esta máquina para el día actual. */
+  onExportPdf?: () => void;
 }
 
 /**
@@ -182,6 +184,7 @@ export function MaquinaColumn({
   onConfirmColumn,
   confirmingColumn,
   onHideColumn,
+  onExportPdf,
 }: MaquinaColumnProps) {
   const allItems = useMemo(
     () => [...itemsManana, ...itemsTarde],
@@ -246,28 +249,52 @@ export function MaquinaColumn({
               </span>
             </div>
           </div>
-          {onHideColumn ? (
-            <TooltipProvider delayDuration={200}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-6 shrink-0 text-slate-400 hover:text-[#002147]"
-                    onClick={onHideColumn}
-                    disabled={disabled}
-                    aria-label={`Ocultar máquina ${maquina.nombre}`}
-                  >
-                    <EyeOff className="size-3.5" aria-hidden />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  Ocultar columna
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          ) : null}
+          <div className="flex shrink-0 items-center gap-0.5">
+            {onExportPdf ? (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-6 text-slate-400 hover:text-[#002147]"
+                      onClick={onExportPdf}
+                      disabled={disabled}
+                      aria-label={`Exportar hoja PDF de ${maquina.nombre}`}
+                    >
+                      <Printer className="size-3.5" aria-hidden />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    Hoja operario (PDF)
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : null}
+            {onHideColumn ? (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-6 text-slate-400 hover:text-[#002147]"
+                      onClick={onHideColumn}
+                      disabled={disabled}
+                      aria-label={`Ocultar máquina ${maquina.nombre}`}
+                    >
+                      <EyeOff className="size-3.5" aria-hidden />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    Ocultar columna
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : null}
+          </div>
         </div>
         {onConfirmColumn ? (
           <Button

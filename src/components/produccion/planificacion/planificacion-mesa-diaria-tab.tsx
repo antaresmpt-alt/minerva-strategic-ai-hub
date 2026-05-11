@@ -20,15 +20,20 @@ import {
   ChevronRight,
   Eye,
   Loader2,
+  Printer,
   RefreshCcw,
   TriangleAlert,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useReactToPrint } from "react-to-print";
 import { toast } from "sonner";
 
 import {
   EditCapacidadDialog,
 } from "@/components/produccion/planificacion/mesa/edit-capacidad-dialog";
+import {
+  ExportDialog,
+} from "@/components/produccion/planificacion/mesa/export-dialog";
 import {
   PlanificacionCard,
   type PlanificacionCardData,
@@ -43,6 +48,7 @@ import {
   MaquinaColumn,
   type MaquinaColumnData,
 } from "@/components/produccion/planificacion/mesa-diaria/maquina-column";
+import { MesaDiariaPrintTemplate } from "@/components/produccion/planificacion/mesa-diaria/mesa-diaria-print-template";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -77,14 +83,17 @@ import {
   type PlanificacionTipoMaquina,
 } from "@/lib/planificacion-ambito";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
 import { cn } from "@/lib/utils";
 import type {
+  CapacidadTurno,
   DayKey,
   EstadoEjecucionMesa,
   MaterialStatus,
   MesaTrabajo,
   MotivoPausaCategoria,
   PoolOT,
+  SlotKey,
   TroquelStatus,
   TurnoKey,
 } from "@/types/planificacion-mesa";
@@ -224,6 +233,51 @@ type CapacidadDailyTurno = {
   motivoAjuste: string | null;
 };
 
+/**
+ * Re-mapea los items de Mesa diaria al formato `Record<SlotKey, MesaTrabajo[]>`
+ * que espera `ExportDialog` / `buildPrintPayload` (clave `${dayKey}::${turno}`,
+ * filtrado por una sola máquina).
+ */
+function buildRealBySlotForMaquina(
+  maquinaId: string | null,
+  items: MesaTrabajo[],
+  dayKey: DayKey,
+): Record<SlotKey, MesaTrabajo[]> {
+  const mananaKey = `${dayKey}::manana` as SlotKey;
+  const tardeKey = `${dayKey}::tarde` as SlotKey;
+  const out: Record<SlotKey, MesaTrabajo[]> = {
+    [mananaKey]: [],
+    [tardeKey]: [],
+  };
+  if (!maquinaId) return out;
+  for (const it of items) {
+    if (it.maquinaId !== maquinaId) continue;
+    if (it.fechaPlanificada !== dayKey) continue;
+    if (it.turno === "manana") out[mananaKey]!.push(it);
+    else if (it.turno === "tarde") out[tardeKey]!.push(it);
+  }
+  for (const k of Object.keys(out) as SlotKey[]) {
+    out[k] = out[k]!.slice().sort((a, b) => a.slotOrden - b.slotOrden);
+  }
+  return out;
+}
+
+/** Filtra las capacidades por máquina y normaliza al shape `CapacidadTurno`. */
+function buildCapacidadesForMaquina(
+  maquinaId: string | null,
+  caps: CapacidadDailyTurno[],
+): CapacidadTurno[] {
+  if (!maquinaId) return [];
+  return caps
+    .filter((c) => c.maquina_id === maquinaId)
+    .map((c) => ({
+      fecha: c.fecha,
+      turno: c.turno,
+      capacidadHoras: c.capacidadHoras,
+      motivoAjuste: c.motivoAjuste,
+    }));
+}
+
 // ---------------------------------------------------------------------------
 // Componente principal
 // ---------------------------------------------------------------------------
@@ -285,6 +339,29 @@ export function PlanificacionMesaDiariaTab() {
   const [capDialogTurno, setCapDialogTurno] = useState<TurnoKey | null>(null);
   const [capDialogMaquinaId, setCapDialogMaquinaId] = useState<string | null>(null);
   const [savingCap, setSavingCap] = useState(false);
+
+  // ---- Export PDF (hoja operario por máquina)
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportMaquinaId, setExportMaquinaId] = useState<string | null>(null);
+
+  const openExportDialogFor = useCallback((maquinaId: string) => {
+    setExportMaquinaId(maquinaId);
+    setExportDialogOpen(true);
+  }, []);
+
+  // ---- Impresión visual del plan del día (PDF #2 — para reuniones).
+  // Patrón react-to-print: template offscreen + handler aislado, igual que
+  // el botón "PDF" de Gestión Externos. No usa `window.print()` sobre la UI viva.
+  const printDiariaRef = useRef<HTMLDivElement>(null);
+  const { umbrales: umbralesOtsCompras } = useSysParametrosOtsCompras();
+  const handlePrintPlanDiario = useReactToPrint({
+    contentRef: printDiariaRef,
+    documentTitle: `Minerva-Plan-Diario-${dayKey}`,
+    pageStyle: `
+      @page { size: A4 landscape; margin: 10mm 10mm; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    `,
+  });
 
   // ---- Loaders ============================================================
 
@@ -933,6 +1010,16 @@ export function PlanificacionMesaDiariaTab() {
     const m = new Map<string, PoolOT>();
     for (const p of pool) m.set(p.ot, p);
     return m;
+  }, [pool]);
+
+  /** OT → título de trabajo, para la hoja operario (PDF #1). */
+  const trabajoByOt = useMemo<Record<string, string>>(() => {
+    const out: Record<string, string> = {};
+    for (const p of pool) {
+      const t = (p.trabajo ?? "").trim();
+      if (t) out[p.ot] = t;
+    }
+    return out;
   }, [pool]);
 
   const poolOtsSet = useMemo(() => new Set(pool.map((p) => p.ot)), [pool]);
@@ -1787,6 +1874,18 @@ export function PlanificacionMesaDiariaTab() {
             <Button
               type="button"
               variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={() => handlePrintPlanDiario()}
+              disabled={loading || visibleMaquinas.length === 0}
+              title="Imprimir / Guardar como PDF el plan visual del día (todas las máquinas)"
+            >
+              <Printer className="mr-1 size-4" aria-hidden />
+              Imprimir plan del día
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
               size="icon"
               className="size-8"
               onClick={() => void reload()}
@@ -1978,6 +2077,7 @@ export function PlanificacionMesaDiariaTab() {
                               return next;
                             });
                           }}
+                          onExportPdf={() => openExportDialogFor(m.id)}
                         />
                       );
                     })}
@@ -2004,6 +2104,46 @@ export function PlanificacionMesaDiariaTab() {
         initialMotivo={initialCapDialogValues.motivo}
         saving={savingCap}
         onSave={saveCapacity}
+      />
+
+      {exportMaquinaId ? (
+        <ExportDialog
+          open={exportDialogOpen}
+          onOpenChange={(open) => {
+            setExportDialogOpen(open);
+            if (!open) setExportMaquinaId(null);
+          }}
+          visibleDayKeys={[dayKey]}
+          weekMondayKey={dayKey}
+          realBySlot={buildRealBySlotForMaquina(
+            exportMaquinaId,
+            mesaItems,
+            dayKey,
+          )}
+          draftBySlot={null}
+          simulationOn={false}
+          capacidades={buildCapacidadesForMaquina(exportMaquinaId, capacidades)}
+          maquinaId={exportMaquinaId}
+          maquinaNombre={maquinaById.get(exportMaquinaId)?.nombre ?? "—"}
+          defaultCapacidad={
+            maquinaById.get(exportMaquinaId)?.capacidad_horas_default_manana ?? 8
+          }
+          userEmail={userEmail}
+          trabajoByOt={trabajoByOt}
+        />
+      ) : null}
+
+      <MesaDiariaPrintTemplate
+        ref={printDiariaRef}
+        ambitoLabel={ambitoLabel}
+        dayKey={dayKey}
+        currentDay={currentDay}
+        maquinas={visibleMaquinas}
+        mesaItems={mesaItems}
+        capacidades={capacidades}
+        trabajoByOt={trabajoByOt}
+        umbrales={umbralesOtsCompras}
+        generadoPor={userEmail}
       />
     </Card>
   );
