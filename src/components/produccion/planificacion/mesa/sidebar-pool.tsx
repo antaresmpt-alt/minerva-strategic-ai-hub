@@ -60,6 +60,8 @@ function SortablePoolCard({
     numHojas: pool.numHojasBrutas,
     horas: pool.horasPlanificadas,
     materialStatus: pool.materialStatus,
+    trabajoTitulo: pool.trabajo,
+    cantidadOt: pool.cantidadOt,
   };
   const sinRuta = (pool.proximoPasoNombre ?? "").toLowerCase().includes("sin ruta");
 

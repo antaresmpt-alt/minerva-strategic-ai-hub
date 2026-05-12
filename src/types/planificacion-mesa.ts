@@ -44,6 +44,8 @@ export interface PoolOT {
   numHojasBrutas: number;
   /** Horas planificadas totales (entrada + tiraje). */
   horasPlanificadas: number;
+  /** Unidades (`prod_ots_general.cantidad`) para tooltip en nº OT. */
+  cantidadOt: number | null;
   materialStatus: MaterialStatus;
   troquelStatus: TroquelStatus;
   /** Primer paso `disponible` del itinerario (GPS), si existe. */
@@ -72,6 +74,10 @@ export interface MesaTrabajo {
   barnizSnapshot: string | null;
   numHojasBrutasSnapshot: number;
   horasPlanificadasSnapshot: number;
+  /** Título del trabajo (`prod_ots_general.titulo`) para tooltip en nº OT. */
+  trabajoTitulo?: string;
+  /** Unidades (`prod_ots_general.cantidad`) para tooltip en nº OT. */
+  cantidadOt?: number | null;
   /** Estado operativo real de ejecución (si existe registro activo en prod_mesa_ejecuciones). */
   estadoEjecucionActual?: EstadoEjecucionMesa | null;
   /** Minutos pausados acumulados (incluye tramo abierto si está en pausa). */

@@ -78,6 +78,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   buildCapacityMap,
   buildMesaFromPool,
+  cantidadOtFromMasterRow,
   cardHeightPx,
   DEFAULT_PLANIFICACION_IA_SETTINGS,
   deserializeDraft,
@@ -787,6 +788,25 @@ export function PlanificacionMesaSecuenciacionTab() {
         resumenHorasPreviasByOt.set(ot, prev);
       }
     }
+    const otTituloCantidadByNum = new Map<
+      string,
+      { trabajo: string; cantidadOt: number | null }
+    >();
+    if (otsList.length > 0) {
+      const { data: ogData, error: ogErr } = await supabase
+        .from(TABLE_OTS_GENERAL)
+        .select("num_pedido, titulo, cantidad")
+        .in("num_pedido", otsList);
+      if (ogErr) throw ogErr;
+      for (const o of (ogData ?? []) as Array<Record<string, unknown>>) {
+        const k = String(o.num_pedido ?? "").trim();
+        if (!k) continue;
+        otTituloCantidadByNum.set(k, {
+          trabajo: String(o.titulo ?? "").trim() || "—",
+          cantidadOt: cantidadOtFromMasterRow(o.cantidad),
+        });
+      }
+    }
     const out: MesaTrabajo[] = [];
     for (const r of rows) {
       const ot = String(r.ot_numero ?? "").trim();
@@ -830,6 +850,7 @@ export function PlanificacionMesaSecuenciacionTab() {
           ? (troqRaw as TroquelStatus)
           : "sin_informar";
 
+      const ogMeta = ot ? otTituloCantidadByNum.get(ot) : undefined;
       out.push({
         id: String(r.id),
         maquinaId:
@@ -849,6 +870,8 @@ export function PlanificacionMesaSecuenciacionTab() {
         barnizSnapshot: (r.barniz_snapshot as string | null) ?? null,
         numHojasBrutasSnapshot: numHojasMerged,
         horasPlanificadasSnapshot: horasMerged,
+        trabajoTitulo: ogMeta?.trabajo,
+        cantidadOt: ogMeta?.cantidadOt ?? null,
         estadoEjecucionActual:
           ejec?.estado === "pendiente_inicio" ||
           ejec?.estado === "en_curso" ||
@@ -1041,12 +1064,17 @@ export function PlanificacionMesaSecuenciacionTab() {
     // Datos comerciales (cliente, fecha entrega, etc.)
     const { data: otsData, error: otsErr } = await supabase
       .from(TABLE_OTS_GENERAL)
-      .select("num_pedido, cliente, fecha_entrega, titulo")
+      .select("num_pedido, cliente, fecha_entrega, titulo, cantidad")
       .in("num_pedido", otsList);
     if (otsErr) throw otsErr;
     const otsByNum = new Map<
       string,
-      { cliente: string; fechaEntrega: string | null; trabajo: string }
+      {
+        cliente: string;
+        fechaEntrega: string | null;
+        trabajo: string;
+        cantidadOt: number | null;
+      }
     >();
     for (const o of (otsData ?? []) as Array<Record<string, unknown>>) {
       const ot = String(o.num_pedido ?? "").trim();
@@ -1058,6 +1086,7 @@ export function PlanificacionMesaSecuenciacionTab() {
             ? (o.fecha_entrega as string)
             : null,
         trabajo: String(o.titulo ?? "").trim() || "—",
+        cantidadOt: cantidadOtFromMasterRow(o.cantidad),
       });
     }
 
@@ -1076,6 +1105,7 @@ export function PlanificacionMesaSecuenciacionTab() {
         cliente: "—",
         fechaEntrega: null,
         trabajo: "—",
+        cantidadOt: null,
       };
       const matRaw = String(r.material_status ?? "")
         .trim()
@@ -1107,6 +1137,7 @@ export function PlanificacionMesaSecuenciacionTab() {
         fechaEntrega: r.fecha_entrega_snapshot ?? meta.fechaEntrega,
         numHojasBrutas: desp.numHojas,
         horasPlanificadas: desp.horas,
+        cantidadOt: meta.cantidadOt,
         materialStatus: matStatus,
         troquelStatus: troqStatus,
         proximoPasoNombre: null,
@@ -2739,6 +2770,8 @@ export function PlanificacionMesaSecuenciacionTab() {
         numHojas: p.numHojasBrutas,
         horas: p.horasPlanificadas,
         materialStatus: p.materialStatus,
+        trabajoTitulo: p.trabajo,
+        cantidadOt: p.cantidadOt,
       };
       return <PlanificacionCard data={data} fixedHeight isDragging />;
     }
@@ -2763,6 +2796,8 @@ export function PlanificacionMesaSecuenciacionTab() {
         numHojas: found.numHojasBrutasSnapshot,
         horas: found.horasPlanificadasSnapshot,
         materialStatus: found.materialStatus,
+        trabajoTitulo: found.trabajoTitulo,
+        cantidadOt: found.cantidadOt ?? null,
       };
       const overlayStyle: CSSProperties = {
         minHeight: `${cardHeightPx(found.horasPlanificadasSnapshot)}px`,

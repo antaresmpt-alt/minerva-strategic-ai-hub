@@ -183,6 +183,8 @@ function SortableMesaCard({
     numHojas: trabajo.numHojasBrutasSnapshot,
     horas: trabajo.horasPlanificadasSnapshot,
     materialStatus: trabajo.materialStatus,
+    trabajoTitulo: trabajo.trabajoTitulo,
+    cantidadOt: trabajo.cantidadOt ?? null,
   };
 
   const [actionOpen, setActionOpen] = useState(false);

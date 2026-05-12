@@ -87,6 +87,15 @@ export function detectAdjacentLinks(items: MesaTrabajo[]): boolean[] {
   return flags;
 }
 
+/** `prod_ots_general.cantidad` → número entero > 0 o null. */
+export function cantidadOtFromMasterRow(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  const n =
+    typeof v === "number" ? v : Number(String(v).replace(",", ".").trim());
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n);
+}
+
 /** Construye un MesaTrabajo (sin id) a partir de una OT del Pool al soltarla. */
 export function buildMesaFromPool(
   pool: PoolOT,
@@ -112,6 +121,8 @@ export function buildMesaFromPool(
     barnizSnapshot: pool.barniz,
     numHojasBrutasSnapshot: pool.numHojasBrutas,
     horasPlanificadasSnapshot: pool.horasPlanificadas,
+    trabajoTitulo: pool.trabajo,
+    cantidadOt: pool.cantidadOt ?? null,
   };
 }
 

@@ -32,6 +32,10 @@ export interface PlanificacionCardData {
   numHojas: number;
   horas: number;
   materialStatus: MaterialStatus;
+  /** Tooltip nativo en el nº OT (mismo patrón que el `title` del cliente). */
+  trabajoTitulo?: string;
+  /** Unidades de pedido para el mismo tooltip. */
+  cantidadOt?: number | null;
 }
 
 interface PlanificacionCardProps {
@@ -61,6 +65,19 @@ function formatHoras(h: number): string {
 function formatHojas(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return "0";
   return new Intl.NumberFormat("es-ES").format(Math.round(n));
+}
+
+/** Texto del `title` del nº OT (comentario nativo del navegador). */
+function otNumeroTitle(d: PlanificacionCardData): string | undefined {
+  const parts: string[] = [];
+  const u = d.cantidadOt;
+  if (typeof u === "number" && Number.isFinite(u) && u > 0) {
+    parts.push(`Unidades: ${new Intl.NumberFormat("es-ES").format(Math.round(u))}`);
+  }
+  const t = (d.trabajoTitulo ?? "").trim();
+  if (t && t !== "—") parts.push(`Trabajo: ${t}`);
+  if (parts.length === 0) return undefined;
+  return parts.join(" · ");
 }
 
 function MaterialAlertIcon({ status }: { status: MaterialStatus }) {
@@ -153,7 +170,10 @@ export function PlanificacionCard({
 
       <div className="flex min-w-0 items-center gap-1.5">
         {badgeStart}
-        <span className="font-mono text-xs font-semibold text-[#002147]">
+        <span
+          className="font-mono text-xs font-semibold text-[#002147]"
+          title={otNumeroTitle(data)}
+        >
           {data.ot || "—"}
         </span>
         <p

@@ -62,6 +62,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   buildMesaFromPool,
+  cantidadOtFromMasterRow,
   toDayKey,
 } from "@/lib/planificacion-mesa";
 import {
@@ -644,6 +645,26 @@ export function PlanificacionMesaDiariaTab() {
         }
       }
 
+      const otTituloCantidadByNum = new Map<
+        string,
+        { trabajo: string; cantidadOt: number | null }
+      >();
+      if (otsList.length > 0) {
+        const { data: ogData, error: ogErr } = await supabase
+          .from(TABLE_OTS_GENERAL)
+          .select("num_pedido, titulo, cantidad")
+          .in("num_pedido", otsList);
+        if (ogErr) throw ogErr;
+        for (const o of (ogData ?? []) as Array<Record<string, unknown>>) {
+          const k = String(o.num_pedido ?? "").trim();
+          if (!k) continue;
+          otTituloCantidadByNum.set(k, {
+            trabajo: String(o.titulo ?? "").trim() || "—",
+            cantidadOt: cantidadOtFromMasterRow(o.cantidad),
+          });
+        }
+      }
+
       const out: MesaTrabajo[] = [];
       for (const r of rows) {
         const ot = String(r.ot_numero ?? "").trim();
@@ -691,6 +712,7 @@ export function PlanificacionMesaDiariaTab() {
           troqRaw === "ok" || troqRaw === "falta" || troqRaw === "no_aplica" || troqRaw === "sin_informar"
             ? (troqRaw as TroquelStatus)
             : "sin_informar";
+        const ogMeta = ot ? otTituloCantidadByNum.get(ot) : undefined;
         out.push({
           id: String(r.id),
           maquinaId: (r.maquina_id as string | null) ?? null,
@@ -709,6 +731,8 @@ export function PlanificacionMesaDiariaTab() {
           barnizSnapshot: (r.barniz_snapshot as string | null) ?? null,
           numHojasBrutasSnapshot: numHojasMerged,
           horasPlanificadasSnapshot: horasMerged,
+          trabajoTitulo: ogMeta?.trabajo,
+          cantidadOt: ogMeta?.cantidadOt ?? null,
           estadoEjecucionActual:
             ejec?.estado === "pendiente_inicio" || ejec?.estado === "en_curso" || ejec?.estado === "pausada"
               ? ejec.estado
@@ -871,12 +895,17 @@ export function PlanificacionMesaDiariaTab() {
       // Comerciales (cliente, fecha entrega, título)
       const { data: otsData, error: otsErr } = await supabase
         .from(TABLE_OTS_GENERAL)
-        .select("num_pedido, cliente, fecha_entrega, titulo")
+        .select("num_pedido, cliente, fecha_entrega, titulo, cantidad")
         .in("num_pedido", otsList);
       if (otsErr) throw otsErr;
       const otsByNum = new Map<
         string,
-        { cliente: string; fechaEntrega: string | null; trabajo: string }
+        {
+          cliente: string;
+          fechaEntrega: string | null;
+          trabajo: string;
+          cantidadOt: number | null;
+        }
       >();
       for (const o of (otsData ?? []) as Array<Record<string, unknown>>) {
         const ot = String(o.num_pedido ?? "").trim();
@@ -888,6 +917,7 @@ export function PlanificacionMesaDiariaTab() {
               ? (o.fecha_entrega as string)
               : null,
           trabajo: String(o.titulo ?? "").trim() || "—",
+          cantidadOt: cantidadOtFromMasterRow(o.cantidad),
         });
       }
 
@@ -902,7 +932,12 @@ export function PlanificacionMesaDiariaTab() {
           horas: 0,
           acabadoPral: "",
         };
-        const meta = otsByNum.get(ot) ?? { cliente: "—", fechaEntrega: null, trabajo: "—" };
+        const meta = otsByNum.get(ot) ?? {
+          cliente: "—",
+          fechaEntrega: null,
+          trabajo: "—",
+          cantidadOt: null,
+        };
         const matRaw = String(r.material_status ?? "").trim().toLowerCase();
         const matStatus: MaterialStatus =
           matRaw === "verde" || matRaw === "amarillo" || matRaw === "rojo"
@@ -925,6 +960,7 @@ export function PlanificacionMesaDiariaTab() {
           fechaEntrega: r.fecha_entrega_snapshot ?? meta.fechaEntrega,
           numHojasBrutas: desp.numHojas,
           horasPlanificadas: desp.horas,
+          cantidadOt: meta.cantidadOt,
           materialStatus: matStatus,
           troquelStatus: troqStatus,
           proximoPasoNombre: null,
@@ -1921,6 +1957,8 @@ export function PlanificacionMesaDiariaTab() {
         numHojas: draggingMesaItem.numHojasBrutasSnapshot,
         horas: draggingMesaItem.horasPlanificadasSnapshot,
         materialStatus: draggingMesaItem.materialStatus,
+        trabajoTitulo: draggingMesaItem.trabajoTitulo,
+        cantidadOt: draggingMesaItem.cantidadOt ?? null,
       };
     }
     if (draggingPoolItem) {
@@ -1934,6 +1972,8 @@ export function PlanificacionMesaDiariaTab() {
         numHojas: draggingPoolItem.numHojasBrutas,
         horas: draggingPoolItem.horasPlanificadas,
         materialStatus: draggingPoolItem.materialStatus,
+        trabajoTitulo: draggingPoolItem.trabajo,
+        cantidadOt: draggingPoolItem.cantidadOt,
       };
     }
     return null;
