@@ -1706,7 +1706,7 @@ export function PlanificacionMesaSecuenciacionTab() {
   ]);
 
   const launchExecution = useCallback(
-    async (trabajo: MesaTrabajo) => {
+    async (trabajo: MesaTrabajo, options?: { startImmediately?: boolean }) => {
       if (!selectedMaquinaId) {
         toast.error("Selecciona una máquina para liberar la OT.");
         return;
@@ -1743,22 +1743,27 @@ export function PlanificacionMesaSecuenciacionTab() {
             if (first?.id) otPasoId = first.id;
           }
         }
-        const { error: insErr } = await supabase.from(TABLE_EJECUCIONES).insert({
-          mesa_trabajo_id: trabajo.id,
-          ot_numero: trabajo.ot,
-          maquina_id: selectedMaquinaId,
-          fecha_planificada: trabajo.fechaPlanificada,
-          turno: trabajo.turno,
-          slot_orden: trabajo.slotOrden,
-          liberada_at: nowIso,
-          inicio_real_at: null,
-          estado_ejecucion: "pendiente_inicio",
-          horas_planificadas_snapshot: trabajo.horasPlanificadasSnapshot,
-          ot_paso_id: otPasoId,
-          created_by: userId,
-          created_by_email: userEmail,
-        });
+        const { data: insRow, error: insErr } = await supabase
+          .from(TABLE_EJECUCIONES)
+          .insert({
+            mesa_trabajo_id: trabajo.id,
+            ot_numero: trabajo.ot,
+            maquina_id: selectedMaquinaId,
+            fecha_planificada: trabajo.fechaPlanificada,
+            turno: trabajo.turno,
+            slot_orden: trabajo.slotOrden,
+            liberada_at: nowIso,
+            inicio_real_at: null,
+            estado_ejecucion: "pendiente_inicio",
+            horas_planificadas_snapshot: trabajo.horasPlanificadasSnapshot,
+            ot_paso_id: otPasoId,
+            created_by: userId,
+            created_by_email: userEmail,
+          })
+          .select("id")
+          .single();
         if (insErr) throw insErr;
+        const insertedId = String((insRow as { id?: unknown })?.id ?? "").trim();
 
         const { error: updErr } = await supabase
           .from(TABLE_MESA)
@@ -1766,7 +1771,21 @@ export function PlanificacionMesaSecuenciacionTab() {
           .eq("id", trabajo.id);
         if (updErr) throw updErr;
 
-        toast.success(`OT ${trabajo.ot} liberada a máquina.`);
+        if (options?.startImmediately) {
+          if (!insertedId) throw new Error("No se obtuvo el id de la ejecución creada.");
+          const { error: startErr } = await supabase
+            .from(TABLE_EJECUCIONES)
+            .update({
+              estado_ejecucion: "en_curso",
+              inicio_real_at: nowIso,
+              updated_at: nowIso,
+            })
+            .eq("id", insertedId);
+          if (startErr) throw startErr;
+          toast.success(`OT ${trabajo.ot} liberada e iniciada en máquina.`);
+        } else {
+          toast.success(`OT ${trabajo.ot} liberada a máquina.`);
+        }
         await reload();
       } catch (e) {
         const msg = getErrorMessage(e, "No se pudo liberar la OT.");
@@ -1796,6 +1815,10 @@ export function PlanificacionMesaSecuenciacionTab() {
     ) => {
       if (action === "lanzar") {
         await launchExecution(trabajo);
+        return;
+      }
+      if (action === "iniciar" && !trabajo.ejecucionIdActual?.trim()) {
+        await launchExecution(trabajo, { startImmediately: true });
         return;
       }
       const ejecucionId = trabajo.ejecucionIdActual?.trim() || null;

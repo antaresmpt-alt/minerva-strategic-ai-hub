@@ -22,6 +22,7 @@ import {
   Loader2,
   Printer,
   RefreshCcw,
+  Send,
   TriangleAlert,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -126,6 +127,23 @@ function parseNum(v: unknown): number {
   if (typeof v === "number") return Number.isFinite(v) ? v : 0;
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
+}
+
+/** Misma regla que la mesa semanal: horas live desde despachadas según ámbito efectivo. */
+function horasPlanificadasFromDespRow(
+  d: Record<string, unknown>,
+  tipoEfectivo: PlanificacionTipoMaquina | null,
+): number {
+  const hEntrada = parseNum(d.horas_entrada);
+  const hTiraje = parseNum(d.horas_tiraje);
+  const hTroquelado = parseNum(d.horas_estimadas_troquelado);
+  const hEngomado = parseNum(d.horas_estimadas_engomado);
+  if (tipoEfectivo === "impresion" || tipoEfectivo === "digital") {
+    return hEntrada + hTiraje;
+  }
+  if (tipoEfectivo === "troquelado") return hTroquelado;
+  if (tipoEfectivo === "engomado") return hEngomado;
+  return hEntrada + hTiraje + hTroquelado + hEngomado;
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -427,7 +445,11 @@ export function PlanificacionMesaDiariaTab() {
   );
 
   const loadMesa = useCallback(
-    async (day: DayKey, maquinaIds: string[]): Promise<MesaTrabajo[]> => {
+    async (
+      day: DayKey,
+      maquinaIds: string[],
+      roleForMesa: string | null,
+    ): Promise<MesaTrabajo[]> => {
       if (maquinaIds.length === 0) return [];
       const { data, error: mesaErr } = await supabase
         .from(TABLE_MESA)
@@ -442,6 +464,21 @@ export function PlanificacionMesaDiariaTab() {
       const otsList = rows
         .map((r) => String(r.ot_numero ?? "").trim())
         .filter((ot) => ot.length > 0);
+
+      const { data: mqTipoRows, error: mqTipoErr } = await supabase
+        .from(TABLE_MAQUINAS)
+        .select("id, tipo_maquina")
+        .in("id", maquinaIds);
+      if (mqTipoErr) throw mqTipoErr;
+      const tipoByMaquinaId = new Map<string, string>();
+      for (const m of (mqTipoRows ?? []) as Array<{
+        id?: unknown;
+        tipo_maquina?: unknown;
+      }>) {
+        const id = String(m.id ?? "").trim();
+        const t = String(m.tipo_maquina ?? "").trim();
+        if (id) tipoByMaquinaId.set(id, t);
+      }
 
       // Cargamos ejecuciones activas por máquina/OT (para badges En marcha/Pausada)
       const ejecByMesaId = new Map<
@@ -537,8 +574,9 @@ export function PlanificacionMesaDiariaTab() {
         }
       }
 
-      // Datos de despachadas (para horas/hojas snapshot live + previas)
-      const fallbackByOt = new Map<string, { horas: number; numHojas: number }>();
+      // Datos de despachadas (horas por OT+máquina según tipo_maquina, alineado a mesa semanal)
+      const numHojasByOt = new Map<string, number>();
+      const horasByOtMaquina = new Map<string, number>();
       const resumenHorasPreviasByOt = new Map<
         string,
         { entrada: number; tiraje: number; troquelado: number; engomado: number }
@@ -551,19 +589,34 @@ export function PlanificacionMesaDiariaTab() {
           )
           .in("ot_numero", otsList);
         if (despErr) throw despErr;
-        for (const d of (despData ?? []) as Array<Record<string, unknown>>) {
+        const despRows = (despData ?? []) as Array<Record<string, unknown>>;
+        for (const d of despRows) {
           const ot = String(d.ot_numero ?? "").trim();
           if (!ot) continue;
-          const prev = fallbackByOt.get(ot) ?? { horas: 0, numHojas: 0 };
-          const hEntrada = parseNum(d.horas_entrada);
-          const hTiraje = parseNum(d.horas_tiraje);
-          const hTroquelado = parseNum(d.horas_estimadas_troquelado);
-          const hEngomado = parseNum(d.horas_estimadas_engomado);
-          // En diaria sumamos todo (no filtramos por tipo del rol porque
-          // múltiples tipos pueden coexistir si admin/gerencia/producción).
-          prev.horas += hEntrada + hTiraje + hTroquelado + hEngomado;
-          prev.numHojas = Math.max(prev.numHojas, Math.trunc(parseNum(d.num_hojas_brutas)));
-          fallbackByOt.set(ot, prev);
+          const hojas = Math.max(0, Math.trunc(parseNum(d.num_hojas_brutas)));
+          numHojasByOt.set(ot, Math.max(numHojasByOt.get(ot) ?? 0, hojas));
+        }
+
+        const pairKeys = new Map<string, { ot: string; maquinaId: string }>();
+        for (const r of rows) {
+          const ot = String(r.ot_numero ?? "").trim();
+          const mid = String(r.maquina_id ?? "").trim();
+          if (!ot || !mid) continue;
+          const key = `${ot}::${mid}`;
+          if (!pairKeys.has(key)) pairKeys.set(key, { ot, maquinaId: mid });
+        }
+        for (const { ot, maquinaId } of pairKeys.values()) {
+          const tipoM = tipoByMaquinaId.get(maquinaId) ?? null;
+          const tipoEfectivo = planificacionTipoFiltroEfectivo(
+            getPlanificacionTipoMaquinaFilter(roleForMesa),
+            tipoM,
+          );
+          let sumHoras = 0;
+          for (const d of despRows) {
+            if (String(d.ot_numero ?? "").trim() !== ot) continue;
+            sumHoras += horasPlanificadasFromDespRow(d, tipoEfectivo);
+          }
+          horasByOtMaquina.set(`${ot}::${maquinaId}`, sumHoras);
         }
 
         const { data: resumenEjecData, error: resumenEjecErr } = await supabase
@@ -594,7 +647,10 @@ export function PlanificacionMesaDiariaTab() {
       const out: MesaTrabajo[] = [];
       for (const r of rows) {
         const ot = String(r.ot_numero ?? "").trim();
-        const fallback = fallbackByOt.get(ot);
+        const maquinaRowId = String(r.maquina_id ?? "").trim();
+        const horasLiveKey = ot && maquinaRowId ? `${ot}::${maquinaRowId}` : "";
+        const horasLive = Math.max(0, horasLiveKey ? horasByOtMaquina.get(horasLiveKey) ?? 0 : 0);
+        const numHojasLive = Math.max(0, Math.trunc(numHojasByOt.get(ot) ?? 0));
         const resumenPrevio = resumenHorasPreviasByOt.get(ot);
         const numHojasSnapshot = Math.trunc(parseNum(r.num_hojas_brutas_snapshot));
         const horasSnapshot = parseNum(r.horas_planificadas_snapshot);
@@ -609,8 +665,6 @@ export function PlanificacionMesaDiariaTab() {
             : 0;
         const minutosPausadaActual = Math.max(0, (ejec?.minutosAcum ?? 0) + deltaMin);
         const isLockedState = estadoMesa === "en_ejecucion" || estadoMesa === "finalizada";
-        const numHojasLive = Math.max(0, Math.trunc(fallback?.numHojas ?? 0));
-        const horasLive = Math.max(0, fallback?.horas ?? 0);
         const numHojasMerged = isLockedState
           ? numHojasSnapshot > 0
             ? numHojasSnapshot
@@ -957,7 +1011,7 @@ export function PlanificacionMesaDiariaTab() {
 
       const [poolList, mesaList, capList] = await Promise.all([
         loadPool(roleRead, maquinaIds),
-        loadMesa(dayKey, maquinaIds),
+        loadMesa(dayKey, maquinaIds, roleRead),
         loadCapacidades(dayKey, maquinaIds),
       ]);
       setPool(poolList);
@@ -1446,14 +1500,16 @@ export function PlanificacionMesaDiariaTab() {
   // ---- Acciones por tarjeta (lanzar / iniciar / pausar / etc.) =============
 
   const launchExecution = useCallback(
-    async (trabajo: MesaTrabajo) => {
+    async (trabajo: MesaTrabajo, options?: { startImmediately?: boolean }) => {
       const maquinaId = trabajo.maquinaId?.trim() || null;
       if (!maquinaId) {
         toast.error("La OT no tiene máquina asignada.");
         return;
       }
       if (trabajo.estadoMesa !== "confirmado") {
-        toast.error("Solo se pueden liberar OTs confirmadas. Pulsa primero «Confirmar día».");
+        toast.error(
+          "Solo se pueden liberar OTs confirmadas. Pulsa primero «Confirmar planificación» o «Confirmar día» en la máquina.",
+        );
         return;
       }
       setActionLoadingId(trabajo.id);
@@ -1485,28 +1541,47 @@ export function PlanificacionMesaDiariaTab() {
             if (first?.id) otPasoId = first.id;
           }
         }
-        const { error: insErr } = await supabase.from(TABLE_EJECUCIONES).insert({
-          mesa_trabajo_id: trabajo.id,
-          ot_numero: trabajo.ot,
-          maquina_id: maquinaId,
-          fecha_planificada: trabajo.fechaPlanificada,
-          turno: trabajo.turno,
-          slot_orden: trabajo.slotOrden,
-          liberada_at: nowIso,
-          inicio_real_at: null,
-          estado_ejecucion: "pendiente_inicio",
-          horas_planificadas_snapshot: trabajo.horasPlanificadasSnapshot,
-          ot_paso_id: otPasoId,
-          created_by: userId,
-          created_by_email: userEmail,
-        });
+        const { data: insRow, error: insErr } = await supabase
+          .from(TABLE_EJECUCIONES)
+          .insert({
+            mesa_trabajo_id: trabajo.id,
+            ot_numero: trabajo.ot,
+            maquina_id: maquinaId,
+            fecha_planificada: trabajo.fechaPlanificada,
+            turno: trabajo.turno,
+            slot_orden: trabajo.slotOrden,
+            liberada_at: nowIso,
+            inicio_real_at: null,
+            estado_ejecucion: "pendiente_inicio",
+            horas_planificadas_snapshot: trabajo.horasPlanificadasSnapshot,
+            ot_paso_id: otPasoId,
+            created_by: userId,
+            created_by_email: userEmail,
+          })
+          .select("id")
+          .single();
         if (insErr) throw insErr;
+        const insertedId = String((insRow as { id?: unknown })?.id ?? "").trim();
         const { error: updErr } = await supabase
           .from(TABLE_MESA)
           .update({ estado_mesa: "en_ejecucion" })
           .eq("id", trabajo.id);
         if (updErr) throw updErr;
-        toast.success(`OT ${trabajo.ot} liberada a máquina.`);
+        if (options?.startImmediately) {
+          if (!insertedId) throw new Error("No se obtuvo el id de la ejecución creada.");
+          const { error: startErr } = await supabase
+            .from(TABLE_EJECUCIONES)
+            .update({
+              estado_ejecucion: "en_curso",
+              inicio_real_at: nowIso,
+              updated_at: nowIso,
+            })
+            .eq("id", insertedId);
+          if (startErr) throw startErr;
+          toast.success(`OT ${trabajo.ot} liberada e iniciada en máquina.`);
+        } else {
+          toast.success(`OT ${trabajo.ot} liberada a máquina.`);
+        }
         await reload();
       } catch (e) {
         toast.error(getErrorMessage(e, "No se pudo liberar la OT."));
@@ -1534,6 +1609,10 @@ export function PlanificacionMesaDiariaTab() {
     ) => {
       if (action === "lanzar") {
         await launchExecution(trabajo);
+        return;
+      }
+      if (action === "iniciar" && !trabajo.ejecucionIdActual?.trim()) {
+        await launchExecution(trabajo, { startImmediately: true });
         return;
       }
       const ejecucionId = trabajo.ejecucionIdActual?.trim() || null;
@@ -1641,6 +1720,35 @@ export function PlanificacionMesaDiariaTab() {
     },
     [supabase, dayKey, reload],
   );
+
+  /** Confirma borradores del día en todas las máquinas del ámbito (misma operación que semanal, varias columnas). */
+  const confirmPlanificacionDiaria = useCallback(async () => {
+    if (maquinas.length === 0) {
+      toast.error("No hay máquinas para confirmar la planificación.");
+      return;
+    }
+    if (mesaItems.length === 0) {
+      toast.error("No hay trabajos en el día actual para confirmar.");
+      return;
+    }
+    const ids = maquinas.map((m) => m.id);
+    setSavingChanges(true);
+    try {
+      const { error: updErr } = await supabase
+        .from(TABLE_MESA)
+        .update({ estado_mesa: "confirmado" })
+        .eq("fecha_planificada", dayKey)
+        .in("maquina_id", ids)
+        .eq("estado_mesa", "borrador");
+      if (updErr) throw updErr;
+      toast.success("Planificación confirmada.");
+      await reload();
+    } catch (e) {
+      toast.error(getErrorMessage(e, "No se pudo confirmar la planificación."));
+    } finally {
+      setSavingChanges(false);
+    }
+  }, [supabase, dayKey, maquinas, mesaItems.length, reload]);
 
   // ---- Capacidad: abrir y guardar ==========================================
 
@@ -1857,6 +1965,9 @@ export function PlanificacionMesaDiariaTab() {
   const noMaquinas = !loading && maquinas.length === 0;
   const todasOcultas = !loading && maquinas.length > 0 && visibleMaquinas.length === 0;
 
+  const confirmPlanificacionDisabled =
+    loading || savingChanges || maquinas.length === 0 || mesaItems.length === 0;
+
   return (
     <Card className="border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
       <CardHeader className="gap-2 space-y-0 pb-3">
@@ -1870,7 +1981,22 @@ export function PlanificacionMesaDiariaTab() {
               máquinas y turnos · Atajos: ← / → · T (Hoy).
             </CardDescription>
           </div>
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 bg-[#002147] text-white hover:bg-[#001735]"
+              disabled={confirmPlanificacionDisabled}
+              onClick={() => void confirmPlanificacionDiaria()}
+              title="Confirmar todos los borradores del día en todas las máquinas del ámbito"
+            >
+              {savingChanges ? (
+                <Loader2 className="mr-1 size-4 animate-spin" aria-hidden />
+              ) : (
+                <Send className="mr-1 size-4" aria-hidden />
+              )}
+              Confirmar planificación
+            </Button>
             <Button
               type="button"
               variant="outline"

@@ -114,6 +114,28 @@ function fmtHoras(v: number | null | undefined): string {
   return n.toFixed(1).replace(/\.0$/, "");
 }
 
+/** Texto del botón (evita «Cancelar» ambiguo con cerrar el diálogo). */
+function mesaActionButtonLabel(
+  action: "lanzar" | "iniciar" | "pausar" | "reanudar" | "finalizar" | "cancelar",
+): string {
+  switch (action) {
+    case "lanzar":
+      return "Lanzar";
+    case "iniciar":
+      return "Iniciar";
+    case "pausar":
+      return "Pausar";
+    case "reanudar":
+      return "Reanudar";
+    case "finalizar":
+      return "Finalizar";
+    case "cancelar":
+      return "Anular ejecución…";
+    default:
+      return action;
+  }
+}
+
 function SortableMesaCard({
   trabajo,
   linkedToNext,
@@ -165,6 +187,7 @@ function SortableMesaCard({
 
   const [actionOpen, setActionOpen] = useState(false);
   const [showFinalizeForm, setShowFinalizeForm] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [horasEntrada, setHorasEntrada] = useState("");
   const [horasTiraje, setHorasTiraje] = useState("");
   const [horasTroquelado, setHorasTroquelado] = useState("");
@@ -180,13 +203,16 @@ function SortableMesaCard({
 
   const availableActions = useMemo(() => {
     if (trabajo.estadoMesa === "confirmado" && !trabajo.estadoEjecucionActual) {
-      return ["lanzar"] as const;
+      return ["lanzar", "iniciar"] as const;
     }
     if (isPendingStart) return ["iniciar", "cancelar"] as const;
     if (isInCourse) return ["pausar", "finalizar", "cancelar"] as const;
     if (isPaused) return ["reanudar", "finalizar", "cancelar"] as const;
     return [] as const;
   }, [isInCourse, isPaused, isPendingStart, trabajo.estadoEjecucionActual, trabajo.estadoMesa]);
+
+  const isPreLaunchChoice =
+    trabajo.estadoMesa === "confirmado" && !trabajo.estadoEjecucionActual;
 
   const isSavingThis = actionLoadingId === trabajo.id;
 
@@ -287,6 +313,8 @@ function SortableMesaCard({
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation();
+                  setShowFinalizeForm(false);
+                  setShowCancelConfirm(false);
                   setActionOpen(true);
                 }}
               >
@@ -303,15 +331,41 @@ function SortableMesaCard({
           </div>
         }
       />
-      <Dialog open={actionOpen} onOpenChange={setActionOpen}>
+      <Dialog
+        open={actionOpen}
+        onOpenChange={(open) => {
+          setActionOpen(open);
+          if (!open) {
+            setShowFinalizeForm(false);
+            setShowCancelConfirm(false);
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Acción OT {trabajo.ot}</DialogTitle>
-            <DialogDescription>
-              Selecciona el siguiente paso operativo.
+            <DialogDescription className="text-left text-sm leading-relaxed text-slate-600">
+              Elige un paso operativo para esta OT en la máquina.{" "}
+              <span className="mt-1.5 block">
+                {isPreLaunchChoice ? (
+                  <>
+                    <span className="font-medium text-slate-800">Lanzar</span> deja la OT liberada en
+                    espera de inicio. <span className="font-medium text-slate-800">Iniciar</span>{" "}
+                    libera y arranca el cronómetro al momento. El botón inferior permite{" "}
+                    <span className="font-medium text-slate-800">cerrar sin cambios</span>.
+                  </>
+                ) : (
+                  <>
+                    <span className="font-medium text-slate-800">Cerrar sin cambios</span> solo
+                    cierra este cuadro.{" "}
+                    <span className="font-medium text-red-800">Anular ejecución</span> modifica
+                    datos: cancela la ejecución y deja la OT como terminada en el tablero.
+                  </>
+                )}
+              </span>
             </DialogDescription>
           </DialogHeader>
-          {!showFinalizeForm ? (
+          {!showFinalizeForm && !showCancelConfirm ? (
             <div className="grid grid-cols-2 gap-2 px-6 pb-2">
               {availableActions.map((action) => (
                 <Button
@@ -320,7 +374,7 @@ function SortableMesaCard({
                   variant={action === "finalizar" || action === "cancelar" ? "outline" : "default"}
                   className={cn(
                     "justify-center",
-                    action === "cancelar" && "border-red-200 text-red-700 hover:bg-red-50",
+                    action === "cancelar" && "col-span-2 border-red-200 text-red-700 hover:bg-red-50",
                     action === "finalizar" && "border-[#002147]/30 text-[#002147]",
                     action !== "cancelar" && action !== "finalizar" && "bg-[#002147] text-white hover:bg-[#001735]",
                   )}
@@ -330,13 +384,34 @@ function SortableMesaCard({
                       setShowFinalizeForm(true);
                       return;
                     }
+                    if (action === "cancelar") {
+                      setShowCancelConfirm(true);
+                      return;
+                    }
                     onAction(trabajo, action);
                     setActionOpen(false);
                   }}
                 >
-                  {action[0]!.toUpperCase() + action.slice(1)}
+                  {mesaActionButtonLabel(action)}
                 </Button>
               ))}
+            </div>
+          ) : showCancelConfirm ? (
+            <div className="space-y-3 px-6 pb-2">
+              <div className="rounded-md border border-red-200 bg-red-50/80 p-3 text-xs leading-relaxed text-red-950">
+                <p className="font-semibold">Confirmar anulación en máquina</p>
+                <p className="mt-1.5">
+                  Se marcará la <strong>ejecución como cancelada</strong> y la posición en mesa
+                  como <strong>finalizada</strong> (verás la OT como terminada). No equivale a
+                  cerrar el menú sin hacer nada.
+                </p>
+                {isPendingStart ? (
+                  <p className="mt-1.5 text-red-900/90">
+                    La OT está liberada pero aún sin tiempo de inicio: al anular se cierra esa
+                    liberación en esta máquina.
+                  </p>
+                ) : null}
+              </div>
             </div>
           ) : (
             <div className="space-y-3 px-6 pb-2">
@@ -412,9 +487,38 @@ function SortableMesaCard({
                   Finalizar OT
                 </Button>
               </>
+            ) : showCancelConfirm ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isSavingThis}
+                  onClick={() => setShowCancelConfirm(false)}
+                >
+                  Volver
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-red-300 bg-red-600 text-white hover:bg-red-700"
+                  disabled={isSavingThis}
+                  onClick={() => {
+                    onAction(trabajo, "cancelar");
+                    setActionOpen(false);
+                    setShowCancelConfirm(false);
+                  }}
+                >
+                  Sí, anular ejecución
+                </Button>
+              </>
             ) : (
-              <Button type="button" variant="outline" onClick={() => setActionOpen(false)}>
-                Cerrar
+              <Button
+                type="button"
+                variant="outline"
+                className="sm:ml-auto"
+                onClick={() => setActionOpen(false)}
+              >
+                Cerrar sin cambios
               </Button>
             )}
           </DialogFooter>
