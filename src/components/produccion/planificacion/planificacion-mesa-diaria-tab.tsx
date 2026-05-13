@@ -1078,6 +1078,19 @@ export function PlanificacionMesaDiariaTab() {
     () => visibleMaquinas.map((m) => m.id),
     [visibleMaquinas],
   );
+  /**
+   * Cuántas máquinas visibles hay por `tipo_maquina`. Si una máquina es la
+   * única de su tipo en el día (caso típico: 1 sola offset), la columna se
+   * ensancha y los turnos se muestran lado a lado para aprovechar el
+   * espacio horizontal.
+   */
+  const visibleCountByTipo = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const m of visibleMaquinas) {
+      map.set(m.tipo_maquina, (map.get(m.tipo_maquina) ?? 0) + 1);
+    }
+    return map;
+  }, [visibleMaquinas]);
   const maquinaById = useMemo(() => {
     const m = new Map<string, MaquinaOption>();
     for (const x of maquinas) m.set(x.id, x);
@@ -2221,6 +2234,8 @@ export function PlanificacionMesaDiariaTab() {
                     {visibleMaquinas.map((m) => {
                       const itemsManana = bySlot[dailySlotKey(m.id, "manana")] ?? [];
                       const itemsTarde = bySlot[dailySlotKey(m.id, "tarde")] ?? [];
+                      const isOnlyOfTipo =
+                        (visibleCountByTipo.get(m.tipo_maquina) ?? 0) === 1;
                       return (
                         <MaquinaColumn
                           key={m.id}
@@ -2244,6 +2259,7 @@ export function PlanificacionMesaDiariaTab() {
                             });
                           }}
                           onExportPdf={() => openExportDialogFor(m.id)}
+                          wide={isOnlyOfTipo}
                         />
                       );
                     })}

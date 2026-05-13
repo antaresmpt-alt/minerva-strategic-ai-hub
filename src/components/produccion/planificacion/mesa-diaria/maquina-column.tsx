@@ -75,6 +75,13 @@ interface MaquinaColumnProps {
   onHideColumn?: () => void;
   /** Exportar la hoja operativa PDF de esta máquina para el día actual. */
   onExportPdf?: () => void;
+  /**
+   * Si la máquina es la única visible de su tipo en el día, la columna se
+   * ensancha y los turnos se colocan lado a lado (mañana | tarde) para
+   * aprovechar mejor el espacio horizontal. En modo compacto (varias
+   * máquinas del mismo tipo) se apilan verticalmente como hasta ahora.
+   */
+  wide?: boolean;
 }
 
 /**
@@ -185,6 +192,7 @@ export function MaquinaColumn({
   confirmingColumn,
   onHideColumn,
   onExportPdf,
+  wide = false,
 }: MaquinaColumnProps) {
   const allItems = useMemo(
     () => [...itemsManana, ...itemsTarde],
@@ -213,7 +221,10 @@ export function MaquinaColumn({
   return (
     <div
       className={cn(
-        "flex min-w-[16rem] max-w-[20rem] flex-1 flex-col gap-2 rounded-lg border border-slate-200/90 bg-white p-2 shadow-sm",
+        "flex flex-1 flex-col gap-2 rounded-lg border border-slate-200/90 bg-white p-2 shadow-sm",
+        wide
+          ? "min-w-[34rem] max-w-[44rem]"
+          : "min-w-[16rem] max-w-[20rem]",
         "snap-start",
       )}
     >
@@ -325,7 +336,14 @@ export function MaquinaColumn({
         ) : null}
       </header>
 
-      <div className="flex flex-1 flex-col gap-2">
+      <div
+        className={cn(
+          "flex flex-1 gap-2",
+          wide
+            ? "flex-col sm:grid sm:grid-cols-2 sm:items-stretch"
+            : "flex-col",
+        )}
+      >
         <TurnoColumn
           day={dayKey}
           turno="manana"
