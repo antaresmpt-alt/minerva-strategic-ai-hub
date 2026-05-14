@@ -1,9 +1,10 @@
 "use client";
 
-import { Factory, Loader2, Plus, Route, Save, Trash2 } from "lucide-react";
+import { Factory, Loader2, Plus, Route, Save, Tag, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { RecursosEtiquetasDigitalPanel } from "@/components/settings/recursos-etiquetas-digital-panel";
 import { RecursosPlantillasRutasPanel } from "@/components/settings/recursos-plantillas-rutas-panel";
 import { Button } from "@/components/ui/button";
 import {
@@ -405,6 +406,10 @@ export function RecursosProduccionTab() {
             </TabsTrigger>
             <TabsTrigger value="catalogos" className={SUBTAB_TRIGGER_CLASS}>
               Catálogos de despacho
+            </TabsTrigger>
+            <TabsTrigger value="etiquetas-digital" className={SUBTAB_TRIGGER_CLASS}>
+              <Tag className="size-4 shrink-0 opacity-90" aria-hidden />
+              Etiquetas digital
             </TabsTrigger>
           </TabsList>
 
@@ -1027,6 +1032,9 @@ export function RecursosProduccionTab() {
                 </div>
               )}
             </section>
+          </TabsContent>
+          <TabsContent value="etiquetas-digital" className="mt-0 space-y-4 outline-none">
+            <RecursosEtiquetasDigitalPanel />
           </TabsContent>
         </Tabs>
       </CardContent>

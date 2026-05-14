@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import type { ComprasMaterialTableRow } from "@/types/prod-compra-material";
+import type { ProdEtiquetasCompraRow } from "@/types/prod-etiquetas-compras";
 
 export const TABLE_PROD_CONFIGURACION = "prod_configuracion";
 
@@ -14,6 +15,15 @@ export const TEMPLATE_COMPRAS_SUBJECT = "template_compras_subject";
 export const TEMPLATE_COMPRAS_HEADER = "template_compras_header";
 export const TEMPLATE_COMPRAS_DETAIL = "template_compras_detail";
 export const TEMPLATE_COMPRAS_FOOTER = "template_compras_footer";
+
+export const TEMPLATE_ETIQUETAS_COMPRAS_SUBJECT =
+  "template_etiquetas_compras_subject";
+export const TEMPLATE_ETIQUETAS_COMPRAS_HEADER =
+  "template_etiquetas_compras_header";
+export const TEMPLATE_ETIQUETAS_COMPRAS_DETAIL =
+  "template_etiquetas_compras_detail";
+export const TEMPLATE_ETIQUETAS_COMPRAS_FOOTER =
+  "template_etiquetas_compras_footer";
 export const TEMPLATE_OPTIMUS_IMPORT_PROMPT =
   "produccion_externos_optimus_import_prompt";
 export const TEMPLATE_OPTIMUS_REGEX_RULES = "optimus_regex_rules";
@@ -34,9 +44,17 @@ const COMPRAS_KEYS = [
   TEMPLATE_COMPRAS_FOOTER,
 ] as const;
 
+const ETIQUETAS_COMPRAS_KEYS = [
+  TEMPLATE_ETIQUETAS_COMPRAS_SUBJECT,
+  TEMPLATE_ETIQUETAS_COMPRAS_HEADER,
+  TEMPLATE_ETIQUETAS_COMPRAS_DETAIL,
+  TEMPLATE_ETIQUETAS_COMPRAS_FOOTER,
+] as const;
+
 export const ALL_EMAIL_TEMPLATE_KEYS = [
   ...EXTERNO_KEYS,
   ...COMPRAS_KEYS,
+  ...ETIQUETAS_COMPRAS_KEYS,
 ] as const;
 
 export const DEFAULT_OPTIMUS_IMPORT_PROMPT = `Eres el extractor oficial de albaranes Optimus para Minerva Packaging & Print.
@@ -132,6 +150,13 @@ export const DEFAULT_EMAIL_PLANTILLA_COMPRAS: EmailPlantillaBloques = {
     "Quedamos a la espera de su confirmación para proceder con el pedido.\n\nSaludos cordiales,",
 };
 
+export const DEFAULT_EMAIL_PLANTILLA_ETIQUETAS_COMPRAS: EmailPlantillaBloques = {
+  subject: "Petición compras — Etiquetas digital ({n_lineas} líneas)",
+  header: "Buenos días,\n\nSolicitamos lo siguiente:",
+  detail: "{producto} · Ud.: {unidad} · {equipo} · {marca} · {prioridad}",
+  footer: "Gracias.\n\nSaludos,",
+};
+
 function nonEmpty(s: string | null | undefined): boolean {
   return String(s ?? "").trim().length > 0;
 }
@@ -175,9 +200,36 @@ export function mergePlantillaCompras(
   };
 }
 
+export function mergePlantillaEtiquetasCompras(
+  map: Map<string, string>
+): EmailPlantillaBloques {
+  return {
+    subject: mergeBloque(
+      map.get(TEMPLATE_ETIQUETAS_COMPRAS_SUBJECT),
+      DEFAULT_EMAIL_PLANTILLA_ETIQUETAS_COMPRAS.subject
+    ),
+    header: mergeBloque(
+      map.get(TEMPLATE_ETIQUETAS_COMPRAS_HEADER),
+      DEFAULT_EMAIL_PLANTILLA_ETIQUETAS_COMPRAS.header
+    ),
+    detail: mergeBloque(
+      map.get(TEMPLATE_ETIQUETAS_COMPRAS_DETAIL),
+      DEFAULT_EMAIL_PLANTILLA_ETIQUETAS_COMPRAS.detail
+    ),
+    footer: mergeBloque(
+      map.get(TEMPLATE_ETIQUETAS_COMPRAS_FOOTER),
+      DEFAULT_EMAIL_PLANTILLA_ETIQUETAS_COMPRAS.footer
+    ),
+  };
+}
+
 export async function fetchEmailPlantillasProduccion(
   supabase: SupabaseClient
-): Promise<{ externos: EmailPlantillaBloques; compras: EmailPlantillaBloques }> {
+): Promise<{
+  externos: EmailPlantillaBloques;
+  compras: EmailPlantillaBloques;
+  etiquetasCompras: EmailPlantillaBloques;
+}> {
   const map = new Map<string, string>();
   try {
     const { data, error } = await supabase
@@ -195,6 +247,71 @@ export async function fetchEmailPlantillasProduccion(
   return {
     externos: mergePlantillaExternos(map),
     compras: mergePlantillaCompras(map),
+    etiquetasCompras: mergePlantillaEtiquetasCompras(map),
+  };
+}
+
+function prioridadEtiquetasCompraLabel(
+  p: ProdEtiquetasCompraRow["prioridad"]
+): string {
+  if (p === "ALTA") return "Alta";
+  if (p === "BAJA") return "Baja";
+  return "Media";
+}
+
+function varsEtiquetasCompraFila(row: ProdEtiquetasCompraRow): Record<string, string> {
+  return {
+    producto: (row.producto ?? "").trim() || "—",
+    unidad:
+      row.unidad != null && Number.isFinite(row.unidad)
+        ? String(Math.trunc(row.unidad))
+        : "—",
+    equipo: (row.equipo ?? "").trim() || "—",
+    marca: (row.marca ?? "").trim() || "—",
+    prioridad: prioridadEtiquetasCompraLabel(row.prioridad),
+  };
+}
+
+function varsEtiquetasComprasAgregadas(
+  rows: ProdEtiquetasCompraRow[]
+): Record<string, string> {
+  return {
+    n_lineas: String(rows.length),
+  };
+}
+
+/** Cuerpo del correo de petición (Etiquetas digital → Compras). Solo variables por línea acordadas. */
+export function buildEtiquetasComprasSolicitudEmail(
+  rowsSorted: ProdEtiquetasCompraRow[],
+  plantilla: EmailPlantillaBloques
+): { subject: string; body: string } {
+  const agg = varsEtiquetasComprasAgregadas(rowsSorted);
+  const subject =
+    sustituirVariablesPlantilla(plantilla.subject, agg).trim() ||
+    DEFAULT_EMAIL_PLANTILLA_ETIQUETAS_COMPRAS.subject;
+  const header = sustituirVariablesPlantilla(plantilla.header, agg).trim();
+  const lineas = rowsSorted.map((row) => {
+    const v = { ...agg, ...varsEtiquetasCompraFila(row) };
+    return sustituirVariablesPlantilla(plantilla.detail, v).trim();
+  });
+  const footer = sustituirVariablesPlantilla(plantilla.footer, agg).trim();
+  const bodyBlocks = [
+    header ||
+      sustituirVariablesPlantilla(
+        DEFAULT_EMAIL_PLANTILLA_ETIQUETAS_COMPRAS.header,
+        agg
+      ),
+    lineas.filter(Boolean).join("\n\n"),
+    footer ||
+      sustituirVariablesPlantilla(
+        DEFAULT_EMAIL_PLANTILLA_ETIQUETAS_COMPRAS.footer,
+        agg
+      ),
+  ];
+  const body = bodyBlocks.join("\n\n").trim();
+  return {
+    subject,
+    body: body || "—",
   };
 }
 

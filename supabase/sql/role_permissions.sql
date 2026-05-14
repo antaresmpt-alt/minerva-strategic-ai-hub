@@ -81,7 +81,20 @@ insert into public.role_permissions (role, module_name, is_enabled) values
   ('impresion', 'sales', false), ('impresion', 'sem', false), ('impresion', 'seo', false), ('impresion', 'muelle', false), ('impresion', 'produccion', false), ('impresion', 'produccion_ejecucion', true), ('impresion', 'chat', false), ('impresion', 'settings', false),
   ('digital', 'sales', false), ('digital', 'sem', false), ('digital', 'seo', false), ('digital', 'muelle', false), ('digital', 'produccion', true), ('digital', 'produccion_ejecucion', true), ('digital', 'chat', true), ('digital', 'settings', false),
   ('troquelado', 'sales', false), ('troquelado', 'sem', false), ('troquelado', 'seo', false), ('troquelado', 'muelle', false), ('troquelado', 'produccion', true), ('troquelado', 'produccion_ejecucion', true), ('troquelado', 'chat', true), ('troquelado', 'settings', false),
-  ('engomado', 'sales', false), ('engomado', 'sem', false), ('engomado', 'seo', false), ('engomado', 'muelle', false), ('engomado', 'produccion', true), ('engomado', 'produccion_ejecucion', true), ('engomado', 'chat', true), ('engomado', 'settings', false)
+  ('engomado', 'sales', false), ('engomado', 'sem', false), ('engomado', 'seo', false), ('engomado', 'muelle', false), ('engomado', 'produccion', true), ('engomado', 'produccion_ejecucion', true), ('engomado', 'chat', true), ('engomado', 'settings', false),
+  ('admin', 'etiquetas_digital', true),
+  ('gerencia', 'etiquetas_digital', true),
+  ('comercial', 'etiquetas_digital', false),
+  ('produccion', 'etiquetas_digital', true),
+  ('logistica', 'etiquetas_digital', true),
+  ('ctp', 'etiquetas_digital', false),
+  ('administracion', 'etiquetas_digital', false),
+  ('oficina_tecnica', 'etiquetas_digital', false),
+  ('almacen', 'etiquetas_digital', false),
+  ('impresion', 'etiquetas_digital', false),
+  ('digital', 'etiquetas_digital', true),
+  ('troquelado', 'etiquetas_digital', false),
+  ('engomado', 'etiquetas_digital', false)
 on conflict (role, module_name) do update set
   is_enabled = excluded.is_enabled,
   updated_at = timezone('utc'::text, now());

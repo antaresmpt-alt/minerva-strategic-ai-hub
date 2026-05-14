@@ -7,6 +7,7 @@ export type HubModuleId =
   | "sales"
   | "sem"
   | "seo"
+  | "etiquetas_digital"
   | "muelle"
   | "produccion"
   | "produccion_ejecucion"
@@ -17,6 +18,7 @@ export const HUB_MODULE_IDS: HubModuleId[] = [
   "sales",
   "sem",
   "seo",
+  "etiquetas_digital",
   "muelle",
   "produccion",
   "produccion_ejecucion",
@@ -106,11 +108,25 @@ export function canAccessHubModule(
   }
 
   if (r === "produccion" || r === "logistica") {
-    return module === "chat" || module === "produccion";
+    return (
+      module === "chat" ||
+      module === "produccion" ||
+      module === "etiquetas_digital"
+    );
+  }
+
+  /** Impresión digital: departamento de etiquetas + resto del módulo Producción. */
+  if (r === "digital") {
+    return (
+      module === "chat" ||
+      module === "produccion" ||
+      module === "produccion_ejecucion" ||
+      module === "etiquetas_digital"
+    );
   }
 
   /** Responsables de sección: planificación + ejecución en el mismo módulo Producción. */
-  if (r === "digital" || r === "troquelado" || r === "engomado") {
+  if (r === "troquelado" || r === "engomado") {
     return (
       module === "chat" ||
       module === "produccion" ||
@@ -167,6 +183,8 @@ export function canAccessPagePath(
       return canAccessHubModule(role, "muelle", dynamic);
     if (p.startsWith("/produccion/ejecucion"))
       return canAccessHubModule(role, "produccion_ejecucion", dynamic);
+    if (p.startsWith("/produccion/etiquetas-digital"))
+      return canAccessHubModule(role, "etiquetas_digital", dynamic);
     if (p.startsWith("/produccion"))
       return canAccessHubModule(role, "produccion", dynamic);
     return false;
@@ -191,6 +209,8 @@ export function canAccessPagePath(
     return canAccessHubModule(role, "muelle");
   if (p.startsWith("/produccion/ejecucion"))
     return canAccessHubModule(role, "produccion_ejecucion");
+  if (p.startsWith("/produccion/etiquetas-digital"))
+    return canAccessHubModule(role, "etiquetas_digital");
   if (p.startsWith("/produccion"))
     return canAccessHubModule(role, "produccion");
 
@@ -248,6 +268,9 @@ export function canAccessApiRoute(
     if (pathname.startsWith("/api/muelle")) {
       return canAccessHubModule(role, "muelle", dynamic);
     }
+    if (pathname.startsWith("/api/etiquetas-digital")) {
+      return canAccessHubModule(role, "etiquetas_digital", dynamic);
+    }
     if (pathname.startsWith("/api/gemini")) {
       return canAccessHubModule(role, "sem", dynamic);
     }
@@ -303,6 +326,10 @@ export function canAccessApiRoute(
 
   if (pathname.startsWith("/api/muelle")) {
     return canAccessHubModule(role, "muelle");
+  }
+
+  if (pathname.startsWith("/api/etiquetas-digital")) {
+    return canAccessHubModule(role, "etiquetas_digital");
   }
 
   if (pathname.startsWith("/api/gemini")) {
@@ -366,6 +393,7 @@ export const MODULE_LABELS: Record<HubModuleId, string> = {
   sales: "Ventas",
   sem: "SEM",
   seo: "SEO",
+  etiquetas_digital: "Etiquetas digital",
   muelle: "Muelle",
   produccion: "Producción",
   produccion_ejecucion: "OTs en ejecución",

@@ -1,0 +1,529 @@
+"use client";
+
+import { Loader2 } from "lucide-react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { NativeSelect, type Option } from "@/components/ui/select-native";
+import { Textarea } from "@/components/ui/textarea";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import type { ProdEtiquetasHojaRutaRow } from "@/types/prod-etiquetas-hoja-ruta";
+
+const TABLE_HR = "prod_etiquetas_hoja_ruta";
+
+function isoToDateInput(v: string | null | undefined): string {
+  if (v == null || v === "") return "";
+  const s = String(v).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function parseOptionalInt(s: string): number | null {
+  const t = s.trim();
+  if (!t) return null;
+  const n = Number(t);
+  if (!Number.isFinite(n)) return null;
+  return Math.trunc(n);
+}
+
+function parseOptionalDecimal(s: string): number | null {
+  const t = s.trim().replace(",", ".");
+  if (!t) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+type EditForm = {
+  cliente: string;
+  trabajo: string;
+  papel: string;
+  cantidad: string;
+  fecha_entrega_ot: string;
+  fecha_entrada_depto: string;
+  urgencia: "normal" | "urgente";
+  observacion: string;
+  konica: boolean;
+  troqueladora: boolean;
+  numeradora: boolean;
+  troquel_utillaje: string;
+  fecha_inicio_produccion: string;
+  fecha_fin_produccion: string;
+  cajas: string;
+  bobinas: string;
+  etiquetas: string;
+  cajas_restantes: string;
+  finalizado: boolean;
+};
+
+function rowToForm(r: ProdEtiquetasHojaRutaRow): EditForm {
+  return {
+    cliente: String(r.cliente ?? "").trim(),
+    trabajo: String(r.trabajo ?? "").trim(),
+    papel: String(r.papel ?? "").trim(),
+    cantidad: r.cantidad == null ? "" : String(r.cantidad),
+    fecha_entrega_ot: isoToDateInput(r.fecha_entrega_ot),
+    fecha_entrada_depto: isoToDateInput(r.fecha_entrada_depto),
+    urgencia: r.urgencia === "urgente" ? "urgente" : "normal",
+    observacion: String(r.observacion ?? "").trim(),
+    konica: Boolean(r.konica),
+    troqueladora: Boolean(r.troqueladora),
+    numeradora: Boolean(r.numeradora),
+    troquel_utillaje: String(r.troquel_utillaje ?? "").trim(),
+    fecha_inicio_produccion: isoToDateInput(r.fecha_inicio_produccion),
+    fecha_fin_produccion: isoToDateInput(r.fecha_fin_produccion),
+    cajas: r.cajas == null ? "" : String(r.cajas),
+    bobinas: r.bobinas == null ? "" : String(r.bobinas),
+    etiquetas: r.etiquetas == null ? "" : String(r.etiquetas),
+    cajas_restantes: String(r.cajas_restantes ?? "").trim(),
+    finalizado: Boolean(r.finalizado),
+  };
+}
+
+const URGENCIA_OPTS: Option[] = [
+  { value: "normal", label: "Normal" },
+  { value: "urgente", label: "Urgente" },
+];
+
+type Props = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  row: ProdEtiquetasHojaRutaRow | null;
+  onSaved: () => void;
+};
+
+export function EtiquetasHojaRutaEditDialog({
+  open,
+  onOpenChange,
+  row,
+  onSaved,
+}: Props) {
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const formId = useId();
+  const [form, setForm] = useState<EditForm | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    if (open && row) {
+      setForm(rowToForm(row));
+    } else {
+      setForm(null);
+    }
+    if (!open) {
+      setSaving(false);
+      setDeleting(false);
+    }
+  }, [open, row?.id]);
+
+  const submit = useCallback(async () => {
+    if (!row || !form) return;
+    setSaving(true);
+    try {
+      const patch: Record<string, unknown> = {
+        cliente: form.cliente.trim() || null,
+        trabajo: form.trabajo.trim() || null,
+        papel: form.papel.trim() || null,
+        cantidad: parseOptionalDecimal(form.cantidad),
+        fecha_entrega_ot: form.fecha_entrega_ot.trim() || null,
+        fecha_entrada_depto: form.fecha_entrada_depto.trim() || null,
+        urgencia: form.urgencia,
+        observacion: form.observacion.trim() || null,
+        konica: form.konica,
+        troqueladora: form.troqueladora,
+        numeradora: form.numeradora,
+        troquel_utillaje: form.troquel_utillaje.trim() || null,
+        fecha_inicio_produccion: form.fecha_inicio_produccion.trim() || null,
+        fecha_fin_produccion: form.fecha_fin_produccion.trim() || null,
+        cajas: parseOptionalInt(form.cajas),
+        bobinas: parseOptionalInt(form.bobinas),
+        etiquetas: parseOptionalInt(form.etiquetas),
+        cajas_restantes: form.cajas_restantes.trim() || null,
+        finalizado: form.finalizado,
+      };
+
+      const { error } = await supabase
+        .from(TABLE_HR)
+        .update(patch)
+        .eq("id", row.id);
+      if (error) throw error;
+      toast.success("Cambios guardados.");
+      onSaved();
+      onOpenChange(false);
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "No se pudo guardar la fila."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }, [form, onOpenChange, onSaved, row, supabase]);
+
+  const remove = useCallback(async () => {
+    if (!row) return;
+    if (
+      !window.confirm(
+        "¿Eliminar este registro de la hoja de ruta? La acción no se puede deshacer."
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    try {
+      const { error } = await supabase
+        .from(TABLE_HR)
+        .delete()
+        .eq("id", row.id);
+      if (error) throw error;
+      toast.success("Registro eliminado.");
+      onSaved();
+      onOpenChange(false);
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "No se pudo eliminar el registro."
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }, [onOpenChange, onSaved, row, supabase]);
+
+  if (!open) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="flex max-h-[min(94vh,900px)] max-w-[min(96vw,720px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
+        onKeyDown={(e) => {
+          if (
+            e.key === "Enter" &&
+            (e.ctrlKey || e.metaKey) &&
+            !saving &&
+            !deleting &&
+            form
+          ) {
+            e.preventDefault();
+            void submit();
+          }
+        }}
+      >
+        {!row || !form ? (
+          <div className="flex items-center justify-center gap-2 p-10 text-sm text-slate-600">
+            <Loader2 className="size-5 animate-spin" aria-hidden />
+            Cargando…
+          </div>
+        ) : (
+          <>
+        <DialogHeader className="shrink-0 border-b border-slate-100 px-4 py-3 sm:px-5">
+          <DialogTitle className="text-base text-[#002147]">
+            Editar hoja de ruta · OT{" "}
+            <span className="font-mono">{row.ot_numero}</span>
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            Modifica los campos y guarda.{" "}
+            <kbd className="rounded bg-slate-100 px-1 font-mono text-[10px]">
+              Ctrl+Enter
+            </kbd>{" "}
+            para guardar.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid max-h-[min(78vh,720px)] gap-3 overflow-y-auto px-4 py-3 sm:grid-cols-2 sm:px-5">
+          <div className="grid gap-1 sm:col-span-2">
+            <Label className="text-xs text-slate-500">OT (solo lectura)</Label>
+            <Input
+              className="h-8 font-mono text-xs"
+              value={row.ot_numero}
+              readOnly
+              disabled
+            />
+          </div>
+
+          <div className="grid gap-1">
+            <Label className="text-xs">Cliente</Label>
+            <Input
+              className="h-8 text-xs"
+              value={form.cliente}
+              onChange={(e) =>
+                setForm((f) => (f ? { ...f, cliente: e.target.value } : f))
+              }
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-xs">Trabajo</Label>
+            <Input
+              className="h-8 text-xs"
+              value={form.trabajo}
+              onChange={(e) =>
+                setForm((f) => (f ? { ...f, trabajo: e.target.value } : f))
+              }
+            />
+          </div>
+          <div className="grid gap-1 sm:col-span-2">
+            <Label className="text-xs">Papel</Label>
+            <Input
+              className="h-8 text-xs"
+              value={form.papel}
+              onChange={(e) =>
+                setForm((f) => (f ? { ...f, papel: e.target.value } : f))
+              }
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-xs">Cantidad</Label>
+            <Input
+              className="h-8 text-xs"
+              inputMode="decimal"
+              value={form.cantidad}
+              onChange={(e) =>
+                setForm((f) => (f ? { ...f, cantidad: e.target.value } : f))
+              }
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-xs">Urgencia</Label>
+            <NativeSelect
+              value={form.urgencia}
+              onChange={(e) =>
+                setForm((f) =>
+                  f
+                    ? {
+                        ...f,
+                        urgencia: e.target.value as "normal" | "urgente",
+                      }
+                    : f
+                )
+              }
+              options={URGENCIA_OPTS}
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-xs">Fecha entrega OT</Label>
+            <Input
+              type="date"
+              className="h-8 text-xs"
+              value={form.fecha_entrega_ot}
+              onChange={(e) =>
+                setForm((f) =>
+                  f ? { ...f, fecha_entrega_ot: e.target.value } : f
+                )
+              }
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-xs">Fecha entrada depto.</Label>
+            <Input
+              type="date"
+              className="h-8 text-xs"
+              value={form.fecha_entrada_depto}
+              onChange={(e) =>
+                setForm((f) =>
+                  f ? { ...f, fecha_entrada_depto: e.target.value } : f
+                )
+              }
+            />
+          </div>
+
+          <div className="grid gap-1 sm:col-span-2">
+            <Label htmlFor={`${formId}-obs`} className="text-xs">
+              Observación
+            </Label>
+            <Textarea
+              id={`${formId}-obs`}
+              className="min-h-[4rem] text-xs"
+              value={form.observacion}
+              onChange={(e) =>
+                setForm((f) => (f ? { ...f, observacion: e.target.value } : f))
+              }
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-4 sm:col-span-2">
+            {(
+              [
+                ["konica", "Konica (imprimir)"],
+                ["troqueladora", "Troqueladora"],
+                ["numeradora", "Numeradora"],
+              ] as const
+            ).map(([key, label]) => (
+              <label
+                key={key}
+                className="flex cursor-pointer items-center gap-2 text-xs"
+              >
+                <input
+                  type="checkbox"
+                  className="size-4 rounded border-slate-300"
+                  checked={form[key]}
+                  onChange={(e) =>
+                    setForm((f) =>
+                      f ? { ...f, [key]: e.target.checked } : f
+                    )
+                  }
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+
+          <div className="grid gap-1">
+            <Label className="text-xs">Troquel (utillaje)</Label>
+            <Input
+              className="h-8 text-xs"
+              value={form.troquel_utillaje}
+              onChange={(e) =>
+                setForm((f) =>
+                  f ? { ...f, troquel_utillaje: e.target.value } : f
+                )
+              }
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-xs">Finalizado</Label>
+            <label className="flex cursor-pointer items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                className="size-4 rounded border-slate-300"
+                checked={form.finalizado}
+                onChange={(e) =>
+                  setForm((f) =>
+                    f ? { ...f, finalizado: e.target.checked } : f
+                  )
+                }
+              />
+              Marcar fila como cerrada
+            </label>
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-xs">F. inicio producción</Label>
+            <Input
+              type="date"
+              className="h-8 text-xs"
+              value={form.fecha_inicio_produccion}
+              onChange={(e) =>
+                setForm((f) =>
+                  f ? { ...f, fecha_inicio_produccion: e.target.value } : f
+                )
+              }
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-xs">F. fin producción</Label>
+            <Input
+              type="date"
+              className="h-8 text-xs"
+              value={form.fecha_fin_produccion}
+              onChange={(e) =>
+                setForm((f) =>
+                  f ? { ...f, fecha_fin_produccion: e.target.value } : f
+                )
+              }
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-xs">Cajas</Label>
+            <Input
+              className="h-8 text-xs"
+              inputMode="numeric"
+              value={form.cajas}
+              onChange={(e) =>
+                setForm((f) => (f ? { ...f, cajas: e.target.value } : f))
+              }
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-xs">Bobinas</Label>
+            <Input
+              className="h-8 text-xs"
+              inputMode="numeric"
+              value={form.bobinas}
+              onChange={(e) =>
+                setForm((f) => (f ? { ...f, bobinas: e.target.value } : f))
+              }
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-xs">Etiquetas</Label>
+            <Input
+              className="h-8 text-xs"
+              inputMode="numeric"
+              value={form.etiquetas}
+              onChange={(e) =>
+                setForm((f) => (f ? { ...f, etiquetas: e.target.value } : f))
+              }
+            />
+          </div>
+          <div className="grid gap-1 sm:col-span-2">
+            <Label className="text-xs">Cajas restantes / notas</Label>
+            <Input
+              className="h-8 text-xs"
+              value={form.cajas_restantes}
+              onChange={(e) =>
+                setForm((f) =>
+                  f ? { ...f, cajas_restantes: e.target.value } : f
+                )
+              }
+            />
+          </div>
+        </div>
+
+        <DialogFooter className="shrink-0 flex-col gap-2 border-t border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+          <Button
+            type="button"
+            variant="destructive"
+            className="order-2 w-full sm:order-1 sm:w-auto"
+            disabled={saving || deleting || !row}
+            onClick={() => void remove()}
+          >
+            {deleting ? (
+              <>
+                <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
+                Eliminando…
+              </>
+            ) : (
+              "Eliminar registro"
+            )}
+          </Button>
+          <div className="order-1 flex w-full flex-col gap-2 sm:order-2 sm:w-auto sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full sm:w-auto"
+              onClick={() => onOpenChange(false)}
+              disabled={saving || deleting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              className="w-full bg-[#002147] sm:w-auto"
+              disabled={saving || deleting || !form}
+              onClick={() => void submit()}
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
+                  Guardando…
+                </>
+              ) : (
+                "Guardar"
+              )}
+            </Button>
+          </div>
+        </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}

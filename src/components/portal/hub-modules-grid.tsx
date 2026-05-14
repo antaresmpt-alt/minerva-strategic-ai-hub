@@ -9,6 +9,7 @@ import {
 } from "@/lib/permissions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ModuleCard } from "@/components/portal/module-card";
+import { cn } from "@/lib/utils";
 
 const MODULE_IMG = {
   sales: {
@@ -35,6 +36,10 @@ const MODULE_IMG = {
     src: "/images/module-chatbot.png",
     alt: "Minerva AI Assistant — icono del módulo",
   },
+  etiquetas_digital: {
+    src: "/images/ETIQUETAS-DIGITAL.png",
+    alt: "Etiquetas digital — icono del módulo",
+  },
   muelle: {
     src: "/images/module_muelle.png",
     alt: "Muelle — icono del módulo",
@@ -46,7 +51,16 @@ const MODULE_IMG = {
  * recurso que `/images/...` (sin `/_next/image`), evitando cachés u optimizaciones que
  * mostraban versiones antiguas mientras la URL directa ya estaba actualizada.
  */
-function ModuleMark({ src, alt }: { src: string; alt: string }) {
+function ModuleMark({
+  src,
+  alt,
+  /** Ilustraciones muy densas: mismo marco que el resto pero con aire y escala menor. */
+  inset = false,
+}: {
+  src: string;
+  alt: string;
+  inset?: boolean;
+}) {
   return (
     // eslint-disable-next-line @next/next/no-img-element -- assets estáticos en `public`; debe coincidir con GET directo
     <img
@@ -56,7 +70,12 @@ function ModuleMark({ src, alt }: { src: string; alt: string }) {
       height={220}
       decoding="async"
       loading="eager"
-      className="h-auto max-h-[8.75rem] w-full object-contain object-center"
+      className={cn(
+        "h-auto w-full object-contain object-center",
+        inset
+          ? "max-h-[6.75rem] scale-[0.92] px-3 py-1 sm:max-h-[7rem]"
+          : "max-h-[8.75rem]"
+      )}
     />
   );
 }
@@ -90,6 +109,7 @@ export function HubModulesGrid({
     !allow("sales") &&
     !allow("sem") &&
     !allow("seo") &&
+    !allow("etiquetas_digital") &&
     !allow("muelle") &&
     !allow("chat") &&
     !allow("settings");
@@ -212,6 +232,22 @@ export function HubModulesGrid({
               onAccessDenied={onDenied}
             />
             <ModuleCard
+              title="Etiquetas digital"
+              description="Pool de entrada desde planificación, hoja de ruta del departamento y calendario mensual de trabajo."
+              iconFrame="module"
+              icon={
+                <ModuleMark
+                  src={MODULE_IMG.etiquetas_digital.src}
+                  alt={MODULE_IMG.etiquetas_digital.alt}
+                  inset
+                />
+              }
+              actionLabel="Acceder a Etiquetas digital"
+              href="/produccion/etiquetas-digital"
+              accessAllowed={allow("etiquetas_digital")}
+              onAccessDenied={onDenied}
+            />
+            <ModuleCard
               title="Muelle"
               description="Muelle: Recepción de Material (Próximamente)"
               iconFrame="module"
@@ -219,6 +255,7 @@ export function HubModulesGrid({
                 <ModuleMark
                   src={MODULE_IMG.muelle.src}
                   alt={MODULE_IMG.muelle.alt}
+                  inset
                 />
               }
               actionLabel="Acceder a Muelle"

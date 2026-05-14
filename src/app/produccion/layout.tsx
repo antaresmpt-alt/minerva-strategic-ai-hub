@@ -34,11 +34,17 @@ export default async function ProduccionLayout({
     "produccion_ejecucion",
     dynamic
   );
+  const hasEtiquetasDigitalModule = canAccessHubModule(
+    role,
+    "etiquetas_digital",
+    dynamic
+  );
 
   return (
     <ProduccionShell
       hasProduccionModule={hasProduccionModule}
       hasProduccionEjecucionModule={hasProduccionEjecucionModule}
+      hasEtiquetasDigitalModule={hasEtiquetasDigitalModule}
     >
       {children}
     </ProduccionShell>
