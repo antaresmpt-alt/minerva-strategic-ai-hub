@@ -4,6 +4,7 @@ import { Loader2, Pencil, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { EntregaPlazoSemaforo } from "@/components/produccion/etiquetas-digital/entrega-plazo-semaforo";
 import { EtiquetasEntradaExpressDialog } from "@/components/produccion/etiquetas-digital/etiquetas-entrada-express-dialog";
 import { EtiquetasHojaRutaEditDialog } from "@/components/produccion/etiquetas-digital/etiquetas-hoja-ruta-edit-dialog";
 
@@ -24,11 +25,23 @@ import {
   exportEtiquetasHojaRutaExcel,
   exportEtiquetasHojaRutaPdf,
 } from "@/lib/etiquetas-hoja-ruta-export";
+import {
+  catalogLabels,
+  ETIQUETAS_CATALOG_PAPEL,
+  mergeCatalogAndUsedLabels,
+} from "@/lib/etiquetas-catalogo";
+import {
+  buildMaquinaPatch,
+  type MaquinaHojaRutaField,
+  mergeMaquinaIntoRow,
+} from "@/lib/etiquetas-hoja-ruta-maquina";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import type { ProdEtiquetasCatalogRow } from "@/types/prod-etiquetas-catalogo";
 import type { ProdEtiquetasHojaRutaRow } from "@/types/prod-etiquetas-hoja-ruta";
 import { cn } from "@/lib/utils";
 
 const TABLE = "prod_etiquetas_hoja_ruta";
+const CATALOG_TABLE = "prod_etiquetas_catalogo";
 
 const ORDEN_OPTIONS: Option[] = [
   { value: "fecha_entrega_ot_asc", label: "Fecha entrega OT (asc)" },
@@ -50,13 +63,17 @@ function fmtDate(iso: string | null): string {
   });
 }
 
-function boolCell(v: boolean) {
-  return v ? "Sí" : "—";
-}
+const MAQUINA_COLS: { field: MaquinaHojaRutaField; label: string; title: string }[] =
+  [
+    { field: "konica", label: "Kon", title: "Konica (imprimir)" },
+    { field: "troqueladora", label: "Troq", title: "Troqueladora" },
+    { field: "numeradora", label: "Num", title: "Numeradora" },
+  ];
 
 export function EtiquetasHojaRutaTab() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [rows, setRows] = useState<ProdEtiquetasHojaRutaRow[]>([]);
+  const [catalog, setCatalog] = useState<ProdEtiquetasCatalogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtroTexto, setFiltroTexto] = useState("");
   const [filtroPapel, setFiltroPapel] = useState("");
@@ -67,22 +84,38 @@ export function EtiquetasHojaRutaTab() {
     null
   );
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [togglingMaquina, setTogglingMaquina] = useState<string | null>(null);
 
   const loadRows = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from(TABLE)
-      .select("*")
-      .order("updated_at", { ascending: false });
+    const [rRows, rCat] = await Promise.all([
+      supabase
+        .from(TABLE)
+        .select("*")
+        .order("updated_at", { ascending: false }),
+      supabase
+        .from(CATALOG_TABLE)
+        .select("id, categoria, grupo, label, activo, orden")
+        .order("categoria")
+        .order("grupo")
+        .order("orden")
+        .order("label"),
+    ]);
     setLoading(false);
-    if (error) {
+    if (rRows.error) {
       toast.error("No se pudo cargar la hoja de ruta", {
-        description: error.message,
+        description: rRows.error.message,
       });
       setRows([]);
-      return;
+    } else {
+      setRows((rRows.data ?? []) as ProdEtiquetasHojaRutaRow[]);
     }
-    setRows((data ?? []) as ProdEtiquetasHojaRutaRow[]);
+    if (rCat.error) {
+      console.warn("[etiquetas catalog hoja ruta]", rCat.error.message);
+      setCatalog([]);
+    } else {
+      setCatalog((rCat.data ?? []) as ProdEtiquetasCatalogRow[]);
+    }
   }, [supabase]);
 
   useEffect(() => {
@@ -90,13 +123,16 @@ export function EtiquetasHojaRutaTab() {
   }, [loadRows]);
 
   const papelesUnicos = useMemo(() => {
-    const s = new Set<string>();
+    const fromRows: string[] = [];
     for (const r of rows) {
       const p = (r.papel ?? "").trim();
-      if (p) s.add(p);
+      if (p) fromRows.push(p);
     }
-    return Array.from(s).sort((a, b) => a.localeCompare(b, "es"));
-  }, [rows]);
+    return mergeCatalogAndUsedLabels(
+      catalogLabels(catalog, ETIQUETAS_CATALOG_PAPEL),
+      fromRows
+    );
+  }, [catalog, rows]);
 
   const papelOptions: Option[] = useMemo(
     () => [
@@ -171,6 +207,29 @@ export function EtiquetasHojaRutaTab() {
     [filtroTexto, filtroPapel, ocultarFinalizadas, ordenLabel]
   );
 
+  const toggleMaquina = useCallback(
+    async (r: ProdEtiquetasHojaRutaRow, field: MaquinaHojaRutaField, next: boolean) => {
+      const toggleKey = `${r.id}:${field}`;
+      setTogglingMaquina(toggleKey);
+      const prev = { ...r };
+      const optimistic = mergeMaquinaIntoRow(r, field, next);
+      setRows((list) => list.map((x) => (x.id === r.id ? optimistic : x)));
+      const { error } = await supabase
+        .from(TABLE)
+        .update(buildMaquinaPatch(field, next))
+        .eq("id", r.id);
+      setTogglingMaquina(null);
+      if (error) {
+        setRows((list) => list.map((x) => (x.id === r.id ? prev : x)));
+        toast.error("No se pudo actualizar la máquina", {
+          description: error.message,
+        });
+        return;
+      }
+    },
+    [supabase]
+  );
+
   const toggleFinalizado = useCallback(
     async (r: ProdEtiquetasHojaRutaRow, next: boolean) => {
       setTogglingId(r.id);
@@ -222,6 +281,7 @@ export function EtiquetasHojaRutaTab() {
       <EtiquetasEntradaExpressDialog
         open={expressOpen}
         onOpenChange={setExpressOpen}
+        catalog={catalog}
         onSaved={() => void loadRows()}
       />
       <EtiquetasHojaRutaEditDialog
@@ -230,6 +290,7 @@ export function EtiquetasHojaRutaTab() {
           if (!o) setEditingRow(null);
         }}
         row={editingRow}
+        catalog={catalog}
         onSaved={() => void loadRows()}
       />
       <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -378,12 +439,21 @@ export function EtiquetasHojaRutaTab() {
                 <TableHead className="whitespace-nowrap font-semibold text-[#002147]">
                   F. entrada
                 </TableHead>
-                <TableHead className="whitespace-nowrap font-semibold text-[#002147]">
-                  Urg.
+                <TableHead
+                  className="w-10 whitespace-nowrap px-1 text-center font-semibold text-[#002147]"
+                  title="Plazo hasta entrega OT (rojo ≤4d, amarillo 5–14d, verde >2 sem)"
+                >
+                  Plazo
                 </TableHead>
-                <TableHead className="min-w-[6rem] font-semibold text-[#002147]">
-                  Kon / Troq / Num
-                </TableHead>
+                {MAQUINA_COLS.map(({ label, title }) => (
+                  <TableHead
+                    key={label}
+                    className="w-9 px-1 text-center text-[10px] font-semibold text-[#002147]"
+                    title={title}
+                  >
+                    {label}
+                  </TableHead>
+                ))}
                 <TableHead className="whitespace-nowrap font-semibold text-[#002147]">
                   Troquel
                 </TableHead>
@@ -443,11 +513,34 @@ export function EtiquetasHojaRutaTab() {
                   <TableCell className="whitespace-nowrap tabular-nums">
                     {fmtDate(r.fecha_entrada_depto)}
                   </TableCell>
-                  <TableCell>{r.urgencia === "urgente" ? "Urg." : "—"}</TableCell>
-                  <TableCell className="whitespace-nowrap text-[10px] text-slate-600">
-                    {boolCell(r.konica)} / {boolCell(r.troqueladora)} /{" "}
-                    {boolCell(r.numeradora)}
+                  <TableCell className="px-1 text-center align-middle">
+                    <EntregaPlazoSemaforo
+                      fechaEntregaOt={r.fecha_entrega_ot}
+                      urgente={r.urgencia === "urgente"}
+                    />
                   </TableCell>
+                  {MAQUINA_COLS.map(({ field, title }) => (
+                    <TableCell
+                      key={field}
+                      className="px-1 text-center align-middle"
+                    >
+                      <label
+                        className="inline-flex cursor-pointer justify-center py-0.5"
+                        title={title}
+                      >
+                        <input
+                          type="checkbox"
+                          className="size-3.5 cursor-pointer rounded border-slate-300 accent-[#002147] disabled:opacity-50"
+                          checked={Boolean(r[field])}
+                          disabled={togglingMaquina === `${r.id}:${field}`}
+                          aria-label={`${title} OT ${r.ot_numero}`}
+                          onChange={(e) => {
+                            void toggleMaquina(r, field, e.target.checked);
+                          }}
+                        />
+                      </label>
+                    </TableCell>
+                  ))}
                   <TableCell className="max-w-[4rem] truncate">
                     {r.troquel_utillaje ?? "—"}
                   </TableCell>

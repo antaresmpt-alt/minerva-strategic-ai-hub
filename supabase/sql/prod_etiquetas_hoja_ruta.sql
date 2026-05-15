@@ -3,7 +3,7 @@
 --   supabase/migrations/20260514180000_prod_etiquetas_hoja_ruta.sql
 
 -- Hoja de ruta del departamento de etiquetas digital (una fila por OT en curso).
--- RLS: admin, gerencia, produccion, digital, logistica (CRUD); delete solo admin/gerencia.
+-- RLS: admin, gerencia, produccion, digital, logistica (CRUD); delete admin/gerencia/digital.
 
 create table if not exists public.prod_etiquetas_hoja_ruta (
   id uuid primary key default gen_random_uuid(),
@@ -20,6 +20,9 @@ create table if not exists public.prod_etiquetas_hoja_ruta (
   konica boolean not null default false,
   troqueladora boolean not null default false,
   numeradora boolean not null default false,
+  fecha_fin_konica date null,
+  fecha_fin_troqueladora date null,
+  fecha_fin_numeradora date null,
   troquel_utillaje text null,
   fecha_inicio_produccion date null,
   fecha_fin_produccion date null,
@@ -156,6 +159,6 @@ create policy prod_etiquetas_hoja_ruta_delete
     exists (
       select 1 from public.profiles me
       where me.id = (select auth.uid())
-        and me.role::text = any (array['admin', 'gerencia'])
+        and me.role::text = any (array['admin', 'gerencia', 'digital'])
     )
   );

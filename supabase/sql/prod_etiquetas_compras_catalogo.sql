@@ -45,7 +45,8 @@ create table if not exists public.prod_etiquetas_catalogo (
         'marca',
         'propietario',
         'prioridad',
-        'tipo_linea'
+        'tipo_linea',
+        'tintas'
       )
     ),
   constraint prod_etiquetas_catalogo_grupo_chk
@@ -239,7 +240,7 @@ create policy prod_etiquetas_compras_delete
     exists (
       select 1 from public.profiles me
       where me.id = (select auth.uid())
-        and me.role::text = any (array['admin', 'gerencia'])
+        and me.role::text = any (array['admin', 'gerencia', 'digital'])
     )
   );
 
@@ -278,7 +279,12 @@ from (
     ('propietario', null, 'HUGO', 20, true),
     ('prioridad', null, 'ALTA', 10, true),
     ('prioridad', null, 'MEDIA', 20, true),
-    ('prioridad', null, 'BAJA', 30, true)
+    ('prioridad', null, 'BAJA', 30, true),
+    ('tintas', null, 'CYAN', 10, true),
+    ('tintas', null, 'MAGENTA', 20, true),
+    ('tintas', null, 'YELLOW', 30, true),
+    ('tintas', null, 'BLACK', 40, true),
+    ('tintas', null, 'WHITE', 50, true)
 ) as v(categoria, grupo, label, orden, activo)
 where not exists (
   select 1

@@ -9,6 +9,7 @@ import {
 
 const CATEGORIAS: ProdEtiquetasCatalogCategoria[] = [
   "producto",
+  "tintas",
   "equipo",
   "marca",
   "propietario",

@@ -17,7 +17,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, type Option } from "@/components/ui/select-native";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  catalogLabels,
+  ETIQUETAS_CATALOG_PAPEL,
+} from "@/lib/etiquetas-catalogo";
+import { buildMaquinaFieldsForSave } from "@/lib/etiquetas-hoja-ruta-maquina";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import type { ProdEtiquetasCatalogRow } from "@/types/prod-etiquetas-catalogo";
 import type { ProdEtiquetasHojaRutaRow } from "@/types/prod-etiquetas-hoja-ruta";
 
 const TABLE_HR = "prod_etiquetas_hoja_ruta";
@@ -101,6 +107,7 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   row: ProdEtiquetasHojaRutaRow | null;
+  catalog: ProdEtiquetasCatalogRow[];
   onSaved: () => void;
 };
 
@@ -108,10 +115,15 @@ export function EtiquetasHojaRutaEditDialog({
   open,
   onOpenChange,
   row,
+  catalog,
   onSaved,
 }: Props) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const formId = useId();
+  const labelsPapel = useMemo(
+    () => catalogLabels(catalog, ETIQUETAS_CATALOG_PAPEL),
+    [catalog]
+  );
   const [form, setForm] = useState<EditForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -141,9 +153,11 @@ export function EtiquetasHojaRutaEditDialog({
         fecha_entrada_depto: form.fecha_entrada_depto.trim() || null,
         urgencia: form.urgencia,
         observacion: form.observacion.trim() || null,
-        konica: form.konica,
-        troqueladora: form.troqueladora,
-        numeradora: form.numeradora,
+        ...buildMaquinaFieldsForSave(form.konica, form.troqueladora, form.numeradora, {
+          fecha_fin_konica: row.fecha_fin_konica,
+          fecha_fin_troqueladora: row.fecha_fin_troqueladora,
+          fecha_fin_numeradora: row.fecha_fin_numeradora,
+        }),
         troquel_utillaje: form.troquel_utillaje.trim() || null,
         fecha_inicio_produccion: form.fecha_inicio_produccion.trim() || null,
         fecha_fin_produccion: form.fecha_fin_produccion.trim() || null,
@@ -182,11 +196,17 @@ export function EtiquetasHojaRutaEditDialog({
     }
     setDeleting(true);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from(TABLE_HR)
         .delete()
-        .eq("id", row.id);
+        .eq("id", row.id)
+        .select("id");
       if (error) throw error;
+      if (!data?.length) {
+        throw new Error(
+          "No se eliminó ningún registro. Comprueba permisos o actualiza la página."
+        );
+      }
       toast.success("Registro eliminado.");
       onSaved();
       onOpenChange(false);
@@ -271,14 +291,23 @@ export function EtiquetasHojaRutaEditDialog({
             />
           </div>
           <div className="grid gap-1 sm:col-span-2">
-            <Label className="text-xs">Papel</Label>
+            <Label htmlFor={`${formId}-papel`} className="text-xs">
+              Papel / material
+            </Label>
             <Input
+              id={`${formId}-papel`}
               className="h-8 text-xs"
+              list={`${formId}-papel-dl`}
               value={form.papel}
               onChange={(e) =>
                 setForm((f) => (f ? { ...f, papel: e.target.value } : f))
               }
             />
+            <datalist id={`${formId}-papel-dl`}>
+              {labelsPapel.map((v) => (
+                <option key={v} value={v} />
+              ))}
+            </datalist>
           </div>
           <div className="grid gap-1">
             <Label className="text-xs">Cantidad</Label>

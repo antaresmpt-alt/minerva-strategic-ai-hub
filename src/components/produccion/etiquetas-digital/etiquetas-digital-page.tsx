@@ -1,10 +1,18 @@
 "use client";
 
-import { CalendarDays, Inbox, Route, ShoppingCart } from "lucide-react";
+import {
+  CalendarDays,
+  Inbox,
+  Package,
+  Route,
+  ShoppingCart,
+} from "lucide-react";
 import { useState } from "react";
 
 import { EtiquetasComprasTab } from "@/components/produccion/etiquetas-digital/etiquetas-compras-tab";
 import { EtiquetasHojaRutaTab } from "@/components/produccion/etiquetas-digital/etiquetas-hoja-ruta-tab";
+import { EtiquetasCalendarioMensualTab } from "@/components/produccion/etiquetas-digital/etiquetas-calendario-mensual-tab";
+import { EtiquetasStockBobinasTab } from "@/components/produccion/etiquetas-digital/etiquetas-stock-bobinas-tab";
 import {
   Card,
   CardContent,
@@ -30,7 +38,7 @@ export function EtiquetasDigitalPage() {
           className="mt-0.5 max-w-full truncate text-xs text-slate-600 sm:max-w-3xl"
           title="Departamento de impresión digital de etiquetas — Minerva Global"
         >
-          Pool de entrada, hoja de ruta, compras y planificación mensual ·{" "}
+          Pool, hoja de ruta, compras, stock bobinas y planificación mensual ·{" "}
           <span className="font-medium text-[#002147]">www.minervaglobal.es</span>
         </p>
       </header>
@@ -53,6 +61,10 @@ export function EtiquetasDigitalPage() {
             <TabsTrigger value="compras" className={tabTriggerClass}>
               <ShoppingCart className="size-4 shrink-0 opacity-90" aria-hidden />
               Compras
+            </TabsTrigger>
+            <TabsTrigger value="stock-bobinas" className={tabTriggerClass}>
+              <Package className="size-4 shrink-0 opacity-90" aria-hidden />
+              Stock bobinas
             </TabsTrigger>
             <TabsTrigger value="calendario-mensual" className={tabTriggerClass}>
               <CalendarDays className="size-4 shrink-0 opacity-90" aria-hidden />
@@ -89,24 +101,12 @@ export function EtiquetasDigitalPage() {
           <EtiquetasComprasTab />
         </TabsContent>
 
+        <TabsContent value="stock-bobinas" className="mt-0 outline-none">
+          <EtiquetasStockBobinasTab />
+        </TabsContent>
+
         <TabsContent value="calendario-mensual" className="mt-0 outline-none">
-          <Card
-            size="sm"
-            className="max-w-full min-w-0 overflow-x-hidden border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm"
-          >
-            <CardHeader className="space-y-1 pb-2">
-              <CardTitle className="text-base text-[#002147]">
-                Calendario mensual
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Cuadrícula semana laboral (lun–vie) con entradas por día y
-                estado, al estilo del planning en papel.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="text-sm text-slate-600">
-              Contenido en construcción.
-            </CardContent>
-          </Card>
+          <EtiquetasCalendarioMensualTab />
         </TabsContent>
       </Tabs>
     </div>

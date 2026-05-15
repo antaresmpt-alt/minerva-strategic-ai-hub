@@ -29,6 +29,7 @@ import {
 const CATEGORIA_LABEL: Record<ProdEtiquetasCatalogCategoria, string> = {
   tipo_linea: "Tipo de línea",
   producto: "Producto",
+  tintas: "Tintas (colores)",
   equipo: "Equipo",
   marca: "Marca",
   propietario: "Propietario",

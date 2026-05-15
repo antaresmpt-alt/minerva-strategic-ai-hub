@@ -1,5 +1,6 @@
 export type ProdEtiquetasCatalogCategoria =
   | "producto"
+  | "tintas"
   | "equipo"
   | "marca"
   | "propietario"

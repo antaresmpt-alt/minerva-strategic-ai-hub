@@ -17,7 +17,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, type Option } from "@/components/ui/select-native";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  catalogLabels,
+  ETIQUETAS_CATALOG_PAPEL,
+} from "@/lib/etiquetas-catalogo";
+import { buildMaquinaFieldsForSave } from "@/lib/etiquetas-hoja-ruta-maquina";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import type { ProdEtiquetasCatalogRow } from "@/types/prod-etiquetas-catalogo";
 
 const TABLE_OT = "prod_ots_general";
 const TABLE_HR = "prod_etiquetas_hoja_ruta";
@@ -109,17 +115,23 @@ const URGENCIA_OPTS: Option[] = [
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  catalog: ProdEtiquetasCatalogRow[];
   onSaved: () => void;
 };
 
 export function EtiquetasEntradaExpressDialog({
   open,
   onOpenChange,
+  catalog,
   onSaved,
 }: Props) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const otInputRef = useRef<HTMLInputElement>(null);
   const formId = useId();
+  const labelsPapel = useMemo(
+    () => catalogLabels(catalog, ETIQUETAS_CATALOG_PAPEL),
+    [catalog]
+  );
   const [otInput, setOtInput] = useState("");
   const [loadingOt, setLoadingOt] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -170,7 +182,7 @@ export function EtiquetasEntradaExpressDialog({
       if (errE) throw errE;
       if (exist && !(exist as { finalizado?: boolean }).finalizado) {
         toast.warning(
-          `Ya existe una fila activa en hoja de ruta para OT ${num}. No se podrá guardar otra hasta finalizarla o borrarla (solo admin/gerencia).`
+          `Ya existe una fila activa en hoja de ruta para OT ${num}. No se podrá guardar otra hasta finalizarla o borrarla.`
         );
       }
 
@@ -243,9 +255,11 @@ export function EtiquetasEntradaExpressDialog({
         fecha_entrada_depto: form.fecha_entrada_depto.trim() || null,
         urgencia: form.urgencia,
         observacion: form.observacion.trim() || null,
-        konica: form.konica,
-        troqueladora: form.troqueladora,
-        numeradora: form.numeradora,
+        ...buildMaquinaFieldsForSave(form.konica, form.troqueladora, form.numeradora, {
+          fecha_fin_konica: null,
+          fecha_fin_troqueladora: null,
+          fecha_fin_numeradora: null,
+        }),
         troquel_utillaje: form.troquel_utillaje.trim() || null,
         fecha_inicio_produccion: form.fecha_inicio_produccion.trim() || null,
         fecha_fin_produccion: form.fecha_fin_produccion.trim() || null,
@@ -376,13 +390,22 @@ export function EtiquetasEntradaExpressDialog({
             />
           </div>
           <div className="grid gap-1 sm:col-span-2">
-            <Label className="text-xs">Papel / material (editable)</Label>
+            <Label htmlFor={`${formId}-papel`} className="text-xs">
+              Papel / material (editable)
+            </Label>
             <Input
+              id={`${formId}-papel`}
               className="h-8 text-xs"
+              list={`${formId}-papel-dl`}
               value={form.papel}
               onChange={(e) => setForm((f) => ({ ...f, papel: e.target.value }))}
               placeholder="Sugerido desde familia / pedido cliente"
             />
+            <datalist id={`${formId}-papel-dl`}>
+              {labelsPapel.map((v) => (
+                <option key={v} value={v} />
+              ))}
+            </datalist>
           </div>
           <div className="grid gap-1">
             <Label className="text-xs">Cantidad (etiquetas)</Label>

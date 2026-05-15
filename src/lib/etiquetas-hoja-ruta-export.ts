@@ -2,6 +2,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 
+import { entregaPlazoSemaforo, entregaPlazoTitle } from "@/lib/etiquetas-hoja-ruta-plazo";
 import type { ProdEtiquetasHojaRutaRow } from "@/types/prod-etiquetas-hoja-ruta";
 
 export type EtiquetasHojaRutaExportFilters = {
@@ -51,10 +52,15 @@ function rowToCells(r: ProdEtiquetasHojaRutaRow): string[] {
     fmtDateEs(r.fecha_entrega_ot),
     fmtDateEs(r.fecha_entrada_depto),
     r.urgencia === "urgente" ? "Urgente" : "Normal",
+    entregaPlazoSemaforo(r.fecha_entrega_ot),
+    entregaPlazoTitle(r.fecha_entrega_ot),
     r.observacion ?? "—",
     boolTxt(r.konica),
     boolTxt(r.troqueladora),
     boolTxt(r.numeradora),
+    fmtDateEs(r.fecha_fin_konica),
+    fmtDateEs(r.fecha_fin_troqueladora),
+    fmtDateEs(r.fecha_fin_numeradora),
     r.troquel_utillaje ?? "—",
     fmtDateEs(r.fecha_inicio_produccion),
     fmtDateEs(r.fecha_fin_produccion),
@@ -75,10 +81,15 @@ const EXCEL_HEADERS = [
   "F. entrega OT",
   "F. entrada depto.",
   "Urgencia",
+  "Plazo (semáforo)",
+  "Plazo (texto)",
   "Observación",
   "Konica",
   "Troqueladora",
   "Numeradora",
+  "F. fin Konica",
+  "F. fin Troqueladora",
+  "F. fin Numeradora",
   "Troquel (utillaje)",
   "F. inicio prod.",
   "F. fin prod.",

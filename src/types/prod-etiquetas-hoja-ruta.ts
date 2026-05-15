@@ -14,6 +14,12 @@ export type ProdEtiquetasHojaRutaRow = {
   konica: boolean;
   troqueladora: boolean;
   numeradora: boolean;
+  /** Fin impresión Konica → calendario mensual `I-{ot_numero}`. */
+  fecha_fin_konica: string | null;
+  /** Fin troquelado → calendario `T-{ot_numero}`. */
+  fecha_fin_troqueladora: string | null;
+  /** Fin numeración → calendario `N-{ot_numero}`. */
+  fecha_fin_numeradora: string | null;
   troquel_utillaje: string | null;
   fecha_inicio_produccion: string | null;
   fecha_fin_produccion: string | null;

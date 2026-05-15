@@ -16,6 +16,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, type Option } from "@/components/ui/select-native";
+import {
+  catalogLabels,
+  ETIQUETAS_CATALOG_COMPRAS_PRODUCTO,
+} from "@/lib/etiquetas-catalogo";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
   PROD_ETIQUETAS_TIPO_LINEA_VALUES,
@@ -116,10 +120,7 @@ export function EtiquetasCompraDialog({
   const [entradaMultiple, setEntradaMultiple] = useState(false);
 
   const labelsProducto = useMemo(
-    () =>
-      catalog
-        .filter((c) => c.categoria === "producto" && c.activo)
-        .map((c) => c.label),
+    () => catalogLabels(catalog, ETIQUETAS_CATALOG_COMPRAS_PRODUCTO),
     [catalog]
   );
   const labelsEquipo = useMemo(
@@ -272,8 +273,17 @@ export function EtiquetasCompraDialog({
     }
     setDeleting(true);
     try {
-      const { error } = await supabase.from(TABLE).delete().eq("id", row.id);
+      const { data, error } = await supabase
+        .from(TABLE)
+        .delete()
+        .eq("id", row.id)
+        .select("id");
       if (error) throw error;
+      if (!data?.length) {
+        throw new Error(
+          "No se eliminó ninguna línea. Comprueba permisos o actualiza la página."
+        );
+      }
       toast.success("Eliminada.");
       onSaved();
       onOpenChange(false);
