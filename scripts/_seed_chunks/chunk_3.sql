@@ -1,0 +1,51 @@
+insert into public.prod_etiquetas_material_catalogo (
+  marca, categoria, item_number, face_name, adhesive, backing,
+  price_m2, ean_code, notes, stock_dimensions, activo
+)
+select v.marca, v.categoria, v.item_number, v.face_name, v.adhesive, v.backing,
+  v.price_m2, v.ean_code, v.notes, v.stock_dimensions, v.activo
+from (values
+('ADESTOR', 'Digital Products', '163145', 'InkJet Matt FSC', 'A-251', 'GW62', null, '8447390003266', 'ADHMATTIJ', null, true),
+('ADESTOR', 'Digital Products', '170161', 'InkJet Matt FSC', 'SP-123', 'GW62', null, '8447390001682', 'ADHMATTIJ', null, true),
+('ADESTOR', 'Digital Products', '177240', 'Laser 60 LB DIE', 'SP-123', 'Kraft 80', null, '8447390002610', 'ADHLASERLB', null, true),
+('ADESTOR', 'Digital Products', '177418', 'Laser Nature DIE', 'A-251', 'Kraft Laser 55', null, '8447390002801', 'ADHLASNATU', null, true),
+('ADESTOR', 'Digital Products', '60955', 'Laser 70', 'A-251', 'Kraft Laser 55', null, '8447390609550', 'ADHLASER', '2000-4000-6000', true),
+('ADESTOR', 'Digital Products', '53245', 'Laser 70', 'A-251', 'Kraft Laser 74', null, '8447390532452', 'ADHLASER', '2000-4000', true),
+('ADESTOR', 'Digital Products', '103402', 'Laser 70', 'SP-123', 'Kraft Laser 55', null, '8447390001439', 'ADHLASER', null, true),
+('ADESTOR', 'Digital Products', '56437', 'Laser 70', 'SP-123', 'Kraft Laser 74', null, '8447390564378', 'ADHLASER', '4000', true),
+('ADESTOR', 'Digital Products', '163123', 'Laser 70', 'CG-349', 'Kraft Laser 55', null, '8447390002627', 'ADHLASER', null, true),
+('ADESTOR', 'Digital Products', '174368', 'Laser 70', 'CG-349', 'Kraft Laser 74', null, '8447390001842', 'ADHLASER', null, true),
+('ADESTOR', 'Digital Products', '139087', 'Laser 70', 'RA-678', 'Kraft Laser 55', null, '8447390002634', 'ADHLASER', null, true),
+('ADESTOR', 'Digital Products', '64783', 'Laser 70', 'RA-678', 'Kraft Laser 74', null, '8447390647835', 'ADHLASER', null, true),
+('ADESTOR', 'Digital Products', '143674', 'Laser 70 Opaque', 'A-251', 'Kraft Laser 55', null, '8447390002931', 'ADHLASER', null, true),
+('ADESTOR', 'Digital Products', '76089', 'Laser 70 Opaque', 'A-251', 'Kraft Laser 74', null, '8447390760893', 'ADHLASER', null, true),
+('ADESTOR', 'Digital Products', '186367', 'Laser Colour Yellow', 'A-251', 'Kraft 80', 0.64, '8447390004195', 'ADHCOLORLS', null, true),
+('ADESTOR', 'Digital Products', '186377', 'Laser Colour Blue', 'A-251', 'Kraft 80', 0.64, '8447390004218', 'ADHCOLORLS', null, true),
+('ADESTOR', 'Digital Products', '186378', 'Laser Colour Green', 'A-251', 'Kraft 80', 0.64, '8447390004225', 'ADHCOLORLS', null, true),
+('ADESTOR', 'Digital Products', '186368', 'Laser Colour Red', 'A-251', 'Kraft 80', 0.64, '8447390004201', 'ADHCOLORLS', null, true),
+('ADESTOR', 'Digital Products', '182116', 'Laser Fluor Yellow', 'A-251', 'Kraft 80', 0.63, '8447390003396', 'ADHFLUORLS', null, true),
+('ADESTOR', 'Digital Products', '182117', 'Laser Fluor Orange', 'A-251', 'Kraft 80', 0.63, '8447390003402', 'ADHFLUORLS', null, true),
+('ADESTOR', 'Digital Products', '182118', 'Laser Fluor Red', 'A-251', 'Kraft 80', 0.63, '8447390003419', 'ADHFLUORLS', null, true),
+('ADESTOR', 'Digital Products', '182119', 'Laser Fluor Green', 'A-251', 'Kraft 80', 0.63, '8447390003426', 'ADHFLUORLS', null, true),
+('ADESTOR', 'Digital Products', '186287', 'Laser High Gloss FSC', 'A-251', 'Kraft 80 FSC', null, '8447390001804', 'ADHHGLASER', null, true),
+('ADESTOR', 'Digital Products', '180648', 'PET Laser Matt White', 'A-251', 'KL120', null, '8447390002504', 'ADHPETLMW', null, true),
+('ADESTOR', 'Digital Products', '179164', 'PET Laser Matt White', 'SP-123', 'KL120', null, '8447390002498', 'ADHPETLMW', null, true),
+('ADESTOR', 'Digital Products', '182053', 'PET Laser Matt White', 'RA-678', 'KL120', null, '8447390003495', 'ADHPETLMW', null, true),
+('ADESTOR', 'Wine & Beverage Products', '175300', 'Art 80', 'BC-500', 'GA62', null, '8447390002566', 'ADHALMAZAN', null, true),
+('ADESTOR', 'Wine & Beverage Products', '175301', 'Gloss 80', 'BC-500', 'GW80', null, '8447390001767', 'ADHDUERO', null, true),
+('ADESTOR', 'Wine & Beverage Products', '175302', 'Gloss 90', 'BC-500', 'GA62', null, '8447390206384', 'ADHDUERO', null, true),
+('ADESTOR', 'Wine & Beverage Products', '175336', 'Gloss 90', 'BC-500', 'GW80', null, '8447390206391', 'ADHDUERO', null, true),
+('ADESTOR', 'Wine & Beverage Products', '175994', 'Gloss 90', 'BC-500', 'PET23', null, '8447390003105', 'ADHDUERO', null, true),
+('ADESTOR', 'Wine & Beverage Products', '175154', 'High Gloss 80', 'BC-500', 'GW80', null, '8447390002740', 'ADHALTOBRI', null, true),
+('ADESTOR', 'Wine & Beverage Products', '175460', 'High Gloss 80 WS', 'BC-500', 'GW80', null, '8447390002733', 'ADHALTOBRI', null, true),
+('ADESTOR', 'Wine & Beverage Products', '175615', 'Matt 90 WS', 'BC-500', 'GWBO', null, '8447390002689', 'ADHMATTWS', null, true),
+('ADESTOR', 'Wine & Beverage Products', '173964', 'Cold Ice White 110 HWS', 'BC-500', 'GW80', null, '8447390002597', 'ADHGLAZED', null, true),
+('ADESTOR', 'Wine & Beverage Products', '173965', 'Cotton White 90 WS', 'BC-500', 'GW80', null, '8447390002573', 'ADHCOTTON', null, true),
+('ADESTOR', 'Wine & Beverage Products', '176549', 'Embossed Toile 90 WS', 'BC-500', 'GW80', null, '8447390002580', 'ADHTOILE', null, true),
+('ADESTOR', 'Wine & Beverage Products', '179228', 'Essence Nature DfE 90 WS', 'BC-500', 'GW80', null, '8447390002030', 'ADHESNATWS', null, true),
+('ADESTOR', 'Wine & Beverage Products', '176079', 'Glitter 90 WS', 'BC-500', 'GW80', null, '8447390002603', 'ADHGLITTER', null, true),
+('ADESTOR', 'Wine & Beverage Products', '179303', 'Intensive Nero Smooth 110 WS', 'BC-500', 'GW80', null, '8447390002047', 'ADHINEROWS', null, true)
+) as v(
+  marca, categoria, item_number, face_name, adhesive, backing,
+  price_m2, ean_code, notes, stock_dimensions, activo
+);

@@ -1,0 +1,51 @@
+insert into public.prod_etiquetas_material_catalogo (
+  marca, categoria, item_number, face_name, adhesive, backing,
+  price_m2, ean_code, notes, stock_dimensions, activo
+)
+select v.marca, v.categoria, v.item_number, v.face_name, v.adhesive, v.backing,
+  v.price_m2, v.ean_code, v.notes, v.stock_dimensions, v.activo
+from (values
+('ADESTOR', 'Uncoated Papers', '7115', 'Vellum', 'A-251', 'GA62', null, '8447390071159', 'ADHSORIA', '2000-4000', true),
+('ADESTOR', 'Uncoated Papers', '7120', 'Vellum', 'SP-123', 'GA62', null, '8447390071203', 'ADHSORIA', '2000-4000', true),
+('ADESTOR', 'Uncoated Papers', '47868', 'Vellum', 'Supertack', 'GA62', null, '8447390478682', 'ADHSORIA', '2000', true),
+('ADESTOR', 'Uncoated Papers', '152411', 'Vellum', 'HM100', 'GA62', null, '8447390001606', 'ADHSORIA', '2000-4000', true),
+('ADESTOR', 'Uncoated Papers', '191815', 'Vellum', 'HM245', 'GA62', null, '8447390005970', 'ADHSORIA', '2000', true),
+('ADESTOR', 'Uncoated Papers', '166794', 'Vellum', 'HM300', 'GA62', 0.36, '8447390002924', 'ADHSORIA', null, true),
+('ADESTOR', 'Uncoated Papers', '60763', 'Vellum', 'CG-349', 'GA62', null, '8447390607631', 'ADHSORIA', '2000', true),
+('ADESTOR', 'Uncoated Papers', '7123', 'Vellum', 'RA-678', 'GA62', null, '8447390071234', 'ADHSORIA', null, true),
+('ADESTOR', 'Uncoated Papers', '8461', 'Vellum', 'SA-234', 'GA62', null, '8447390084616', 'ADHSORIA', null, true),
+('ADESTOR', 'Uncoated Papers', '83658', 'Vellum Duplex (SP123/GA62)', 'SP-123', 'GA62', null, '8447390836581', 'ADHSORIA', null, true),
+('ADESTOR', 'Uncoated Papers', '177521', 'Seal Nature DfE', 'Supertack', 'GA62', null, '8447390002542', 'ADHSEALDFE', null, true),
+('ADESTOR', 'Coated Gloss White Papers', '7173', 'Art 80', 'A-251', 'GA62', null, '8447390071739', 'ADHALMAZAN', '2000', true),
+('ADESTOR', 'Coated Gloss White Papers', '7174', 'Art 80', 'SP123-', 'GA62', null, '8447390071746', 'ADHALMAZAN', '2000', true),
+('ADESTOR', 'Coated Gloss White Papers', '143670', 'Art 80', 'HM-100', 'GA62', null, '8447390002016', 'ADHALMAZAN', null, true),
+('ADESTOR', 'Coated Gloss White Papers', '48997', 'Art 80', 'Supertack', 'GA62', null, '8447390489978', 'ADHALMAZAN', null, true),
+('ADESTOR', 'Coated Gloss White Papers', '75145', 'Art 80 Opaque', 'A-251', 'GA62', null, '8447390751457', 'ADHALMAZAN', '2000', true),
+('ADESTOR', 'Coated Gloss White Papers', '87542', 'Art 80 Opaque', 'SP123-', 'GA62', null, '8447390875429', 'ADHALMAZAN', null, true),
+('ADESTOR', 'Coated Gloss White Papers', '114363', 'Art 80 Duplex (A251+GW62)', 'A-251', 'GW62', null, '8447390002863', 'ADHALMAZAN', null, true),
+('ADESTOR', 'Coated Gloss White Papers', '67424', 'Art 225', 'SP-123', 'GA62', null, '8447390674244', 'ADHALMAZAN', null, true),
+('ADESTOR', 'Coated Gloss White Papers', '7165', 'Gloss 60', 'SP123-', 'GA62', null, '8447390071654', 'ADHDUERO', null, true),
+('ADESTOR', 'Coated Gloss White Papers', '50617', 'Gloss 60', 'Supertack', 'GA62', null, '8447390506170', 'ADHDUERO', null, true),
+('ADESTOR', 'Coated Gloss White Papers', '7154', 'Gloss 80', 'A-251', 'GA62', null, '8447390071548', 'ADHDUERO', '2000-4000', true),
+('ADESTOR', 'Coated Gloss White Papers', '147659', 'Gloss 80', 'A-251', 'PET23', null, '8447390001200', 'ADHDUERO', null, true),
+('ADESTOR', 'Coated Gloss White Papers', '7155', 'Gloss 80', 'SP-123', 'GA62', null, '8447390071555', 'ADHDUERO', '2000-4000', true),
+('ADESTOR', 'Coated Gloss White Papers', '161773', 'Gloss 80', 'SP123-', 'PET23', null, '8447390001385', 'ADHDUERO', '2000-4000', true),
+('ADESTOR', 'Coated Gloss White Papers', '177549', 'Gloss 80', 'SP-123', 'PET30', 0.35, '8447390003099', 'ADHDUERO', null, true),
+('ADESTOR', 'Coated Gloss White Papers', '46421', 'Gloss 80', 'Supertack', 'GA62', null, '8447390464210', 'ADHDUERO', '2000', true),
+('ADESTOR', 'Coated Gloss White Papers', '117047', 'Gloss 80', 'HM-100', 'GA62', null, '8447390001446', 'ADHDUERO', '2000-4000', true),
+('ADESTOR', 'Coated Gloss White Papers', '191814', 'Gloss 80', 'HM245', 'GA62', null, '8447390005963', 'ADHDUERO', '2000-4000', true),
+('ADESTOR', 'Coated Gloss White Papers', '156397', 'Gloss 80', 'HM-300', 'GA62', 0.36, '8447390001330', 'ADHDUERO', null, true),
+('ADESTOR', 'Coated Gloss White Papers', '36301', 'Gloss 80', 'CG349', 'GA62', null, '8447390363018', 'ADHDUERO', '2000', true),
+('ADESTOR', 'Coated Gloss White Papers', '7157', 'Gloss 80', 'RA-678', 'GA62', null, '8447390071579', 'ADHDUERO', null, true),
+('ADESTOR', 'Coated Gloss White Papers', '46475', 'Gloss 80', 'SA-234', 'GA62', null, '8447390464753', 'ADHDUERO', null, true),
+('ADESTOR', 'Coated Gloss White Papers', '178801', 'Gloss 80', 'SA-234W', 'GA62', null, '8447390003365', 'ADHDUERO', null, true),
+('ADESTOR', 'Coated Gloss White Papers', '153535', 'Gloss 80 Duplex (SP123/GA62)', 'SP123-', 'GA62', null, '8447390003358', 'ADHDUERO', null, true),
+('ADESTOR', 'Coated Gloss White Papers', '19397', 'Gloss 90', 'A-251', 'GA62', 0.35, '8447390193974', 'ADHDUERO', null, true),
+('ADESTOR', 'Coated Gloss White Papers', '19399', 'Gloss 90', 'SP-123', 'GA62', 0.36, '8447390193998', 'ADHDUERO', null, true),
+('ADESTOR', 'Coated Gloss White Papers', '36843', 'Gloss 125', 'A-251', 'GA62', null, '8447390368433', 'ADHDUERO', null, true),
+('ADESTOR', 'Coated Gloss White Papers', '43909', 'Gloss 150', 'SP-123', 'GA62', null, '8447390439096', 'ADHDUERO', null, true),
+('ADESTOR', 'Coated Gloss White Papers', '65604', 'Board 200', 'SP-123', 'GA62', 0.66, '8447390656042', 'ADHDUERO', null, true)
+) as v(
+  marca, categoria, item_number, face_name, adhesive, backing,
+  price_m2, ean_code, notes, stock_dimensions, activo
+);

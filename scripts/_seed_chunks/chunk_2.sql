@@ -1,0 +1,51 @@
+insert into public.prod_etiquetas_material_catalogo (
+  marca, categoria, item_number, face_name, adhesive, backing,
+  price_m2, ean_code, notes, stock_dimensions, activo
+)
+select v.marca, v.categoria, v.item_number, v.face_name, v.adhesive, v.backing,
+  v.price_m2, v.ean_code, v.notes, v.stock_dimensions, v.activo
+from (values
+('ADESTOR', 'Coated Gloss White Papers', '162495', 'Gloss GP', 'SP-123', 'GA62', null, '8447390001231', 'ADHDUEROGP', '2000', true),
+('ADESTOR', 'Coated Gloss White Papers', '170545', 'Gloss GP', 'SP-123', 'PET23', 0.49, '8447390001699', 'ADHDUEROGP', '2000', true),
+('ADESTOR', 'Coated Matt White Papers', '59947', 'Matt 80', 'A-251', 'GA62', 0.39, '8447390599479', 'ADHSORIAPL', null, true),
+('ADESTOR', 'Coated Matt White Papers', '59948', 'Matt 80', 'A-251', 'Kraft 80', null, 'NO', null, null, true),
+('ADESTOR', 'Coated High Gloss White Papers', '7182', 'High Gloss 80', 'A-251', 'GA62', 0.48, '8447390071821', 'ADHALTOBRI', '2000', true),
+('ADESTOR', 'Coated High Gloss White Papers', '7183', 'High Gloss 80', 'SP123-', 'GA62', null, '8447390071838', 'ADHALTOBRI', '2000', true),
+('ADESTOR', 'Coloured Papers', '76927', 'Fluor Yellow', 'A-251', 'GA62', null, '8447390769278', 'ADHFLUORES', null, true),
+('ADESTOR', 'Coloured Papers', '76934', 'Fluor Orange', 'A-251', 'GA62', null, '8447390769346', 'ADHFLUORES', null, true),
+('ADESTOR', 'Coloured Papers', '76922', 'Fluor Red', 'A-251', 'GA62', null, '8447390769223', 'ADHFLUORES', null, true),
+('ADESTOR', 'Coloured Papers', '76940', 'Fluor Green', 'A-251', 'GA62', null, '8447390769407', 'ADHFLUORES', null, true),
+('ADESTOR', 'Direct Thermal Papers', '153110', 'Thermal Eco BPA Free', 'A-251', 'GA62', null, '8447390001507', 'ADHTERMBΡΑ', '2000-4000-6000', true),
+('ADESTOR', 'Direct Thermal Papers', '147842', 'Thermal Eco BPA Free', 'SP123-', 'GA62', null, '8447390001460', 'ADHTERMΒΡΑ', '2000-4000', true),
+('ADESTOR', 'Direct Thermal Papers', '160670', 'Thermal Eco BPA Free', 'Supertack', 'GA62', null, '8447390001484', 'ADHTERMBΡΑ', '2000', true),
+('ADESTOR', 'Direct Thermal Papers', '152523', 'Thermal Eco BPA Free', 'HM-100', 'GA62', null, '8447390001477', 'ADHTERMBΒΡΑ', '2000-4000', true),
+('ADESTOR', 'Direct Thermal Papers', '191816', 'Thermal Eco BPA Free', 'HM245', 'GA62', null, '8447390005987', 'ADHTERMBΡΑ', '2000-4000', true),
+('ADESTOR', 'Direct Thermal Papers', '174815', 'Thermal Eco BPA Free', 'HM-300', 'GA62', 0.38, '8447390002511', 'ADHTERMΒΡΑ', null, true),
+('ADESTOR', 'Direct Thermal Papers', '172399', 'Thermal Eco BPA Free', 'CG-349', 'GA62', null, '8447390001491', 'ADHTERMBΡΑ', '2000', true),
+('ADESTOR', 'Direct Thermal Papers', '173939', 'Thermal Eco BPA Free', 'SA-234', 'GA62', null, '8447390001521', 'ADHTERMBΡΑ', '2000', true),
+('ADESTOR', 'Direct Thermal Papers', '191305', 'Thermal Top PH Free', 'A-251', 'GA62', null, '8447390005796', 'ADHTOPPHFR', '2000-4000', true),
+('ADESTOR', 'Direct Thermal Papers', '191308', 'Thermal Top PH Free', 'CG-349', 'GA62', null, '8447390005826', 'ADHTOPPHFR', null, true),
+('ADESTOR', 'Direct Thermal Papers', '191242', 'Thermal Top PH Free', 'HM-100', 'GA62', null, '8447390005727', 'ADHTOPPHER', '2000-4000', true),
+('ADESTOR', 'Direct Thermal Papers', '192851', 'Thermal Top PH Free', 'HM245', 'GA62', null, '8447390006069', 'ADHTOPFPHFR', '2000', true),
+('ADESTOR', 'Direct Thermal Papers', '191291', 'Thermal Top PH Free', 'HM300', 'GA62', 0.49, '8447390005789', 'ADHTOPPHER', null, true),
+('ADESTOR', 'Direct Thermal Papers', '191306', 'Thermal Top PH Free', 'SP-123', 'GA62', 0.48, '8447390005802', 'ADHTOPPHFR', '2000-4000', true),
+('ADESTOR', 'Direct Thermal Papers', '191307', 'Thermal Top PH Free', 'Supertack', 'GA62', null, '8447390005819', 'ADHTOPPHFR', '2000', true),
+('ADESTOR', 'Direct Thermal Papers', '187683', 'Thermal Top FD BPA Free', 'A-251', 'GA62', null, '8447390004935', 'ADHTOPFDTC', '2000-4000', true),
+('ADESTOR', 'Direct Thermal Papers', '191010', 'Thermal Top FD BPA Free', 'HM100', 'GA62', null, '8447390005642', 'ADHTOPFDTC', '2000-4000', true),
+('ADESTOR', 'Direct Thermal Papers', '187684', 'Thermal Top FD BPA Free', 'SP-123', 'GA62', null, '8447390004942', 'ADHTOPFDTC', '2000-4000', true),
+('ADESTOR', 'Direct Thermal Papers', '7287', 'Thermal Top Plus PH Free', 'A-251', 'GA62', null, '8447390072873', 'ADHTERMICT', '2000-4000', true),
+('ADESTOR', 'Direct Thermal Papers', '7289', 'Thermal Top Plus PH Free', 'SP-123', 'GA62', null, '8447390072897', 'ADHTERMICT', '2000', true),
+('ADESTOR', 'Direct Thermal Papers', '55434', 'Thermal Top Plus PH Free', 'Supertack', 'GA62', null, '8447390554348', 'ADHTERMICT', '2000', true),
+('ADESTOR', 'Direct Thermal Papers', '117049', 'Thermal Top Plus PH Free', 'HM-100', 'GA62', null, '8447390001415', 'ADHTERMICT', '2000-4000', true),
+('ADESTOR', 'Direct Thermal Papers', '191840', 'Thermal Top Plus PH Free', 'HM245', 'GA62', null, '8447390006007', 'ADHTERMICT', '2000', true),
+('ADESTOR', 'Direct Thermal Papers', '158476', 'Thermal Top Plus PH Free', 'HM-300', 'GA62', 0.56, '8447390001309', 'ADHTERMICT', '2000-4000', true),
+('ADESTOR', 'Direct Thermal Papers', '9466', 'Thermal Top Plus PH Free', 'CG-349', 'GA62', null, '8447390094660', 'ADHTERMICT', '2000', true),
+('ADESTOR', 'Direct Thermal Papers', '44831', 'Thermal Top Plus PH Free', 'RA-678', 'GA62', null, '8447390448319', 'ADHTERMICT', null, true),
+('ADESTOR', 'Direct Thermal Papers', '153283', 'Thermal Top Plus PH Free', 'SA-234', 'GA62', null, '8447390001279', 'ADHTERMICT', null, true),
+('ADESTOR', 'Direct Thermal Papers', '186548', 'Thermal Top Plus Opaque PH Free', 'A-251', 'GA62', null, '8447390760770', 'ADHTOP+OP', null, true),
+('ADESTOR', 'Direct Thermal Papers', '186549', 'Thermal Top Plus Opaque PH Free', 'SP-123', 'GA62', null, '8447390772551', 'ADHTOP+OP', null, true),
+('ADESTOR', 'Digital Products', '164210', 'Gloss Inkjet FSC', 'SP-123', 'GW62', null, '8447390001668', 'ADHGLOSSIJ', null, true)
+) as v(
+  marca, categoria, item_number, face_name, adhesive, backing,
+  price_m2, ean_code, notes, stock_dimensions, activo
+);

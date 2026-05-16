@@ -232,15 +232,24 @@ export function EtiquetasHojaRutaMuelleView({
       ) : (
         <div className="grid gap-3">
           {filtradas.map((r) => (
-            <button
+            <Card
               key={r.id}
-              type="button"
-              onClick={() => onOpenDetail(r)}
-              className="text-left transition hover:ring-2 hover:ring-[#C69C2B]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#002147]/30"
+              className="min-h-[11rem] border-slate-200/90 bg-white shadow-sm"
             >
-              <Card className="min-h-[11rem] border-slate-200/90 bg-white shadow-sm">
-                <CardHeader className="space-y-2 pb-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
+              <CardHeader
+                className="cursor-pointer space-y-2 pb-2 transition hover:bg-slate-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#002147]/30 focus-visible:ring-inset"
+                role="button"
+                tabIndex={0}
+                aria-label={`Abrir detalle OT ${r.ot_numero}`}
+                onClick={() => onOpenDetail(r)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onOpenDetail(r);
+                  }
+                }}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="font-mono text-lg font-bold text-[#002147]">
                       {r.ot_numero}
                     </span>
@@ -262,8 +271,8 @@ export function EtiquetasHojaRutaMuelleView({
                   {r.papel?.trim() ? (
                     <CardDescription className="text-xs">{r.papel.trim()}</CardDescription>
                   ) : null}
-                </CardHeader>
-                <CardContent className="space-y-3" onClick={(e) => e.stopPropagation()}>
+              </CardHeader>
+              <CardContent className="space-y-3">
                   <div className="flex items-baseline justify-between gap-2 border-t border-slate-100 pt-2">
                     <span className="text-xs text-muted-foreground">Etiquetas</span>
                     <span className="text-xl font-semibold tabular-nums text-[#002147]">
@@ -278,12 +287,11 @@ export function EtiquetasHojaRutaMuelleView({
                     togglingMaquina={togglingMaquina}
                     onToggle={(field, next) => onToggleMaquina(r, field, next)}
                   />
-                  <p className="text-center text-[10px] text-muted-foreground">
-                    Toca la tarjeta para editar cantidad o abrir ficha
-                  </p>
-                </CardContent>
-              </Card>
-            </button>
+                <p className="text-center text-[10px] text-muted-foreground">
+                  Toca la cabecera para editar cantidad o abrir ficha
+                </p>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}

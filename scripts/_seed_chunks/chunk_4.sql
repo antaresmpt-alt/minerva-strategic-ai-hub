@@ -1,0 +1,51 @@
+insert into public.prod_etiquetas_material_catalogo (
+  marca, categoria, item_number, face_name, adhesive, backing,
+  price_m2, ean_code, notes, stock_dimensions, activo
+)
+select v.marca, v.categoria, v.item_number, v.face_name, v.adhesive, v.backing,
+  v.price_m2, v.ean_code, v.notes, v.stock_dimensions, v.activo
+from (values
+('ADESTOR', 'Wine & Beverage Products', '178578', 'Kraft Brown 70 DfE', 'BC-500', 'GW80', null, '8447390002702', 'ADHKRAFT70', null, true),
+('ADESTOR', 'Wine & Beverage Products', '173963', 'Martelé Extra White 90 WS', 'BC-500', 'GW80', null, '8447390002658', 'ADHMARTELE', null, true),
+('ADESTOR', 'Wine & Beverage Products', '185083', 'Martelé Extra White 90 WS', 'BC-500', 'PET30', null, '8447390003921', 'ADHMARTELE', null, true),
+('ADESTOR', 'Wine & Beverage Products', '173962', 'Martelé Ivory 90 WS', 'BC-500', 'GW80', 0.86, '8447390002665', 'ADHMARTELE', null, true),
+('ADESTOR', 'Wine & Beverage Products', '175044', 'Snow Digital 90 WS', 'BC-500', 'GW80', null, '8447390002559', 'ADHSNOW', null, true),
+('ADESTOR', 'Wine & Beverage Products', '175422', 'StonePaper 144 DIE', 'BC-500', 'GW80', null, '8447390002535', 'ADHPIEDRA', null, true),
+('ADESTOR', 'Wine & Beverage Products', '193441', 'Laid White 90 WS', 'BC-500', 'GW80', null, '8447390006434', 'ADHLAIDCR', null, true),
+('ADESTOR', 'Wine & Beverage Products', '193442', 'Laid Cream 90 WS', 'BC-500', 'GW80', null, '8447390006427', 'ADHLAIDWH', null, true),
+('ADESTOR', 'Wine & Beverage Products', '193182', 'Vintack White 95 WS', 'BC-500', 'GW80', null, '8447390006342', 'ADHVINTAWH', null, true),
+('ADESTOR', 'Wine & Beverage Products', '193440', 'Vintack Cream 90 WS', 'BC-500', 'GW80', null, '8447390001934', 'ADHVINTACR', null, true),
+('ADESTOR', 'Wine & Beverage Products', '175329', 'Foil Bright Gold', 'BC-500', 'GW80', null, '8447390002719', 'ADHLAMINAD', null, true),
+('ADESTOR', 'Wine & Beverage Products', '175488', 'Foil Bright Silver', 'BC-500', 'GW80', null, '8447390002726', 'ADHLAMINAD', null, true),
+('ADESTOR', 'Wine & Beverage Products', '184861', 'Foil Matt Silver', 'BC-500', 'GW80', 0.87, '8447390003853', 'ADHLAMINAD', null, true),
+('ADESTOR', 'Wine & Beverage Products', '177715', 'Foil Bright Silver', 'CG-349', 'GW80', null, '8447390002948', 'ADHLAMINAD', null, true),
+('ADESTOR', 'Wine & Beverage Products', '177900', 'Metalvac Bright Silver', 'BC-500', 'GW80', 0.74, '8447390002696', 'ADHMETALBS', null, true),
+('ADESTOR', 'Wine & Beverage Products', '181013', 'Metalvac Bright Silver', 'A-251', 'GA62', null, '8447390002443', 'ADHMETALBS', null, true),
+('ADESTOR', 'Wine & Beverage Products', '181014', 'Metalvac Bright Silver', 'SP123-', 'GA62', null, '8447390002450', 'ADHMETALBS', null, true),
+('ADESTOR', 'Wine & Beverage Products', '181015', 'Metalvac Bright Silver', 'SP-123', 'PET23', null, '8447390002467', 'ADHMETALBS', null, true),
+('ADESTOR', 'Standard Films', '196418', 'PP Pearl White C TC', 'A-292F', 'GW', null, '8447390006830', 'ADHPPPEARL', '2000', true),
+('ADESTOR', 'Standard Films', '196420', 'PP Pearl White C TC', 'A-292F', 'PET23', null, '8447390006847', 'ADHPPPEARL', '2000', true),
+('ADESTOR', 'Standard Films', '191513', 'PP Pearl White C TC', 'HM-100', 'GW', null, '8447390002108', 'ADHPPPEARL', '2000', true),
+('ADESTOR', 'Standard Films', '196421', 'PP Gloss White S TC', 'A-292F', 'GW', null, '8447390006854', 'ADHPPGLWH6', '2000', true),
+('ADESTOR', 'Standard Films', '196422', 'PP Gloss Clear S TC', 'A-292F', 'GW', null, '8447390006861', 'ADHPPGLCL6', '2000', true),
+('ADESTOR', 'Standard Films', '196429', 'PP Gloss Clear S TC', 'A-292F', 'PET30', null, '8447390006939', 'ADHPPGLCL6', null, true),
+('ADESTOR', 'Standard Films', '195415', 'PP Matt White TC', 'A-292', 'GW62', null, '8447390006649', 'ADHPPMTWH6', null, true),
+('ADESTOR', 'Standard Films', '195416', 'PP Gloss Silver TC', 'A-292', 'GW62', null, '8447390006656', 'ADHPPGLSIL', null, true),
+('ADESTOR', 'Standard Films', '195414', 'PP Gloss Clear TC', 'A-292', 'PET30', null, '8447390006632', 'ADHPPGLCL5', null, true),
+('ADESTOR', 'Standard Films', '196425', 'PE Gloss White TC', 'A-292F', 'GW', null, '8447390006892', 'ADHPEGLWH8', '2000', true),
+('ADESTOR', 'Standard Films', '196426', 'PE Gloss Clear TC', 'A-292F', 'GW', null, '8447390006908', 'ADHPEGLCLB', '2000', true),
+('ADESTOR', 'Standard Films', '196427', 'PE Gloss White TC100', 'A-292F', 'GW', null, '8447390006915', 'ADHPEGWT10', null, true),
+('ADESTOR', 'Standard Films', '7262', 'PVC Gloss White', 'A-251', 'GW', null, '844739072620', 'ADHPVCBLAN', null, true),
+('FEDRIGONI', 'Coated Gloss White Papers', 'PCD0362', 'CAST GLOSS PEFC', 'P1000', 'YG60', null, null, 'ALTO BRILLO BASE AMARILLA', '2000', true),
+('FEDRIGONI', 'Coated Gloss White Papers', 'PCD0108', 'COATED 80 FSC™', 'RF20', 'YG60', null, null, null, '2000', true),
+('FEDRIGONI', 'Coated Gloss White Papers', 'PCD0108', 'COATED 80 FSC™', 'RF20', 'YG60', null, null, 'REMOVIBLE BASE AMARILLA', '2000', true),
+('FEDRIGONI', 'Coated Gloss White Papers', 'PCD0060', 'COATED 80 FSC™', 'TT50 EXTREME', 'YG60', null, null, 'couche brillo - superficies rugosas - adherencia extrema', '1500', true),
+('FEDRIGONI', 'Coated Gloss White Papers', 'PCD0121', 'COATED 80 FSC™', 'TT50L', 'YG60', null, null, 'couche brillo - superficies planas  - adherencia fuerte', '1500', true),
+('FEDRIGONI', 'Coated Gloss White Papers', 'PCD0072', 'COATED 80 FSC™', 'RF20', 'WG62', null, null, 'REMOVIBLE BASE BLANCA', '0', true),
+('FEDRIGONI', 'Coated Gloss White Papers', 'PCD0062', 'COATED 80 FSC™', 'ST5000', 'YG60', null, null, 'SUPER PERMANENTE - adherencia muyfuerte', '2000', true),
+('FEDRIGONI', 'Wine & Beverage Products', 'WNE0138', 'FREELIFE MERIDA WHITE FSC™', 'SH6020 PLUS', 'WG80', null, null, 'RUGOSO TIPO TEJIDO', '0', true),
+('FEDRIGONI', 'Standard Films', 'FLM0115', 'PP TC MATT WHITE 70', 'AP901', 'WG74', null, null, null, '1000', true)
+) as v(
+  marca, categoria, item_number, face_name, adhesive, backing,
+  price_m2, ean_code, notes, stock_dimensions, activo
+);

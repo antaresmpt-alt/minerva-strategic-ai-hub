@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BookOpen,
   CalendarDays,
   Inbox,
   Package,
@@ -10,6 +11,7 @@ import {
 import { useState } from "react";
 
 import { EtiquetasComprasTab } from "@/components/produccion/etiquetas-digital/etiquetas-compras-tab";
+import { EtiquetasConsultaMaterialTab } from "@/components/produccion/etiquetas-digital/etiquetas-consulta-material-tab";
 import { EtiquetasHojaRutaTab } from "@/components/produccion/etiquetas-digital/etiquetas-hoja-ruta-tab";
 import { EtiquetasCalendarioMensualTab } from "@/components/produccion/etiquetas-digital/etiquetas-calendario-mensual-tab";
 import { EtiquetasStockBobinasTab } from "@/components/produccion/etiquetas-digital/etiquetas-stock-bobinas-tab";
@@ -38,7 +40,7 @@ export function EtiquetasDigitalPage() {
           className="mt-0.5 max-w-full truncate text-xs text-slate-600 sm:max-w-3xl"
           title="Departamento de impresión digital de etiquetas — Minerva Global"
         >
-          Pool, hoja de ruta, compras, stock bobinas y planificación mensual ·{" "}
+          Pool, hoja de ruta, compras, consulta material, stock y calendario ·{" "}
           <span className="font-medium text-[#002147]">www.minervaglobal.es</span>
         </p>
       </header>
@@ -61,6 +63,10 @@ export function EtiquetasDigitalPage() {
             <TabsTrigger value="compras" className={tabTriggerClass}>
               <ShoppingCart className="size-4 shrink-0 opacity-90" aria-hidden />
               Compras
+            </TabsTrigger>
+            <TabsTrigger value="consulta-material" className={tabTriggerClass}>
+              <BookOpen className="size-4 shrink-0 opacity-90" aria-hidden />
+              Consulta material
             </TabsTrigger>
             <TabsTrigger value="stock-bobinas" className={tabTriggerClass}>
               <Package className="size-4 shrink-0 opacity-90" aria-hidden />
@@ -99,6 +105,10 @@ export function EtiquetasDigitalPage() {
 
         <TabsContent value="compras" className="mt-0 outline-none">
           <EtiquetasComprasTab />
+        </TabsContent>
+
+        <TabsContent value="consulta-material" className="mt-0 outline-none">
+          <EtiquetasConsultaMaterialTab />
         </TabsContent>
 
         <TabsContent value="stock-bobinas" className="mt-0 outline-none">
