@@ -21,8 +21,23 @@ export type CalendarioSemanaLaboral = (
 )[];
 
 const DIAS_LABORABLES = ["Lun", "Mar", "Mié", "Jue", "Vie"] as const;
+const DIA_SABADO = "Sáb" as const;
 
 export { DIAS_LABORABLES };
+
+export function diasLaborablesCabecera(
+  includeSaturday: boolean
+): readonly string[] {
+  return includeSaturday ? [...DIAS_LABORABLES, DIA_SABADO] : DIAS_LABORABLES;
+}
+
+export function numColumnasCalendario(includeSaturday: boolean): number {
+  return includeSaturday ? 6 : 5;
+}
+
+function emptySemana(cols: number): CalendarioSemanaLaboral {
+  return Array.from({ length: cols }, () => null);
+}
 
 const MESES_ES = [
   "Enero",
@@ -41,6 +56,29 @@ const MESES_ES = [
 
 export function mesAnioLabel(year: number, monthIndex: number): string {
   return `${MESES_ES[monthIndex]} ${year}`;
+}
+
+export function fechaDiaLabel(ymd: string): string {
+  const d = new Date(`${ymd}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return ymd;
+  return d.toLocaleDateString("es-ES", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+/** Reparte líneas en dos columnas cuando hay muchas entradas. */
+export function splitLineasDosColumnas<T>(items: T[]): {
+  left: T[];
+  right: T[];
+} {
+  if (items.length < 4) {
+    return { left: items, right: [] };
+  }
+  const mid = Math.ceil(items.length / 2);
+  return { left: items.slice(0, mid), right: items.slice(mid) };
 }
 
 export function ymdFromParts(year: number, monthIndex: number, day: number): string {
@@ -163,23 +201,27 @@ export function apuntesPorDia(
   return map;
 }
 
-/** Cuadrícula lun–vie por semanas (estilo planning en papel). */
+/** Cuadrícula lun–vie (opcional sáb) por semanas (estilo planning en papel). */
 export function buildSemanasLaboralesMes(
   year: number,
-  monthIndex: number
+  monthIndex: number,
+  options?: { includeSaturday?: boolean }
 ): CalendarioSemanaLaboral[] {
+  const includeSaturday = options?.includeSaturday ?? false;
+  const cols = numColumnasCalendario(includeSaturday);
   const lastDay = new Date(year, monthIndex + 1, 0).getDate();
   const semanas: CalendarioSemanaLaboral[] = [];
-  let semana: CalendarioSemanaLaboral = [null, null, null, null, null];
+  let semana: CalendarioSemanaLaboral = emptySemana(cols);
 
   for (let d = 1; d <= lastDay; d++) {
     const date = new Date(year, monthIndex, d, 12, 0, 0);
     const dow = date.getDay();
-    if (dow === 0 || dow === 6) continue;
+    if (dow === 0) continue;
+    if (dow === 6 && !includeSaturday) continue;
     const col = dow - 1;
     if (col === 0 && semana.some((c) => c != null)) {
       semanas.push(semana);
-      semana = [null, null, null, null, null];
+      semana = emptySemana(cols);
     }
     semana[col] = { ymd: ymdFromParts(year, monthIndex, d), dayNum: d };
   }

@@ -7,9 +7,19 @@ import { toast } from "sonner";
 import { EntregaPlazoSemaforo } from "@/components/produccion/etiquetas-digital/entrega-plazo-semaforo";
 import { EtiquetasEntradaExpressDialog } from "@/components/produccion/etiquetas-digital/etiquetas-entrada-express-dialog";
 import { EtiquetasHojaRutaEditDialog } from "@/components/produccion/etiquetas-digital/etiquetas-hoja-ruta-edit-dialog";
+import { EtiquetasHojaRutaMuelleDialog } from "@/components/produccion/etiquetas-digital/etiquetas-hoja-ruta-muelle-dialog";
+import { EtiquetasHojaRutaMuelleView } from "@/components/produccion/etiquetas-digital/etiquetas-hoja-ruta-muelle-view";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, type Option } from "@/components/ui/select-native";
@@ -31,6 +41,10 @@ import {
   mergeCatalogAndUsedLabels,
 } from "@/lib/etiquetas-catalogo";
 import {
+  buildEtiquetasHojaRutaKpis,
+  formatEtiquetasKpi,
+} from "@/lib/etiquetas-hoja-ruta-kpis";
+import {
   buildMaquinaPatch,
   type MaquinaHojaRutaField,
   mergeMaquinaIntoRow,
@@ -42,6 +56,7 @@ import { cn } from "@/lib/utils";
 
 const TABLE = "prod_etiquetas_hoja_ruta";
 const CATALOG_TABLE = "prod_etiquetas_catalogo";
+const STORAGE_COMPACT = "etiquetas-hr-compact";
 
 const ORDEN_OPTIONS: Option[] = [
   { value: "fecha_entrega_ot_asc", label: "Fecha entrega OT (asc)" },
@@ -85,6 +100,30 @@ export function EtiquetasHojaRutaTab() {
   );
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [togglingMaquina, setTogglingMaquina] = useState<string | null>(null);
+  const [compactMode, setCompactMode] = useState(false);
+  const [muelleDetailRow, setMuelleDetailRow] =
+    useState<ProdEtiquetasHojaRutaRow | null>(null);
+  const [konicaEtiquetasRow, setKonicaEtiquetasRow] =
+    useState<ProdEtiquetasHojaRutaRow | null>(null);
+  const [konicaEtiquetasInput, setKonicaEtiquetasInput] = useState("");
+  const [savingEtiquetas, setSavingEtiquetas] = useState(false);
+
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(STORAGE_COMPACT);
+      if (v === "1") setCompactMode(true);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_COMPACT, compactMode ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [compactMode]);
 
   const loadRows = useCallback(async () => {
     setLoading(true);
@@ -207,6 +246,46 @@ export function EtiquetasHojaRutaTab() {
     [filtroTexto, filtroPapel, ocultarFinalizadas, ordenLabel]
   );
 
+  const kpis = useMemo(() => buildEtiquetasHojaRutaKpis(rows), [rows]);
+
+  const exportOptions = useMemo(
+    () => ({
+      includeKpis: !compactMode,
+      kpis,
+    }),
+    [compactMode, kpis]
+  );
+
+  const exportHint = compactMode
+    ? "Listado filtrado (sin indicadores)"
+    : "Listado filtrado + indicadores en resumen";
+
+  const updateEtiquetas = useCallback(
+    async (r: ProdEtiquetasHojaRutaRow, etiquetas: number): Promise<boolean> => {
+      setSavingEtiquetas(true);
+      const prev = r.etiquetas;
+      setRows((list) =>
+        list.map((x) => (x.id === r.id ? { ...x, etiquetas } : x))
+      );
+      const { error } = await supabase
+        .from(TABLE)
+        .update({ etiquetas })
+        .eq("id", r.id);
+      setSavingEtiquetas(false);
+      if (error) {
+        setRows((list) =>
+          list.map((x) => (x.id === r.id ? { ...x, etiquetas: prev } : x))
+        );
+        toast.error("No se pudo guardar las etiquetas", {
+          description: error.message,
+        });
+        return false;
+      }
+      return true;
+    },
+    [supabase]
+  );
+
   const toggleMaquina = useCallback(
     async (r: ProdEtiquetasHojaRutaRow, field: MaquinaHojaRutaField, next: boolean) => {
       const toggleKey = `${r.id}:${field}`;
@@ -229,6 +308,44 @@ export function EtiquetasHojaRutaTab() {
     },
     [supabase]
   );
+
+  const requestMaquinaToggle = useCallback(
+    (
+      r: ProdEtiquetasHojaRutaRow,
+      field: MaquinaHojaRutaField,
+      next: boolean
+    ) => {
+      if (
+        field === "konica" &&
+        next &&
+        (r.etiquetas == null || r.etiquetas <= 0)
+      ) {
+        setKonicaEtiquetasRow(r);
+        setKonicaEtiquetasInput("");
+        return;
+      }
+      void toggleMaquina(r, field, next);
+    },
+    [toggleMaquina]
+  );
+
+  const confirmKonicaEtiquetas = useCallback(async () => {
+    const r = konicaEtiquetasRow;
+    if (!r) return;
+    const n = Number.parseInt(konicaEtiquetasInput.trim(), 10);
+    if (!Number.isFinite(n) || n <= 0) {
+      toast.message("Cantidad no válida", {
+        description: "Indica un número de etiquetas mayor que cero.",
+      });
+      return;
+    }
+    const ok = await updateEtiquetas(r, n);
+    if (!ok) return;
+    const fresh = { ...r, etiquetas: n };
+    setKonicaEtiquetasRow(null);
+    setKonicaEtiquetasInput("");
+    void toggleMaquina(fresh, "konica", true);
+  }, [konicaEtiquetasInput, konicaEtiquetasRow, toggleMaquina, updateEtiquetas]);
 
   const toggleFinalizado = useCallback(
     async (r: ProdEtiquetasHojaRutaRow, next: boolean) => {
@@ -263,8 +380,13 @@ export function EtiquetasHojaRutaTab() {
       });
       return;
     }
-    exportEtiquetasHojaRutaExcel(filtradas, exportFilters);
-  }, [filtradas, exportFilters]);
+    exportEtiquetasHojaRutaExcel(filtradas, exportFilters, exportOptions);
+    toast.success(
+      exportOptions.includeKpis
+        ? "Excel descargado (con indicadores)"
+        : "Excel descargado"
+    );
+  }, [exportOptions, filtradas, exportFilters]);
 
   const handleExportPdf = useCallback(() => {
     if (filtradas.length === 0) {
@@ -273,8 +395,13 @@ export function EtiquetasHojaRutaTab() {
       });
       return;
     }
-    exportEtiquetasHojaRutaPdf(filtradas, exportFilters);
-  }, [filtradas, exportFilters]);
+    exportEtiquetasHojaRutaPdf(filtradas, exportFilters, exportOptions);
+    toast.success(
+      exportOptions.includeKpis
+        ? "PDF descargado (con indicadores)"
+        : "PDF descargado"
+    );
+  }, [exportOptions, filtradas, exportFilters]);
 
   return (
     <div className="flex w-full min-w-0 max-w-[100vw] flex-col gap-3">
@@ -293,6 +420,84 @@ export function EtiquetasHojaRutaTab() {
         catalog={catalog}
         onSaved={() => void loadRows()}
       />
+      <EtiquetasHojaRutaMuelleDialog
+        row={muelleDetailRow}
+        open={muelleDetailRow != null}
+        onOpenChange={(o) => {
+          if (!o) setMuelleDetailRow(null);
+        }}
+        togglingMaquina={togglingMaquina}
+        savingEtiquetas={savingEtiquetas}
+        onToggleMaquina={requestMaquinaToggle}
+        onSaveEtiquetas={(row, etiquetas) => {
+          void updateEtiquetas(row, etiquetas);
+        }}
+        onEdit={(row) => {
+          setMuelleDetailRow(null);
+          setEditingRow(row);
+        }}
+      />
+      <Dialog
+        open={konicaEtiquetasRow != null}
+        onOpenChange={(o) => {
+          if (!o) {
+            setKonicaEtiquetasRow(null);
+            setKonicaEtiquetasInput("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-[#002147]">
+              Etiquetas — OT {konicaEtiquetasRow?.ot_numero}
+            </DialogTitle>
+            <DialogDescription>
+              Indica cuántas etiquetas lleva este trabajo antes de marcar la
+              impresión (Konica). Se usa en los indicadores del departamento.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <Label htmlFor="etq-konica-etiquetas" className="text-xs">
+              Número de etiquetas
+            </Label>
+            <Input
+              id="etq-konica-etiquetas"
+              type="number"
+              min={1}
+              inputMode="numeric"
+              autoFocus
+              value={konicaEtiquetasInput}
+              onChange={(e) => setKonicaEtiquetasInput(e.target.value)}
+              placeholder="Ej. 5000"
+              className="h-10"
+            />
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setKonicaEtiquetasRow(null);
+                setKonicaEtiquetasInput("");
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              className="bg-[#002147]"
+              disabled={savingEtiquetas || !konicaEtiquetasInput.trim()}
+              onClick={() => void confirmKonicaEtiquetas()}
+            >
+              {savingEtiquetas ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden />
+              ) : (
+                "Guardar y marcar impresión"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-base font-semibold text-[#002147]">Hoja de ruta</h2>
@@ -307,7 +512,7 @@ export function EtiquetasHojaRutaTab() {
             variant="outline"
             size="sm"
             onClick={handleExportExcel}
-            title="Listado actual (filtros aplicados)"
+            title={exportHint}
           >
             Exportar Excel
           </Button>
@@ -316,7 +521,7 @@ export function EtiquetasHojaRutaTab() {
             variant="outline"
             size="sm"
             onClick={handleExportPdf}
-            title="Listado actual (filtros aplicados)"
+            title={exportHint}
           >
             Exportar PDF
           </Button>
@@ -356,7 +561,7 @@ export function EtiquetasHojaRutaTab() {
         </div>
       </div>
 
-      <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-slate-200/90 bg-white/90 p-3 shadow-sm sm:flex-row sm:flex-wrap sm:items-end">
+      <div className="hidden min-w-0 flex-col gap-3 rounded-lg border border-slate-200/90 bg-white/90 p-3 shadow-sm md:flex md:flex-row md:flex-wrap md:items-end">
         <div className="grid min-w-0 flex-1 gap-2 sm:max-w-md">
           <Label htmlFor="etq-hr-buscar" className="text-xs">
             Buscar (OT, cliente, trabajo)
@@ -394,15 +599,72 @@ export function EtiquetasHojaRutaTab() {
           />
           Ocultar finalizadas
         </label>
+        <label
+          className="flex cursor-pointer items-center gap-2 text-xs text-slate-700 sm:pb-1"
+          title="Oculta el resumen superior y compacta la tabla"
+        >
+          <input
+            type="checkbox"
+            className="size-4 rounded border-slate-300"
+            checked={compactMode}
+            onChange={(e) => setCompactMode(e.target.checked)}
+          />
+          Modo compacto
+        </label>
       </div>
 
+      {!compactMode ? (
+        <div className="hidden grid-cols-2 gap-2 sm:grid-cols-4 md:grid">
+          <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="text-[11px] text-slate-500">Etiquetas hoy</p>
+            <p className="text-sm font-semibold text-[#002147]">
+              {formatEtiquetasKpi(kpis.etiquetasHoy)}
+            </p>
+            <p className="mt-0.5 text-[10px] text-slate-500">
+              Konica cerrada hoy
+            </p>
+          </div>
+          <div className="rounded-md border border-slate-200 bg-[#002147]/5 px-3 py-2">
+            <p className="text-[11px] text-[#002147]/80">Etiquetas este mes</p>
+            <p className="text-sm font-semibold text-[#002147]">
+              {formatEtiquetasKpi(kpis.etiquetasMes)}
+            </p>
+            <p className="mt-0.5 text-[10px] text-slate-500">
+              Suma al marcar Kon
+            </p>
+          </div>
+          <div className="rounded-md border border-slate-200 bg-amber-50 px-3 py-2">
+            <p className="text-[11px] text-amber-700">Cola Konica</p>
+            <p className="text-sm font-semibold text-amber-900">
+              {kpis.colaKonica}
+            </p>
+            <p className="mt-0.5 text-[10px] text-amber-800/80">OTs por imprimir</p>
+          </div>
+          <div className="rounded-md border border-slate-200 bg-red-50 px-3 py-2">
+            <p className="text-[11px] text-red-700">Plazo ≤ 4 días</p>
+            <p className="text-sm font-semibold text-red-900">
+              {kpis.plazoCritico}
+            </p>
+            <p className="mt-0.5 text-[10px] text-red-800/80">OTs activas</p>
+          </div>
+        </div>
+      ) : null}
+
+      <EtiquetasHojaRutaMuelleView
+        rows={rows}
+        loading={loading}
+        togglingMaquina={togglingMaquina}
+        onToggleMaquina={requestMaquinaToggle}
+        onOpenDetail={setMuelleDetailRow}
+      />
+
       {loading && rows.length === 0 ? (
-        <div className="flex items-center justify-center gap-2 py-12 text-sm text-slate-600">
+        <div className="hidden items-center justify-center gap-2 py-12 text-sm text-slate-600 md:flex">
           <Loader2 className="size-5 animate-spin" aria-hidden />
           Cargando…
         </div>
       ) : filtradas.length === 0 ? (
-        <Alert className="border-slate-200 bg-slate-50/90">
+        <Alert className="hidden border-slate-200 bg-slate-50/90 md:block">
           <AlertTitle>Sin filas</AlertTitle>
           <AlertDescription className="text-sm">
             {rows.length === 0
@@ -411,10 +673,20 @@ export function EtiquetasHojaRutaTab() {
           </AlertDescription>
         </Alert>
       ) : (
-        <div className="max-w-full overflow-x-auto rounded-lg border border-slate-200/90 bg-white shadow-sm">
-          <Table className="min-w-[1100px] text-xs">
+        <div className="hidden max-w-full overflow-x-auto rounded-lg border border-slate-200/90 bg-white shadow-sm md:block">
+          <Table
+            className={cn(
+              "transition-all duration-300 ease-out",
+              compactMode ? "min-w-[1000px] text-[11px]" : "min-w-[1100px] text-xs"
+            )}
+          >
             <TableHeader>
-              <TableRow className="bg-slate-50/90 hover:bg-slate-50/90">
+              <TableRow
+                className={cn(
+                  "bg-slate-50/90 hover:bg-slate-50/90",
+                  compactMode && "h-8"
+                )}
+              >
                 <TableHead className="w-10 px-1 text-center font-semibold text-[#002147]">
                   <span className="sr-only">Editar</span>
                 </TableHead>
@@ -477,43 +749,95 @@ export function EtiquetasHojaRutaTab() {
                   key={r.id}
                   className={cn(
                     i % 2 === 1 ? "bg-slate-50/50" : "bg-white",
-                    "border-slate-100"
+                    "border-slate-100",
+                    compactMode && "h-8"
                   )}
                 >
-                  <TableCell className="w-10 px-1 text-center align-middle">
+                  <TableCell
+                    className={cn(
+                      "w-10 px-1 text-center align-middle",
+                      compactMode && "py-1"
+                    )}
+                  >
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="size-7 text-[#002147] hover:bg-slate-100"
+                      className={cn(
+                        "text-[#002147] hover:bg-slate-100",
+                        compactMode ? "size-6" : "size-7"
+                      )}
                       aria-label={`Editar OT ${r.ot_numero}`}
                       onClick={() => setEditingRow(r)}
                     >
                       <Pencil className="size-3.5" aria-hidden />
                     </Button>
                   </TableCell>
-                  <TableCell className="whitespace-nowrap font-medium text-[#002147]">
+                  <TableCell
+                    className={cn(
+                      "whitespace-nowrap font-medium text-[#002147]",
+                      compactMode && "py-1 font-mono text-[11px]"
+                    )}
+                  >
                     {r.ot_numero}
                   </TableCell>
-                  <TableCell className="max-w-[10rem] truncate" title={r.cliente ?? ""}>
+                  <TableCell
+                    className={cn(
+                      "truncate",
+                      compactMode ? "max-w-[8rem] py-1 text-[11px]" : "max-w-[10rem]"
+                    )}
+                    title={r.cliente ?? ""}
+                  >
                     {r.cliente ?? "—"}
                   </TableCell>
-                  <TableCell className="max-w-[12rem] truncate" title={r.trabajo ?? ""}>
+                  <TableCell
+                    className={cn(
+                      "truncate",
+                      compactMode ? "max-w-[10rem] py-1 text-[11px]" : "max-w-[12rem]"
+                    )}
+                    title={r.trabajo ?? ""}
+                  >
                     {r.trabajo ?? "—"}
                   </TableCell>
-                  <TableCell className="max-w-[8rem] truncate" title={r.papel ?? ""}>
+                  <TableCell
+                    className={cn(
+                      "truncate",
+                      compactMode ? "max-w-[6rem] py-1 text-[11px]" : "max-w-[8rem]"
+                    )}
+                    title={r.papel ?? ""}
+                  >
                     {r.papel ?? "—"}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">
+                  <TableCell
+                    className={cn(
+                      "text-right tabular-nums",
+                      compactMode && "py-1 text-[11px]"
+                    )}
+                  >
                     {r.cantidad != null ? String(r.cantidad) : "—"}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap tabular-nums">
+                  <TableCell
+                    className={cn(
+                      "whitespace-nowrap tabular-nums",
+                      compactMode && "py-1 text-[11px]"
+                    )}
+                  >
                     {fmtDate(r.fecha_entrega_ot)}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap tabular-nums">
+                  <TableCell
+                    className={cn(
+                      "whitespace-nowrap tabular-nums",
+                      compactMode && "py-1 text-[11px]"
+                    )}
+                  >
                     {fmtDate(r.fecha_entrada_depto)}
                   </TableCell>
-                  <TableCell className="px-1 text-center align-middle">
+                  <TableCell
+                    className={cn(
+                      "px-1 text-center align-middle",
+                      compactMode && "py-1"
+                    )}
+                  >
                     <EntregaPlazoSemaforo
                       fechaEntregaOt={r.fecha_entrega_ot}
                       urgente={r.urgencia === "urgente"}
@@ -535,24 +859,42 @@ export function EtiquetasHojaRutaTab() {
                           disabled={togglingMaquina === `${r.id}:${field}`}
                           aria-label={`${title} OT ${r.ot_numero}`}
                           onChange={(e) => {
-                            void toggleMaquina(r, field, e.target.checked);
+                            requestMaquinaToggle(r, field, e.target.checked);
                           }}
                         />
                       </label>
                     </TableCell>
                   ))}
-                  <TableCell className="max-w-[4rem] truncate">
+                  <TableCell
+                    className={cn(
+                      "max-w-[4rem] truncate",
+                      compactMode && "py-1 text-[11px]"
+                    )}
+                  >
                     {r.troquel_utillaje ?? "—"}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap tabular-nums text-[10px]">
+                  <TableCell
+                    className={cn(
+                      "whitespace-nowrap tabular-nums",
+                      compactMode ? "py-1 text-[10px]" : "text-[10px]"
+                    )}
+                  >
                     {fmtDate(r.fecha_inicio_produccion)} /{" "}
                     {fmtDate(r.fecha_fin_produccion)}
                   </TableCell>
-                  <TableCell className="text-right text-[10px] tabular-nums text-slate-700">
+                  <TableCell
+                    className={cn(
+                      "text-right tabular-nums text-slate-700",
+                      compactMode ? "py-1 text-[10px]" : "text-[10px]"
+                    )}
+                  >
                     {r.cajas ?? "—"} / {r.bobinas ?? "—"} / {r.etiquetas ?? "—"}
                   </TableCell>
                   <TableCell
-                    className="max-w-[8rem] truncate text-[10px]"
+                    className={cn(
+                      "max-w-[8rem] truncate",
+                      compactMode ? "py-1 text-[10px]" : "text-[10px]"
+                    )}
                     title={r.cajas_restantes ?? ""}
                   >
                     {r.cajas_restantes ?? "—"}
@@ -583,3 +925,5 @@ export function EtiquetasHojaRutaTab() {
     </div>
   );
 }
+
+
