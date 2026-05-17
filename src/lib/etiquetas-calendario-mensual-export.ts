@@ -1,5 +1,10 @@
 import { jsPDF } from "jspdf";
 
+import {
+  labelFiltrosCalendario,
+  type CalendarioFiltros,
+  type CalendarioResumenMes,
+} from "@/lib/etiquetas-calendario-filters";
 import type {
   CalendarioEventoAuto,
   CalendarioSemanaLaboral,
@@ -8,17 +13,20 @@ import {
   diasLaborablesCabecera,
   mesAnioLabel,
 } from "@/lib/etiquetas-calendario-mensual";
+import type { ProdCalendarioFestivoRow } from "@/types/prod-calendario-festivo";
 import type { ProdEtiquetasCalendarioApunteRow } from "@/types/prod-etiquetas-calendario-apunte";
 
 const NAVY: [number, number, number] = [0, 33, 71];
 const WHITE: [number, number, number] = [255, 255, 255];
 const SLATE: [number, number, number] = [71, 85, 105];
 const BORDER: [number, number, number] = [203, 213, 225];
+const FESTIVO_BG: [number, number, number] = [226, 232, 240];
+const FESTIVO_HEADER: [number, number, number] = [100, 116, 139];
 
 const MARGIN = 8;
-const HEADER_H = 20;
+const HEADER_H = 22;
 const COL_HEADER_H = 6;
-const FOOTER_H = 8;
+const FOOTER_H = 14;
 const TWO_COL_MIN_LINES = 4;
 
 function pageW(doc: jsPDF): number {
@@ -37,9 +45,11 @@ function fmtNowEs(): string {
 
 function lineasDia(
   eventos: CalendarioEventoAuto[],
-  apuntes: ProdEtiquetasCalendarioApunteRow[]
+  apuntes: ProdEtiquetasCalendarioApunteRow[],
+  festivoNombres: string[]
 ): string[] {
   const out: string[] = [];
+  for (const n of festivoNombres) out.push(`[Festivo] ${n}`);
   for (const ev of eventos) out.push(ev.label);
   for (const a of apuntes) {
     const t = String(a.texto ?? "").trim();
@@ -51,7 +61,8 @@ function lineasDia(
 function drawMonthHeader(
   doc: jsPDF,
   year: number,
-  monthIndex: number
+  monthIndex: number,
+  filtros: CalendarioFiltros
 ): number {
   const w = pageW(doc);
   doc.setFillColor(...NAVY);
@@ -63,6 +74,7 @@ function drawMonthHeader(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.text(mesAnioLabel(year, monthIndex), MARGIN, 15);
+  doc.text(`Filtros: ${labelFiltrosCalendario(filtros)}`, MARGIN, 19);
   doc.text(`Generado: ${fmtNowEs()}`, w - MARGIN, 15, {
     align: "right",
   });
@@ -100,7 +112,8 @@ function drawDayCell(
   h: number,
   dayNum: number | null,
   eventos: CalendarioEventoAuto[],
-  apuntes: ProdEtiquetasCalendarioApunteRow[]
+  apuntes: ProdEtiquetasCalendarioApunteRow[],
+  festivos: ProdCalendarioFestivoRow[]
 ): void {
   if (dayNum == null) {
     doc.setDrawColor(...BORDER);
@@ -111,18 +124,26 @@ function drawDayCell(
     return;
   }
 
+  const esFestivo = festivos.length > 0;
   const headerH = 5.5;
   const padX = 1.5;
   const padBottom = 1.2;
-  /** jsPDF usa Y como línea base; hay que dejar hueco bajo la franja azul. */
   const padTopContent = 3.2;
 
-  doc.setFillColor(...NAVY);
+  if (esFestivo) {
+    doc.setFillColor(...FESTIVO_HEADER);
+  } else {
+    doc.setFillColor(...NAVY);
+  }
   doc.rect(x, y, w, headerH, "F");
 
   const bodyY = y + headerH;
   const bodyH = h - headerH;
-  doc.setFillColor(255, 255, 255);
+  if (esFestivo) {
+    doc.setFillColor(...FESTIVO_BG);
+  } else {
+    doc.setFillColor(255, 255, 255);
+  }
   doc.rect(x, bodyY, w, bodyH, "F");
 
   doc.setTextColor(...WHITE);
@@ -130,7 +151,11 @@ function drawDayCell(
   doc.setFontSize(9);
   doc.text(String(dayNum), x + w - 1.5, y + 4, { align: "right" });
 
-  const lines = lineasDia(eventos, apuntes);
+  const lines = lineasDia(
+    eventos,
+    apuntes,
+    festivos.map((f) => f.nombre)
+  );
   const innerX = x + padX;
   const innerW = w - padX * 2;
   const innerH = bodyH - padTopContent - padBottom;
@@ -144,9 +169,12 @@ function drawDayCell(
     for (const line of items) {
       if (cy > bodyY + padTopContent + innerH - lineH) break;
       const isOt = /^[ITN]-/.test(line);
-      doc.setFont("helvetica", isOt ? "bold" : "normal");
+      const isFest = line.startsWith("[Festivo]");
+      doc.setFont("helvetica", isOt || isFest ? "bold" : "normal");
       if (isOt && line.startsWith("I-")) {
         doc.setTextColor(...NAVY);
+      } else if (isFest) {
+        doc.setTextColor(...FESTIVO_HEADER);
       } else {
         doc.setTextColor(51, 65, 85);
       }
@@ -176,6 +204,29 @@ function drawDayCell(
   doc.rect(x, y, w, h);
 }
 
+function drawResumenFooter(
+  doc: jsPDF,
+  y: number,
+  resumen: CalendarioResumenMes
+): void {
+  const w = pageW(doc);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  doc.setTextColor(...SLATE);
+  const diaMax =
+    resumen.diaMaxYmd && resumen.diaMaxTotal > 0
+      ? ` · Día más cargado: ${resumen.diaMaxYmd.slice(8, 10)}/${resumen.diaMaxYmd.slice(5, 7)} (${resumen.diaMaxTotal})`
+      : "";
+  doc.text(
+    `Resumen: I=${resumen.totalI} T=${resumen.totalT} N=${resumen.totalN} · Apuntes=${resumen.totalApuntes} · Días con actividad=${resumen.diasConActividad} · Festivos=${resumen.festivosEnMes}${diaMax}`,
+    MARGIN,
+    y
+  );
+  doc.text("Minerva Global — Etiquetas digital", w - MARGIN, y, {
+    align: "right",
+  });
+}
+
 export function exportEtiquetasCalendarioMensualPdf(params: {
   year: number;
   monthIndex: number;
@@ -183,13 +234,25 @@ export function exportEtiquetasCalendarioMensualPdf(params: {
   semanas: CalendarioSemanaLaboral[];
   eventosMap: Map<string, CalendarioEventoAuto[]>;
   apuntesMap: Map<string, ProdEtiquetasCalendarioApunteRow[]>;
+  festivosMap: Map<string, ProdCalendarioFestivoRow[]>;
+  filtros: CalendarioFiltros;
+  resumen: CalendarioResumenMes;
 }): void {
-  const { year, monthIndex, includeSaturday, semanas, eventosMap, apuntesMap } =
-    params;
+  const {
+    year,
+    monthIndex,
+    includeSaturday,
+    semanas,
+    eventosMap,
+    apuntesMap,
+    festivosMap,
+    filtros,
+    resumen,
+  } = params;
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   const dias = diasLaborablesCabecera(includeSaturday);
 
-  let gridTop = drawMonthHeader(doc, year, monthIndex);
+  let gridTop = drawMonthHeader(doc, year, monthIndex, filtros);
   gridTop = drawColHeaders(doc, gridTop, includeSaturday);
 
   const w = pageW(doc);
@@ -213,10 +276,11 @@ export function exportEtiquetasCalendarioMensualPdf(params: {
           rowH,
           dia.dayNum,
           eventosMap.get(dia.ymd) ?? [],
-          apuntesMap.get(dia.ymd) ?? []
+          apuntesMap.get(dia.ymd) ?? [],
+          festivosMap.get(dia.ymd) ?? []
         );
       } else {
-        drawDayCell(doc, x, y, colW, rowH, null, [], []);
+        drawDayCell(doc, x, y, colW, rowH, null, [], [], []);
       }
     });
   });
@@ -225,13 +289,11 @@ export function exportEtiquetasCalendarioMensualPdf(params: {
   doc.setFontSize(7);
   doc.setTextColor(...SLATE);
   doc.text(
-    "I/T/N desde hoja de ruta · Apuntes del calendario",
+    "I/T/N desde hoja de ruta · Apuntes del calendario · Festivos según capas activas",
     MARGIN,
-    h - 4
+    h - 8
   );
-  doc.text("Minerva Global — Etiquetas digital", w - MARGIN, h - 4, {
-    align: "right",
-  });
+  drawResumenFooter(doc, h - 4, resumen);
 
   const tag = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
   doc.save(`etiquetas-calendario-${tag}.pdf`);

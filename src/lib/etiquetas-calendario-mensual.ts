@@ -231,6 +231,18 @@ export function buildSemanasLaboralesMes(
   return semanas;
 }
 
+export function countDiasLaborablesEnGrid(
+  semanas: CalendarioSemanaLaboral[]
+): number {
+  let n = 0;
+  for (const semana of semanas) {
+    for (const dia of semana) {
+      if (dia) n += 1;
+    }
+  }
+  return n;
+}
+
 export function filasHojaRutaEnMes(
   rows: Pick<
     ProdEtiquetasHojaRutaRow,
