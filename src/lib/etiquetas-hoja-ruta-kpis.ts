@@ -31,6 +31,16 @@ export function formatEtiquetasKpi(n: number): string {
   return n.toLocaleString("es-ES");
 }
 
+/** Cantidad de etiquetas de la OT en hoja de ruta (campo `cantidad`). */
+export function cantidadEtiquetasKpi(
+  cantidad: number | null | undefined
+): number | null {
+  if (cantidad == null) return null;
+  const qty = Number(cantidad);
+  if (!Number.isFinite(qty) || qty <= 0) return null;
+  return qty;
+}
+
 /** KPIs globales (todas las filas cargadas), no dependen de filtros de tabla. */
 export function buildEtiquetasHojaRutaKpis(
   rows: ProdEtiquetasHojaRutaRow[]
@@ -51,9 +61,9 @@ export function buildEtiquetasHojaRutaKpis(
 
     if (!r.konica) continue;
     const fk = ymdKey(r.fecha_fin_konica);
-    if (fk == null || r.etiquetas == null) continue;
+    const qty = cantidadEtiquetasKpi(r.cantidad);
+    if (fk == null || qty == null) continue;
 
-    const qty = r.etiquetas;
     if (fk === today) etiquetasHoy += qty;
     if (fk >= mesInicio && fk <= mesFin) etiquetasMes += qty;
   }

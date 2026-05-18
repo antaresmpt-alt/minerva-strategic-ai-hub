@@ -278,8 +278,11 @@ function buildSummaryAoa(
         "Nota",
         "Los KPIs son globales; el detalle de la hoja «Hoja de ruta» respeta los filtros.",
       ],
-      ["Etiquetas hoy (Konica)", formatEtiquetasKpi(k.etiquetasHoy)],
-      ["Etiquetas este mes (Konica)", formatEtiquetasKpi(k.etiquetasMes)],
+      ["Etiquetas hoy (cantidad OT, Konica)", formatEtiquetasKpi(k.etiquetasHoy)],
+      [
+        "Etiquetas este mes (cantidad OT, Konica)",
+        formatEtiquetasKpi(k.etiquetasMes),
+      ],
       ["Cola Konica (OTs)", k.colaKonica],
       ["Plazo ≤ 4 días (OTs activas)", k.plazoCritico]
     );

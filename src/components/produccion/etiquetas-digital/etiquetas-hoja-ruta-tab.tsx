@@ -12,14 +12,6 @@ import { EtiquetasHojaRutaMuelleView } from "@/components/produccion/etiquetas-d
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, type Option } from "@/components/ui/select-native";
@@ -42,6 +34,7 @@ import {
 } from "@/lib/etiquetas-catalogo";
 import {
   buildEtiquetasHojaRutaKpis,
+  cantidadEtiquetasKpi,
   formatEtiquetasKpi,
 } from "@/lib/etiquetas-hoja-ruta-kpis";
 import {
@@ -103,10 +96,6 @@ export function EtiquetasHojaRutaTab() {
   const [compactMode, setCompactMode] = useState(false);
   const [muelleDetailRow, setMuelleDetailRow] =
     useState<ProdEtiquetasHojaRutaRow | null>(null);
-  const [konicaEtiquetasRow, setKonicaEtiquetasRow] =
-    useState<ProdEtiquetasHojaRutaRow | null>(null);
-  const [konicaEtiquetasInput, setKonicaEtiquetasInput] = useState("");
-  const [savingEtiquetas, setSavingEtiquetas] = useState(false);
 
   useEffect(() => {
     try {
@@ -260,34 +249,18 @@ export function EtiquetasHojaRutaTab() {
     ? "Listado filtrado (sin indicadores)"
     : "Listado filtrado + indicadores en resumen";
 
-  const updateEtiquetas = useCallback(
-    async (r: ProdEtiquetasHojaRutaRow, etiquetas: number): Promise<boolean> => {
-      setSavingEtiquetas(true);
-      const prev = r.etiquetas;
-      setRows((list) =>
-        list.map((x) => (x.id === r.id ? { ...x, etiquetas } : x))
-      );
-      const { error } = await supabase
-        .from(TABLE)
-        .update({ etiquetas })
-        .eq("id", r.id);
-      setSavingEtiquetas(false);
-      if (error) {
-        setRows((list) =>
-          list.map((x) => (x.id === r.id ? { ...x, etiquetas: prev } : x))
-        );
-        toast.error("No se pudo guardar las etiquetas", {
-          description: error.message,
-        });
-        return false;
-      }
-      return true;
-    },
-    [supabase]
-  );
-
   const toggleMaquina = useCallback(
     async (r: ProdEtiquetasHojaRutaRow, field: MaquinaHojaRutaField, next: boolean) => {
+      if (
+        field === "konica" &&
+        next &&
+        cantidadEtiquetasKpi(r.cantidad) == null
+      ) {
+        toast.message("Sin cantidad en la OT", {
+          description:
+            "Esta fila no tiene cantidad; no sumará en los indicadores hasta que la completes en edición o entrada express.",
+        });
+      }
       const toggleKey = `${r.id}:${field}`;
       setTogglingMaquina(toggleKey);
       const prev = { ...r };
@@ -308,44 +281,6 @@ export function EtiquetasHojaRutaTab() {
     },
     [supabase]
   );
-
-  const requestMaquinaToggle = useCallback(
-    (
-      r: ProdEtiquetasHojaRutaRow,
-      field: MaquinaHojaRutaField,
-      next: boolean
-    ) => {
-      if (
-        field === "konica" &&
-        next &&
-        (r.etiquetas == null || r.etiquetas <= 0)
-      ) {
-        setKonicaEtiquetasRow(r);
-        setKonicaEtiquetasInput("");
-        return;
-      }
-      void toggleMaquina(r, field, next);
-    },
-    [toggleMaquina]
-  );
-
-  const confirmKonicaEtiquetas = useCallback(async () => {
-    const r = konicaEtiquetasRow;
-    if (!r) return;
-    const n = Number.parseInt(konicaEtiquetasInput.trim(), 10);
-    if (!Number.isFinite(n) || n <= 0) {
-      toast.message("Cantidad no válida", {
-        description: "Indica un número de etiquetas mayor que cero.",
-      });
-      return;
-    }
-    const ok = await updateEtiquetas(r, n);
-    if (!ok) return;
-    const fresh = { ...r, etiquetas: n };
-    setKonicaEtiquetasRow(null);
-    setKonicaEtiquetasInput("");
-    void toggleMaquina(fresh, "konica", true);
-  }, [konicaEtiquetasInput, konicaEtiquetasRow, toggleMaquina, updateEtiquetas]);
 
   const toggleFinalizado = useCallback(
     async (r: ProdEtiquetasHojaRutaRow, next: boolean) => {
@@ -427,77 +362,12 @@ export function EtiquetasHojaRutaTab() {
           if (!o) setMuelleDetailRow(null);
         }}
         togglingMaquina={togglingMaquina}
-        savingEtiquetas={savingEtiquetas}
-        onToggleMaquina={requestMaquinaToggle}
-        onSaveEtiquetas={(row, etiquetas) => {
-          void updateEtiquetas(row, etiquetas);
-        }}
+        onToggleMaquina={toggleMaquina}
         onEdit={(row) => {
           setMuelleDetailRow(null);
           setEditingRow(row);
         }}
       />
-      <Dialog
-        open={konicaEtiquetasRow != null}
-        onOpenChange={(o) => {
-          if (!o) {
-            setKonicaEtiquetasRow(null);
-            setKonicaEtiquetasInput("");
-          }
-        }}
-      >
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-[#002147]">
-              Etiquetas — OT {konicaEtiquetasRow?.ot_numero}
-            </DialogTitle>
-            <DialogDescription>
-              Indica cuántas etiquetas lleva este trabajo antes de marcar la
-              impresión (Konica). Se usa en los indicadores del departamento.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-2">
-            <Label htmlFor="etq-konica-etiquetas" className="text-xs">
-              Número de etiquetas
-            </Label>
-            <Input
-              id="etq-konica-etiquetas"
-              type="number"
-              min={1}
-              inputMode="numeric"
-              autoFocus
-              value={konicaEtiquetasInput}
-              onChange={(e) => setKonicaEtiquetasInput(e.target.value)}
-              placeholder="Ej. 5000"
-              className="h-10"
-            />
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setKonicaEtiquetasRow(null);
-                setKonicaEtiquetasInput("");
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              className="bg-[#002147]"
-              disabled={savingEtiquetas || !konicaEtiquetasInput.trim()}
-              onClick={() => void confirmKonicaEtiquetas()}
-            >
-              {savingEtiquetas ? (
-                <Loader2 className="size-4 animate-spin" aria-hidden />
-              ) : (
-                "Guardar y marcar impresión"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-base font-semibold text-[#002147]">Hoja de ruta</h2>
@@ -621,7 +491,7 @@ export function EtiquetasHojaRutaTab() {
               {formatEtiquetasKpi(kpis.etiquetasHoy)}
             </p>
             <p className="mt-0.5 text-[10px] text-slate-500">
-              Konica cerrada hoy
+              Cantidad OT · Konica hoy
             </p>
           </div>
           <div className="rounded-md border border-slate-200 bg-[#002147]/5 px-3 py-2">
@@ -630,7 +500,7 @@ export function EtiquetasHojaRutaTab() {
               {formatEtiquetasKpi(kpis.etiquetasMes)}
             </p>
             <p className="mt-0.5 text-[10px] text-slate-500">
-              Suma al marcar Kon
+              Cantidad OT · Konica del mes
             </p>
           </div>
           <div className="rounded-md border border-slate-200 bg-amber-50 px-3 py-2">
@@ -654,7 +524,7 @@ export function EtiquetasHojaRutaTab() {
         rows={rows}
         loading={loading}
         togglingMaquina={togglingMaquina}
-        onToggleMaquina={requestMaquinaToggle}
+        onToggleMaquina={toggleMaquina}
         onOpenDetail={setMuelleDetailRow}
       />
 
@@ -859,7 +729,7 @@ export function EtiquetasHojaRutaTab() {
                           disabled={togglingMaquina === `${r.id}:${field}`}
                           aria-label={`${title} OT ${r.ot_numero}`}
                           onChange={(e) => {
-                            requestMaquinaToggle(r, field, e.target.checked);
+                            void toggleMaquina(r, field, e.target.checked);
                           }}
                         />
                       </label>

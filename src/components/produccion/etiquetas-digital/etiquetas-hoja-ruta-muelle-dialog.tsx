@@ -1,7 +1,6 @@
 "use client";
 
-import { Loader2, Pencil } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Pencil } from "lucide-react";
 
 import { EtiquetasHojaRutaMaquinaButtons } from "@/components/produccion/etiquetas-digital/etiquetas-hoja-ruta-maquina-buttons";
 import { EntregaPlazoSemaforo } from "@/components/produccion/etiquetas-digital/entrega-plazo-semaforo";
@@ -14,8 +13,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import type { MaquinaHojaRutaField } from "@/lib/etiquetas-hoja-ruta-maquina";
 import type { ProdEtiquetasHojaRutaRow } from "@/types/prod-etiquetas-hoja-ruta";
 
@@ -24,13 +21,11 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   togglingMaquina: string | null;
-  savingEtiquetas: boolean;
   onToggleMaquina: (
     row: ProdEtiquetasHojaRutaRow,
     field: MaquinaHojaRutaField,
     next: boolean
   ) => void;
-  onSaveEtiquetas: (row: ProdEtiquetasHojaRutaRow, etiquetas: number) => void;
   onEdit: (row: ProdEtiquetasHojaRutaRow) => void;
 };
 
@@ -39,26 +34,15 @@ export function EtiquetasHojaRutaMuelleDialog({
   open,
   onOpenChange,
   togglingMaquina,
-  savingEtiquetas,
   onToggleMaquina,
-  onSaveEtiquetas,
   onEdit,
 }: Props) {
-  const [etqInput, setEtqInput] = useState("");
-
-  useEffect(() => {
-    if (row && open) {
-      setEtqInput(row.etiquetas != null ? String(row.etiquetas) : "");
-    }
-  }, [row, open]);
-
   if (!row) return null;
 
-  const handleSaveEtiquetas = () => {
-    const n = Number.parseInt(etqInput.trim(), 10);
-    if (!Number.isFinite(n) || n < 0) return;
-    onSaveEtiquetas(row, n);
-  };
+  const cantidadLabel =
+    row.cantidad != null && Number(row.cantidad) > 0
+      ? Number(row.cantidad).toLocaleString("es-ES")
+      : "—";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -76,6 +60,13 @@ export function EtiquetasHojaRutaMuelleDialog({
           </DialogDescription>
         </DialogHeader>
 
+        <p className="text-xs text-slate-600">
+          Cantidad OT (indicadores):{" "}
+          <span className="font-semibold tabular-nums text-[#002147]">
+            {cantidadLabel}
+          </span>
+        </p>
+
         <div className="space-y-3">
           <p className="text-xs font-medium text-slate-600">Pasos de producción</p>
           <EtiquetasHojaRutaMaquinaButtons
@@ -86,37 +77,6 @@ export function EtiquetasHojaRutaMuelleDialog({
             togglingMaquina={togglingMaquina}
             onToggle={(field, next) => onToggleMaquina(row, field, next)}
           />
-        </div>
-
-        <div className="grid gap-2">
-          <Label htmlFor="etq-muelle-etiquetas" className="text-xs">
-            Etiquetas (para KPI al marcar impresión)
-          </Label>
-          <div className="flex gap-2">
-            <Input
-              id="etq-muelle-etiquetas"
-              type="number"
-              min={0}
-              inputMode="numeric"
-              value={etqInput}
-              onChange={(e) => setEtqInput(e.target.value)}
-              className="h-10"
-              placeholder="Cantidad"
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              className="shrink-0"
-              disabled={savingEtiquetas || !etqInput.trim()}
-              onClick={handleSaveEtiquetas}
-            >
-              {savingEtiquetas ? (
-                <Loader2 className="size-4 animate-spin" aria-hidden />
-              ) : (
-                "Guardar"
-              )}
-            </Button>
-          </div>
         </div>
 
         <DialogFooter className="flex-row gap-2 sm:justify-between">
