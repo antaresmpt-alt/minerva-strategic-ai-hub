@@ -21,7 +21,8 @@ import {
   catalogLabels,
   ETIQUETAS_CATALOG_PAPEL,
 } from "@/lib/etiquetas-catalogo";
-import { buildMaquinaFieldsForSave } from "@/lib/etiquetas-hoja-ruta-maquina";
+import { buildMaquinaFieldsForSaveFromForm } from "@/lib/etiquetas-hoja-ruta-maquina";
+import { todayYmdLocal } from "@/lib/etiquetas-hoja-ruta-plazo";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { ProdEtiquetasCatalogRow } from "@/types/prod-etiquetas-catalogo";
 import type { ProdEtiquetasHojaRutaRow } from "@/types/prod-etiquetas-hoja-ruta";
@@ -64,6 +65,9 @@ type EditForm = {
   konica: boolean;
   troqueladora: boolean;
   numeradora: boolean;
+  fecha_fin_konica: string;
+  fecha_fin_troqueladora: string;
+  fecha_fin_numeradora: string;
   troquel_utillaje: string;
   fecha_inicio_produccion: string;
   fecha_fin_produccion: string;
@@ -87,6 +91,9 @@ function rowToForm(r: ProdEtiquetasHojaRutaRow): EditForm {
     konica: Boolean(r.konica),
     troqueladora: Boolean(r.troqueladora),
     numeradora: Boolean(r.numeradora),
+    fecha_fin_konica: isoToDateInput(r.fecha_fin_konica),
+    fecha_fin_troqueladora: isoToDateInput(r.fecha_fin_troqueladora),
+    fecha_fin_numeradora: isoToDateInput(r.fecha_fin_numeradora),
     troquel_utillaje: String(r.troquel_utillaje ?? "").trim(),
     fecha_inicio_produccion: isoToDateInput(r.fecha_inicio_produccion),
     fecha_fin_produccion: isoToDateInput(r.fecha_fin_produccion),
@@ -153,11 +160,16 @@ export function EtiquetasHojaRutaEditDialog({
         fecha_entrada_depto: form.fecha_entrada_depto.trim() || null,
         urgencia: form.urgencia,
         observacion: form.observacion.trim() || null,
-        ...buildMaquinaFieldsForSave(form.konica, form.troqueladora, form.numeradora, {
-          fecha_fin_konica: row.fecha_fin_konica,
-          fecha_fin_troqueladora: row.fecha_fin_troqueladora,
-          fecha_fin_numeradora: row.fecha_fin_numeradora,
-        }),
+        ...buildMaquinaFieldsForSaveFromForm(
+          form.konica,
+          form.troqueladora,
+          form.numeradora,
+          {
+            fecha_fin_konica: form.fecha_fin_konica,
+            fecha_fin_troqueladora: form.fecha_fin_troqueladora,
+            fecha_fin_numeradora: form.fecha_fin_numeradora,
+          }
+        ),
         troquel_utillaje: form.troquel_utillaje.trim() || null,
         fecha_inicio_produccion: form.fecha_inicio_produccion.trim() || null,
         fecha_fin_produccion: form.fecha_fin_produccion.trim() || null,
@@ -394,17 +406,77 @@ export function EtiquetasHojaRutaEditDialog({
                   type="checkbox"
                   className="size-4 rounded border-slate-300"
                   checked={form[key]}
-                  onChange={(e) =>
-                    setForm((f) =>
-                      f ? { ...f, [key]: e.target.checked } : f
-                    )
-                  }
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    const today = todayYmdLocal();
+                    setForm((f) => {
+                      if (!f) return f;
+                      const fechaKey =
+                        key === "konica"
+                          ? "fecha_fin_konica"
+                          : key === "troqueladora"
+                            ? "fecha_fin_troqueladora"
+                            : "fecha_fin_numeradora";
+                      return {
+                        ...f,
+                        [key]: checked,
+                        [fechaKey]: checked
+                          ? f[fechaKey].trim() || today
+                          : "",
+                      };
+                    });
+                  }}
                 />
                 {label}
               </label>
             ))}
           </div>
 
+          <p className="text-[11px] text-slate-500 sm:col-span-2">
+            Fechas de fin por proceso (calendario I / T / N).
+          </p>
+          <div className="grid gap-1">
+            <Label className="text-xs">F. fin Konica (I)</Label>
+            <Input
+              type="date"
+              className="h-8 text-xs"
+              disabled={!form.konica}
+              value={form.fecha_fin_konica}
+              onChange={(e) =>
+                setForm((f) =>
+                  f ? { ...f, fecha_fin_konica: e.target.value } : f
+                )
+              }
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-xs">F. fin Troqueladora (T)</Label>
+            <Input
+              type="date"
+              className="h-8 text-xs"
+              disabled={!form.troqueladora}
+              value={form.fecha_fin_troqueladora}
+              onChange={(e) =>
+                setForm((f) =>
+                  f ? { ...f, fecha_fin_troqueladora: e.target.value } : f
+                )
+              }
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-xs">F. fin Numeradora (N)</Label>
+            <Input
+              type="date"
+              className="h-8 text-xs"
+              disabled={!form.numeradora}
+              value={form.fecha_fin_numeradora}
+              onChange={(e) =>
+                setForm((f) =>
+                  f ? { ...f, fecha_fin_numeradora: e.target.value } : f
+                )
+              }
+            />
+          </div>
           <div className="grid gap-1">
             <Label className="text-xs">Troquel (utillaje)</Label>
             <Input

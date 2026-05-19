@@ -46,6 +46,41 @@ export function mergeMaquinaIntoRow(
   return { ...row, ...buildMaquinaPatch(field, checked) };
 }
 
+/** Guardar desde formulario con fechas editables (calendario I/T/N). */
+export function buildMaquinaFieldsForSaveFromForm(
+  konica: boolean,
+  troqueladora: boolean,
+  numeradora: boolean,
+  fechas: {
+    fecha_fin_konica: string;
+    fecha_fin_troqueladora: string;
+    fecha_fin_numeradora: string;
+  }
+): Pick<
+  ProdEtiquetasHojaRutaRow,
+  | "konica"
+  | "troqueladora"
+  | "numeradora"
+  | "fecha_fin_konica"
+  | "fecha_fin_troqueladora"
+  | "fecha_fin_numeradora"
+> {
+  const today = todayYmdLocal();
+  const fin = (on: boolean, raw: string) => {
+    if (!on) return null;
+    const t = raw.trim();
+    return t ? t.slice(0, 10) : today;
+  };
+  return {
+    konica,
+    troqueladora,
+    numeradora,
+    fecha_fin_konica: fin(konica, fechas.fecha_fin_konica),
+    fecha_fin_troqueladora: fin(troqueladora, fechas.fecha_fin_troqueladora),
+    fecha_fin_numeradora: fin(numeradora, fechas.fecha_fin_numeradora),
+  };
+}
+
 /** Patch al guardar formulario (respeta fecha si ya existía y solo se mantiene el check). */
 export function buildMaquinaFieldsForSave(
   konica: boolean,
