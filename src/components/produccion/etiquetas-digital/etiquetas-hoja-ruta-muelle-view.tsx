@@ -250,9 +250,16 @@ export function EtiquetasHojaRutaMuelleView({
                 }}
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-mono text-lg font-bold text-[#002147]">
-                      {r.ot_numero}
-                    </span>
+                    <div className="flex min-w-0 items-baseline gap-2">
+                      <span className="shrink-0 font-mono text-lg font-bold text-[#002147]">
+                        {r.ot_numero}
+                      </span>
+                      {r.cliente?.trim() ? (
+                        <span className="min-w-0 truncate text-sm font-medium text-slate-700">
+                          · {r.cliente.trim()}
+                        </span>
+                      ) : null}
+                    </div>
                     <div className="flex items-center gap-1.5">
                       {r.urgencia === "urgente" ? (
                         <span className="rounded-md bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-800">
