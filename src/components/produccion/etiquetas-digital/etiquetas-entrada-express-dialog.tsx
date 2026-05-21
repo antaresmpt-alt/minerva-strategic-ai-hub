@@ -27,6 +27,7 @@ import type { ProdEtiquetasCatalogRow } from "@/types/prod-etiquetas-catalogo";
 
 const TABLE_OT = "prod_ots_general";
 const TABLE_HR = "prod_etiquetas_hoja_ruta";
+const TABLE_DESPACHADAS = "produccion_ot_despachadas";
 
 function fechaMaestroToYmd(raw: string | null | undefined): string {
   const s = String(raw ?? "").trim();
@@ -160,9 +161,7 @@ export function EtiquetasEntradaExpressDialog({
     try {
       const { data: master, error: errM } = await supabase
         .from(TABLE_OT)
-        .select(
-          "id, num_pedido, cliente, titulo, cantidad, fecha_entrega, familia, pedido_cliente"
-        )
+        .select("id, num_pedido, cliente, titulo, cantidad, fecha_entrega")
         .eq("num_pedido", ot)
         .maybeSingle();
       if (errM) throw errM;
@@ -186,11 +185,15 @@ export function EtiquetasEntradaExpressDialog({
         );
       }
 
-      const papelParts = [
-        String((master as { familia?: string | null }).familia ?? "").trim(),
-        String((master as { pedido_cliente?: string | null }).pedido_cliente ?? "").trim(),
-      ].filter(Boolean);
-      const papelGuess = papelParts.join(" · ");
+      const { data: despacho, error: errD } = await supabase
+        .from(TABLE_DESPACHADAS)
+        .select("material")
+        .eq("ot_numero", num)
+        .maybeSingle();
+      if (errD) throw errD;
+      const materialDespacho = String(
+        (despacho as { material?: string | null } | null)?.material ?? ""
+      ).trim();
 
       setForm({
         ...emptyForm(),
@@ -202,7 +205,7 @@ export function EtiquetasEntradaExpressDialog({
         trabajo: String(
           (master as { titulo?: string | null }).titulo ?? ""
         ).trim(),
-        papel: papelGuess,
+        papel: materialDespacho,
         cantidad:
           (master as { cantidad?: number | null }).cantidad == null
             ? ""
@@ -399,7 +402,7 @@ export function EtiquetasEntradaExpressDialog({
               list={`${formId}-papel-dl`}
               value={form.papel}
               onChange={(e) => setForm((f) => ({ ...f, papel: e.target.value }))}
-              placeholder="Sugerido desde familia / pedido cliente"
+              placeholder="Rellenar si no hay material despachado"
             />
             <datalist id={`${formId}-papel-dl`}>
               {labelsPapel.map((v) => (
