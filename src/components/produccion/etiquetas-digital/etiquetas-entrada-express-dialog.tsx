@@ -21,7 +21,8 @@ import {
   catalogLabels,
   ETIQUETAS_CATALOG_PAPEL,
 } from "@/lib/etiquetas-catalogo";
-import { buildMaquinaFieldsForSave } from "@/lib/etiquetas-hoja-ruta-maquina";
+import { buildMaquinaFieldsForSaveFromForm } from "@/lib/etiquetas-hoja-ruta-maquina";
+import { todayYmdLocal } from "@/lib/etiquetas-hoja-ruta-plazo";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { ProdEtiquetasCatalogRow } from "@/types/prod-etiquetas-catalogo";
 
@@ -72,6 +73,9 @@ type ExpressForm = {
   konica: boolean;
   troqueladora: boolean;
   numeradora: boolean;
+  fecha_fin_konica: string;
+  fecha_fin_troqueladora: string;
+  fecha_fin_numeradora: string;
   troquel_utillaje: string;
   fecha_inicio_produccion: string;
   fecha_fin_produccion: string;
@@ -97,6 +101,9 @@ function emptyForm(): ExpressForm {
     konica: false,
     troqueladora: false,
     numeradora: false,
+    fecha_fin_konica: "",
+    fecha_fin_troqueladora: "",
+    fecha_fin_numeradora: "",
     troquel_utillaje: "",
     fecha_inicio_produccion: "",
     fecha_fin_produccion: "",
@@ -258,11 +265,16 @@ export function EtiquetasEntradaExpressDialog({
         fecha_entrada_depto: form.fecha_entrada_depto.trim() || null,
         urgencia: form.urgencia,
         observacion: form.observacion.trim() || null,
-        ...buildMaquinaFieldsForSave(form.konica, form.troqueladora, form.numeradora, {
-          fecha_fin_konica: null,
-          fecha_fin_troqueladora: null,
-          fecha_fin_numeradora: null,
-        }),
+        ...buildMaquinaFieldsForSaveFromForm(
+          form.konica,
+          form.troqueladora,
+          form.numeradora,
+          {
+            fecha_fin_konica: form.fecha_fin_konica,
+            fecha_fin_troqueladora: form.fecha_fin_troqueladora,
+            fecha_fin_numeradora: form.fecha_fin_numeradora,
+          }
+        ),
         troquel_utillaje: form.troquel_utillaje.trim() || null,
         fecha_inicio_produccion: form.fecha_inicio_produccion.trim() || null,
         fecha_fin_produccion: form.fecha_fin_produccion.trim() || null,
@@ -487,13 +499,72 @@ export function EtiquetasEntradaExpressDialog({
                   type="checkbox"
                   className="size-4 rounded border-slate-300"
                   checked={form[key]}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, [key]: e.target.checked }))
-                  }
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    const today = todayYmdLocal();
+                    setForm((f) => {
+                      const fechaKey =
+                        key === "konica"
+                          ? "fecha_fin_konica"
+                          : key === "troqueladora"
+                            ? "fecha_fin_troqueladora"
+                            : "fecha_fin_numeradora";
+                      return {
+                        ...f,
+                        [key]: checked,
+                        [fechaKey]: checked
+                          ? f[fechaKey].trim() || today
+                          : "",
+                      };
+                    });
+                  }}
                 />
                 {label}
               </label>
             ))}
+          </div>
+
+          <p className="text-[11px] text-slate-500 sm:col-span-2">
+            Fechas de fin por proceso (calendario I / T / N).
+          </p>
+          <div className="grid gap-1">
+            <Label className="text-xs">F. fin Konica (I)</Label>
+            <Input
+              type="date"
+              className="h-8 text-xs"
+              disabled={!form.konica}
+              value={form.fecha_fin_konica}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, fecha_fin_konica: e.target.value }))
+              }
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-xs">F. fin Troqueladora (T)</Label>
+            <Input
+              type="date"
+              className="h-8 text-xs"
+              disabled={!form.troqueladora}
+              value={form.fecha_fin_troqueladora}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  fecha_fin_troqueladora: e.target.value,
+                }))
+              }
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-xs">F. fin Numeradora (N)</Label>
+            <Input
+              type="date"
+              className="h-8 text-xs"
+              disabled={!form.numeradora}
+              value={form.fecha_fin_numeradora}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, fecha_fin_numeradora: e.target.value }))
+              }
+            />
           </div>
 
           <div className="grid gap-1">
