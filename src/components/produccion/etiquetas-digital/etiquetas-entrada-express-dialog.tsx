@@ -21,10 +21,16 @@ import {
   catalogLabels,
   ETIQUETAS_CATALOG_PAPEL,
 } from "@/lib/etiquetas-catalogo";
+import { EtiquetasHojaRutaDuplicadoDialog } from "@/components/produccion/etiquetas-digital/etiquetas-hoja-ruta-duplicado-dialog";
+import {
+  findHojaRutaPorOtNumero,
+  normalizaOtNumero,
+} from "@/lib/etiquetas-hoja-ruta-duplicados";
 import { buildMaquinaFieldsForSaveFromForm } from "@/lib/etiquetas-hoja-ruta-maquina";
 import { todayYmdLocal } from "@/lib/etiquetas-hoja-ruta-plazo";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { ProdEtiquetasCatalogRow } from "@/types/prod-etiquetas-catalogo";
+import type { ProdEtiquetasHojaRutaRow } from "@/types/prod-etiquetas-hoja-ruta";
 
 const TABLE_OT = "prod_ots_general";
 const TABLE_HR = "prod_etiquetas_hoja_ruta";
@@ -76,6 +82,7 @@ type ExpressForm = {
   fecha_fin_konica: string;
   fecha_fin_troqueladora: string;
   fecha_fin_numeradora: string;
+  metros_impresion: string;
   troquel_utillaje: string;
   fecha_inicio_produccion: string;
   fecha_fin_produccion: string;
@@ -104,6 +111,7 @@ function emptyForm(): ExpressForm {
     fecha_fin_konica: "",
     fecha_fin_troqueladora: "",
     fecha_fin_numeradora: "",
+    metros_impresion: "",
     troquel_utillaje: "",
     fecha_inicio_produccion: "",
     fecha_fin_produccion: "",
@@ -125,6 +133,13 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   catalog: ProdEtiquetasCatalogRow[];
   onSaved: () => void;
+  /**
+   * Si se detecta un duplicado (OT ya presente en hoja de ruta), se ofrece al
+   * usuario "Abrir" para editar la fila existente en vez de crear un nuevo
+   * duplicado. Este callback recibe la fila a editar; el llamador debe cerrar
+   * la entrada express y abrir el diálogo de edición.
+   */
+  onAbrirExistente?: (row: ProdEtiquetasHojaRutaRow) => void;
 };
 
 export function EtiquetasEntradaExpressDialog({
@@ -132,6 +147,7 @@ export function EtiquetasEntradaExpressDialog({
   onOpenChange,
   catalog,
   onSaved,
+  onAbrirExistente,
 }: Props) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const otInputRef = useRef<HTMLInputElement>(null);
@@ -145,6 +161,10 @@ export function EtiquetasEntradaExpressDialog({
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<ExpressForm>(() => emptyForm());
   const [entradaMultiple, setEntradaMultiple] = useState(false);
+  const [duplicadosState, setDuplicadosState] = useState<{
+    otNumero: string;
+    rows: ProdEtiquetasHojaRutaRow[];
+  } | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -153,6 +173,7 @@ export function EtiquetasEntradaExpressDialog({
       setEntradaMultiple(false);
       setLoadingOt(false);
       setSaving(false);
+      setDuplicadosState(null);
       return;
     }
     window.setTimeout(() => otInputRef.current?.focus(), 50);
@@ -177,18 +198,16 @@ export function EtiquetasEntradaExpressDialog({
         setForm(emptyForm());
         return;
       }
-      const num = String(
+      const num = normalizaOtNumero(
         (master as { num_pedido?: string | null }).num_pedido ?? ot
-      ).trim();
-      const { data: exist, error: errE } = await supabase
-        .from(TABLE_HR)
-        .select("id, finalizado")
-        .eq("ot_numero", num)
-        .maybeSingle();
-      if (errE) throw errE;
-      if (exist && !(exist as { finalizado?: boolean }).finalizado) {
+      );
+      const existentes = await findHojaRutaPorOtNumero(supabase, num);
+      const activas = existentes.filter((r) => !r.finalizado);
+      if (existentes.length > 0) {
         toast.warning(
-          `Ya existe una fila activa en hoja de ruta para OT ${num}. No se podrá guardar otra hasta finalizarla o borrarla.`
+          activas.length > 0
+            ? `Ya hay ${activas.length} fila${activas.length === 1 ? "" : "s"} activa${activas.length === 1 ? "" : "s"} en hoja de ruta para OT ${num}. Al guardar se te ofrecerá abrir la existente.`
+            : `Existen ${existentes.length} fila${existentes.length === 1 ? "" : "s"} históricas para OT ${num}. Al guardar se te ofrecerá abrirla en vez de duplicar.`
         );
       }
 
@@ -233,24 +252,16 @@ export function EtiquetasEntradaExpressDialog({
   }, [otInput, supabase]);
 
   const submit = useCallback(async () => {
-    const ot = form.ot_numero.trim();
+    const ot = normalizaOtNumero(form.ot_numero);
     if (!ot) {
       toast.error("Carga una OT válida (Enter en el campo OT).");
       return;
     }
     setSaving(true);
     try {
-      const { data: dup, error: errDup } = await supabase
-        .from(TABLE_HR)
-        .select("id")
-        .eq("ot_numero", ot)
-        .eq("finalizado", false)
-        .maybeSingle();
-      if (errDup) throw errDup;
-      if (dup) {
-        toast.error(
-          `Ya hay una fila no finalizada para OT ${ot}. Finalízala o elimínala antes de crear otra.`
-        );
+      const existentes = await findHojaRutaPorOtNumero(supabase, ot);
+      if (existentes.length > 0) {
+        setDuplicadosState({ otNumero: ot, rows: existentes });
         return;
       }
 
@@ -273,7 +284,8 @@ export function EtiquetasEntradaExpressDialog({
             fecha_fin_konica: form.fecha_fin_konica,
             fecha_fin_troqueladora: form.fecha_fin_troqueladora,
             fecha_fin_numeradora: form.fecha_fin_numeradora,
-          }
+          },
+          parseOptionalDecimal(form.metros_impresion)
         ),
         troquel_utillaje: form.troquel_utillaje.trim() || null,
         fecha_inicio_produccion: form.fecha_inicio_produccion.trim() || null,
@@ -308,7 +320,26 @@ export function EtiquetasEntradaExpressDialog({
   }, [entradaMultiple, form, onOpenChange, onSaved, supabase]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      <EtiquetasHojaRutaDuplicadoDialog
+        open={duplicadosState != null}
+        onOpenChange={(o) => {
+          if (!o) setDuplicadosState(null);
+        }}
+        otNumero={duplicadosState?.otNumero ?? ""}
+        existentes={duplicadosState?.rows ?? []}
+        onAbrirExistente={(row) => {
+          setDuplicadosState(null);
+          onOpenChange(false);
+          if (onAbrirExistente) onAbrirExistente(row);
+          else
+            toast.info(
+              `Abre la OT ${row.ot_numero} desde el listado para editarla.`
+            );
+        }}
+        onCancelar={() => setDuplicadosState(null)}
+      />
+      <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="flex max-h-[min(94vh,900px)] max-w-[min(96vw,720px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
         onKeyDown={(e) => {
@@ -509,13 +540,17 @@ export function EtiquetasEntradaExpressDialog({
                           : key === "troqueladora"
                             ? "fecha_fin_troqueladora"
                             : "fecha_fin_numeradora";
-                      return {
+                      const next: ExpressForm = {
                         ...f,
                         [key]: checked,
                         [fechaKey]: checked
                           ? f[fechaKey].trim() || today
                           : "",
                       };
+                      if (key === "konica" && !checked) {
+                        next.metros_impresion = "";
+                      }
+                      return next;
                     });
                   }}
                 />
@@ -536,6 +571,19 @@ export function EtiquetasEntradaExpressDialog({
               value={form.fecha_fin_konica}
               onChange={(e) =>
                 setForm((f) => ({ ...f, fecha_fin_konica: e.target.value }))
+              }
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-xs">Metros impresión (Konica)</Label>
+            <Input
+              className="h-8 text-xs tabular-nums"
+              inputMode="decimal"
+              placeholder="Ej. 124,5"
+              disabled={!form.konica}
+              value={form.metros_impresion}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, metros_impresion: e.target.value }))
               }
             />
           </div>
@@ -699,5 +747,6 @@ export function EtiquetasEntradaExpressDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   );
 }

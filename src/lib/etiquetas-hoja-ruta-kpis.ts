@@ -4,6 +4,8 @@ import type { ProdEtiquetasHojaRutaRow } from "@/types/prod-etiquetas-hoja-ruta"
 export type EtiquetasHojaRutaKpis = {
   etiquetasHoy: number;
   etiquetasMes: number;
+  metrosHoy: number;
+  metrosMes: number;
   colaKonica: number;
   plazoCritico: number;
 };
@@ -31,6 +33,13 @@ export function formatEtiquetasKpi(n: number): string {
   return n.toLocaleString("es-ES");
 }
 
+export function formatMetrosKpi(n: number): string {
+  return `${n.toLocaleString("es-ES", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1,
+  })} m`;
+}
+
 /** Cantidad de etiquetas de la OT en hoja de ruta (campo `cantidad`). */
 export function cantidadEtiquetasKpi(
   cantidad: number | null | undefined
@@ -50,6 +59,8 @@ export function buildEtiquetasHojaRutaKpis(
 
   let etiquetasHoy = 0;
   let etiquetasMes = 0;
+  let metrosHoy = 0;
+  let metrosMes = 0;
   let colaKonica = 0;
   let plazoCritico = 0;
 
@@ -61,12 +72,30 @@ export function buildEtiquetasHojaRutaKpis(
 
     if (!r.konica) continue;
     const fk = ymdKey(r.fecha_fin_konica);
-    const qty = cantidadEtiquetasKpi(r.cantidad);
-    if (fk == null || qty == null) continue;
+    if (fk == null) continue;
 
-    if (fk === today) etiquetasHoy += qty;
-    if (fk >= mesInicio && fk <= mesFin) etiquetasMes += qty;
+    const qty = cantidadEtiquetasKpi(r.cantidad);
+    if (qty != null) {
+      if (fk === today) etiquetasHoy += qty;
+      if (fk >= mesInicio && fk <= mesFin) etiquetasMes += qty;
+    }
+
+    const mts =
+      r.metros_impresion != null && Number.isFinite(Number(r.metros_impresion))
+        ? Number(r.metros_impresion)
+        : null;
+    if (mts != null && mts >= 0) {
+      if (fk === today) metrosHoy += mts;
+      if (fk >= mesInicio && fk <= mesFin) metrosMes += mts;
+    }
   }
 
-  return { etiquetasHoy, etiquetasMes, colaKonica, plazoCritico };
+  return {
+    etiquetasHoy,
+    etiquetasMes,
+    metrosHoy,
+    metrosMes,
+    colaKonica,
+    plazoCritico,
+  };
 }

@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 
 import {
   formatEtiquetasKpi,
+  formatMetrosKpi,
   type EtiquetasHojaRutaKpis,
 } from "@/lib/etiquetas-hoja-ruta-kpis";
 import {
@@ -56,6 +57,16 @@ function boolTxt(v: boolean) {
   return v ? "Sí" : "No";
 }
 
+function fmtMetros(v: number | null | undefined): string {
+  if (v == null) return "—";
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "—";
+  return `${n.toLocaleString("es-ES", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })} m`;
+}
+
 function rowToCells(r: ProdEtiquetasHojaRutaRow): string[] {
   return [
     r.ot_numero,
@@ -75,6 +86,7 @@ function rowToCells(r: ProdEtiquetasHojaRutaRow): string[] {
     fmtDateEs(r.fecha_fin_konica),
     fmtDateEs(r.fecha_fin_troqueladora),
     fmtDateEs(r.fecha_fin_numeradora),
+    fmtMetros(r.metros_impresion),
     r.troquel_utillaje ?? "—",
     fmtDateEs(r.fecha_inicio_produccion),
     fmtDateEs(r.fecha_fin_produccion),
@@ -104,6 +116,7 @@ const EXCEL_HEADERS = [
   "F. fin Konica",
   "F. fin Troqueladora",
   "F. fin Numeradora",
+  "Metros impresión",
   "Troquel (utillaje)",
   "F. inicio prod.",
   "F. fin prod.",
@@ -134,6 +147,7 @@ const PDF_HEADERS = [
   "Caj",
   "Bob",
   "Etq",
+  "Mts",
   "Resto",
   "Fin.",
 ] as const;
@@ -142,13 +156,13 @@ const PDF_PLAZO_COL = 8;
 const PDF_I_COL = 10;
 const PDF_T_COL = 11;
 const PDF_N_COL = 12;
-const PDF_FIN_COL = 20;
+const PDF_FIN_COL = 21;
 
 const PDF_MARGIN = { left: 8, right: 8 } as const;
 
 /** Pesos relativos; el ancho total se reparte en toda la página. */
 const PDF_COL_WEIGHTS: number[] = [
-  9, 24, 44, 14, 8, 11, 11, 5, 5, 18, 5, 5, 5, 9, 11, 11, 6, 6, 7, 12, 5,
+  9, 24, 44, 14, 8, 11, 11, 5, 5, 18, 5, 5, 5, 9, 11, 11, 6, 6, 7, 8, 12, 5,
 ];
 
 const PDF_COL_WEIGHT_SUM = PDF_COL_WEIGHTS.reduce((a, b) => a + b, 0);
@@ -196,7 +210,7 @@ function pdfColumnStyles(tableWidth: number): Record<number, PdfColStyle> {
       overflow: "ellipsize",
       halign: PDF_CENTER_COLS.has(i)
         ? "center"
-        : i === 4 || (i >= 16 && i <= 18)
+        : i === 4 || (i >= 16 && i <= 19)
           ? "right"
           : "left",
     };
@@ -234,6 +248,12 @@ function rowToPdfBody(r: ProdEtiquetasHojaRutaRow): string[] {
     r.cajas != null ? String(r.cajas) : "—",
     r.bobinas != null ? String(r.bobinas) : "—",
     r.etiquetas != null ? String(r.etiquetas) : "—",
+    r.metros_impresion != null
+      ? r.metros_impresion.toLocaleString("es-ES", {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 1,
+        })
+      : "—",
     pdfTxt(r.cajas_restantes),
     "",
   ];
@@ -283,6 +303,8 @@ function buildSummaryAoa(
         "Etiquetas este mes (cantidad OT, Konica)",
         formatEtiquetasKpi(k.etiquetasMes),
       ],
+      ["Metros hoy (Konica)", formatMetrosKpi(k.metrosHoy)],
+      ["Metros este mes (Konica)", formatMetrosKpi(k.metrosMes)],
       ["Cola Konica (OTs)", k.colaKonica],
       ["Plazo ≤ 4 días (OTs activas)", k.plazoCritico]
     );
@@ -292,12 +314,13 @@ function buildSummaryAoa(
   return base;
 }
 
-/** Dibuja 4 KPIs en fila; devuelve Y donde puede empezar la tabla. */
+/** Dibuja 6 KPIs en fila; devuelve Y donde puede empezar la tabla. */
 function drawKpisBlock(doc: jsPDF, kpis: EtiquetasHojaRutaKpis, startY: number): number {
   const margin = PDF_MARGIN.left;
   const usable = pdfTableWidth(doc);
   const gap = 3;
-  const boxW = (usable - gap * 3) / 4;
+  const cols = 6;
+  const boxW = (usable - gap * (cols - 1)) / cols;
   const boxH = 14;
 
   const items: { label: string; value: string; fill: [number, number, number] }[] = [
@@ -310,6 +333,16 @@ function drawKpisBlock(doc: jsPDF, kpis: EtiquetasHojaRutaKpis, startY: number):
       label: "Etiquetas este mes",
       value: formatEtiquetasKpi(kpis.etiquetasMes),
       fill: [230, 236, 245],
+    },
+    {
+      label: "Metros hoy",
+      value: formatMetrosKpi(kpis.metrosHoy),
+      fill: [220, 252, 231],
+    },
+    {
+      label: "Metros este mes",
+      value: formatMetrosKpi(kpis.metrosMes),
+      fill: [209, 250, 229],
     },
     {
       label: "Cola Konica",

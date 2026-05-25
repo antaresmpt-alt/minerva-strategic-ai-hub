@@ -21,6 +21,10 @@ import {
   catalogLabels,
   ETIQUETAS_CATALOG_PAPEL,
 } from "@/lib/etiquetas-catalogo";
+import {
+  findHojaRutaPorOtNumeroExcepto,
+  normalizaOtNumero,
+} from "@/lib/etiquetas-hoja-ruta-duplicados";
 import { buildMaquinaFieldsForSaveFromForm } from "@/lib/etiquetas-hoja-ruta-maquina";
 import { todayYmdLocal } from "@/lib/etiquetas-hoja-ruta-plazo";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -54,6 +58,7 @@ function parseOptionalDecimal(s: string): number | null {
 }
 
 type EditForm = {
+  ot_numero: string;
   cliente: string;
   trabajo: string;
   papel: string;
@@ -68,6 +73,7 @@ type EditForm = {
   fecha_fin_konica: string;
   fecha_fin_troqueladora: string;
   fecha_fin_numeradora: string;
+  metros_impresion: string;
   troquel_utillaje: string;
   fecha_inicio_produccion: string;
   fecha_fin_produccion: string;
@@ -80,6 +86,7 @@ type EditForm = {
 
 function rowToForm(r: ProdEtiquetasHojaRutaRow): EditForm {
   return {
+    ot_numero: String(r.ot_numero ?? "").trim(),
     cliente: String(r.cliente ?? "").trim(),
     trabajo: String(r.trabajo ?? "").trim(),
     papel: String(r.papel ?? "").trim(),
@@ -94,6 +101,10 @@ function rowToForm(r: ProdEtiquetasHojaRutaRow): EditForm {
     fecha_fin_konica: isoToDateInput(r.fecha_fin_konica),
     fecha_fin_troqueladora: isoToDateInput(r.fecha_fin_troqueladora),
     fecha_fin_numeradora: isoToDateInput(r.fecha_fin_numeradora),
+    metros_impresion:
+      r.metros_impresion == null
+        ? ""
+        : String(r.metros_impresion).replace(".", ","),
     troquel_utillaje: String(r.troquel_utillaje ?? "").trim(),
     fecha_inicio_produccion: isoToDateInput(r.fecha_inicio_produccion),
     fecha_fin_produccion: isoToDateInput(r.fecha_fin_produccion),
@@ -149,9 +160,38 @@ export function EtiquetasHojaRutaEditDialog({
 
   const submit = useCallback(async () => {
     if (!row || !form) return;
+    const otNuevo = normalizaOtNumero(form.ot_numero);
+    if (!otNuevo) {
+      toast.error("El número de OT no puede estar vacío.");
+      return;
+    }
+    const otOriginal = normalizaOtNumero(row.ot_numero);
+    if (otNuevo !== otOriginal) {
+      try {
+        const otros = await findHojaRutaPorOtNumeroExcepto(
+          supabase,
+          otNuevo,
+          row.id
+        );
+        if (otros.length > 0) {
+          const ok = window.confirm(
+            `Ya existe otra fila con OT ${otNuevo} (${otros.length} coincidencia${otros.length === 1 ? "" : "s"}). Si guardas, generarás un duplicado.\n\n¿Guardar de todos modos?`
+          );
+          if (!ok) return;
+        }
+      } catch (e) {
+        toast.error(
+          e instanceof Error
+            ? `No se pudo comprobar duplicados: ${e.message}`
+            : "No se pudo comprobar duplicados."
+        );
+        return;
+      }
+    }
     setSaving(true);
     try {
       const patch: Record<string, unknown> = {
+        ot_numero: otNuevo,
         cliente: form.cliente.trim() || null,
         trabajo: form.trabajo.trim() || null,
         papel: form.papel.trim() || null,
@@ -168,7 +208,8 @@ export function EtiquetasHojaRutaEditDialog({
             fecha_fin_konica: form.fecha_fin_konica,
             fecha_fin_troqueladora: form.fecha_fin_troqueladora,
             fecha_fin_numeradora: form.fecha_fin_numeradora,
-          }
+          },
+          parseOptionalDecimal(form.metros_impresion)
         ),
         troquel_utillaje: form.troquel_utillaje.trim() || null,
         fecha_inicio_produccion: form.fecha_inicio_produccion.trim() || null,
@@ -273,13 +314,22 @@ export function EtiquetasHojaRutaEditDialog({
 
         <div className="grid max-h-[min(78vh,720px)] gap-3 overflow-y-auto px-4 py-3 sm:grid-cols-2 sm:px-5">
           <div className="grid gap-1 sm:col-span-2">
-            <Label className="text-xs text-slate-500">OT (solo lectura)</Label>
+            <Label htmlFor={`${formId}-ot`} className="text-xs">
+              OT (nº)
+            </Label>
             <Input
+              id={`${formId}-ot`}
               className="h-8 font-mono text-xs"
-              value={row.ot_numero}
-              readOnly
-              disabled
+              value={form.ot_numero}
+              onChange={(e) =>
+                setForm((f) => (f ? { ...f, ot_numero: e.target.value } : f))
+              }
             />
+            <p className="text-[10px] text-slate-500">
+              Original:{" "}
+              <span className="font-mono">{row.ot_numero}</span>. Al cambiar
+              el número se avisará si ya existe otra fila con el mismo OT.
+            </p>
           </div>
 
           <div className="grid gap-1">
@@ -417,13 +467,17 @@ export function EtiquetasHojaRutaEditDialog({
                           : key === "troqueladora"
                             ? "fecha_fin_troqueladora"
                             : "fecha_fin_numeradora";
-                      return {
+                      const next: EditForm = {
                         ...f,
                         [key]: checked,
                         [fechaKey]: checked
                           ? f[fechaKey].trim() || today
                           : "",
                       };
+                      if (key === "konica" && !checked) {
+                        next.metros_impresion = "";
+                      }
+                      return next;
                     });
                   }}
                 />
@@ -445,6 +499,21 @@ export function EtiquetasHojaRutaEditDialog({
               onChange={(e) =>
                 setForm((f) =>
                   f ? { ...f, fecha_fin_konica: e.target.value } : f
+                )
+              }
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-xs">Metros impresión (Konica)</Label>
+            <Input
+              className="h-8 text-xs tabular-nums"
+              inputMode="decimal"
+              placeholder="Ej. 124,5"
+              disabled={!form.konica}
+              value={form.metros_impresion}
+              onChange={(e) =>
+                setForm((f) =>
+                  f ? { ...f, metros_impresion: e.target.value } : f
                 )
               }
             />

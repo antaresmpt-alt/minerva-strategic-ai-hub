@@ -9,6 +9,7 @@ import { EtiquetasEntradaExpressDialog } from "@/components/produccion/etiquetas
 import { EtiquetasHojaRutaEditDialog } from "@/components/produccion/etiquetas-digital/etiquetas-hoja-ruta-edit-dialog";
 import { EtiquetasHojaRutaMuelleDialog } from "@/components/produccion/etiquetas-digital/etiquetas-hoja-ruta-muelle-dialog";
 import { EtiquetasHojaRutaMuelleView } from "@/components/produccion/etiquetas-digital/etiquetas-hoja-ruta-muelle-view";
+import { EtiquetasMetrosImpresionDialog } from "@/components/produccion/etiquetas-digital/etiquetas-metros-impresion-dialog";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -36,10 +37,12 @@ import {
   buildEtiquetasHojaRutaKpis,
   cantidadEtiquetasKpi,
   formatEtiquetasKpi,
+  formatMetrosKpi,
 } from "@/lib/etiquetas-hoja-ruta-kpis";
 import {
   buildMaquinaPatch,
   type MaquinaHojaRutaField,
+  type MaquinaPatchExtras,
   mergeMaquinaIntoRow,
 } from "@/lib/etiquetas-hoja-ruta-maquina";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -95,6 +98,8 @@ export function EtiquetasHojaRutaTab() {
   const [togglingMaquina, setTogglingMaquina] = useState<string | null>(null);
   const [compactMode, setCompactMode] = useState(false);
   const [muelleDetailRow, setMuelleDetailRow] =
+    useState<ProdEtiquetasHojaRutaRow | null>(null);
+  const [pendingKonicaRow, setPendingKonicaRow] =
     useState<ProdEtiquetasHojaRutaRow | null>(null);
 
   useEffect(() => {
@@ -249,6 +254,33 @@ export function EtiquetasHojaRutaTab() {
     ? "Listado filtrado (sin indicadores)"
     : "Listado filtrado + indicadores en resumen";
 
+  const commitMaquinaPatch = useCallback(
+    async (
+      r: ProdEtiquetasHojaRutaRow,
+      field: MaquinaHojaRutaField,
+      next: boolean,
+      extras: MaquinaPatchExtras = {}
+    ) => {
+      const toggleKey = `${r.id}:${field}`;
+      setTogglingMaquina(toggleKey);
+      const prev = { ...r };
+      const optimistic = mergeMaquinaIntoRow(r, field, next, extras);
+      setRows((list) => list.map((x) => (x.id === r.id ? optimistic : x)));
+      const { error } = await supabase
+        .from(TABLE)
+        .update(buildMaquinaPatch(field, next, extras))
+        .eq("id", r.id);
+      setTogglingMaquina(null);
+      if (error) {
+        setRows((list) => list.map((x) => (x.id === r.id ? prev : x)));
+        toast.error("No se pudo actualizar la máquina", {
+          description: error.message,
+        });
+      }
+    },
+    [supabase]
+  );
+
   const toggleMaquina = useCallback(
     async (r: ProdEtiquetasHojaRutaRow, field: MaquinaHojaRutaField, next: boolean) => {
       if (
@@ -261,25 +293,27 @@ export function EtiquetasHojaRutaTab() {
             "Esta fila no tiene cantidad; no sumará en los indicadores hasta que la completes en edición o entrada express.",
         });
       }
-      const toggleKey = `${r.id}:${field}`;
-      setTogglingMaquina(toggleKey);
-      const prev = { ...r };
-      const optimistic = mergeMaquinaIntoRow(r, field, next);
-      setRows((list) => list.map((x) => (x.id === r.id ? optimistic : x)));
-      const { error } = await supabase
-        .from(TABLE)
-        .update(buildMaquinaPatch(field, next))
-        .eq("id", r.id);
-      setTogglingMaquina(null);
-      if (error) {
-        setRows((list) => list.map((x) => (x.id === r.id ? prev : x)));
-        toast.error("No se pudo actualizar la máquina", {
-          description: error.message,
-        });
+      // Konica + marcar → pedir metros antes de persistir.
+      if (field === "konica" && next) {
+        setPendingKonicaRow(r);
         return;
       }
+      await commitMaquinaPatch(r, field, next);
     },
-    [supabase]
+    [commitMaquinaPatch]
+  );
+
+  const handleMetrosConfirm = useCallback(
+    async (metros: number | null) => {
+      const r = pendingKonicaRow;
+      if (!r) {
+        setPendingKonicaRow(null);
+        return;
+      }
+      await commitMaquinaPatch(r, "konica", true, { metros_impresion: metros });
+      setPendingKonicaRow(null);
+    },
+    [commitMaquinaPatch, pendingKonicaRow]
   );
 
   const toggleFinalizado = useCallback(
@@ -345,6 +379,10 @@ export function EtiquetasHojaRutaTab() {
         onOpenChange={setExpressOpen}
         catalog={catalog}
         onSaved={() => void loadRows()}
+        onAbrirExistente={(row) => {
+          setExpressOpen(false);
+          setEditingRow(row);
+        }}
       />
       <EtiquetasHojaRutaEditDialog
         open={editingRow != null}
@@ -366,6 +404,17 @@ export function EtiquetasHojaRutaTab() {
         onEdit={(row) => {
           setMuelleDetailRow(null);
           setEditingRow(row);
+        }}
+      />
+      <EtiquetasMetrosImpresionDialog
+        open={pendingKonicaRow != null}
+        onOpenChange={(o) => {
+          if (!o) setPendingKonicaRow(null);
+        }}
+        otNumero={pendingKonicaRow?.ot_numero ?? null}
+        valorInicial={pendingKonicaRow?.metros_impresion ?? null}
+        onConfirmar={(metros) => {
+          void handleMetrosConfirm(metros);
         }}
       />
       <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -484,7 +533,7 @@ export function EtiquetasHojaRutaTab() {
       </div>
 
       {!compactMode ? (
-        <div className="hidden grid-cols-2 gap-2 sm:grid-cols-4 md:grid">
+        <div className="hidden grid-cols-2 gap-2 sm:grid-cols-3 md:grid lg:grid-cols-6">
           <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
             <p className="text-[11px] text-slate-500">Etiquetas hoy</p>
             <p className="text-sm font-semibold text-[#002147]">
@@ -501,6 +550,24 @@ export function EtiquetasHojaRutaTab() {
             </p>
             <p className="mt-0.5 text-[10px] text-slate-500">
               Cantidad OT · Konica del mes
+            </p>
+          </div>
+          <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2">
+            <p className="text-[11px] text-emerald-800">Metros hoy</p>
+            <p className="text-sm font-semibold text-emerald-900">
+              {formatMetrosKpi(kpis.metrosHoy)}
+            </p>
+            <p className="mt-0.5 text-[10px] text-emerald-800/80">
+              Papel consumido · Konica hoy
+            </p>
+          </div>
+          <div className="rounded-md border border-emerald-200 bg-emerald-50/60 px-3 py-2">
+            <p className="text-[11px] text-emerald-800">Metros este mes</p>
+            <p className="text-sm font-semibold text-emerald-900">
+              {formatMetrosKpi(kpis.metrosMes)}
+            </p>
+            <p className="mt-0.5 text-[10px] text-emerald-800/80">
+              Papel consumido · Konica del mes
             </p>
           </div>
           <div className="rounded-md border border-slate-200 bg-amber-50 px-3 py-2">
