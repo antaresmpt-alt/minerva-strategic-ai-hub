@@ -12,7 +12,9 @@ import {
   entregaPlazoTitle,
   type EntregaPlazoSemaforo,
 } from "@/lib/etiquetas-hoja-ruta-plazo";
+import { resolveTroquelDisplay } from "@/lib/etiquetas-troqueles-display";
 import type { ProdEtiquetasHojaRutaRow } from "@/types/prod-etiquetas-hoja-ruta";
+import type { ProdEtiquetasTroquelRow } from "@/types/prod-etiquetas-troqueles";
 
 export type EtiquetasHojaRutaExportFilters = {
   buscar: string;
@@ -25,6 +27,7 @@ export type EtiquetasHojaRutaExportOptions = {
   /** Vista ampliada (no compacto): incluir bloque KPI en resumen. */
   includeKpis: boolean;
   kpis: EtiquetasHojaRutaKpis;
+  troquelesById?: Map<number, ProdEtiquetasTroquelRow>;
 };
 
 const NAVY: [number, number, number] = [0, 33, 71];
@@ -67,7 +70,10 @@ function fmtMetros(v: number | null | undefined): string {
   })} m`;
 }
 
-function rowToCells(r: ProdEtiquetasHojaRutaRow): string[] {
+function rowToCells(
+  r: ProdEtiquetasHojaRutaRow,
+  troquelesById: Map<number, ProdEtiquetasTroquelRow>
+): string[] {
   return [
     r.ot_numero,
     r.cliente ?? "—",
@@ -87,7 +93,7 @@ function rowToCells(r: ProdEtiquetasHojaRutaRow): string[] {
     fmtDateEs(r.fecha_fin_troqueladora),
     fmtDateEs(r.fecha_fin_numeradora),
     fmtMetros(r.metros_impresion),
-    r.troquel_utillaje ?? "—",
+    resolveTroquelDisplay(r, troquelesById),
     fmtDateEs(r.fecha_inicio_produccion),
     fmtDateEs(r.fecha_fin_produccion),
     r.cajas != null ? String(r.cajas) : "—",
@@ -227,7 +233,10 @@ function drawPdfCheck(doc: jsPDF, cx: number, cy: number): void {
 }
 
 /** Fila PDF compacta (sin plazo texto ni fechas fin máquina). */
-function rowToPdfBody(r: ProdEtiquetasHojaRutaRow): string[] {
+function rowToPdfBody(
+  r: ProdEtiquetasHojaRutaRow,
+  troquelesById: Map<number, ProdEtiquetasTroquelRow>
+): string[] {
   return [
     r.ot_numero,
     pdfTxt(r.cliente),
@@ -242,7 +251,7 @@ function rowToPdfBody(r: ProdEtiquetasHojaRutaRow): string[] {
     "",
     "",
     "",
-    pdfTxt(r.troquel_utillaje),
+    pdfTxt(resolveTroquelDisplay(r, troquelesById)),
     fmtDateEs(r.fecha_inicio_produccion),
     fmtDateEs(r.fecha_fin_produccion),
     r.cajas != null ? String(r.cajas) : "—",
@@ -399,7 +408,8 @@ export function exportEtiquetasHojaRutaExcel(
     buildSummaryAoa(filters, rows.length, options)
   );
   summary["!cols"] = [{ wch: 36 }, { wch: 28 }];
-  const data = rows.map(rowToCells);
+  const troquelesById = options.troquelesById ?? new Map();
+  const data = rows.map((row) => rowToCells(row, troquelesById));
   const detail = XLSX.utils.aoa_to_sheet([EXCEL_HEADERS, ...data]);
   detail["!freeze"] = { xSplit: 0, ySplit: 1 };
   detail["!cols"] = EXCEL_HEADERS.map((h, i) => ({
@@ -469,7 +479,8 @@ export function exportEtiquetasHojaRutaPdf(
     tableStartY = drawKpisBlock(doc, options.kpis, 34);
   }
 
-  const pdfRows = rows.map(rowToPdfBody);
+  const troquelesById = options.troquelesById ?? new Map();
+  const pdfRows = rows.map((row) => rowToPdfBody(row, troquelesById));
 
   autoTable(doc, {
     startY: tableStartY,

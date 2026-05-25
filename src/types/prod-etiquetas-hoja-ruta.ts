@@ -22,6 +22,8 @@ export type ProdEtiquetasHojaRutaRow = {
   fecha_fin_numeradora: string | null;
   /** Metros de papel consumidos en impresión Konica (se solicita al marcar konica = true). */
   metros_impresion: number | null;
+  /** Relación opcional con el catálogo de troqueles de etiquetas. */
+  troquel_id: number | null;
   troquel_utillaje: string | null;
   fecha_inicio_produccion: string | null;
   fecha_fin_produccion: string | null;

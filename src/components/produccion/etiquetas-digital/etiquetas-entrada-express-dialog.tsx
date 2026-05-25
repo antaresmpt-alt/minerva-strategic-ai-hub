@@ -1,8 +1,10 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { Eye, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+
+import { EtiquetasTroquelesViewerDialog } from "./etiquetas-troqueles-viewer-dialog";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -28,9 +30,14 @@ import {
 } from "@/lib/etiquetas-hoja-ruta-duplicados";
 import { buildMaquinaFieldsForSaveFromForm } from "@/lib/etiquetas-hoja-ruta-maquina";
 import { todayYmdLocal } from "@/lib/etiquetas-hoja-ruta-plazo";
+import {
+  buildTroquelOptions,
+  formatTroquelCatalogLabel,
+} from "@/lib/etiquetas-troqueles-display";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { ProdEtiquetasCatalogRow } from "@/types/prod-etiquetas-catalogo";
 import type { ProdEtiquetasHojaRutaRow } from "@/types/prod-etiquetas-hoja-ruta";
+import type { ProdEtiquetasTroquelRow } from "@/types/prod-etiquetas-troqueles";
 
 const TABLE_OT = "prod_ots_general";
 const TABLE_HR = "prod_etiquetas_hoja_ruta";
@@ -83,6 +90,7 @@ type ExpressForm = {
   fecha_fin_troqueladora: string;
   fecha_fin_numeradora: string;
   metros_impresion: string;
+  troquel_id: string;
   troquel_utillaje: string;
   fecha_inicio_produccion: string;
   fecha_fin_produccion: string;
@@ -112,6 +120,7 @@ function emptyForm(): ExpressForm {
     fecha_fin_troqueladora: "",
     fecha_fin_numeradora: "",
     metros_impresion: "",
+    troquel_id: "",
     troquel_utillaje: "",
     fecha_inicio_produccion: "",
     fecha_fin_produccion: "",
@@ -132,6 +141,7 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   catalog: ProdEtiquetasCatalogRow[];
+  troqueles: ProdEtiquetasTroquelRow[];
   onSaved: () => void;
   /**
    * Si se detecta un duplicado (OT ya presente en hoja de ruta), se ofrece al
@@ -146,6 +156,7 @@ export function EtiquetasEntradaExpressDialog({
   open,
   onOpenChange,
   catalog,
+  troqueles,
   onSaved,
   onAbrirExistente,
 }: Props) {
@@ -160,6 +171,8 @@ export function EtiquetasEntradaExpressDialog({
   const [loadingOt, setLoadingOt] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<ExpressForm>(() => emptyForm());
+  const [troquelQuery, setTroquelQuery] = useState("");
+  const [viewerOpen, setViewerOpen] = useState(false);
   const [entradaMultiple, setEntradaMultiple] = useState(false);
   const [duplicadosState, setDuplicadosState] = useState<{
     otNumero: string;
@@ -170,6 +183,7 @@ export function EtiquetasEntradaExpressDialog({
     if (!open) {
       setOtInput("");
       setForm(emptyForm());
+      setTroquelQuery("");
       setEntradaMultiple(false);
       setLoadingOt(false);
       setSaving(false);
@@ -251,6 +265,29 @@ export function EtiquetasEntradaExpressDialog({
     }
   }, [otInput, supabase]);
 
+  const troquelOptions = useMemo(
+    () => buildTroquelOptions(troqueles, troquelQuery),
+    [troqueles, troquelQuery]
+  );
+
+  const troquelSelectOptions = useMemo(() => {
+    const selected = form.troquel_id
+      ? troqueles.find((troquel) => String(troquel.id) === form.troquel_id)
+      : null;
+    const list =
+      selected && !troquelOptions.some((troquel) => troquel.id === selected.id)
+        ? [selected, ...troquelOptions]
+        : troquelOptions;
+
+    return [
+      { value: "", label: "— Sin troquel de catálogo —" },
+      ...list.map((troquel) => ({
+        value: String(troquel.id),
+        label: formatTroquelCatalogLabel(troquel),
+      })),
+    ];
+  }, [form.troquel_id, troquelOptions, troqueles]);
+
   const submit = useCallback(async () => {
     const ot = normalizaOtNumero(form.ot_numero);
     if (!ot) {
@@ -287,6 +324,7 @@ export function EtiquetasEntradaExpressDialog({
           },
           parseOptionalDecimal(form.metros_impresion)
         ),
+        troquel_id: form.troquel_id ? Number(form.troquel_id) : null,
         troquel_utillaje: form.troquel_utillaje.trim() || null,
         fecha_inicio_produccion: form.fecha_inicio_produccion.trim() || null,
         fecha_fin_produccion: form.fecha_fin_produccion.trim() || null,
@@ -306,6 +344,7 @@ export function EtiquetasEntradaExpressDialog({
       if (entradaMultiple) {
         setForm(emptyForm());
         setOtInput("");
+        setTroquelQuery("");
         window.setTimeout(() => otInputRef.current?.focus(), 80);
       } else {
         onOpenChange(false);
@@ -615,8 +654,45 @@ export function EtiquetasEntradaExpressDialog({
             />
           </div>
 
+          <div className="grid gap-1 sm:col-span-2">
+            <Label className="text-xs">Troquel catálogo</Label>
+            <Input
+              className="h-8 text-xs"
+              value={troquelQuery}
+              onChange={(e) => setTroquelQuery(e.target.value)}
+              placeholder="Filtrar por código, medida, cliente o trabajo"
+            />
+            <div className="flex gap-1.5">
+              <NativeSelect
+                value={form.troquel_id}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, troquel_id: e.target.value }))
+                }
+                options={troquelSelectOptions}
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 shrink-0 p-0"
+                disabled={!form.troquel_id}
+                onClick={() => setViewerOpen(true)}
+                title={
+                  form.troquel_id
+                    ? "Ver archivos del troquel"
+                    : "Selecciona un troquel del catálogo primero"
+                }
+              >
+                <Eye className="size-3.5" />
+              </Button>
+            </div>
+            <p className="text-[10px] text-slate-500">
+              El texto libre queda solo para históricos o casos no catalogados.
+            </p>
+          </div>
           <div className="grid gap-1">
-            <Label className="text-xs">Troquel (utillaje)</Label>
+            <Label className="text-xs">Troquel texto libre / histórico</Label>
             <Input
               className="h-8 text-xs"
               value={form.troquel_utillaje}
@@ -747,6 +823,16 @@ export function EtiquetasEntradaExpressDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    
+    <EtiquetasTroquelesViewerDialog
+      open={viewerOpen}
+      onOpenChange={setViewerOpen}
+      troquel={
+        form.troquel_id
+          ? troqueles.find((t) => String(t.id) === form.troquel_id) ?? null
+          : null
+      }
+    />
     </>
   );
 }

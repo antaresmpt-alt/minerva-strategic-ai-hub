@@ -63,12 +63,14 @@ import type { CalendarioFestivoAmbito } from "@/types/prod-calendario-festivo";
 import type { ProdEtiquetasCalendarioApunteRow } from "@/types/prod-etiquetas-calendario-apunte";
 import type { ProdEtiquetasCatalogRow } from "@/types/prod-etiquetas-catalogo";
 import type { ProdEtiquetasHojaRutaRow } from "@/types/prod-etiquetas-hoja-ruta";
+import type { ProdEtiquetasTroquelRow } from "@/types/prod-etiquetas-troqueles";
 import { cn } from "@/lib/utils";
 
 const TABLE_HR = "prod_etiquetas_hoja_ruta";
 const TABLE_APUNTE = "prod_etiquetas_calendario_apunte";
 const TABLE_FESTIVO = "prod_calendario_festivo";
 const CATALOG_TABLE = "prod_etiquetas_catalogo";
+const TROQUELES_TABLE = "prod_etiquetas_troqueles";
 
 const MIGRATION_HINT_APUNTE =
   "Ejecuta la migraciÃ³n 20260517160000_prod_etiquetas_calendario_apunte.sql en Supabase.";
@@ -511,6 +513,7 @@ export function EtiquetasCalendarioMensualTab() {
   const [monthIndex, setMonthIndex] = useState(now.getMonth());
   const [hojaRuta, setHojaRuta] = useState<ProdEtiquetasHojaRutaRow[]>([]);
   const [catalog, setCatalog] = useState<ProdEtiquetasCatalogRow[]>([]);
+  const [troqueles, setTroqueles] = useState<ProdEtiquetasTroquelRow[]>([]);
   const [apuntes, setApuntes] = useState<ProdEtiquetasCalendarioApunteRow[]>([]);
   const [festivos, setFestivos] = useState<ProdCalendarioFestivoRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -624,7 +627,7 @@ export function EtiquetasCalendarioMensualTab() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [rHr, rAp, rFest, rCat] = await Promise.all([
+    const [rHr, rAp, rFest, rCat, rTroqueles] = await Promise.all([
       supabase.from(TABLE_HR).select("*").order("ot_numero"),
       supabase
         .from(TABLE_APUNTE)
@@ -642,6 +645,7 @@ export function EtiquetasCalendarioMensualTab() {
         .eq("activo", true)
         .order("fecha"),
       supabase.from(CATALOG_TABLE).select("*").order("orden"),
+      supabase.from(TROQUELES_TABLE).select("*").order("codigo"),
     ]);
     setLoading(false);
 
@@ -684,6 +688,10 @@ export function EtiquetasCalendarioMensualTab() {
 
     if (!rCat.error) {
       setCatalog((rCat.data ?? []) as ProdEtiquetasCatalogRow[]);
+    }
+
+    if (!rTroqueles.error) {
+      setTroqueles((rTroqueles.data ?? []) as ProdEtiquetasTroquelRow[]);
     }
   }, [end, start, supabase]);
 
@@ -995,6 +1003,7 @@ export function EtiquetasCalendarioMensualTab() {
         onOpenChange={(open) => !open && setEditingHr(null)}
         row={editingHr}
         catalog={catalog}
+        troqueles={troqueles}
         onSaved={() => {
           setEditingHr(null);
           void load();

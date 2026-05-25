@@ -48,10 +48,13 @@ import {
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { ProdEtiquetasCatalogRow } from "@/types/prod-etiquetas-catalogo";
 import type { ProdEtiquetasHojaRutaRow } from "@/types/prod-etiquetas-hoja-ruta";
+import type { ProdEtiquetasTroquelRow } from "@/types/prod-etiquetas-troqueles";
+import { resolveTroquelDisplay } from "@/lib/etiquetas-troqueles-display";
 import { cn } from "@/lib/utils";
 
 const TABLE = "prod_etiquetas_hoja_ruta";
 const CATALOG_TABLE = "prod_etiquetas_catalogo";
+const TROQUELES_TABLE = "prod_etiquetas_troqueles";
 const STORAGE_COMPACT = "etiquetas-hr-compact";
 
 const ORDEN_OPTIONS: Option[] = [
@@ -85,6 +88,7 @@ export function EtiquetasHojaRutaTab() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [rows, setRows] = useState<ProdEtiquetasHojaRutaRow[]>([]);
   const [catalog, setCatalog] = useState<ProdEtiquetasCatalogRow[]>([]);
+  const [troqueles, setTroqueles] = useState<ProdEtiquetasTroquelRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtroTexto, setFiltroTexto] = useState("");
   const [filtroPapel, setFiltroPapel] = useState("");
@@ -121,7 +125,7 @@ export function EtiquetasHojaRutaTab() {
 
   const loadRows = useCallback(async () => {
     setLoading(true);
-    const [rRows, rCat] = await Promise.all([
+    const [rRows, rCat, rTroqueles] = await Promise.all([
       supabase
         .from(TABLE)
         .select("*")
@@ -133,6 +137,10 @@ export function EtiquetasHojaRutaTab() {
         .order("grupo")
         .order("orden")
         .order("label"),
+      supabase
+        .from(TROQUELES_TABLE)
+        .select("*")
+        .order("codigo", { ascending: true }),
     ]);
     setLoading(false);
     if (rRows.error) {
@@ -148,6 +156,12 @@ export function EtiquetasHojaRutaTab() {
       setCatalog([]);
     } else {
       setCatalog((rCat.data ?? []) as ProdEtiquetasCatalogRow[]);
+    }
+    if (rTroqueles.error) {
+      console.warn("[etiquetas troqueles hoja ruta]", rTroqueles.error.message);
+      setTroqueles([]);
+    } else {
+      setTroqueles((rTroqueles.data ?? []) as ProdEtiquetasTroquelRow[]);
     }
   }, [supabase]);
 
@@ -242,12 +256,17 @@ export function EtiquetasHojaRutaTab() {
 
   const kpis = useMemo(() => buildEtiquetasHojaRutaKpis(rows), [rows]);
 
+  const troquelesById = useMemo(() => {
+    return new Map(troqueles.map((troquel) => [troquel.id, troquel]));
+  }, [troqueles]);
+
   const exportOptions = useMemo(
     () => ({
       includeKpis: !compactMode,
       kpis,
+      troquelesById,
     }),
-    [compactMode, kpis]
+    [compactMode, kpis, troquelesById]
   );
 
   const exportHint = compactMode
@@ -378,6 +397,7 @@ export function EtiquetasHojaRutaTab() {
         open={expressOpen}
         onOpenChange={setExpressOpen}
         catalog={catalog}
+        troqueles={troqueles}
         onSaved={() => void loadRows()}
         onAbrirExistente={(row) => {
           setExpressOpen(false);
@@ -391,6 +411,7 @@ export function EtiquetasHojaRutaTab() {
         }}
         row={editingRow}
         catalog={catalog}
+        troqueles={troqueles}
         onSaved={() => void loadRows()}
       />
       <EtiquetasHojaRutaMuelleDialog
@@ -804,11 +825,12 @@ export function EtiquetasHojaRutaTab() {
                   ))}
                   <TableCell
                     className={cn(
-                      "max-w-[4rem] truncate",
+                      "max-w-[9rem] truncate",
                       compactMode && "py-1 text-[11px]"
                     )}
+                    title={resolveTroquelDisplay(r, troquelesById)}
                   >
-                    {r.troquel_utillaje ?? "—"}
+                    {resolveTroquelDisplay(r, troquelesById)}
                   </TableCell>
                   <TableCell
                     className={cn(

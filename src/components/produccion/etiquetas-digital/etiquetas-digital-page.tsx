@@ -4,6 +4,7 @@ import {
   BookOpen,
   CalendarDays,
   Inbox,
+  Layers,
   Package,
   Route,
   ShoppingCart,
@@ -15,6 +16,7 @@ import { EtiquetasConsultaMaterialTab } from "@/components/produccion/etiquetas-
 import { EtiquetasHojaRutaTab } from "@/components/produccion/etiquetas-digital/etiquetas-hoja-ruta-tab";
 import { EtiquetasCalendarioMensualTab } from "@/components/produccion/etiquetas-digital/etiquetas-calendario-mensual-tab";
 import { EtiquetasStockBobinasTab } from "@/components/produccion/etiquetas-digital/etiquetas-stock-bobinas-tab";
+import { EtiquetasTroquelesTab } from "@/components/produccion/etiquetas-digital/etiquetas-troqueles-tab";
 import {
   Card,
   CardContent,
@@ -76,6 +78,10 @@ export function EtiquetasDigitalPage() {
               <CalendarDays className="size-4 shrink-0 opacity-90" aria-hidden />
               Calendario mensual
             </TabsTrigger>
+            <TabsTrigger value="troqueles" className={tabTriggerClass}>
+              <Layers className="size-4 shrink-0 opacity-90" aria-hidden />
+              Troqueles etiq.
+            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -117,6 +123,10 @@ export function EtiquetasDigitalPage() {
 
         <TabsContent value="calendario-mensual" className="mt-0 outline-none">
           <EtiquetasCalendarioMensualTab />
+        </TabsContent>
+
+        <TabsContent value="troqueles" className="mt-0 outline-none">
+          <EtiquetasTroquelesTab />
         </TabsContent>
       </Tabs>
     </div>
