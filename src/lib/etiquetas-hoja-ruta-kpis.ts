@@ -2,8 +2,6 @@ import { entregaPlazoSemaforo, todayYmdLocal } from "@/lib/etiquetas-hoja-ruta-p
 import type { ProdEtiquetasHojaRutaRow } from "@/types/prod-etiquetas-hoja-ruta";
 
 export type EtiquetasHojaRutaKpis = {
-  etiquetasHoy: number;
-  etiquetasMes: number;
   metrosHoy: number;
   metrosMes: number;
   colaKonica: number;
@@ -57,8 +55,6 @@ export function buildEtiquetasHojaRutaKpis(
   const today = todayYmdLocal();
   const { start: mesInicio, end: mesFin } = currentMonthRangeYmd();
 
-  let etiquetasHoy = 0;
-  let etiquetasMes = 0;
   let metrosHoy = 0;
   let metrosMes = 0;
   let colaKonica = 0;
@@ -74,12 +70,6 @@ export function buildEtiquetasHojaRutaKpis(
     const fk = ymdKey(r.fecha_fin_konica);
     if (fk == null) continue;
 
-    const qty = cantidadEtiquetasKpi(r.cantidad);
-    if (qty != null) {
-      if (fk === today) etiquetasHoy += qty;
-      if (fk >= mesInicio && fk <= mesFin) etiquetasMes += qty;
-    }
-
     const mts =
       r.metros_impresion != null && Number.isFinite(Number(r.metros_impresion))
         ? Number(r.metros_impresion)
@@ -91,8 +81,6 @@ export function buildEtiquetasHojaRutaKpis(
   }
 
   return {
-    etiquetasHoy,
-    etiquetasMes,
     metrosHoy,
     metrosMes,
     colaKonica,

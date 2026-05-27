@@ -446,6 +446,15 @@ export function EtiquetasHojaRutaTab() {
 
   const kpis = useMemo(() => buildEtiquetasHojaRutaKpis(rows), [rows]);
 
+  const etiquetasOts = useMemo(
+    () =>
+      filtradas.reduce((total, row) => {
+        const qty = cantidadEtiquetasKpi(row.cantidad);
+        return total + (qty ?? 0);
+      }, 0),
+    [filtradas]
+  );
+
   const troquelesById = useMemo(() => {
     return new Map(troqueles.map((troquel) => [troquel.id, troquel]));
   }, [troqueles]);
@@ -987,23 +996,14 @@ export function EtiquetasHojaRutaTab() {
       </div>
 
       {!compactMode ? (
-        <div className="hidden grid-cols-2 gap-2 sm:grid-cols-3 md:grid lg:grid-cols-6">
+        <div className="hidden grid-cols-2 gap-2 sm:grid-cols-3 md:grid lg:grid-cols-5">
           <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-            <p className="text-[11px] text-slate-500">Etiquetas hoy</p>
+            <p className="text-[11px] text-slate-500">Etiquetas OTs</p>
             <p className="text-sm font-semibold text-[#002147]">
-              {formatEtiquetasKpi(kpis.etiquetasHoy)}
+              {formatEtiquetasKpi(etiquetasOts)}
             </p>
             <p className="mt-0.5 text-[10px] text-slate-500">
-              Cantidad OT · Konica hoy
-            </p>
-          </div>
-          <div className="rounded-md border border-slate-200 bg-[#002147]/5 px-3 py-2">
-            <p className="text-[11px] text-[#002147]/80">Etiquetas este mes</p>
-            <p className="text-sm font-semibold text-[#002147]">
-              {formatEtiquetasKpi(kpis.etiquetasMes)}
-            </p>
-            <p className="mt-0.5 text-[10px] text-slate-500">
-              Cantidad OT · Konica del mes
+              Cantidad OT · según filtros
             </p>
           </div>
           <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2">

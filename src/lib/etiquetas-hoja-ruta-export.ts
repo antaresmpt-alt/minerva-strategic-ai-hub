@@ -3,6 +3,7 @@ import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 
 import {
+  cantidadEtiquetasKpi,
   formatEtiquetasKpi,
   formatMetrosKpi,
   type EtiquetasHojaRutaKpis,
@@ -69,6 +70,10 @@ function fmtMetros(v: number | null | undefined): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   })} m`;
+}
+
+function sumEtiquetasOts(rows: ProdEtiquetasHojaRutaRow[]): number {
+  return rows.reduce((total, row) => total + (cantidadEtiquetasKpi(row.cantidad) ?? 0), 0);
 }
 
 function rowToCells(
@@ -285,9 +290,11 @@ function exportFileTag(includeKpis: boolean): string {
 
 function buildSummaryAoa(
   filters: EtiquetasHojaRutaExportFilters,
-  rowCount: number,
+  rows: ProdEtiquetasHojaRutaRow[],
   options: EtiquetasHojaRutaExportOptions
 ): (string | number)[][] {
+  const rowCount = rows.length;
+  const etiquetasOts = sumEtiquetasOts(rows);
   const base: (string | number)[][] = [
     ["Minerva Global — Etiquetas digital · Hoja de ruta"],
     [],
@@ -304,16 +311,12 @@ function buildSummaryAoa(
     const k = options.kpis;
     base.push(
       [],
-      ["Indicadores (todas las OT cargadas)"],
+      ["Indicadores"],
       [
         "Nota",
-        "Los KPIs son globales; el detalle de la hoja «Hoja de ruta» respeta los filtros.",
+        "Etiquetas OTs respeta la selección exportada; el resto de KPIs son globales.",
       ],
-      ["Etiquetas hoy (cantidad OT, Konica)", formatEtiquetasKpi(k.etiquetasHoy)],
-      [
-        "Etiquetas este mes (cantidad OT, Konica)",
-        formatEtiquetasKpi(k.etiquetasMes),
-      ],
+      ["Etiquetas OTs (cantidad, selección)", formatEtiquetasKpi(etiquetasOts)],
       ["Metros hoy (Konica)", formatMetrosKpi(k.metrosHoy)],
       ["Metros este mes (Konica)", formatMetrosKpi(k.metrosMes)],
       ["Cola Konica (OTs)", k.colaKonica],
@@ -325,25 +328,26 @@ function buildSummaryAoa(
   return base;
 }
 
-/** Dibuja 6 KPIs en fila; devuelve Y donde puede empezar la tabla. */
-function drawKpisBlock(doc: jsPDF, kpis: EtiquetasHojaRutaKpis, startY: number): number {
+/** Dibuja los KPIs en fila; devuelve Y donde puede empezar la tabla. */
+function drawKpisBlock(
+  doc: jsPDF,
+  kpis: EtiquetasHojaRutaKpis,
+  rows: ProdEtiquetasHojaRutaRow[],
+  startY: number
+): number {
   const margin = PDF_MARGIN.left;
   const usable = pdfTableWidth(doc);
   const gap = 3;
-  const cols = 6;
+  const cols = 5;
   const boxW = (usable - gap * (cols - 1)) / cols;
   const boxH = 14;
+  const etiquetasOts = sumEtiquetasOts(rows);
 
   const items: { label: string; value: string; fill: [number, number, number] }[] = [
     {
-      label: "Etiquetas hoy",
-      value: formatEtiquetasKpi(kpis.etiquetasHoy),
+      label: "Etiquetas OTs",
+      value: formatEtiquetasKpi(etiquetasOts),
       fill: LIGHT_BG,
-    },
-    {
-      label: "Etiquetas este mes",
-      value: formatEtiquetasKpi(kpis.etiquetasMes),
-      fill: [230, 236, 245],
     },
     {
       label: "Metros hoy",
@@ -370,12 +374,12 @@ function drawKpisBlock(doc: jsPDF, kpis: EtiquetasHojaRutaKpis, startY: number):
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
   doc.setTextColor(...NAVY);
-  doc.text("Indicadores (todas las OT cargadas)", margin, startY + 3);
+  doc.text("Indicadores", margin, startY + 3);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(6.5);
   doc.setTextColor(...SLATE);
   doc.text(
-    "El listado inferior respeta los filtros aplicados.",
+    "Etiquetas OTs respeta la selección exportada; el resto de KPIs son globales.",
     margin,
     startY + 7
   );
@@ -407,7 +411,7 @@ export function exportEtiquetasHojaRutaExcel(
 ): void {
   const wb = XLSX.utils.book_new();
   const summary = XLSX.utils.aoa_to_sheet(
-    buildSummaryAoa(filters, rows.length, options)
+    buildSummaryAoa(filters, rows, options)
   );
   summary["!cols"] = [{ wch: 36 }, { wch: 28 }];
   const troquelesById = options.troquelesById ?? new Map();
@@ -478,7 +482,7 @@ export function exportEtiquetasHojaRutaPdf(
 
   let tableStartY = 36;
   if (options.includeKpis) {
-    tableStartY = drawKpisBlock(doc, options.kpis, 34);
+    tableStartY = drawKpisBlock(doc, options.kpis, rows, 34);
   }
 
   const troquelesById = options.troquelesById ?? new Map();
