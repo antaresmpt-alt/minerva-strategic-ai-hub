@@ -13,6 +13,14 @@ import { EtiquetasMetrosImpresionDialog } from "@/components/produccion/etiqueta
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, type Option } from "@/components/ui/select-native";
@@ -56,6 +64,7 @@ const TABLE = "prod_etiquetas_hoja_ruta";
 const CATALOG_TABLE = "prod_etiquetas_catalogo";
 const TROQUELES_TABLE = "prod_etiquetas_troqueles";
 const STORAGE_COMPACT = "etiquetas-hr-compact";
+const STORAGE_EXPORT = "etiquetas-hr-export-modal";
 
 const ORDEN_OPTIONS: Option[] = [
   { value: "fecha_entrega_ot_asc", label: "Fecha entrega OT (asc)" },
@@ -84,8 +93,162 @@ const MAQUINA_COLS: { field: MaquinaHojaRutaField; label: string; title: string 
     { field: "numeradora", label: "Num", title: "Numeradora" },
   ];
 
+type ExportFormat = "excel" | "pdf";
+type ExportMode = "screen" | "date";
+type ExportDateField =
+  | "fecha_entrada_depto"
+  | "fecha_entrega_ot"
+  | "fecha_fin_konica"
+  | "fecha_fin_troqueladora"
+  | "fecha_fin_numeradora"
+  | "any_process";
+type ExportPreset =
+  | "today"
+  | "this_week"
+  | "last_week"
+  | "current_month"
+  | "previous_month"
+  | "custom";
+
+type StoredExportPrefs = Partial<{
+  mode: ExportMode;
+  dateField: ExportDateField;
+  preset: ExportPreset;
+  from: string;
+  to: string;
+}>;
+
+const EXPORT_DATE_FIELD_OPTIONS: Option[] = [
+  { value: "fecha_entrada_depto", label: "F. entrada depto." },
+  { value: "fecha_entrega_ot", label: "F. entrega OT" },
+  { value: "fecha_fin_konica", label: "F. fin Konica (I)" },
+  { value: "fecha_fin_troqueladora", label: "F. fin Troqueladora (T)" },
+  { value: "fecha_fin_numeradora", label: "F. fin Numeradora (N)" },
+  { value: "any_process", label: "Algún proceso (I, T o N)" },
+];
+
+const EXPORT_PRESET_OPTIONS: Option[] = [
+  { value: "today", label: "Hoy" },
+  { value: "this_week", label: "Esta semana" },
+  { value: "last_week", label: "Última semana" },
+  { value: "current_month", label: "Mes actual" },
+  { value: "previous_month", label: "Mes anterior" },
+  { value: "custom", label: "Personalizado" },
+];
+
+function ymdLocal(d = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function addDaysYmd(ymd: string, days: number): string {
+  const d = new Date(`${ymd}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return ymdLocal(d);
+}
+
+function monthRangeYmd(offsetMonths = 0): { start: string; end: string } {
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth() + offsetMonths, 1, 12);
+  const last = new Date(now.getFullYear(), now.getMonth() + offsetMonths + 1, 0, 12);
+  return { start: ymdLocal(first), end: ymdLocal(last) };
+}
+
+function weekRangeYmd(offsetWeeks = 0): { start: string; end: string } {
+  const today = new Date(`${ymdLocal()}T12:00:00`);
+  const dow = today.getDay() === 0 ? 7 : today.getDay();
+  today.setDate(today.getDate() - dow + 1 + offsetWeeks * 7);
+  const start = ymdLocal(today);
+  return { start, end: addDaysYmd(start, 6) };
+}
+
+function presetRange(preset: ExportPreset): { start: string; end: string } {
+  const today = ymdLocal();
+  if (preset === "today") return { start: today, end: today };
+  if (preset === "this_week") return weekRangeYmd(0);
+  if (preset === "last_week") {
+    const end = today;
+    return { start: addDaysYmd(end, -6), end };
+  }
+  if (preset === "previous_month") return monthRangeYmd(-1);
+  return monthRangeYmd(0);
+}
+
+function ymdKey(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const s = String(iso).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  return null;
+}
+
+function dateInRange(value: string | null | undefined, start: string, end: string): boolean {
+  const k = ymdKey(value);
+  return k != null && k >= start && k <= end;
+}
+
+function rowInExportDateRange(
+  row: ProdEtiquetasHojaRutaRow,
+  field: ExportDateField,
+  start: string,
+  end: string
+): boolean {
+  if (field === "any_process") {
+    return (
+      dateInRange(row.fecha_fin_konica, start, end) ||
+      dateInRange(row.fecha_fin_troqueladora, start, end) ||
+      dateInRange(row.fecha_fin_numeradora, start, end)
+    );
+  }
+  return dateInRange(row[field], start, end);
+}
+
+function readStoredExportPrefs(): StoredExportPrefs {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(STORAGE_EXPORT);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as StoredExportPrefs;
+    const out: StoredExportPrefs = {};
+    if (parsed.mode === "screen" || parsed.mode === "date") out.mode = parsed.mode;
+    if (
+      parsed.dateField === "fecha_entrada_depto" ||
+      parsed.dateField === "fecha_entrega_ot" ||
+      parsed.dateField === "fecha_fin_konica" ||
+      parsed.dateField === "fecha_fin_troqueladora" ||
+      parsed.dateField === "fecha_fin_numeradora" ||
+      parsed.dateField === "any_process"
+    ) {
+      out.dateField = parsed.dateField;
+    }
+    if (
+      parsed.preset === "today" ||
+      parsed.preset === "this_week" ||
+      parsed.preset === "last_week" ||
+      parsed.preset === "current_month" ||
+      parsed.preset === "previous_month" ||
+      parsed.preset === "custom"
+    ) {
+      out.preset = parsed.preset;
+    }
+    if (parsed.from) out.from = parsed.from;
+    if (parsed.to) out.to = parsed.to;
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function readStoredCompactMode(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(STORAGE_COMPACT) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function EtiquetasHojaRutaTab() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const [initialExportPrefs] = useState(readStoredExportPrefs);
   const [rows, setRows] = useState<ProdEtiquetasHojaRutaRow[]>([]);
   const [catalog, setCatalog] = useState<ProdEtiquetasCatalogRow[]>([]);
   const [troqueles, setTroqueles] = useState<ProdEtiquetasTroquelRow[]>([]);
@@ -100,20 +263,30 @@ export function EtiquetasHojaRutaTab() {
   );
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [togglingMaquina, setTogglingMaquina] = useState<string | null>(null);
-  const [compactMode, setCompactMode] = useState(false);
+  const [compactMode, setCompactMode] = useState(readStoredCompactMode);
   const [muelleDetailRow, setMuelleDetailRow] =
     useState<ProdEtiquetasHojaRutaRow | null>(null);
   const [pendingKonicaRow, setPendingKonicaRow] =
     useState<ProdEtiquetasHojaRutaRow | null>(null);
-
-  useEffect(() => {
-    try {
-      const v = localStorage.getItem(STORAGE_COMPACT);
-      if (v === "1") setCompactMode(true);
-    } catch {
-      /* ignore */
-    }
-  }, []);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportFormatHint, setExportFormatHint] = useState<ExportFormat>("pdf");
+  const [exportMode, setExportMode] = useState<ExportMode>(
+    initialExportPrefs.mode ?? "screen"
+  );
+  const [exportDateField, setExportDateField] =
+    useState<ExportDateField>(
+      initialExportPrefs.dateField ?? "fecha_entrada_depto"
+    );
+  const [exportPreset, setExportPreset] = useState<ExportPreset>(
+    initialExportPrefs.preset ?? "current_month"
+  );
+  const currentMonth = monthRangeYmd(0);
+  const [exportFrom, setExportFrom] = useState(
+    initialExportPrefs.from ?? currentMonth.start
+  );
+  const [exportTo, setExportTo] = useState(
+    initialExportPrefs.to ?? currentMonth.end
+  );
 
   useEffect(() => {
     try {
@@ -122,6 +295,23 @@ export function EtiquetasHojaRutaTab() {
       /* ignore */
     }
   }, [compactMode]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        STORAGE_EXPORT,
+        JSON.stringify({
+          mode: exportMode,
+          dateField: exportDateField,
+          preset: exportPreset,
+          from: exportFrom,
+          to: exportTo,
+        })
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [exportDateField, exportFrom, exportMode, exportPreset, exportTo]);
 
   const loadRows = useCallback(async () => {
     setLoading(true);
@@ -270,8 +460,74 @@ export function EtiquetasHojaRutaTab() {
   );
 
   const exportHint = compactMode
-    ? "Listado filtrado (sin indicadores)"
-    : "Listado filtrado + indicadores en resumen";
+    ? "Elegir selección de exportación (sin indicadores)"
+    : "Elegir selección de exportación + indicadores en resumen";
+
+  const exportRange = useMemo(() => {
+    if (exportPreset === "custom") {
+      return {
+        start: exportFrom || ymdLocal(),
+        end: exportTo || exportFrom || ymdLocal(),
+      };
+    }
+    return presetRange(exportPreset);
+  }, [exportFrom, exportPreset, exportTo]);
+
+  const exportDateFieldLabel = useMemo(
+    () =>
+      EXPORT_DATE_FIELD_OPTIONS.find((o) => o.value === exportDateField)?.label ??
+      exportDateField,
+    [exportDateField]
+  );
+
+  const exportPresetLabel = useMemo(
+    () => EXPORT_PRESET_OPTIONS.find((o) => o.value === exportPreset)?.label ?? exportPreset,
+    [exportPreset]
+  );
+
+  const exportSelectedRows = useMemo(() => {
+    if (exportMode === "screen") return filtradas;
+    const start = exportRange.start <= exportRange.end ? exportRange.start : exportRange.end;
+    const end = exportRange.start <= exportRange.end ? exportRange.end : exportRange.start;
+    return rows
+      .filter((row) => rowInExportDateRange(row, exportDateField, start, end))
+      .sort((a, b) => {
+        const av = a.ot_numero ?? "";
+        const bv = b.ot_numero ?? "";
+        return av.localeCompare(bv, "es", { numeric: true });
+      });
+  }, [exportDateField, exportMode, exportRange.end, exportRange.start, filtradas, rows]);
+
+  const exportSelectionLabel = useMemo(() => {
+    if (exportMode === "screen") {
+      return "En pantalla (filtros aplicados)";
+    }
+    const start = exportRange.start <= exportRange.end ? exportRange.start : exportRange.end;
+    const end = exportRange.start <= exportRange.end ? exportRange.end : exportRange.start;
+    return `Rango: ${exportDateFieldLabel} · ${exportPresetLabel} · ${fmtDate(start)} → ${fmtDate(end)}`;
+  }, [exportDateFieldLabel, exportMode, exportPresetLabel, exportRange.end, exportRange.start]);
+
+  const exportFiltersForDialog = useMemo(
+    () => ({
+      ...exportFilters,
+      selectionLabel: exportSelectionLabel,
+      ...(exportMode === "date"
+        ? {
+            buscar: "",
+            papel: "",
+            ocultarFinalizadas: false,
+            ordenLabel: `${exportDateFieldLabel} (${exportPresetLabel})`,
+          }
+        : null),
+    }),
+    [
+      exportDateFieldLabel,
+      exportFilters,
+      exportMode,
+      exportPresetLabel,
+      exportSelectionLabel,
+    ]
+  );
 
   const commitMaquinaPatch = useCallback(
     async (
@@ -361,35 +617,66 @@ export function EtiquetasHojaRutaTab() {
     [supabase]
   );
 
+  const openExportDialog = useCallback((format: ExportFormat) => {
+    setExportFormatHint(format);
+    setExportDialogOpen(true);
+  }, []);
+
+  const runExport = useCallback(
+    (format: ExportFormat) => {
+      if (exportSelectedRows.length === 0) {
+        toast.message("Sin datos", {
+          description: "No hay filas que coincidan con la selección de exportación.",
+        });
+        return;
+      }
+      if (format === "excel") {
+        exportEtiquetasHojaRutaExcel(
+          exportSelectedRows,
+          exportFiltersForDialog,
+          exportOptions
+        );
+        toast.success(
+          exportOptions.includeKpis
+            ? "Excel descargado (con indicadores)"
+            : "Excel descargado"
+        );
+      } else {
+        exportEtiquetasHojaRutaPdf(
+          exportSelectedRows,
+          exportFiltersForDialog,
+          exportOptions
+        );
+        toast.success(
+          exportOptions.includeKpis
+            ? "PDF descargado (con indicadores)"
+            : "PDF descargado"
+        );
+      }
+      setExportDialogOpen(false);
+    },
+    [exportFiltersForDialog, exportOptions, exportSelectedRows]
+  );
+
   const handleExportExcel = useCallback(() => {
-    if (filtradas.length === 0) {
+    if (rows.length === 0) {
       toast.message("Sin datos", {
-        description: "No hay filas que coincidan con los filtros actuales.",
+        description: "No hay filas cargadas para exportar.",
       });
       return;
     }
-    exportEtiquetasHojaRutaExcel(filtradas, exportFilters, exportOptions);
-    toast.success(
-      exportOptions.includeKpis
-        ? "Excel descargado (con indicadores)"
-        : "Excel descargado"
-    );
-  }, [exportOptions, filtradas, exportFilters]);
+    openExportDialog("excel");
+  }, [openExportDialog, rows.length]);
 
   const handleExportPdf = useCallback(() => {
-    if (filtradas.length === 0) {
+    if (rows.length === 0) {
       toast.message("Sin datos", {
-        description: "No hay filas que coincidan con los filtros actuales.",
+        description: "No hay filas cargadas para exportar.",
       });
       return;
     }
-    exportEtiquetasHojaRutaPdf(filtradas, exportFilters, exportOptions);
-    toast.success(
-      exportOptions.includeKpis
-        ? "PDF descargado (con indicadores)"
-        : "PDF descargado"
-    );
-  }, [exportOptions, filtradas, exportFilters]);
+    openExportDialog("pdf");
+  }, [openExportDialog, rows.length]);
 
   return (
     <div className="flex w-full min-w-0 max-w-[100vw] flex-col gap-3">
@@ -438,6 +725,152 @@ export function EtiquetasHojaRutaTab() {
           void handleMetrosConfirm(metros);
         }}
       />
+      <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
+        <DialogContent
+          className="max-w-lg"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+              e.preventDefault();
+              if (exportSelectedRows.length > 0) runExport(exportFormatHint);
+            }
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle className="text-[#002147]">Exportar hoja de ruta</DialogTitle>
+            <DialogDescription>
+              Elige si quieres exportar la vista actual o un rango de fechas.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <p className="text-xs font-medium text-slate-700">Qué exportar</p>
+              <label className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 p-2 text-sm">
+                <input
+                  type="radio"
+                  name="etq-export-mode"
+                  className="mt-0.5"
+                  checked={exportMode === "screen"}
+                  onChange={() => setExportMode("screen")}
+                />
+                <span>
+                  <span className="font-medium text-[#002147]">
+                    En pantalla (según filtros aplicados)
+                  </span>
+                  <span className="mt-0.5 block text-xs text-slate-500">
+                    Usa buscador, papel, ocultar finalizadas y orden actual.
+                  </span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 p-2 text-sm">
+                <input
+                  type="radio"
+                  name="etq-export-mode"
+                  className="mt-0.5"
+                  checked={exportMode === "date"}
+                  onChange={() => setExportMode("date")}
+                />
+                <span>
+                  <span className="font-medium text-[#002147]">Rango de fechas</span>
+                  <span className="mt-0.5 block text-xs text-slate-500">
+                    Para entradas, entregas o procesos I/T/N.
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            {exportMode === "date" ? (
+              <div className="grid gap-3 rounded-md border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2">
+                <div className="grid gap-1 sm:col-span-2">
+                  <Label className="text-xs">Fecha a consultar</Label>
+                  <NativeSelect
+                    value={exportDateField}
+                    onChange={(e) =>
+                      setExportDateField(e.target.value as ExportDateField)
+                    }
+                    options={EXPORT_DATE_FIELD_OPTIONS}
+                  />
+                </div>
+                <div className="grid gap-1 sm:col-span-2">
+                  <Label className="text-xs">Rango rápido</Label>
+                  <NativeSelect
+                    value={exportPreset}
+                    onChange={(e) => {
+                      const next = e.target.value as ExportPreset;
+                      setExportPreset(next);
+                      if (next !== "custom") {
+                        const r = presetRange(next);
+                        setExportFrom(r.start);
+                        setExportTo(r.end);
+                      }
+                    }}
+                    options={EXPORT_PRESET_OPTIONS}
+                  />
+                </div>
+                <div className="grid gap-1">
+                  <Label className="text-xs">Desde</Label>
+                  <Input
+                    type="date"
+                    className="h-8 text-xs"
+                    value={exportPreset === "custom" ? exportFrom : exportRange.start}
+                    disabled={exportPreset !== "custom"}
+                    onChange={(e) => setExportFrom(e.target.value)}
+                  />
+                </div>
+                <div className="grid gap-1">
+                  <Label className="text-xs">Hasta</Label>
+                  <Input
+                    type="date"
+                    className="h-8 text-xs"
+                    value={exportPreset === "custom" ? exportTo : exportRange.end}
+                    disabled={exportPreset !== "custom"}
+                    onChange={(e) => setExportTo(e.target.value)}
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            <div className="rounded-md bg-[#002147]/5 px-3 py-2 text-sm text-[#002147]">
+              Vas a exportar{" "}
+              <span className="font-semibold tabular-nums">
+                {exportSelectedRows.length.toLocaleString("es-ES")}
+              </span>{" "}
+              filas.
+              <p className="mt-0.5 text-xs text-slate-600">{exportSelectionLabel}</p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setExportDialogOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant={exportFormatHint === "excel" ? "default" : "outline"}
+                className={exportFormatHint === "excel" ? "bg-[#002147]" : undefined}
+                disabled={exportSelectedRows.length === 0}
+                onClick={() => runExport("excel")}
+              >
+                Exportar Excel
+              </Button>
+              <Button
+                type="button"
+                variant={exportFormatHint === "pdf" ? "default" : "outline"}
+                className={exportFormatHint === "pdf" ? "bg-[#002147]" : undefined}
+                disabled={exportSelectedRows.length === 0}
+                onClick={() => runExport("pdf")}
+              >
+                Exportar PDF
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-base font-semibold text-[#002147]">Hoja de ruta</h2>

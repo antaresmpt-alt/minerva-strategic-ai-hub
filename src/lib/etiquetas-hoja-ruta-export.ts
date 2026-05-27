@@ -21,6 +21,7 @@ export type EtiquetasHojaRutaExportFilters = {
   papel: string;
   ocultarFinalizadas: boolean;
   ordenLabel: string;
+  selectionLabel?: string;
 };
 
 export type EtiquetasHojaRutaExportOptions = {
@@ -295,6 +296,7 @@ function buildSummaryAoa(
     ["Papel", filters.papel.trim() || "Todos"],
     ["Ocultar finalizadas", filters.ocultarFinalizadas ? "Sí" : "No"],
     ["Orden", filters.ordenLabel],
+    ["Selección", filters.selectionLabel?.trim() || "Según filtros aplicados"],
     ["Registros exportados (filtros)", rowCount],
   ];
 
