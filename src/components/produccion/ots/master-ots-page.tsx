@@ -30,6 +30,10 @@ import {
   type DespachoItinerarioSlot,
 } from "@/components/produccion/ots/despacho-itinerario-picker";
 import { TroquelPickerField } from "@/components/produccion/ots/troquel-picker-field";
+import {
+  ReferenciaMinervaPicker,
+  type ReferenciaMinervaValue,
+} from "@/components/produccion/ots/referencia-minerva-picker";
 import { estadoDisplayForRow } from "@/components/produccion/ots/master-ots-table-helpers";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -79,6 +83,7 @@ import { escapeIlikePattern } from "@/lib/troqueles-query";
 import { useHubStore } from "@/lib/store";
 import type { ChatMessage } from "@/lib/store";
 import type { ProdOtsGeneralRow } from "@/types/prod-ots";
+import type { ProdReferenciaRow } from "@/types/prod-referencias";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
@@ -107,11 +112,35 @@ function masterOtsPrimaryOrder(sorting: SortingState): {
 const TABLE_OT_DESPACHADAS = "produccion_ot_despachadas";
 const TABLE_OT_PASOS = "prod_ot_pasos";
 const TABLE_COMPRA = "prod_compra_material";
+
+function emptyDespachoMeta(): DespachoMeta {
+  return {
+    cliente: "",
+    trabajo: "",
+    cantidad: "",
+    pedido_cliente: "",
+    fecha_entrega: "",
+  };
+}
+
+function formatFechaEntregaCorta(value: string | null | undefined): string {
+  const s = String(value ?? "").trim();
+  if (!s) return "";
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return s;
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
 /** Seguimiento externo: columna `OT` e `id_pedido` (equivalente a `num_pedido` / OT). */
 const SEGUIMIENTO_EXTERNOS = "prod_seguimiento_externos";
 
 type DespachoSeleccion = { id: string; num_pedido: string };
-type DespachoMeta = { cliente: string; trabajo: string; cantidad: string };
+type DespachoMeta = {
+  cliente: string;
+  trabajo: string;
+  cantidad: string;
+  pedido_cliente: string;
+  fecha_entrega: string;
+};
 type DespachoCatalogItem = { id: string; tipo: "material" | "acabado_pral"; label: string };
 
 type DespachoFormState = {
@@ -129,6 +158,13 @@ type DespachoFormState = {
   poses: string;
   acabado_pral: string;
   notas: string;
+  /** Referencia Minerva (agrupador de repeticiones). */
+  referencia_id: string | null;
+  referencia_codigo: string;
+  /** Puntero opcional de clonado desde una OT concreta. */
+  ot_anterior_numero: string;
+  /** Enlace blando a prod_ots_general.id de la OT anterior (si existe en el sistema). */
+  ot_anterior_id: string | null;
 };
 
 function emptyDespachoForm(): DespachoFormState {
@@ -147,7 +183,50 @@ function emptyDespachoForm(): DespachoFormState {
     poses: "",
     acabado_pral: "",
     notas: "",
+    referencia_id: null,
+    referencia_codigo: "",
+    ot_anterior_numero: "",
+    ot_anterior_id: null,
   };
+}
+
+/** Campos técnicos que se clonan desde una OT/referencia anterior (clonado NO destructivo). */
+const DESPACHO_CLONE_FIELDS = [
+  "tintas",
+  "material",
+  "tamano_hoja",
+  "gramaje",
+  "troquel",
+  "poses",
+  "acabado_pral",
+  "notas",
+] as const;
+
+/** Columnas de despacho que se leen para clonar de una OT/referencia anterior. */
+const DESPACHO_CLONE_SELECT =
+  "tintas, material, tamano_hoja, gramaje, troquel, poses, acabado_pral, notas, despachado_at";
+
+/**
+ * Aplica los datos de una OT/referencia anterior SOLO sobre campos vacíos del formulario
+ * actual (no machaca lo que el usuario ya haya tocado). Devuelve el nº de campos rellenados.
+ */
+function applyClonePrefill(
+  form: DespachoFormState,
+  source: Record<string, unknown>
+): { next: DespachoFormState; filled: number } {
+  const next = { ...form };
+  let filled = 0;
+  for (const field of DESPACHO_CLONE_FIELDS) {
+    const current = String(next[field] ?? "").trim();
+    if (current) continue;
+    const raw = source[field];
+    if (raw == null) continue;
+    const valueStr = String(raw).trim();
+    if (!valueStr) continue;
+    next[field] = valueStr;
+    filled += 1;
+  }
+  return { next, filled };
 }
 
 function parseOptionalIntInput(s: string): number | null {
@@ -211,6 +290,22 @@ function parseNumPedidoId(numPedido: string): number | null {
 
 function emptySelectOption(label: string): Option[] {
   return [{ value: "", label }];
+}
+
+function parseReferenciaClienteFromTitulo(titulo: string | null | undefined): string {
+  const match = String(titulo ?? "")
+    .trim()
+    .match(/^([A-Z]{1,6}\d{1,8})\s*[-–—]\s+/i);
+  return match?.[1]?.trim().toUpperCase() ?? "";
+}
+
+function parseDescripcionReferenciaFromTitulo(
+  titulo: string | null | undefined
+): string {
+  return String(titulo ?? "")
+    .trim()
+    .replace(/^[A-Z]{1,6}\d{1,8}\s*[-–—]\s+/i, "")
+    .trim();
 }
 
 async function collectDistinctTriples(
@@ -301,11 +396,8 @@ export function MasterOtsPage() {
   const [despachoExpressOtInput, setDespachoExpressOtInput] = useState("");
   const [despachoExpressSeleccion, setDespachoExpressSeleccion] =
     useState<DespachoSeleccion | null>(null);
-  const [despachoExpressMeta, setDespachoExpressMeta] = useState<DespachoMeta>({
-    cliente: "",
-    trabajo: "",
-    cantidad: "",
-  });
+  const [despachoExpressMeta, setDespachoExpressMeta] =
+    useState<DespachoMeta>(emptyDespachoMeta);
   const [despachoExpressYaDespachada, setDespachoExpressYaDespachada] =
     useState(false);
   const [despachoExpressCompraGenerada, setDespachoExpressCompraGenerada] =
@@ -646,6 +738,25 @@ export function MasterOtsPage() {
     [despachoExpressMode, despachoExpressSeleccion, despachoSeleccion]
   );
 
+  /**
+   * Meta unificada de la OT activa para mostrar en cabecera del modal de despacho.
+   * En modo express se rellena al cargar la OT; en modo normal se deriva de la fila
+   * seleccionada en la tabla maestra.
+   */
+  const activeDespachoMeta = useMemo<DespachoMeta>(() => {
+    if (despachoExpressMode) return despachoExpressMeta;
+    if (!despachoSeleccion) return emptyDespachoMeta();
+    const row = rows.find((r) => r.id === despachoSeleccion.id);
+    if (!row) return emptyDespachoMeta();
+    return {
+      cliente: String(row.cliente ?? "").trim(),
+      trabajo: String(row.titulo ?? "").trim(),
+      cantidad: row.cantidad == null ? "" : String(row.cantidad),
+      pedido_cliente: String(row.pedido_cliente ?? "").trim(),
+      fecha_entrega: String(row.fecha_entrega ?? "").trim(),
+    };
+  }, [despachoExpressMode, despachoExpressMeta, despachoSeleccion, rows]);
+
   const activeDespachoStatus = useMemo(() => {
     if (!activeDespachoSeleccion) return "none" as const;
     if (despachoExpressMode) {
@@ -697,7 +808,9 @@ export function MasterOtsPage() {
       try {
         const { data: masterRow, error: masterErr } = await supabase
           .from(TABLE)
-          .select("id, num_pedido, despachado, cliente, titulo, cantidad")
+          .select(
+            "id, num_pedido, despachado, cliente, titulo, cantidad, pedido_cliente, fecha_entrega"
+          )
           .eq("num_pedido", ot)
           .maybeSingle();
         if (masterErr) throw masterErr;
@@ -706,7 +819,7 @@ export function MasterOtsPage() {
           setDespachoExpressSeleccion(null);
           setDespachoExpressYaDespachada(false);
           setDespachoExpressCompraGenerada(false);
-          setDespachoExpressMeta({ cliente: "", trabajo: "", cantidad: "" });
+          setDespachoExpressMeta(emptyDespachoMeta());
           setDespachoItinerarioSlots([]);
           setDespachoForm(emptyDespachoForm());
           return;
@@ -727,6 +840,12 @@ export function MasterOtsPage() {
             (masterRow as { cantidad?: number | null }).cantidad == null
               ? ""
               : String((masterRow as { cantidad?: number | null }).cantidad),
+          pedido_cliente: String(
+            (masterRow as { pedido_cliente?: string | null }).pedido_cliente ?? ""
+          ).trim(),
+          fecha_entrega: String(
+            (masterRow as { fecha_entrega?: string | null }).fecha_entrega ?? ""
+          ).trim(),
         });
 
         const [
@@ -738,7 +857,7 @@ export function MasterOtsPage() {
           supabase
             .from(TABLE_OT_DESPACHADAS)
             .select(
-              "tintas, material, tamano_hoja, gramaje, num_hojas_brutas, num_hojas_netas, horas_entrada, horas_tiraje, horas_estimadas_troquelado, horas_estimadas_engomado, troquel, poses, acabado_pral, notas"
+              "tintas, material, tamano_hoja, gramaje, num_hojas_brutas, num_hojas_netas, horas_entrada, horas_tiraje, horas_estimadas_troquelado, horas_estimadas_engomado, troquel, poses, acabado_pral, notas, referencia_id, ot_anterior_numero, ot_anterior_id"
             )
             .eq("ot_numero", sel.num_pedido)
             .maybeSingle(),
@@ -786,7 +905,30 @@ export function MasterOtsPage() {
           poses: d.poses == null ? "" : String(d.poses),
           acabado_pral: String(d.acabado_pral ?? ""),
           notas: String(d.notas ?? ""),
+          referencia_id:
+            typeof d.referencia_id === "string" ? d.referencia_id : null,
+          referencia_codigo: "",
+          ot_anterior_numero: String(d.ot_anterior_numero ?? ""),
+          ot_anterior_id:
+            typeof d.ot_anterior_id === "string" ? d.ot_anterior_id : null,
         });
+
+        // Resolver el código de la referencia Minerva para mostrarlo en el picker.
+        if (typeof d.referencia_id === "string" && d.referencia_id) {
+          void supabase
+            .from("prod_referencias")
+            .select("codigo")
+            .eq("id", d.referencia_id)
+            .maybeSingle()
+            .then(({ data: refRow }) => {
+              const codigo = String(
+                (refRow as { codigo?: string | null } | null)?.codigo ?? ""
+              ).trim();
+              if (codigo) {
+                setDespachoForm((f) => ({ ...f, referencia_codigo: codigo }));
+              }
+            });
+        }
 
         const nombreById = new Map<number, string>();
         for (const c of (catRows ?? []) as Array<{ id: number; nombre: string | null }>) {
@@ -807,6 +949,172 @@ export function MasterOtsPage() {
       }
     },
     [supabase]
+  );
+
+  /**
+   * Carga el itinerario (slots de procesos) de la OT indicada por número.
+   * Devuelve [] si no existe en el maestro o no tiene pasos.
+   */
+  const loadItinerarioFromOtNumero = useCallback(
+    async (otNumero: string): Promise<DespachoItinerarioSlot[]> => {
+      const ot = String(otNumero ?? "").trim();
+      if (!ot) return [];
+      const { data: masterRow, error: masterErr } = await supabase
+        .from(TABLE)
+        .select("id")
+        .eq("num_pedido", ot)
+        .maybeSingle();
+      if (masterErr) throw masterErr;
+      const masterId =
+        typeof (masterRow as { id?: string | null } | null)?.id === "string"
+          ? String((masterRow as { id?: string | null }).id)
+          : null;
+      if (!masterId) return [];
+      const [
+        { data: pasosRows, error: pasosErr },
+        { data: catRows, error: catErr },
+      ] = await Promise.all([
+        supabase
+          .from(TABLE_OT_PASOS)
+          .select("proceso_id, orden")
+          .eq("ot_id", masterId)
+          .order("orden", { ascending: true }),
+        supabase.from("prod_procesos_cat").select("id, nombre"),
+      ]);
+      if (pasosErr) throw pasosErr;
+      if (catErr) throw catErr;
+      const nombreById = new Map<number, string>();
+      for (const c of (catRows ?? []) as Array<{
+        id: number;
+        nombre: string | null;
+      }>) {
+        nombreById.set(c.id, String(c.nombre ?? `Proceso #${c.id}`));
+      }
+      return (
+        (pasosRows ?? []) as Array<{ proceso_id: number; orden: number }>
+      )
+        .sort((a, b) => a.orden - b.orden)
+        .map((p) => ({
+          key: crypto.randomUUID(),
+          procesoId: p.proceso_id,
+          nombre: nombreById.get(p.proceso_id) ?? `Proceso #${p.proceso_id}`,
+        }));
+    },
+    [supabase]
+  );
+
+  // Clonado al elegir una Referencia Minerva existente: hereda del despacho MÁS RECIENTE
+  // de esa referencia. No machaca campos ya rellenados.
+  const handleReferenciaPicked = useCallback(
+    async (row: ProdReferenciaRow) => {
+      try {
+        const { data, error } = await supabase
+          .from(TABLE_OT_DESPACHADAS)
+          .select(`ot_numero, ${DESPACHO_CLONE_SELECT}`)
+          .eq("referencia_id", row.id)
+          .order("despachado_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (error) throw error;
+        setDespachoForm((f) => {
+          const base: DespachoFormState = {
+            ...f,
+            referencia_id: row.id,
+            referencia_codigo: row.codigo,
+          };
+          if (!data) return base;
+          return applyClonePrefill(base, data as Record<string, unknown>).next;
+        });
+        if (!data) {
+          toast.info(
+            `Referencia ${row.codigo} sin histórico todavía: nada que heredar.`
+          );
+          return;
+        }
+        toast.success(
+          `Datos heredados de la referencia ${row.codigo} (solo campos vacíos).`
+        );
+        // Heredar itinerario si la OT origen lo tiene y el destino está vacío.
+        const sourceOt = String(
+          (data as { ot_numero?: string | null }).ot_numero ?? ""
+        ).trim();
+        if (!sourceOt) return;
+        const slots = await loadItinerarioFromOtNumero(sourceOt);
+        if (slots.length === 0) return;
+        let applied = false;
+        setDespachoItinerarioSlots((prev) => {
+          if (prev.length > 0) return prev;
+          applied = true;
+          return slots;
+        });
+        if (applied) {
+          toast.success(
+            `Itinerario heredado de la OT ${sourceOt} (${slots.length} procesos).`
+          );
+        }
+      } catch (e) {
+        toast.error(
+          e instanceof Error ? e.message : "No se pudo clonar de la referencia."
+        );
+      }
+    },
+    [loadItinerarioFromOtNumero, supabase]
+  );
+
+  // Clonado desde una OT anterior concreta (puntero opcional). Resuelve ot_anterior_id
+  // de forma blanda (solo si la OT existe en el maestro).
+  const cloneFromOtAnterior = useCallback(
+    async (otRaw: string) => {
+      const ot = String(otRaw ?? "").trim();
+      if (!ot) return;
+      try {
+        const [{ data: masterRow }, { data, error }] = await Promise.all([
+          supabase.from(TABLE).select("id").eq("num_pedido", ot).maybeSingle(),
+          supabase
+            .from(TABLE_OT_DESPACHADAS)
+            .select(DESPACHO_CLONE_SELECT)
+            .eq("ot_numero", ot)
+            .maybeSingle(),
+        ]);
+        if (error) throw error;
+        if (!data) {
+          toast.info(`La OT ${ot} no tiene despacho registrado para clonar.`);
+          return;
+        }
+        const resolvedId =
+          typeof (masterRow as { id?: string | null } | null)?.id === "string"
+            ? String((masterRow as { id?: string | null }).id)
+            : null;
+        setDespachoForm((f) => {
+          const base: DespachoFormState = {
+            ...f,
+            ot_anterior_numero: ot,
+            ot_anterior_id: resolvedId ?? f.ot_anterior_id,
+          };
+          return applyClonePrefill(base, data as Record<string, unknown>).next;
+        });
+        toast.success(`Datos heredados de la OT ${ot} (solo campos vacíos).`);
+        // Heredar itinerario si la OT origen lo tiene y el destino está vacío.
+        const slots = await loadItinerarioFromOtNumero(ot);
+        if (slots.length === 0) return;
+        let applied = false;
+        setDespachoItinerarioSlots((prev) => {
+          if (prev.length > 0) return prev;
+          applied = true;
+          return slots;
+        });
+        if (applied) {
+          toast.success(
+            `Itinerario heredado de la OT ${ot} (${slots.length} procesos).`
+          );
+        }
+      } catch (e) {
+        toast.error(
+          e instanceof Error ? e.message : "No se pudo clonar de la OT anterior."
+        );
+      }
+    },
+    [loadItinerarioFromOtNumero, supabase]
   );
 
   const despachadoColumnFilters = useMemo<ColumnFiltersState>(
@@ -953,6 +1261,9 @@ export function MasterOtsPage() {
         poses: integerOrZeroForDespacho(despachoForm.poses),
         acabado_pral: despachoForm.acabado_pral.trim() || null,
         notas: despachoForm.notas.trim() || null,
+        referencia_id: despachoForm.referencia_id,
+        ot_anterior_numero: despachoForm.ot_anterior_numero.trim() || null,
+        ot_anterior_id: despachoForm.ot_anterior_id,
         despachado_at: new Date().toISOString(),
       };
 
@@ -986,7 +1297,7 @@ export function MasterOtsPage() {
         setDespachoExpressSeleccion(null);
         setDespachoExpressYaDespachada(false);
         setDespachoExpressCompraGenerada(false);
-        setDespachoExpressMeta({ cliente: "", trabajo: "", cantidad: "" });
+        setDespachoExpressMeta(emptyDespachoMeta());
         setDespachoExpressOtInput("");
         setDespachoItinerarioSlots([]);
         window.setTimeout(() => despachoOtInputRef.current?.focus(), 80);
@@ -997,7 +1308,7 @@ export function MasterOtsPage() {
         setDespachoExpressSeleccion(null);
         setDespachoExpressYaDespachada(false);
         setDespachoExpressCompraGenerada(false);
-        setDespachoExpressMeta({ cliente: "", trabajo: "", cantidad: "" });
+        setDespachoExpressMeta(emptyDespachoMeta());
         setDespachoExpressOtInput("");
       }
 
@@ -1221,7 +1532,7 @@ ${otsContextJson}
             setDespachoExpressOtInput("");
             setDespachoExpressYaDespachada(false);
             setDespachoExpressCompraGenerada(false);
-            setDespachoExpressMeta({ cliente: "", trabajo: "", cantidad: "" });
+            setDespachoExpressMeta(emptyDespachoMeta());
           }
         }}
       >
@@ -1281,20 +1592,6 @@ ${otsContextJson}
                 <p className="text-[11px] text-slate-600">
                   Enter carga OT · Ctrl+Enter guarda despacho.
                 </p>
-                <div className="grid gap-1 text-[11px] text-slate-700 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto] sm:items-center">
-                  <p className="truncate">
-                    <span className="font-semibold text-[#002147]">Cliente:</span>{" "}
-                    {despachoExpressMeta.cliente || "—"}
-                  </p>
-                  <p className="truncate">
-                    <span className="font-semibold text-[#002147]">Trabajo:</span>{" "}
-                    {despachoExpressMeta.trabajo || "—"}
-                  </p>
-                  <p className="truncate sm:justify-self-end">
-                    <span className="font-semibold text-[#002147]">Cantidad:</span>{" "}
-                    {despachoExpressMeta.cantidad || "—"}
-                  </p>
-                </div>
                 {activeDespachoStatus === "despachada_sin_compra" ? (
                   <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-900">
                     OT ya despachada sin compra generada: puedes modificar despacho.
@@ -1307,6 +1604,101 @@ ${otsContextJson}
                 ) : null}
               </div>
             ) : null}
+            {activeDespachoSeleccion ? (
+              <div className="grid gap-1 rounded-md border border-slate-200 bg-slate-50/60 px-3 py-2 text-[11px] text-slate-700 sm:col-span-2 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)_minmax(0,0.8fr)_minmax(0,0.6fr)_minmax(0,0.8fr)] sm:items-baseline sm:gap-3">
+                <p className="truncate">
+                  <span className="font-semibold text-[#002147]">Cliente:</span>{" "}
+                  {activeDespachoMeta.cliente || "—"}
+                </p>
+                <p className="truncate" title={activeDespachoMeta.trabajo || undefined}>
+                  <span className="font-semibold text-[#002147]">Trabajo:</span>{" "}
+                  {activeDespachoMeta.trabajo || "—"}
+                </p>
+                <p className="truncate">
+                  <span className="font-semibold text-[#002147]">Pedido:</span>{" "}
+                  {activeDespachoMeta.pedido_cliente || "—"}
+                </p>
+                <p className="truncate">
+                  <span className="font-semibold text-[#002147]">Cantidad:</span>{" "}
+                  {activeDespachoMeta.cantidad || "—"}
+                </p>
+                <p className="truncate">
+                  <span className="font-semibold text-[#002147]">Entrega:</span>{" "}
+                  {formatFechaEntregaCorta(activeDespachoMeta.fecha_entrega) || "—"}
+                </p>
+              </div>
+            ) : null}
+            <div className="grid gap-2 rounded-lg border border-[#002147]/15 bg-[#002147]/[0.02] p-3 sm:col-span-2 sm:grid-cols-2">
+              <ReferenciaMinervaPicker
+                value={
+                  {
+                    id: despachoForm.referencia_id,
+                    codigo: despachoForm.referencia_codigo,
+                  } as ReferenciaMinervaValue
+                }
+                onChange={(v) =>
+                  setDespachoForm((f) => ({
+                    ...f,
+                    referencia_id: v.id,
+                    referencia_codigo: v.codigo,
+                  }))
+                }
+                onReferenciaPicked={(row) => void handleReferenciaPicked(row)}
+                createDefaults={{
+                  cliente: activeDespachoMeta.cliente || null,
+                  descripcion: parseDescripcionReferenciaFromTitulo(
+                    activeDespachoMeta.trabajo
+                  ),
+                  referenciaCliente: parseReferenciaClienteFromTitulo(
+                    activeDespachoMeta.trabajo
+                  ),
+                }}
+                disabled={despachoSaving}
+              />
+              <div className="grid gap-1">
+                <Label htmlFor="despacho-ot-anterior" className="text-xs">
+                  OT anterior (clonar de una OT concreta)
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="despacho-ot-anterior"
+                    className="h-8 text-xs font-mono"
+                    value={despachoForm.ot_anterior_numero}
+                    onChange={(e) =>
+                      setDespachoForm((f) => ({
+                        ...f,
+                        ot_anterior_numero: e.target.value,
+                        ot_anterior_id: null,
+                      }))
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void cloneFromOtAnterior(despachoForm.ot_anterior_numero);
+                      }
+                    }}
+                    placeholder="Nº OT anterior"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={
+                      despachoSaving || !despachoForm.ot_anterior_numero.trim()
+                    }
+                    onClick={() =>
+                      void cloneFromOtAnterior(despachoForm.ot_anterior_numero)
+                    }
+                  >
+                    Clonar
+                  </Button>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  El clonado solo rellena campos vacíos (no machaca lo que ya
+                  hayas escrito).
+                </p>
+              </div>
+            </div>
             <div className="grid gap-1">
               <Label htmlFor="despacho-tintas" className="text-xs">
                 Tintas
@@ -1674,7 +2066,7 @@ ${otsContextJson}
               setDespachoExpressSeleccion(null);
               setDespachoExpressYaDespachada(false);
               setDespachoExpressCompraGenerada(false);
-              setDespachoExpressMeta({ cliente: "", trabajo: "", cantidad: "" });
+              setDespachoExpressMeta(emptyDespachoMeta());
               setDespachoForm(emptyDespachoForm());
               setDespachoItinerarioSlots([]);
               setDespachoOpen(true);

@@ -21,6 +21,10 @@ import {
   DespachoItinerarioPicker,
   type DespachoItinerarioSlot,
 } from "@/components/produccion/ots/despacho-itinerario-picker";
+import {
+  ReferenciaMinervaPicker,
+  type ReferenciaMinervaValue,
+} from "@/components/produccion/ots/referencia-minerva-picker";
 import { TroquelPickerField } from "@/components/produccion/ots/troquel-picker-field";
 import { Button } from "@/components/ui/button";
 import {
@@ -60,6 +64,7 @@ import {
   type CompraDetalleVista,
 } from "@/components/produccion/ots/detalles-compra-dialog";
 import type { OtsDespachadasTableRow } from "@/types/prod-ots-despachadas";
+import type { ProdReferenciaRow } from "@/types/prod-referencias";
 
 const TABLE_DESPACHADAS = "produccion_ot_despachadas";
 const TABLE_MASTER = "prod_ots_general";
@@ -193,6 +198,10 @@ type DespachoEditFormState = {
   poses: string;
   acabado_pral: string;
   notas: string;
+  referencia_id: string | null;
+  referencia_codigo: string;
+  ot_anterior_numero: string;
+  ot_anterior_id: string | null;
 };
 
 function emptyDespachoEditForm(): DespachoEditFormState {
@@ -211,7 +220,58 @@ function emptyDespachoEditForm(): DespachoEditFormState {
     poses: "",
     acabado_pral: "",
     notas: "",
+    referencia_id: null,
+    referencia_codigo: "",
+    ot_anterior_numero: "",
+    ot_anterior_id: null,
   };
+}
+
+const DESPACHO_EDIT_CLONE_FIELDS = [
+  "tintas",
+  "material",
+  "tamano_hoja",
+  "gramaje",
+  "troquel",
+  "poses",
+  "acabado_pral",
+  "notas",
+] as const;
+
+const DESPACHO_EDIT_CLONE_SELECT =
+  "tintas, material, tamano_hoja, gramaje, troquel, poses, acabado_pral, notas, despachado_at";
+
+function applyEditClonePrefill(
+  form: DespachoEditFormState,
+  source: Record<string, unknown>
+): DespachoEditFormState {
+  const next = { ...form };
+  for (const field of DESPACHO_EDIT_CLONE_FIELDS) {
+    const current = String(next[field] ?? "").trim();
+    if (current) continue;
+    const raw = source[field];
+    if (raw == null) continue;
+    const valueStr = String(raw).trim();
+    if (!valueStr) continue;
+    next[field] = valueStr;
+  }
+  return next;
+}
+
+function parseReferenciaClienteFromTitulo(titulo: string | null | undefined): string {
+  const match = String(titulo ?? "")
+    .trim()
+    .match(/^([A-Z]{1,6}\d{1,8})\s*[-–—]\s+/i);
+  return match?.[1]?.trim().toUpperCase() ?? "";
+}
+
+function parseDescripcionReferenciaFromTitulo(
+  titulo: string | null | undefined
+): string {
+  return String(titulo ?? "")
+    .trim()
+    .replace(/^[A-Z]{1,6}\d{1,8}\s*[-–—]\s+/i, "")
+    .trim();
 }
 
 function parseOptionalIntInput(s: string): number | null {
@@ -247,6 +307,10 @@ function rowToEditForm(row: OtsDespachadasTableRow): DespachoEditFormState {
     poses: row.poses != null && Number.isFinite(row.poses) ? String(row.poses) : "",
     acabado_pral: row.acabado_pral?.trim() ?? "",
     notas: row.notas?.trim() ?? "",
+    referencia_id: row.referencia_id ?? null,
+    referencia_codigo: row.referencia_codigo?.trim() ?? "",
+    ot_anterior_numero: row.ot_anterior_numero?.trim() ?? "",
+    ot_anterior_id: row.ot_anterior_id ?? null,
   };
 }
 
@@ -444,6 +508,16 @@ export function OtsDespachadasPage({
           fecha_entrega: string | null;
         }
       >();
+      const refIds = [
+        ...new Set(
+          list
+            .map((d) =>
+              String((d as { referencia_id?: string | null }).referencia_id ?? "").trim()
+            )
+            .filter(Boolean)
+        ),
+      ];
+      const referenciaCodigoById = new Map<string, string>();
       if (nums.length > 0) {
         const { data: masterRows, error: mErr } = await supabase
           .from(TABLE_MASTER)
@@ -464,6 +538,19 @@ export function OtsDespachadasPage({
             cantidad: row.cantidad,
             fecha_entrega: row.fecha_entrega,
           });
+        }
+      }
+      if (refIds.length > 0) {
+        const { data: refRows, error: rErr } = await supabase
+          .from("prod_referencias")
+          .select("id, codigo")
+          .in("id", refIds);
+        if (rErr) throw rErr;
+        for (const r of refRows ?? []) {
+          const row = r as { id: string; codigo: string | null };
+          const id = String(row.id ?? "").trim();
+          const codigo = String(row.codigo ?? "").trim();
+          if (id && codigo) referenciaCodigoById.set(id, codigo);
         }
       }
       const merged: OtsDespachadasTableRow[] = list.map((raw) => {
@@ -512,6 +599,15 @@ export function OtsDespachadasPage({
           troquel: (d.troquel as string | null) ?? null,
           poses: num(d.poses),
           acabado_pral: (d.acabado_pral as string | null) ?? null,
+          referencia_id:
+            typeof d.referencia_id === "string" ? d.referencia_id : null,
+          referencia_codigo:
+            typeof d.referencia_id === "string"
+              ? referenciaCodigoById.get(d.referencia_id) ?? null
+              : null,
+          ot_anterior_numero: (d.ot_anterior_numero as string | null) ?? null,
+          ot_anterior_id:
+            typeof d.ot_anterior_id === "string" ? d.ot_anterior_id : null,
         };
       });
       let troquelMap = new Map<string, TroquelExcelTooltip>();
@@ -771,6 +867,139 @@ export function OtsDespachadasPage({
     }
   }, [ejecutarGenerarComprasLote, selectedRows, supabase]);
 
+  /**
+   * Carga el itinerario (slots) de una OT por número.
+   * Devuelve [] si la OT no existe en el maestro o no tiene pasos.
+   */
+  const loadEditItinerarioFromOtNumero = useCallback(
+    async (otNumero: string): Promise<DespachoItinerarioSlot[]> => {
+      const ot = String(otNumero ?? "").trim();
+      if (!ot) return [];
+      const id = await fetchProdOtGeneralIdByNumPedido(supabase, ot);
+      if (!id) return [];
+      const pasos = await fetchProdOtPasosVista(supabase, id);
+      return pasosVistaToItinerarioSlots(pasos);
+    },
+    [supabase]
+  );
+
+  const handleEditReferenciaPicked = useCallback(
+    async (row: ProdReferenciaRow) => {
+      try {
+        const { data, error } = await supabase
+          .from(TABLE_DESPACHADAS)
+          .select(`ot_numero, ${DESPACHO_EDIT_CLONE_SELECT}`)
+          .eq("referencia_id", row.id)
+          .order("despachado_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (error) throw error;
+        setEditForm((f) => {
+          const base: DespachoEditFormState = {
+            ...f,
+            referencia_id: row.id,
+            referencia_codigo: row.codigo,
+          };
+          return data
+            ? applyEditClonePrefill(base, data as Record<string, unknown>)
+            : base;
+        });
+        if (!data) {
+          toast.info(
+            `Referencia ${row.codigo} sin histórico todavía: nada que heredar.`
+          );
+          return;
+        }
+        toast.success(
+          `Datos heredados de la referencia ${row.codigo} (solo campos vacíos).`
+        );
+        // Itinerario: solo si la OT en edición permite reemplazo y está vacía.
+        if (!editCanReplaceItinerario) return;
+        if (editItinerarioSlots.length > 0) return;
+        const sourceOt = String(
+          (data as { ot_numero?: string | null }).ot_numero ?? ""
+        ).trim();
+        if (!sourceOt) return;
+        const slots = await loadEditItinerarioFromOtNumero(sourceOt);
+        if (slots.length === 0) return;
+        setEditItinerarioSlots(slots);
+        toast.success(
+          `Itinerario heredado de la OT ${sourceOt} (${slots.length} procesos).`
+        );
+      } catch (e) {
+        toast.error(
+          e instanceof Error ? e.message : "No se pudo clonar de la referencia."
+        );
+      }
+    },
+    [
+      editCanReplaceItinerario,
+      editItinerarioSlots.length,
+      loadEditItinerarioFromOtNumero,
+      supabase,
+    ]
+  );
+
+  const cloneEditFromOtAnterior = useCallback(
+    async (otRaw: string) => {
+      const ot = String(otRaw ?? "").trim();
+      if (!ot) return;
+      try {
+        const [{ data: masterRow }, { data, error }] = await Promise.all([
+          supabase
+            .from(TABLE_MASTER)
+            .select("id")
+            .eq("num_pedido", ot)
+            .maybeSingle(),
+          supabase
+            .from(TABLE_DESPACHADAS)
+            .select(DESPACHO_EDIT_CLONE_SELECT)
+            .eq("ot_numero", ot)
+            .maybeSingle(),
+        ]);
+        if (error) throw error;
+        if (!data) {
+          toast.info(`La OT ${ot} no tiene despacho registrado para clonar.`);
+          return;
+        }
+        const resolvedId =
+          typeof (masterRow as { id?: string | null } | null)?.id === "string"
+            ? String((masterRow as { id?: string | null }).id)
+            : null;
+        setEditForm((f) =>
+          applyEditClonePrefill(
+            {
+              ...f,
+              ot_anterior_numero: ot,
+              ot_anterior_id: resolvedId ?? f.ot_anterior_id,
+            },
+            data as Record<string, unknown>
+          )
+        );
+        toast.success(`Datos heredados de la OT ${ot} (solo campos vacíos).`);
+        // Itinerario: solo si la OT en edición permite reemplazo y está vacía.
+        if (!editCanReplaceItinerario) return;
+        if (editItinerarioSlots.length > 0) return;
+        const slots = await loadEditItinerarioFromOtNumero(ot);
+        if (slots.length === 0) return;
+        setEditItinerarioSlots(slots);
+        toast.success(
+          `Itinerario heredado de la OT ${ot} (${slots.length} procesos).`
+        );
+      } catch (e) {
+        toast.error(
+          e instanceof Error ? e.message : "No se pudo clonar de la OT anterior."
+        );
+      }
+    },
+    [
+      editCanReplaceItinerario,
+      editItinerarioSlots.length,
+      loadEditItinerarioFromOtNumero,
+      supabase,
+    ]
+  );
+
   const submitEditDespacho = useCallback(async () => {
     if (!editRow) return;
     setEditSaving(true);
@@ -796,6 +1025,9 @@ export function OtsDespachadasPage({
           poses: parseOptionalIntInput(editForm.poses),
           acabado_pral: editForm.acabado_pral.trim() || null,
           notas: editForm.notas.trim() || null,
+          referencia_id: editForm.referencia_id,
+          ot_anterior_numero: editForm.ot_anterior_numero.trim() || null,
+          ot_anterior_id: editForm.ot_anterior_id,
         })
         .eq("id", editRow.id);
       if (error) throw error;
@@ -878,6 +1110,76 @@ export function OtsDespachadasPage({
             </DialogDescription>
           </DialogHeader>
           <div className="grid max-h-[min(58vh,520px)] gap-3 overflow-y-auto px-4 py-3 sm:grid-cols-2 sm:px-5">
+            <div className="grid gap-2 rounded-lg border border-[#002147]/15 bg-[#002147]/[0.02] p-3 sm:col-span-2 sm:grid-cols-2">
+              <ReferenciaMinervaPicker
+                value={
+                  {
+                    id: editForm.referencia_id,
+                    codigo: editForm.referencia_codigo,
+                  } as ReferenciaMinervaValue
+                }
+                onChange={(v) =>
+                  setEditForm((f) => ({
+                    ...f,
+                    referencia_id: v.id,
+                    referencia_codigo: v.codigo,
+                  }))
+                }
+                onReferenciaPicked={(row) => void handleEditReferenciaPicked(row)}
+                createDefaults={{
+                  cliente: editRow?.cliente ?? null,
+                  descripcion: parseDescripcionReferenciaFromTitulo(
+                    editRow?.titulo
+                  ),
+                  referenciaCliente: parseReferenciaClienteFromTitulo(
+                    editRow?.titulo
+                  ),
+                }}
+                disabled={editSaving}
+              />
+              <div className="grid gap-1">
+                <Label htmlFor="edit-despacho-ot-anterior" className="text-xs">
+                  OT anterior (clonar de una OT concreta)
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="edit-despacho-ot-anterior"
+                    className="h-8 text-xs font-mono"
+                    value={editForm.ot_anterior_numero}
+                    onChange={(e) =>
+                      setEditForm((f) => ({
+                        ...f,
+                        ot_anterior_numero: e.target.value,
+                        ot_anterior_id: null,
+                      }))
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void cloneEditFromOtAnterior(
+                          editForm.ot_anterior_numero
+                        );
+                      }
+                    }}
+                    placeholder="Nº OT anterior"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={editSaving || !editForm.ot_anterior_numero.trim()}
+                    onClick={() =>
+                      void cloneEditFromOtAnterior(editForm.ot_anterior_numero)
+                    }
+                  >
+                    Clonar
+                  </Button>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  El clonado solo rellena campos vacíos.
+                </p>
+              </div>
+            </div>
             <div className="grid gap-1">
               <Label htmlFor="edit-despacho-tintas" className="text-xs">
                 Tintas

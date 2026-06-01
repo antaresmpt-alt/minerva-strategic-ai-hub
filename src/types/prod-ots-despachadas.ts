@@ -30,4 +30,12 @@ export type OtsDespachadasTableRow = {
   /** Poses (`integer` en `produccion_ot_despachadas`). */
   poses: number | null;
   acabado_pral: string | null;
+  /** Referencia Minerva (agrupador de repeticiones). */
+  referencia_id?: string | null;
+  /** Código visible de la referencia Minerva (solo para UI; procede de `prod_referencias.codigo`). */
+  referencia_codigo?: string | null;
+  /** Nº de OT anterior escrito a mano (puntero opcional de clonado). */
+  ot_anterior_numero?: string | null;
+  /** Enlace blando a `prod_ots_general.id` de la OT anterior, si existe. */
+  ot_anterior_id?: string | null;
 };
