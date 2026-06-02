@@ -142,6 +142,16 @@ type DespachoMeta = {
   fecha_entrega: string;
 };
 type DespachoCatalogItem = { id: string; tipo: "material" | "acabado_pral"; label: string };
+type ReferenciaHistorialRow = {
+  ot_numero: string;
+  despachado_at: string | null;
+  material: string | null;
+  gramaje: number | null;
+  tamano_hoja: string | null;
+  troquel: string | null;
+  poses: number | null;
+  acabado_pral: string | null;
+};
 
 type DespachoFormState = {
   tintas: string;
@@ -407,6 +417,11 @@ export function MasterOtsPage() {
   const [despachoForm, setDespachoForm] = useState<DespachoFormState>(() =>
     emptyDespachoForm()
   );
+  const [referenciaHistorial, setReferenciaHistorial] = useState<
+    ReferenciaHistorialRow[]
+  >([]);
+  const [referenciaHistorialLoading, setReferenciaHistorialLoading] =
+    useState(false);
   const [despachoItinerarioSlots, setDespachoItinerarioSlots] = useState<
     DespachoItinerarioSlot[]
   >([]);
@@ -780,6 +795,50 @@ export function MasterOtsPage() {
     despachoExpressYaDespachada,
     despachoRegistradoOtSet,
     rows,
+  ]);
+
+  useEffect(() => {
+    const referenciaId = despachoForm.referencia_id;
+    if (!despachoOpen || !referenciaId) {
+      setReferenciaHistorial([]);
+      setReferenciaHistorialLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setReferenciaHistorialLoading(true);
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from(TABLE_OT_DESPACHADAS)
+          .select(
+            "ot_numero, despachado_at, material, gramaje, tamano_hoja, troquel, poses, acabado_pral"
+          )
+          .eq("referencia_id", referenciaId)
+          .order("despachado_at", { ascending: false })
+          .limit(8);
+        if (error) throw error;
+        if (cancelled) return;
+        const activeOt = activeDespachoSeleccion?.num_pedido?.trim() ?? "";
+        setReferenciaHistorial(
+          ((data ?? []) as ReferenciaHistorialRow[])
+            .filter((row) => row.ot_numero.trim() !== activeOt)
+            .slice(0, 6)
+        );
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) setReferenciaHistorial([]);
+      } finally {
+        if (!cancelled) setReferenciaHistorialLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeDespachoSeleccion?.num_pedido,
+    despachoForm.referencia_id,
+    despachoOpen,
+    supabase,
   ]);
 
   const despachoMaterialSuggestions = useMemo(
@@ -1698,6 +1757,55 @@ ${otsContextJson}
                   hayas escrito).
                 </p>
               </div>
+              {despachoForm.referencia_id ? (
+                <div className="rounded-md border border-slate-200 bg-white/70 p-2 sm:col-span-2">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-semibold text-[#002147]">
+                      Historial de esta referencia
+                    </p>
+                    {referenciaHistorialLoading ? (
+                      <span className="text-[10px] text-slate-500">
+                        Cargando…
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-500">
+                        {referenciaHistorial.length} OT
+                      </span>
+                    )}
+                  </div>
+                  {referenciaHistorial.length === 0 &&
+                  !referenciaHistorialLoading ? (
+                    <p className="text-[11px] text-slate-500">
+                      Sin despachos anteriores con esta referencia.
+                    </p>
+                  ) : (
+                    <div className="grid gap-1">
+                      {referenciaHistorial.map((h) => (
+                        <div
+                          key={h.ot_numero}
+                          className="grid gap-1 rounded border border-slate-100 bg-slate-50 px-2 py-1 text-[11px] text-slate-700 sm:grid-cols-[72px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.8fr)]"
+                        >
+                          <span className="font-mono font-semibold text-[#002147]">
+                            {h.ot_numero}
+                          </span>
+                          <span className="truncate">
+                            {h.material || "—"}
+                            {h.gramaje != null ? ` ${h.gramaje}g` : ""}
+                            {h.tamano_hoja ? ` · ${h.tamano_hoja}` : ""}
+                          </span>
+                          <span className="truncate">
+                            Troquel {h.troquel || "—"}
+                            {h.poses != null ? ` · ${h.poses} poses` : ""}
+                          </span>
+                          <span className="truncate">
+                            {h.acabado_pral || "Sin acabado"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </div>
             <div className="grid gap-1">
               <Label htmlFor="despacho-tintas" className="text-xs">
