@@ -19,7 +19,7 @@
 
 ---
 
-## Fase 1 — Badges de completitud avanzados (≈ 30 min)
+## ✅ Fase 1 — Badges de completitud avanzados (completada 2026-06-03)
 
 Indicadores visuales para detectar fichas incompletas y priorizar el relleno.
 
@@ -28,16 +28,16 @@ Indicadores visuales para detectar fichas incompletas y priorizar el relleno.
 | Nivel | Condición | Badge |
 |-------|-----------|-------|
 | `solo_codigo` | Sin `referencia_cliente` ni `descripcion` | ⚫ Solo código |
-| `identidad` | Tiene `referencia_cliente` o `descripcion`, sin técnica | 🔴 Sin técnica |
-| `parcial` | Tiene identidad + algún campo técnico (material o troquel) | 🟡 Parcial |
+| `sin_tecnica` | Tiene `referencia_cliente` o `descripcion`, sin técnica | 🔴 Sin técnica |
+| `parcial` | Tiene identidad + algún campo técnico (material/troquel/tintas/poses) | 🟡 Parcial |
 | `completa` | Identidad + material + troquel + tintas + ruta | ✅ Completa |
 
-**Filtros nuevos:**
-- "Sin técnica" → localizar fichas que necesitan enriquecerse.
-- "Sin EU" → fichas sin `referencia_cliente` informado.
-- Contador en cabecera: `X completas · Y parciales · Z sin técnica`.
+**Implementado:**
+- [x] Función `completitudNivel()` con 4 niveles + componente `CompletitudBadge`.
+- [x] Filtro nuevo por completitud (incl. opción "Sin técnica o menos").
+- [x] Contador desglosado en cabecera: `X completas · Y parciales · Z sin técnica · W solo código`.
 
-**Archivos a tocar:**
+**Archivos tocados:**
 - `src/components/produccion/articulos/articulos-maestro-page.tsx`
 
 ---

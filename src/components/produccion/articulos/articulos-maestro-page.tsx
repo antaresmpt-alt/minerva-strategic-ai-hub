@@ -134,28 +134,59 @@ function formToPayload(form: ArticuloForm) {
   };
 }
 
-// ─── Completeness badge ───────────────────────────────────────────────────────
+// ─── Completeness levels ────────────────────────────────────────────────────
 
-function completitudBadge(row: ProdReferenciaRow) {
-  const hasTecnica =
-    row.material_habitual || row.poses_habitual || row.troquel_habitual || row.tintas_habituales;
-  const hasIdentidad = row.referencia_cliente || row.descripcion;
+type CompletitudNivel = "solo_codigo" | "sin_tecnica" | "parcial" | "completa";
 
-  if (!hasIdentidad)
-    return (
-      <Badge variant="outline" className="border-slate-300 text-[10px] text-slate-400">
-        Solo código
-      </Badge>
-    );
-  if (!hasTecnica)
-    return (
-      <Badge variant="outline" className="border-amber-300 bg-amber-50 text-[10px] text-amber-700">
-        Sin técnica
-      </Badge>
-    );
+const COMPLETITUD_META: Record<
+  CompletitudNivel,
+  { label: string; dot: string; className: string }
+> = {
+  solo_codigo: {
+    label: "Solo código",
+    dot: "⚫",
+    className: "border-slate-300 text-slate-400",
+  },
+  sin_tecnica: {
+    label: "Sin técnica",
+    dot: "🔴",
+    className: "border-red-300 bg-red-50 text-red-700",
+  },
+  parcial: {
+    label: "Parcial",
+    dot: "🟡",
+    className: "border-amber-300 bg-amber-50 text-amber-700",
+  },
+  completa: {
+    label: "Completa",
+    dot: "✅",
+    className: "border-emerald-300 bg-emerald-50 text-emerald-700",
+  },
+};
+
+function completitudNivel(row: ProdReferenciaRow): CompletitudNivel {
+  const hasIdentidad = Boolean(row.referencia_cliente || row.descripcion);
+  if (!hasIdentidad) return "solo_codigo";
+
+  const tieneMaterial = Boolean(row.material_habitual);
+  const tieneTroquel = Boolean(row.troquel_habitual);
+  const tieneTintas = Boolean(row.tintas_habituales);
+  const tieneRuta = Boolean(row.ruta_habitual);
+  const algoTecnico =
+    tieneMaterial || tieneTroquel || tieneTintas || Boolean(row.poses_habitual);
+
+  if (!algoTecnico) return "sin_tecnica";
+
+  const esCompleta =
+    tieneMaterial && tieneTroquel && tieneTintas && tieneRuta;
+  return esCompleta ? "completa" : "parcial";
+}
+
+function CompletitudBadge({ nivel }: { nivel: CompletitudNivel }) {
+  const meta = COMPLETITUD_META[nivel];
   return (
-    <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-[10px] text-emerald-700">
-      Completa
+    <Badge variant="outline" className={`text-[10px] ${meta.className}`}>
+      {meta.label}
     </Badge>
   );
 }
@@ -413,6 +444,7 @@ export function ArticulosMaestroPage() {
   const [filtroCliente, setFiltroCliente] = useState("todos");
   const [filtroTipo, setFiltroTipo] = useState("todos");
   const [filtroActivo, setFiltroActivo] = useState("activos");
+  const [filtroCompletitud, setFiltroCompletitud] = useState("todos");
 
   // Modal editar
   const [editingRow, setEditingRow] = useState<ProdReferenciaRow | null>(null);
@@ -470,9 +502,23 @@ export function ArticulosMaestroPage() {
         filtroActivo === "todos" ||
         (filtroActivo === "activos" && r.activo) ||
         (filtroActivo === "inactivos" && !r.activo);
-      return matchTexto && matchCliente && matchTipo && matchActivo;
+      const nivel = completitudNivel(r);
+      const matchCompletitud =
+        filtroCompletitud === "todos" ||
+        (filtroCompletitud === "sin_tecnica_o_menos" &&
+          (nivel === "sin_tecnica" || nivel === "solo_codigo")) ||
+        filtroCompletitud === nivel;
+      return (
+        matchTexto && matchCliente && matchTipo && matchActivo && matchCompletitud
+      );
     });
-  }, [rows, filtroTexto, filtroCliente, filtroTipo, filtroActivo]);
+  }, [rows, filtroTexto, filtroCliente, filtroTipo, filtroActivo, filtroCompletitud]);
+
+  const completitudCounts = useMemo(() => {
+    const acc = { solo_codigo: 0, sin_tecnica: 0, parcial: 0, completa: 0 };
+    for (const r of rows) acc[completitudNivel(r)] += 1;
+    return acc;
+  }, [rows]);
 
   const clientesUnicos = useMemo(
     () => Array.from(new Set(rows.map((r) => r.cliente).filter(Boolean) as string[])).sort(),
@@ -616,6 +662,22 @@ export function ArticulosMaestroPage() {
           Catálogo de referencias Minerva · {rows.length} artículos ·{" "}
           {rows.filter((r) => r.activo).length} activos
         </p>
+        {rows.length > 0 && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+            <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-emerald-700">
+              ✅ {completitudCounts.completa} completas
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-amber-700">
+              🟡 {completitudCounts.parcial} parciales
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-1.5 py-0.5 text-red-700">
+              🔴 {completitudCounts.sin_tecnica} sin técnica
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-slate-500">
+              ⚫ {completitudCounts.solo_codigo} solo código
+            </span>
+          </div>
+        )}
       </header>
 
       {/* Barra de acciones */}
@@ -698,6 +760,19 @@ export function ArticulosMaestroPage() {
           <option value="todos">Todos (incl. inactivos)</option>
           <option value="inactivos">Solo inactivos</option>
         </select>
+
+        <select
+          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+          value={filtroCompletitud}
+          onChange={(e) => setFiltroCompletitud(e.target.value)}
+        >
+          <option value="todos">Toda completitud</option>
+          <option value="completa">✅ Completas</option>
+          <option value="parcial">🟡 Parciales</option>
+          <option value="sin_tecnica">🔴 Sin técnica</option>
+          <option value="solo_codigo">⚫ Solo código</option>
+          <option value="sin_tecnica_o_menos">⚠️ Sin técnica o menos</option>
+        </select>
       </div>
 
       {/* Error */}
@@ -760,7 +835,9 @@ export function ArticulosMaestroPage() {
                   <td className="max-w-[160px] truncate px-3 py-2 font-mono text-[10px] text-slate-400">
                     {r.ruta_habitual ?? <span className="text-slate-300">—</span>}
                   </td>
-                  <td className="px-3 py-2">{completitudBadge(r)}</td>
+                  <td className="px-3 py-2">
+                    <CompletitudBadge nivel={completitudNivel(r)} />
+                  </td>
                   <td className="px-3 py-2 text-center text-slate-400">
                     {r.total_repeticiones > 0 ? (
                       <span className="font-medium text-slate-600">{r.total_repeticiones}</span>
