@@ -1,4 +1,6 @@
 import * as XLSX from "xlsx";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ProdReferenciaRow, ArticuloExcelRow } from "@/types/prod-referencias";
 
@@ -43,7 +45,98 @@ export function nextCodigoMinerva(existing: string[]): string {
 export type ArticuloImportRow = Omit<
   ProdReferenciaRow,
   "id" | "created_at" | "updated_at" | "ultima_ot_numero" | "ultima_ot_fecha" | "total_repeticiones"
->;
+> & {
+  __presentFields?: Partial<Record<keyof ArticuloImportDbRow, boolean>>;
+};
+
+type ArticuloImportDbRow = Omit<ArticuloImportRow, "__presentFields">;
+
+const IMPORT_DB_FIELDS = [
+  "codigo",
+  "referencia_cliente",
+  "descripcion",
+  "cliente",
+  "tipo_producto",
+  "subtipo",
+  "activo",
+  "formato_largo_mm",
+  "formato_ancho_mm",
+  "formato_fondo_mm",
+  "material_habitual",
+  "poses_habitual",
+  "troquel_habitual",
+  "tintas_habituales",
+  "acabado_habitual",
+  "ruta_habitual",
+  "notas",
+] as const satisfies readonly (keyof ArticuloImportDbRow)[];
+
+function fieldPresent(value: unknown): boolean {
+  return cleanStr(value) != null;
+}
+
+function setPresentFields(
+  row: ArticuloImportRow,
+  presentFields: ArticuloImportRow["__presentFields"]
+): ArticuloImportRow {
+  Object.defineProperty(row, "__presentFields", {
+    value: presentFields,
+    enumerable: false,
+    configurable: true,
+  });
+  return row;
+}
+
+function importRowToDbRow(row: ArticuloImportRow): ArticuloImportDbRow {
+  return Object.fromEntries(
+    IMPORT_DB_FIELDS.map((field) => [field, row[field]])
+  ) as ArticuloImportDbRow;
+}
+
+function normalizeImportKey(value: string | null | undefined): string {
+  return String(value ?? "").trim().replace(/\s+/g, " ").toUpperCase();
+}
+
+function compositeKeyFromValues(
+  cliente: string | null | undefined,
+  referenciaCliente: string | null | undefined
+): string | null {
+  const c = normalizeImportKey(cliente);
+  const r = normalizeImportKey(referenciaCliente);
+  return c && r ? `${c}::${r}` : null;
+}
+
+function incomingIdentityKey(row: ArticuloImportRow): string {
+  return compositeKeyFromValues(row.cliente, row.referencia_cliente) ?? `codigo:${normalizeImportKey(row.codigo)}`;
+}
+
+function hasIncomingField(row: ArticuloImportRow, field: keyof ArticuloImportDbRow): boolean {
+  return row.__presentFields?.[field] ?? true;
+}
+
+function buildArticuloUpdatePatch(
+  incoming: ArticuloImportRow
+): Partial<ArticuloImportDbRow> {
+  const patch: Partial<ArticuloImportDbRow> = {};
+  for (const field of IMPORT_DB_FIELDS) {
+    if (field === "codigo") continue;
+    if (!hasIncomingField(incoming, field)) continue;
+    const value = incoming[field];
+    if (value == null) continue;
+    patch[field] = value as never;
+  }
+  return patch;
+}
+
+function articuloPatchHasChanges(
+  patch: Partial<ArticuloImportDbRow>,
+  existing: ProdReferenciaRow
+): boolean {
+  return Object.entries(patch).some(([field, value]) => {
+    const key = field as keyof ProdReferenciaRow;
+    return value !== (existing[key] ?? null);
+  });
+}
 
 export async function parseArticulosExcelFile(
   file: File,
@@ -71,7 +164,7 @@ export async function parseArticulosExcelFile(
             localCodigos.push(codigo);
           }
 
-          return {
+          const parsedRow: ArticuloImportRow = {
             codigo,
             referencia_cliente: cleanStr(row.referencia_cliente),
             descripcion: cleanStr(row.descripcion),
@@ -90,6 +183,25 @@ export async function parseArticulosExcelFile(
             ruta_habitual: cleanStr(row.ruta_habitual),
             notas: cleanStr(row.notas),
           };
+          return setPresentFields(parsedRow, {
+            codigo: fieldPresent(row.codigo),
+            referencia_cliente: fieldPresent(row.referencia_cliente),
+            descripcion: fieldPresent(row.descripcion),
+            cliente: fieldPresent(row.cliente),
+            tipo_producto: fieldPresent(row.tipo_producto),
+            subtipo: fieldPresent(row.subtipo),
+            activo: fieldPresent(row.activo),
+            formato_largo_mm: fieldPresent(row.formato_largo_mm),
+            formato_ancho_mm: fieldPresent(row.formato_ancho_mm),
+            formato_fondo_mm: fieldPresent(row.formato_fondo_mm),
+            material_habitual: fieldPresent(row.material_habitual),
+            poses_habitual: fieldPresent(row.poses_habitual),
+            troquel_habitual: fieldPresent(row.troquel_habitual),
+            tintas_habituales: fieldPresent(row.tintas_habituales),
+            acabado_habitual: fieldPresent(row.acabado_habitual),
+            ruta_habitual: fieldPresent(row.ruta_habitual),
+            notas: fieldPresent(row.notas),
+          });
         });
 
         resolve(parsed);
@@ -115,36 +227,35 @@ export function computeArticulosDiff(
   existing: ProdReferenciaRow[]
 ): ArticuloDiffResult {
   const byCode = new Map(existing.map((r) => [r.codigo.trim().toUpperCase(), r]));
+  const byClienteReferencia = new Map<string, ProdReferenciaRow>();
+  for (const row of existing) {
+    const key = compositeKeyFromValues(row.cliente, row.referencia_cliente);
+    if (key && !byClienteReferencia.has(key)) {
+      byClienteReferencia.set(key, row);
+    }
+  }
+  const uniqueIncoming = new Map<string, ArticuloImportRow>();
+  for (const row of incoming) {
+    uniqueIncoming.set(incomingIdentityKey(row), row);
+  }
 
   const nuevos: ArticuloImportRow[] = [];
   const modificados: ArticuloDiffResult["modificados"] = [];
   const sinCambios: ArticuloImportRow[] = [];
 
-  for (const row of incoming) {
+  for (const row of uniqueIncoming.values()) {
     const key = row.codigo.trim().toUpperCase();
-    const ex = byCode.get(key);
+    const ex =
+      byCode.get(key) ??
+      byClienteReferencia.get(
+        compositeKeyFromValues(row.cliente, row.referencia_cliente) ?? ""
+      );
     if (!ex) {
       nuevos.push(row);
       continue;
     }
 
-    const changed =
-      cleanStr(row.referencia_cliente) !== (ex.referencia_cliente ?? null) ||
-      cleanStr(row.descripcion) !== (ex.descripcion ?? null) ||
-      cleanStr(row.cliente) !== (ex.cliente ?? null) ||
-      cleanStr(row.tipo_producto) !== (ex.tipo_producto ?? null) ||
-      cleanStr(row.subtipo) !== (ex.subtipo ?? null) ||
-      row.activo !== ex.activo ||
-      parseOptionalNum(row.formato_largo_mm) !== (ex.formato_largo_mm ?? null) ||
-      parseOptionalNum(row.formato_ancho_mm) !== (ex.formato_ancho_mm ?? null) ||
-      parseOptionalNum(row.formato_fondo_mm) !== (ex.formato_fondo_mm ?? null) ||
-      cleanStr(row.material_habitual) !== (ex.material_habitual ?? null) ||
-      parseOptionalInt(row.poses_habitual) !== (ex.poses_habitual ?? null) ||
-      cleanStr(row.troquel_habitual) !== (ex.troquel_habitual ?? null) ||
-      cleanStr(row.tintas_habituales) !== (ex.tintas_habituales ?? null) ||
-      cleanStr(row.acabado_habitual) !== (ex.acabado_habitual ?? null) ||
-      cleanStr(row.ruta_habitual) !== (ex.ruta_habitual ?? null) ||
-      cleanStr(row.notas) !== (ex.notas ?? null);
+    const changed = articuloPatchHasChanges(buildArticuloUpdatePatch(row), ex);
 
     if (changed) {
       modificados.push({ incoming: row, existing: ex });
@@ -167,33 +278,20 @@ export async function aplicarArticulosDiff(
   let actualizados = 0;
 
   if (diff.nuevos.length > 0) {
-    const { error } = await supabase.from("prod_referencias").insert(diff.nuevos);
+    const { error } = await supabase
+      .from("prod_referencias")
+      .insert(diff.nuevos.map(importRowToDbRow));
     if (error) throw error;
     insertados = diff.nuevos.length;
   }
 
   if (opts.incluirModificados && diff.modificados.length > 0) {
     for (const { incoming, existing } of diff.modificados) {
+      const patch = buildArticuloUpdatePatch(incoming);
+      if (Object.keys(patch).length === 0) continue;
       const { error } = await supabase
         .from("prod_referencias")
-        .update({
-          referencia_cliente: incoming.referencia_cliente,
-          descripcion: incoming.descripcion,
-          cliente: incoming.cliente,
-          tipo_producto: incoming.tipo_producto,
-          subtipo: incoming.subtipo,
-          activo: incoming.activo,
-          formato_largo_mm: incoming.formato_largo_mm,
-          formato_ancho_mm: incoming.formato_ancho_mm,
-          formato_fondo_mm: incoming.formato_fondo_mm,
-          material_habitual: incoming.material_habitual,
-          poses_habitual: incoming.poses_habitual,
-          troquel_habitual: incoming.troquel_habitual,
-          tintas_habituales: incoming.tintas_habituales,
-          acabado_habitual: incoming.acabado_habitual,
-          ruta_habitual: incoming.ruta_habitual,
-          notas: incoming.notas,
-        })
+        .update(patch)
         .eq("id", existing.id);
       if (error) throw error;
       actualizados++;
@@ -235,6 +333,106 @@ export function exportarArticulosAExcel(rows: ProdReferenciaRow[], filename = "m
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "articulos");
   XLSX.writeFile(wb, filename);
+}
+
+function fmtPdfText(value: string | number | boolean | null | undefined): string {
+  return String(value ?? "").trim() || "-";
+}
+
+function fmtPdfFormato(row: ProdReferenciaRow): string {
+  const parts = [
+    row.formato_largo_mm,
+    row.formato_ancho_mm,
+    row.formato_fondo_mm,
+  ].filter((v) => v != null);
+  return parts.length > 0 ? parts.join(" x ") : "-";
+}
+
+function fmtPdfPosesTroquel(row: ProdReferenciaRow): string {
+  const parts = [
+    row.poses_habitual != null ? `${row.poses_habitual} poses` : "",
+    row.troquel_habitual ?? "",
+  ].filter((v) => String(v).trim());
+  return parts.join(" / ") || "-";
+}
+
+export function exportarArticulosAPdf(
+  rows: ProdReferenciaRow[],
+  filename = "maestro_articulos.pdf"
+): void {
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const generated = new Intl.DateTimeFormat("es-ES", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date());
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.text("Maestro de Articulos", 8, 10);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.text(`Generado: ${generated} · Registros: ${rows.length}`, 8, 15);
+
+  autoTable(doc, {
+    startY: 20,
+    head: [[
+      "Codigo",
+      "Ref. cliente",
+      "Descripcion",
+      "Cliente",
+      "Tipo",
+      "Material",
+      "Formato",
+      "Tintas",
+      "Acabado",
+      "Poses/Troquel",
+    ]],
+    body: rows.map((row) => [
+      fmtPdfText(row.codigo),
+      fmtPdfText(row.referencia_cliente),
+      fmtPdfText(row.descripcion),
+      fmtPdfText(row.cliente),
+      fmtPdfText(row.tipo_producto),
+      fmtPdfText(row.material_habitual),
+      fmtPdfFormato(row),
+      fmtPdfText(row.tintas_habituales),
+      fmtPdfText(row.acabado_habitual),
+      fmtPdfPosesTroquel(row),
+    ]),
+    styles: {
+      fontSize: 6,
+      cellPadding: 0.8,
+      overflow: "ellipsize",
+      minCellHeight: 4,
+    },
+    headStyles: {
+      fillColor: [0, 33, 71],
+      textColor: [255, 255, 255],
+      fontSize: 6,
+    },
+    columnStyles: {
+      0: { cellWidth: 15 },
+      1: { cellWidth: 20 },
+      2: { cellWidth: 48 },
+      3: { cellWidth: 36 },
+      4: { cellWidth: 16 },
+      5: { cellWidth: 34 },
+      6: { cellWidth: 18 },
+      7: { cellWidth: 28 },
+      8: { cellWidth: 32 },
+      9: { cellWidth: 28 },
+    },
+    margin: { left: 8, right: 8 },
+  });
+
+  const totalPages = doc.getNumberOfPages();
+  for (let page = 1; page <= totalPages; page += 1) {
+    doc.setPage(page);
+    doc.setFontSize(8);
+    doc.text(`Pagina ${page}/${totalPages}`, 288, 205, { align: "right" });
+  }
+
+  doc.save(filename);
 }
 
 export function descargarPlantillaArticulos(): void {

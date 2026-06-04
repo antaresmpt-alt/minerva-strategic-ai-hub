@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Boxes,
   Download,
+  FileText,
   FileSpreadsheet,
   Loader2,
   Pencil,
@@ -35,6 +36,7 @@ import {
   computeArticulosDiff,
   descargarPlantillaArticulos,
   exportarArticulosAExcel,
+  exportarArticulosAPdf,
   parseArticulosExcelFile,
   type ArticuloDiffResult,
   type ArticuloImportRow,
@@ -592,6 +594,10 @@ export function ArticulosMaestroPage() {
     exportarArticulosAExcel(rowsFiltradas);
   }, [rowsFiltradas]);
 
+  const handleExportPdf = useCallback(() => {
+    exportarArticulosAPdf(rowsFiltradas);
+  }, [rowsFiltradas]);
+
   // ── Import ──────────────────────────────────────────────────────────────────
 
   const handleFileChange = useCallback(
@@ -692,7 +698,11 @@ export function ArticulosMaestroPage() {
         </Button>
         <Button size="sm" variant="outline" onClick={handleExport} className="gap-1.5">
           <Download className="size-3.5" />
-          Exportar ({rowsFiltradas.length})
+          Exportar Excel ({rowsFiltradas.length})
+        </Button>
+        <Button size="sm" variant="outline" onClick={handleExportPdf} className="gap-1.5">
+          <FileText className="size-3.5" />
+          Exportar PDF
         </Button>
         <Button
           size="sm"
