@@ -27,6 +27,23 @@ function cleanStr(value: unknown): string | null {
   return s || null;
 }
 
+function foldKey(value: string | null | undefined): string {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
+}
+
+export function normalizeArticuloCliente(value: string | null | undefined): string | null {
+  const cleaned = cleanStr(value);
+  if (cleaned == null) return null;
+  const key = foldKey(cleaned).replace(/[.,]/g, "");
+  if (key.includes("LABORATORIOS ANUR")) return "LABORATORIOS ANUR S.L.";
+  return cleaned;
+}
+
 /** Genera el siguiente código M-NNNNN libre dado el máximo actual. */
 export function nextCodigoMinerva(existing: string[]): string {
   let max = 0;
@@ -94,7 +111,7 @@ function importRowToDbRow(row: ArticuloImportRow): ArticuloImportDbRow {
 }
 
 function normalizeImportKey(value: string | null | undefined): string {
-  return String(value ?? "").trim().replace(/\s+/g, " ").toUpperCase();
+  return foldKey(value);
 }
 
 function compositeKeyFromValues(
@@ -138,6 +155,138 @@ function articuloPatchHasChanges(
   });
 }
 
+function importRowLabel(row: ArticuloImportRow): string {
+  return [
+    row.codigo,
+    row.cliente,
+    row.referencia_cliente,
+    row.descripcion,
+  ]
+    .filter((v) => String(v ?? "").trim())
+    .join(" · ");
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error != null) {
+    const e = error as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown };
+    return [e.message, e.details, e.hint, e.code ? `code=${e.code}` : null]
+      .filter(Boolean)
+      .map(String)
+      .join(" · ");
+  }
+  return String(error || "Error desconocido");
+}
+
+function isDuplicateKeyError(error: unknown): boolean {
+  const msg = errorMessage(error).toLowerCase();
+  return (
+    msg.includes("23505") ||
+    msg.includes("duplicate key") ||
+    msg.includes("prod_referencias_cliente_ref_cliente_uq") ||
+    msg.includes("prod_referencias_codigo")
+  );
+}
+
+/** Supabase devuelve como máximo 1000 filas por petición: hay que paginar. */
+async function loadExistingArticuloKeys(
+  supabase: SupabaseClient
+): Promise<{ codes: Set<string>; composite: Set<string> }> {
+  const existingCodes = new Set<string>();
+  const existingComposite = new Set<string>();
+  const pageSize = 1000;
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("prod_referencias")
+      .select("codigo,cliente,referencia_cliente")
+      .range(from, from + pageSize - 1);
+
+    if (error) throw error;
+
+    const batch = data ?? [];
+    for (const row of batch) {
+      const codigo = normalizeImportKey(row.codigo);
+      if (codigo) existingCodes.add(codigo);
+      const key = compositeKeyFromValues(
+        normalizeArticuloCliente(row.cliente),
+        row.referencia_cliente
+      );
+      if (key) existingComposite.add(key);
+    }
+
+    if (batch.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return { codes: existingCodes, composite: existingComposite };
+}
+
+async function insertArticulosWithFallback(
+  supabase: SupabaseClient,
+  rows: ArticuloImportRow[]
+): Promise<{ insertados: number; omitidos: string[]; duplicados: number }> {
+  const omitidos: string[] = [];
+  let insertados = 0;
+  let duplicados = 0;
+  const dbRows = rows.map(importRowToDbRow);
+  const chunkSize = 50;
+
+  for (let start = 0; start < dbRows.length; start += chunkSize) {
+    const chunk = dbRows.slice(start, start + chunkSize);
+    const { error } = await supabase.from("prod_referencias").insert(chunk);
+    if (!error) {
+      insertados += chunk.length;
+      continue;
+    }
+
+    for (let i = 0; i < chunk.length; i += 1) {
+      const row = rows[start + i];
+      const { error: rowError } = await supabase
+        .from("prod_referencias")
+        .insert(chunk[i]);
+      if (rowError) {
+        if (isDuplicateKeyError(rowError)) {
+          duplicados += 1;
+        } else {
+          omitidos.push(`${importRowLabel(row)} → ${errorMessage(rowError)}`);
+        }
+      } else {
+        insertados += 1;
+      }
+    }
+  }
+
+  return { insertados, omitidos, duplicados };
+}
+
+async function filterExistingArticulosBeforeInsert(
+  supabase: SupabaseClient,
+  rows: ArticuloImportRow[]
+): Promise<{ nuevos: ArticuloImportRow[]; duplicados: number }> {
+  if (rows.length === 0) return { nuevos: [], duplicados: 0 };
+
+  const { codes, composite: existingComposite } = await loadExistingArticuloKeys(supabase);
+
+  const nuevos: ArticuloImportRow[] = [];
+  let duplicados = 0;
+  for (const row of rows) {
+    const codigo = normalizeImportKey(row.codigo);
+    const rowKey = compositeKeyFromValues(row.cliente, row.referencia_cliente);
+    if (
+      (codigo && codes.has(codigo)) ||
+      (rowKey != null && existingComposite.has(rowKey))
+    ) {
+      duplicados += 1;
+      continue;
+    }
+    nuevos.push(row);
+  }
+
+  return { nuevos, duplicados };
+}
+
 export async function parseArticulosExcelFile(
   file: File,
   existingCodigos: string[]
@@ -168,7 +317,7 @@ export async function parseArticulosExcelFile(
             codigo,
             referencia_cliente: cleanStr(row.referencia_cliente),
             descripcion: cleanStr(row.descripcion),
-            cliente: cleanStr(row.cliente),
+            cliente: normalizeArticuloCliente(row.cliente),
             tipo_producto: cleanStr(row.tipo_producto),
             subtipo: cleanStr(row.subtipo),
             activo: row.activo != null ? parseBool(row.activo) : true,
@@ -273,16 +422,24 @@ export async function aplicarArticulosDiff(
   supabase: SupabaseClient,
   diff: ArticuloDiffResult,
   opts: { incluirModificados: boolean }
-): Promise<{ insertados: number; actualizados: number }> {
+): Promise<{
+  insertados: number;
+  actualizados: number;
+  omitidos: string[];
+  duplicados: number;
+}> {
   let insertados = 0;
   let actualizados = 0;
+  const omitidos: string[] = [];
+  let duplicados = 0;
 
   if (diff.nuevos.length > 0) {
-    const { error } = await supabase
-      .from("prod_referencias")
-      .insert(diff.nuevos.map(importRowToDbRow));
-    if (error) throw error;
-    insertados = diff.nuevos.length;
+    const filtered = await filterExistingArticulosBeforeInsert(supabase, diff.nuevos);
+    duplicados += filtered.duplicados;
+    const result = await insertArticulosWithFallback(supabase, filtered.nuevos);
+    insertados = result.insertados;
+    duplicados += result.duplicados;
+    omitidos.push(...result.omitidos);
   }
 
   if (opts.incluirModificados && diff.modificados.length > 0) {
@@ -293,12 +450,15 @@ export async function aplicarArticulosDiff(
         .from("prod_referencias")
         .update(patch)
         .eq("id", existing.id);
-      if (error) throw error;
-      actualizados++;
+      if (error) {
+        omitidos.push(`${importRowLabel(incoming)} → ${errorMessage(error)}`);
+      } else {
+        actualizados++;
+      }
     }
   }
 
-  return { insertados, actualizados };
+  return { insertados, actualizados, omitidos, duplicados };
 }
 
 // ─── Export ───────────────────────────────────────────────────────────────────

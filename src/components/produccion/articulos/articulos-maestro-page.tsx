@@ -46,6 +46,28 @@ import {
   type ProdReferenciaRow,
 } from "@/types/prod-referencias";
 
+const REFERENCIAS_PAGE_SIZE = 1000;
+
+async function fetchAllProdReferencias(
+  supabase: ReturnType<typeof createSupabaseBrowserClient>
+): Promise<ProdReferenciaRow[]> {
+  const all: ProdReferenciaRow[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("prod_referencias")
+      .select("*")
+      .order("codigo", { ascending: true })
+      .range(from, from + REFERENCIAS_PAGE_SIZE - 1);
+    if (error) throw error;
+    const batch = (data ?? []) as ProdReferenciaRow[];
+    all.push(...batch);
+    if (batch.length < REFERENCIAS_PAGE_SIZE) break;
+    from += REFERENCIAS_PAGE_SIZE;
+  }
+  return all;
+}
+
 // ─── Form ─────────────────────────────────────────────────────────────────────
 
 type ArticuloForm = {
@@ -87,6 +109,18 @@ const EMPTY_FORM: ArticuloForm = {
   ruta_habitual: "",
   notas: "",
 };
+
+function formatImportError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error != null) {
+    const e = error as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown };
+    return [e.message, e.details, e.hint, e.code ? `code=${e.code}` : null]
+      .filter(Boolean)
+      .map(String)
+      .join(" · ");
+  }
+  return String(error || "Error importando");
+}
 
 function rowToForm(row: ProdReferenciaRow): ArticuloForm {
   return {
@@ -472,12 +506,7 @@ export function ArticulosMaestroPage() {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: err } = await supabase
-        .from("prod_referencias")
-        .select("*")
-        .order("codigo", { ascending: true });
-      if (err) throw err;
-      setRows((data ?? []) as ProdReferenciaRow[]);
+      setRows(await fetchAllProdReferencias(supabase));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error cargando artículos");
     } finally {
@@ -623,27 +652,49 @@ export function ArticulosMaestroPage() {
   );
 
   const handleImportConfirm = useCallback(async () => {
-    if (!importDiff) return;
+    if (!importDiff || !importFile) return;
     setImportLoading(true);
     setImportError(null);
     try {
-      const { insertados, actualizados } = await aplicarArticulosDiff(
+      const freshRows = await fetchAllProdReferencias(supabase);
+      setRows(freshRows);
+      const existingCodigos = freshRows.map((r) => r.codigo);
+      const parsed = await parseArticulosExcelFile(importFile, existingCodigos);
+      const diffToApply = computeArticulosDiff(parsed, freshRows);
+
+      const { insertados, actualizados, omitidos, duplicados } = await aplicarArticulosDiff(
         supabase,
-        importDiff,
+        diffToApply,
         { incluirModificados: importIncluirModificados }
       );
-      toast.success(`Importación completa: ${insertados} nuevos, ${actualizados} actualizados`);
-      setImportOpen(false);
-      setImportFile(null);
-      setImportDiff(null);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      const summary = `Importación completa: ${insertados} nuevos, ${actualizados} actualizados${
+        duplicados > 0 ? `, ${duplicados} duplicados saltados` : ""
+      }`;
+      if (omitidos.length > 0) {
+        setImportError(
+          `${summary}. Omitidos ${omitidos.length}: ${omitidos.slice(0, 5).join(" | ")}${
+            omitidos.length > 5 ? " | ..." : ""
+          }`
+        );
+        toast.warning(`${summary}. Omitidos ${omitidos.length}.`);
+      } else {
+        if (duplicados > 0) {
+          toast.warning(summary);
+        } else {
+          toast.success(summary);
+        }
+        setImportOpen(false);
+        setImportFile(null);
+        setImportDiff(null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
       await loadData();
     } catch (e) {
-      setImportError(e instanceof Error ? e.message : "Error importando");
+      setImportError(formatImportError(e));
     } finally {
       setImportLoading(false);
     }
-  }, [importDiff, importIncluirModificados, supabase, loadData]);
+  }, [importDiff, importFile, importIncluirModificados, supabase, loadData]);
 
   const resetImport = useCallback(() => {
     setImportFile(null);
