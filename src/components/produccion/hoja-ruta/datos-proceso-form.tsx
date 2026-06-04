@@ -358,7 +358,7 @@ function CampoArray({
             {campo.arrayItemType === "select" && campo.arrayItemOptions ? (
               <Select
                 value={item}
-                onValueChange={(v) => onItemChange(index, v)}
+                onValueChange={(v) => onItemChange(index, v ?? "")}
                 disabled={readonly}
               >
                 <SelectTrigger className="flex-1">
