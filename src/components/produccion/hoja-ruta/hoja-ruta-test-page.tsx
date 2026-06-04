@@ -58,7 +58,8 @@ export function HojaRutaTestPage() {
   const config = useMemo(() => getCamposConfigByProcesoId(procesoId), [procesoId]);
   const jsonPreview = useMemo(() => JSON.stringify(datos, null, 2), [datos]);
 
-  function handleProcesoChange(value: string) {
+  function handleProcesoChange(value: string | null) {
+    if (value == null) return;
     setProcesoId(Number(value));
     setDatos({});
   }
