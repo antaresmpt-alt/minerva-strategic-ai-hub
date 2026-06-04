@@ -314,6 +314,7 @@ export function ComprasMaterialPage() {
   const [filtroBusquedaTecnica, setFiltroBusquedaTecnica] = useState("");
   const [filtroProveedorId, setFiltroProveedorId] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("");
+  const [filtroAlbaran, setFiltroAlbaran] = useState("");
   /** `false`: ocultar compras en estado «Recibido» (vista limpia). `true`: ver todo el histórico. */
   const [verHistorial, setVerHistorial] = useState(false);
 
@@ -742,7 +743,9 @@ export function ComprasMaterialPage() {
 
   const rowsFiltradas = useMemo(() => {
     let list = rows;
-    if (!verHistorial) {
+    // Al seleccionar un albarán concreto mostramos también los recibidos,
+    // ya que el nº de albarán se informa en la recepción.
+    if (!verHistorial && !filtroAlbaran.trim()) {
       list = list.filter(
         (r) => normalizeCompraEstado(r.estado) !== "recibido"
       );
@@ -753,6 +756,12 @@ export function ComprasMaterialPage() {
     if (filtroEstado) {
       list = list.filter((r) => (r.estado ?? "").trim() === filtroEstado);
     }
+    const qAlbaran = filtroAlbaran.trim().toLowerCase();
+    if (qAlbaran) {
+      list = list.filter((r) =>
+        (r.albaran_proveedor ?? "").trim().toLowerCase().includes(qAlbaran)
+      );
+    }
     const q = filtroBusqueda.trim().toLowerCase();
     if (q) {
       list = list.filter((r) => {
@@ -761,6 +770,7 @@ export function ComprasMaterialPage() {
           r.num_compra,
           r.cliente,
           r.titulo,
+          r.albaran_proveedor,
         ].map((x) => String(x ?? "").toLowerCase());
         return bloques.some((s) => s.includes(q));
       });
@@ -791,6 +801,7 @@ export function ComprasMaterialPage() {
     filtroBusquedaTecnica,
     filtroEstado,
     filtroProveedorId,
+    filtroAlbaran,
   ]);
 
   const proveedoresUnicosDeLista = useMemo(() => {
@@ -825,6 +836,17 @@ export function ComprasMaterialPage() {
     ],
     []
   );
+
+  const albaranesUnicos = useMemo<string[]>(() => {
+    const set = new Set<string>();
+    for (const r of rows) {
+      const alb = (r.albaran_proveedor ?? "").trim();
+      if (alb && alb !== "-") set.add(alb);
+    }
+    return [...set].sort((a, b) =>
+      a.localeCompare(b, "es", { numeric: true, sensitivity: "base" })
+    );
+  }, [rows]);
 
   const conteosEstadoFiltrado = useMemo(() => {
     const m = new Map<string, number>();
@@ -1888,6 +1910,11 @@ export function ComprasMaterialPage() {
       </div>
 
       <div className="rounded-lg border border-slate-200/90 bg-slate-50/40 p-3 shadow-sm">
+        <datalist id="albaranes-disponibles">
+          {albaranesUnicos.map((a) => (
+            <option key={a} value={a} />
+          ))}
+        </datalist>
         <div className="hidden flex-col gap-3 md:flex">
           <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5">
             <div className="w-[12rem] min-w-[11rem] shrink-0">
@@ -1906,13 +1933,24 @@ export function ComprasMaterialPage() {
                 onChange={(e) => setFiltroProveedorId(e.target.value)}
               />
             </div>
+            <div className="grid w-[12rem] min-w-[11rem] shrink-0 gap-1.5">
+              <Label htmlFor="filtro-albaran">Albarán</Label>
+              <Input
+                id="filtro-albaran"
+                list="albaranes-disponibles"
+                placeholder="Escribe o elige…"
+                value={filtroAlbaran}
+                onChange={(e) => setFiltroAlbaran(e.target.value)}
+                className="h-9 w-full"
+              />
+            </div>
             <div className="grid min-w-0 max-w-sm flex-1 gap-1.5">
               <Label htmlFor="busq-compra-mat">
-                Buscar (OT, compra, cliente, título)
+                Buscar (OT, compra, cliente, título, albarán)
               </Label>
               <Input
                 id="busq-compra-mat"
-                placeholder="Ej. 24001 o cliente"
+                placeholder="Ej. 24001, cliente o albarán"
                 value={filtroBusqueda}
                 onChange={(e) => setFiltroBusqueda(e.target.value)}
                 className="h-9 w-full max-w-sm"
@@ -2069,12 +2107,23 @@ export function ComprasMaterialPage() {
             className="min-h-11 text-base"
           />
           <div className="grid min-w-0 gap-1.5">
+            <Label htmlFor="filtro-albaran-m">Albarán</Label>
+            <Input
+              id="filtro-albaran-m"
+              list="albaranes-disponibles"
+              placeholder="Escribe o elige un albarán…"
+              value={filtroAlbaran}
+              onChange={(e) => setFiltroAlbaran(e.target.value)}
+              className="min-h-11 w-full touch-manipulation text-base"
+            />
+          </div>
+          <div className="grid min-w-0 gap-1.5">
             <Label htmlFor="busq-compra-mat-m">
-              Buscar (OT, compra, cliente, título)
+              Buscar (OT, compra, cliente, título, albarán)
             </Label>
             <Input
               id="busq-compra-mat-m"
-              placeholder="Ej. 24001 o cliente"
+              placeholder="Ej. 24001, cliente o albarán"
               value={filtroBusqueda}
               onChange={(e) => setFiltroBusqueda(e.target.value)}
               className="min-h-11 w-full touch-manipulation text-base"
