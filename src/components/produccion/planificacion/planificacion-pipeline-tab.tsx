@@ -7,14 +7,11 @@ import {
   ChevronRight,
   CircleAlert,
   CircleX,
-  Clock,
   FileDown,
   FileText,
-  ExternalLink,
   Loader2,
   RefreshCcw,
   Route,
-  Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -34,6 +31,7 @@ import {
   exportPipelinePdf,
   type PipelinePdfMode,
 } from "@/lib/pipeline/pipeline-export";
+import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 const STEP_BADGE_STYLES: Record<string, string> = {
@@ -60,24 +58,6 @@ function fmtDateShort(v: string | null | undefined): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(d);
-}
-
-function tipoMaquinaLabel(v: string | null | undefined): string {
-  const t = String(v ?? "").trim().toLowerCase();
-  if (t === "impresion") return "Impresión";
-  if (t === "digital") return "Digital";
-  if (t === "troquelado") return "Troquelado";
-  if (t === "engomado") return "Engomado";
-  return "—";
-}
-
-function machineLabel(maquinaNombre: string | null | undefined, tipoMaquina: string | null | undefined): string {
-  const nombre = String(maquinaNombre ?? "").trim();
-  const tipo = tipoMaquinaLabel(tipoMaquina);
-  if (nombre && tipo !== "—") return `${nombre} · ${tipo}`;
-  if (nombre) return nombre;
-  if (tipo !== "—") return tipo;
-  return "Sin máquina asignada";
 }
 
 function sectionLabel(v: string | null | undefined): string {
@@ -823,7 +803,8 @@ export function PlanificacionPipelineTab() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-        <Dialog
+        <HojaRutaOtDialog
+          otNumero={detailOt?.otNumero ?? selectedOtNumero}
           open={detailOpen}
           onOpenChange={(o) => {
             setDetailOpen(o);
@@ -832,233 +813,7 @@ export function PlanificacionPipelineTab() {
               setSelectedOtNumero(null);
             }
           }}
-        >
-          <DialogContent className="flex max-h-[min(94vh,860px)] max-w-[min(96vw,940px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
-            <DialogHeader className="shrink-0 border-b border-slate-100 px-4 py-3 sm:px-5">
-              <DialogTitle className="text-base">
-                OT <span className="font-mono text-sm font-semibold text-[#002147]">{detailOt?.otNumero ?? ""}</span>
-              </DialogTitle>
-              <DialogDescription className="text-xs">
-                Paso actual / siguiente + detalle de ejecución y externo (desde `prod_ot_pasos`).
-              </DialogDescription>
-            </DialogHeader>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
-              {detailOt ? (
-                <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-                  <div className="space-y-3">
-                    <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        {detailOt.badges.includes("sin_itinerario") ? (
-                          <span className="inline-flex items-center gap-2 rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
-                            <AlertTriangle className="size-4 text-slate-500" />
-                            Sin itinerario
-                          </span>
-                        ) : null}
-                        {detailOt.badges.includes("externo_activo") ? (
-                          <span className="inline-flex items-center gap-2 rounded-md bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-800">
-                            <ExternalLink className="size-4 text-blue-700" />
-                            Externo activo
-                          </span>
-                        ) : null}
-                        {detailOt.badges.includes("bloqueado") ? (
-                          <span className="inline-flex items-center gap-2 rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-900">
-                            <Clock className="size-4 text-amber-700" />
-                            Bloqueado
-                          </span>
-                        ) : null}
-                        {detailOt.badges.includes("en_riesgo") ? (
-                          <span className="inline-flex items-center gap-2 rounded-md bg-red-50 px-2 py-1 text-xs font-semibold text-red-900">
-                            <Zap className="size-4 text-red-700" />
-                            Riesgo
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="text-sm text-slate-700">
-                        <div className="font-semibold">{detailOt.cliente ?? "—"} · {detailOt.trabajo ?? "—"}</div>
-                        <div className="text-xs text-slate-500">
-                          Entrega: {fmtDateShort(detailOt.fechaCompromiso)} · Estado OT: {detailOt.estadoOt ?? "—"}
-                        </div>
-                      </div>
-                      <div className="text-xs text-slate-600">
-                        Paso actual:{" "}
-                        <span className="font-medium">
-                          {detailOt.pasoActual?.procesoNombre ?? "—"} ({detailOt.pasoActual?.estadoPaso ?? "—"})
-                        </span>{" "}
-                        · Siguiente:{" "}
-                        <span className="font-medium">
-                          {detailOt.siguientePaso?.procesoNombre ?? "—"}
-                        </span>
-                      </div>
-                      <div className="grid gap-1 rounded-md border border-slate-200 bg-white p-2 text-xs text-slate-700 sm:grid-cols-2">
-                        <div>
-                          <span className="font-medium">Plan / Real:</span>{" "}
-                          {fmtHours(detailOt.analytics.horasPlanificadasTotal)} / {fmtHours(detailOt.analytics.horasRealesTotal)}
-                        </div>
-                        <div>
-                          <span className="font-medium">Desviación:</span>{" "}
-                          {detailOt.analytics.desviacionHoras != null
-                            ? `${detailOt.analytics.desviacionHoras > 0 ? "+" : ""}${detailOt.analytics.desviacionHoras.toFixed(1)}h`
-                            : "—"}
-                        </div>
-                        <div>
-                          <span className="font-medium">ETA:</span> {fmtDateShort(detailOt.analytics.etaPrevista)}
-                        </div>
-                        <div>
-                          <span className="font-medium">SLA:</span> {detailOt.analytics.slaStatus}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg border border-slate-200 bg-white p-3">
-                      <p className="text-xs font-semibold text-[#002147]">Timeline completa</p>
-                      {detailOt.pasos.length === 0 ? (
-                        <p className="mt-2 text-sm text-slate-600">
-                          Esta OT no tiene pasos en base de datos (`prod_ot_pasos`).
-                        </p>
-                      ) : (
-                        <div className="mt-2 space-y-2">
-                          {detailOt.pasos.map((p) => {
-                            const pillCls =
-                              STEP_BADGE_STYLES[p.estadoPaso] ?? STEP_BADGE_STYLES.pendiente;
-                            return (
-                              <div key={p.pasoId} className="rounded-md border border-slate-100 bg-slate-50/50 p-2">
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-semibold ${pillCls}`}>
-                                      {p.orden} · {p.procesoNombre ?? "—"}
-                                    </span>
-                                    {p.esExterno ? (
-                                      <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-800">
-                                        Externo
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                  <span className="text-xs text-slate-500">{p.estadoPaso}</span>
-                                </div>
-                                <div className="mt-2 grid gap-1 sm:grid-cols-2">
-                                  <div className="text-xs text-slate-700">
-                                    <div className="font-medium">Máquina</div>
-                                    <div className="text-slate-600">{machineLabel(p.maquinaNombre, p.tipoMaquina)}</div>
-                                  </div>
-                                  <div className="text-xs text-slate-700">
-                                    <div className="font-medium">Fechas</div>
-                                    <div className="text-slate-600">
-                                      Disp.: {fmtDateShort(p.fechaDisponible)} · Inicio: {fmtDateShort(p.fechaInicio)} · Fin: {fmtDateShort(p.fechaFin)}
-                                    </div>
-                                  </div>
-                                </div>
-                                {p.resumenCorto ? (
-                                  <div className="mt-2 text-xs text-slate-700">
-                                    <span className="font-medium">Resumen:</span> {p.resumenCorto}
-                                  </div>
-                                ) : null}
-                                {p.ejecucion ? (
-                                  <div className="mt-2 rounded-md border border-slate-200 bg-white p-2">
-                                    <p className="text-xs font-semibold text-[#002147]">Ejecución</p>
-                                    <p className="text-xs text-slate-600">
-                                      Estado: <span className="font-medium">{p.ejecucion.estado}</span> · Maquinista: {p.ejecucion.maquinista ?? "—"}
-                                      {p.ejecucion.horasReales != null ? ` · Horas reales: ${p.ejecucion.horasReales}` : ""}
-                                    </p>
-                                    <p className="text-xs text-slate-500">
-                                      Inicio real: {fmtDateShort(p.ejecucion.inicioRealAt)} · Fin real: {fmtDateShort(p.ejecucion.finRealAt)}
-                                    </p>
-                                    {p.ejecucion.incidencia ? <p className="text-xs text-red-800">Incidencia: {p.ejecucion.incidencia}</p> : null}
-                                    {p.ejecucion.observaciones ? <p className="text-xs text-slate-600">Obs: {p.ejecucion.observaciones}</p> : null}
-                                  </div>
-                                ) : null}
-                                {p.externo ? (
-                                  <div className="mt-2 rounded-md border border-blue-100 bg-blue-50/40 p-2">
-                                    <p className="text-xs font-semibold text-[#002147]">Externo</p>
-                                    <p className="text-xs text-slate-700">
-                                      Estado: <span className="font-medium">{p.externo.estado ?? "—"}</span>
-                                      {p.externo.proveedorNombre ? ` · Proveedor: ${p.externo.proveedorNombre}` : ""}
-                                    </p>
-                                    <p className="text-xs text-slate-600">
-                                      Envio: {fmtDateShort(p.externo.fechaEnvio)} · Previsto: {fmtDateShort(p.externo.fechaPrevista)}
-                                    </p>
-                                    {p.externo.observaciones ? <p className="text-xs text-slate-600">Obs: {p.externo.observaciones}</p> : null}
-                                  </div>
-                                ) : null}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="rounded-lg border border-slate-200 bg-white p-3">
-                      <p className="text-xs font-semibold text-[#002147]">Atajos</p>
-                      <div className="mt-2 space-y-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            void router.push("/produccion/ots?tab=despachadas");
-                          }}
-                          className="w-full justify-start"
-                        >
-                          <Route className="mr-2 size-4" />
-                          Ver en OTs (Despachadas)
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            void router.push("/produccion/ots?tab=planificacion");
-                          }}
-                          className="w-full justify-start"
-                        >
-                          <Route className="mr-2 size-4" />
-                          Ver en Planificacion OTs
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            void loadData();
-                          }}
-                          className="w-full justify-start"
-                        >
-                          <RefreshCcw className="mr-2 size-4" />
-                          Refrescar pipeline
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-                      <p className="text-xs font-semibold text-[#002147]">Notas</p>
-                      <p className="mt-2 text-xs text-slate-600 leading-relaxed">
-                        El “GPS” de la OT se deriva de <code className="rounded bg-white px-1">prod_ot_pasos</code>. La ejecución real y
-                        pausas se muestran desde <code className="rounded bg-white px-1">prod_mesa_ejecuciones</code> y <code className="rounded bg-white px-1">prod_mesa_ejecuciones_pausas</code>.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-            <DialogFooter className="shrink-0 border-t border-slate-100 px-4 py-3 sm:px-5">
-              <Button type="button" variant="outline" onClick={() => setDetailOpen(false)}>
-                Cerrar
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                className="bg-[#002147] text-white hover:bg-[#001a38]"
-                onClick={() => {
-                  setDetailOpen(false);
-                }}
-                disabled={false}
-              >
-                Listo
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        />
       </Card>
     </TooltipProvider>
   );

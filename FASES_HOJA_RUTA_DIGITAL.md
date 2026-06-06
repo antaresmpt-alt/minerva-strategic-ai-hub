@@ -264,19 +264,31 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 
 ---
 
-## 🖼️ Bloque 3: Vista Global Hoja de Ruta
+## 🖼️ Bloque 3: Hoja de Ruta Virtual (componente único) ⏳ **EN PROGRESO**
 
-**Objetivo**: Crear la interfaz visual completa que muestra toda la hoja de ruta de una OT.
+**Objetivo**: Convertir el actual "modal GPS" del Pipeline en la **Hoja de Ruta Virtual** completa: una vista única, bien maquetada, que muestre TODOS los campos capturados por proceso (`datos_proceso`), reutilizable desde varios puntos de entrada.
+
+### Decisiones de diseño (acordadas)
+- **No se mantiene un modal GPS aparte**: se **evoluciona** ese modal hasta ser la hoja de ruta. Un solo concepto, no dos que se desincronizan.
+- **Un único componente** `HojaRutaOtDialog` (lectura) con **muchos puntos de entrada**: Pipeline, OTs Despachadas, Planificación, tarjeta de Ejecución.
+- **Fuente de datos**: no hay una sola tabla con todo. La hoja se monta juntando:
+  - `prod_ots_general` (cabecera: cliente, pedido, cantidad, fecha entrega, estado)
+  - `produccion_ot_despachadas` (ficha inicial: material, hojas, tintas, troquel, poses, acabado)
+  - `prod_ot_pasos` (itinerario/GPS) + **`prod_ot_pasos.datos_proceso`** (campos completos por proceso)
+  - `prod_mesa_ejecuciones` (ejecución real: maquinista, horas, inicio/fin, incidencias)
+  - `prod_mesa_ejecuciones_pausas` (pausas y motivos)
+  - `prod_seguimiento_externos` (proveedor, envío, recepción)
 
 ### Tareas
-- [ ] Modal o página dedicada "Ver Hoja de Ruta" para una OT
-- [ ] Renderizar zonas dinámicas según itinerario de la OT:
-  - Cabecera (cliente, cantidad, descripción, pedido, fecha entrega)
-  - Tags de ruta (badges visuales de los procesos)
-  - Zona por cada proceso del itinerario con sus datos capturados
-- [ ] Indicadores de estado por proceso (pendiente / en marcha / finalizado)
-- [ ] Vista histórica: comparar datos previsto vs real
-- [ ] Acceso desde múltiples puntos (OTs Despachadas, Planificación Mesa, ejecución activa)
+- [x] Loader `fetchHojaRutaOt(otNumero)` que monta la hoja completa (incluye `datos_proceso`)
+- [x] Componente `HojaRutaOtDialog` (lectura, bien maquetado):
+  - Cabecera (cliente, trabajo, pedido, cantidad, entrega, estado)
+  - Tags de ruta (badges de procesos del itinerario)
+  - Zona por proceso con: máquina, fechas, estado, **datos del proceso (`datos_proceso`)**, ejecución real (maquinista/horas/incidencias) y externo si aplica
+- [x] Reutiliza `DatosProcesoForm` en modo `readonly` para pintar `datos_proceso`
+- [x] Enganchado en Pipeline (sustituye el modal GPS)
+- [ ] Enganchar también en OTs Despachadas, Planificación y tarjeta de Ejecución (siguientes pasadas)
+- [ ] Comparativa previsto vs real más visual (fase posterior)
 
 ---
 
@@ -326,6 +338,62 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 
 ---
 
+## 📦 Bloque 6: Producidas / Histórico + Cierre de OT ⏳ **PENDIENTE**
+
+**Objetivo**: Al dar una OT por terminada, congelar TODA su hoja de ruta en un histórico inmutable. Sirve para trazabilidad ("¿qué usamos la última vez?"), promedios para prefill y análisis.
+
+### Tabla `prod_ot_producidas` (diseño híbrido)
+- **`snapshot` JSONB**: la hoja completa congelada (pasos, `datos_proceso`, ejecución, pausas, externos). Inmutable.
+- **Columnas "planas" indexadas** para consulta/promedios sin hurgar el JSONB:
+  - `ot_numero`, `referencia_minerva`, `referencia_cliente`, `cliente`
+  - `material`, `troquel`, `tintas`, `acabado`
+  - `cantidad_pedida`, `cantidad_producida`, `merma`
+  - `horas_total`, `estuches_por_bulto`, `bultos_palet`, `palets`
+  - `fecha_fin`, `cerrada_por`, `version`
+
+### Lifecycle de cierre (acordado)
+- **Fase 1 — automática**: al finalizar el último paso del itinerario → OT pasa a **`pendiente_revision`** (NO escribe aún en producidas).
+- **Fase 2 — manual**: una persona pulsa **"Cerrar y enviar a histórico"** → se escribe el snapshot y la OT pasa a **`producida`/`cerrada`**.
+- **Por qué híbrido**: el "último paso finalizado" no garantiza datos bien apuntados; la revisión humana protege la calidad del histórico (y por tanto los promedios del maestro).
+- **Reapertura**: si hay error tras cerrar, "Reabrir" vuelve a `pendiente_revision` y al regenerar se **versiona** el snapshot (no se pisa).
+- **El albarán NO es el disparador del cierre** (es logística/facturación, puede ir desfasado o ser parcial). Como mucho, señal complementaria.
+
+### Dónde se opera
+- **Botón "Cerrar y archivar"** dentro del `HojaRutaOtDialog` (componente único → disponible en todos los puntos de entrada).
+- **Cola "Pendientes de revisión"** como filtro/atajo en **Pipeline** (cuadro de mando de planta).
+
+### Dos pestañas (acordado)
+- **Pipeline** = EN CURSO. Cuadro de mando en tiempo real (por dónde va cada OT, cuántas en troquel, cuellos de botella, riesgo). No histórico.
+- **Producidas/Histórico** = TERMINADAS. Listados, filtros (cliente/artículo/material/troquel), cálculos, medias, export. Las dos abren el **mismo** `HojaRutaOtDialog` (Pipeline en vivo; Producidas desde snapshot).
+
+### Nota — recálculo del Maestro de Artículos
+- **Maestro** = "cómo se hace / cómo debería hacerse" (ficha canónica).
+- **Producidas** = evidencia real de lo que pasó (fuente de verdad histórica).
+- El maestro **recalcula sus valores por defecto** desde producidas para que al despachar dé previstos precisos. Reglas:
+  - **Últimas N** (p.ej. 5), no todo el histórico.
+  - **Descartar outliers** (una OT con avería de 8h no debe disparar la media).
+  - **Override manual**: el maestro propone el promedio, pero se puede fijar un valor "oficial" que mande.
+- "¿Qué usamos la última vez?" (queja recurrente de producción) = último valor de material/troquel en producidas para esa referencia, mostrado en despacho y en la hoja de ruta.
+
+---
+
+## 🚚 Bloque 7: Expedición / Albarán ⏳ **PENDIENTE (depende de Bloque 6 + decisión Odoo)**
+
+**Objetivo**: Generar el albarán/preparar expedición a partir de las OTs ya producidas.
+
+### Acordado
+- **Ubicación**: opción "Generar albarán" desde la pestaña **Producidas/Terminadas** (los datos ya están congelados ahí).
+- **Modelo 1 OT → N albaranes** (prever entregas parciales: "cantidad servida" vs "cantidad producida").
+
+### A decidir antes de implementar
+- **Rol de Odoo**: ¿Minerva **emite** el albarán (documento legal, con serie + numeración correlativa) o solo **prepara/exporta** datos y Odoo lo emite? Esto cambia el alcance por completo (no duplicar numeración ni tener dos verdades).
+- **Datos logísticos que NO están en la hoja de ruta** y habrá que capturar: dirección/forma de envío, transportista, nº de bultos físicos del envío, peso, fecha de salida.
+
+### Alternativa de ubicación
+- Que la expedición/albarán viva cerca de **Muelle** (zona logística ya existente) y que Producidas solo tenga un botón "Preparar albarán" que lleve ahí. Producidas se mantiene como histórico/análisis.
+
+---
+
 ## 🚀 Fases Futuras (Post-MVP)
 
 ### Fase Extra 1: Inteligencia de Repetición en Hoja de Ruta
@@ -355,10 +423,40 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 ✅ **Bloque 2.1 COMPLETADO** (5 jun 2026): Cabecera + Prefill + Limpieza UI + fix timing
 ✅ **Bloque 2.2 BASE IMPLEMENTADA** (6 jun 2026): Auto-enriquecimiento troquelado desde `prod_troqueles`
 ✅ **Bloque 2.5 COMPLETADO** (6 jun 2026): Encadenado salida→entrada + semáforo de aviso (margen 5%)
-⏳ **Bloque 3 PENDIENTE**: Vista global
+✅ **Motivos de pausa por proceso** (6 jun 2026): `sys_motivos_pausa.tipos_maquina` (NULL = universal) + filtrado por tipo de máquina en ejecución
+⏳ **Bloque 3 EN PROGRESO** (6 jun 2026): Hoja de Ruta Virtual (`HojaRutaOtDialog`) + loader `fetchHojaRutaOt`, enganchado en Pipeline
 ⏳ **Bloque 4 PENDIENTE**: PDF token
 ⏳ **Bloque 5 PENDIENTE**: Integración Etiquetas ↔ Hoja de Ruta (flujo Hugo)
+⏳ **Bloque 6 PENDIENTE**: Producidas/Histórico (`prod_ot_producidas`, snapshot híbrido) + lifecycle de cierre (pendiente_revision → producida) + recálculo maestro
+⏳ **Bloque 7 PENDIENTE**: Expedición/Albarán (depende de Bloque 6 + decisión Odoo)
 
 ---
 
-**Última actualización**: 6 de junio de 2026 - 14:00
+**Última actualización**: 7 de junio de 2026 - 00:18
+
+
+## 📌 Punto de continuación (próxima sesión)
+
+**Sesión 6-7 jun 2026** — Bloque 3 (Hoja de Ruta Virtual): **base funcionando en Pipeline** ✅
+
+### Hecho hoy
+- Loader `fetchHojaRutaOt(otNumero)` en `src/lib/hoja-ruta/hoja-ruta-query.ts`
+  (cabecera + despacho + pasos con `datos_proceso` + ejecución + pausas + externos).
+- Componente `HojaRutaOtDialog` en `src/components/produccion/hoja-ruta/hoja-ruta-ot-dialog.tsx`
+  (lectura, autocarga por `otNumero`, renderizador compacto de `datos_proceso`).
+- Sustituido el "modal GPS" inline del Pipeline por `<HojaRutaOtDialog />`.
+- Verificado en Pipeline: maqueta bien. `tsc --noEmit` y lint en verde.
+
+### Pendiente de pulir (mañana)
+- [ ] Enganchar `HojaRutaOtDialog` en **OTs Despachadas**, **Planificación** y **tarjeta de Ejecución**
+      (el componente ya solo necesita `otNumero`).
+- [ ] Pulir maquetación / detalles visuales de la hoja (queda fino, pero hay cosas a afinar).
+- [ ] Mostrar comparativa previsto vs real más visual.
+- [ ] (Opcional) recuperar en la hoja los "atajos" útiles del modal antiguo si se echan en falta.
+
+### Siguiente bloque grande
+- Bloque 6: tabla `prod_ot_producidas` + lifecycle de cierre (`pendiente_revision` → `producida`).
+
+---
+
+**Nota de cierre**: comprobado en Pipeline. La Hoja de Ruta Virtual pinta bien como base; quedan ajustes visuales y conexiones a otras pantallas para la próxima sesión.
