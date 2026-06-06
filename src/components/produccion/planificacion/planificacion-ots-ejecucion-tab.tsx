@@ -99,7 +99,12 @@ type EjecucionRow = {
   ot_numero: string;
   maquina_id: string;
   prod_maquinas?: { nombre: string | null; tipo_maquina: string | null } | null;
-  prod_ot_pasos?: { proceso_id: number | null; datos_proceso: Record<string, unknown> | null } | null;
+  prod_ot_pasos?: {
+    ot_id: string | null;
+    orden: number | null;
+    proceso_id: number | null;
+    datos_proceso: Record<string, unknown> | null;
+  } | null;
   fecha_planificada: string | null;
   turno: string | null;
   slot_orden: number | null;
@@ -135,6 +140,7 @@ type MotivoPausaRow = {
   color_hex: string;
   activo: boolean;
   orden: number | string | null;
+  tipos_maquina: string[] | null;
 };
 
 type PausaRow = {
@@ -186,6 +192,9 @@ function mapTroquelRow(row: TroquelInfoRow) {
 }
 
 function mapMotivoRow(row: MotivoPausaRow): MotivoPausa {
+  const tiposMaquina = Array.isArray(row.tipos_maquina)
+    ? row.tipos_maquina.map((t) => String(t).trim()).filter(Boolean)
+    : null;
   return {
     id: row.id,
     slug: row.slug,
@@ -194,7 +203,19 @@ function mapMotivoRow(row: MotivoPausaRow): MotivoPausa {
     colorHex: row.color_hex,
     activo: Boolean(row.activo),
     orden: Math.trunc(parseNum(row.orden) ?? 0),
+    tiposMaquina,
   };
+}
+
+function motivoAplicaATipoMaquina(
+  motivo: MotivoPausa,
+  tipoMaquina: string | null | undefined,
+): boolean {
+  const tipos = motivo.tiposMaquina ?? [];
+  if (tipos.length === 0) return true;
+  const tipo = String(tipoMaquina ?? "").trim();
+  if (!tipo) return true;
+  return tipos.includes(tipo);
 }
 
 function pickMotivoJoin(value: PausaRow["sys_motivos_pausa"]): MotivoPausaRow | null {
@@ -211,13 +232,14 @@ type SalidaAnteriorInfo = {
 function mapRow(
   r: EjecucionRow,
   pausesByExecutionId: Map<string, MesaEjecucionPausa[]>,
-  salidaAnteriorByOt: Map<string, SalidaAnteriorInfo>,
+  salidaAnteriorByOtId: Map<string, SalidaAnteriorInfo>,
 ): MesaEjecucion {
   const pauses = pausesByExecutionId.get(r.id) ?? [];
   const openPause = pauses.find((p) => p.resumedAt == null) ?? null;
   const pasoJoin = r.prod_ot_pasos;
   const pid = pasoJoin?.proceso_id;
-  const salidaAnterior = salidaAnteriorByOt.get(r.ot_numero.trim()) ?? null;
+  const otId = String(pasoJoin?.ot_id ?? "").trim();
+  const salidaAnterior = otId ? salidaAnteriorByOtId.get(otId) ?? null : null;
   return {
     id: r.id,
     mesaTrabajoId: r.mesa_trabajo_id,
@@ -332,12 +354,12 @@ export function PlanificacionOtsEjecucionTab({
       const [execRes, maqRes, motivosRes] = await Promise.all([
         supabase
           .from(TABLE_EJECUCIONES)
-          .select("*, prod_maquinas(nombre,tipo_maquina), prod_ot_pasos(proceso_id,datos_proceso)")
+          .select("*, prod_maquinas(nombre,tipo_maquina), prod_ot_pasos(ot_id,orden,proceso_id,datos_proceso)")
           .order("updated_at", { ascending: false }),
         maqQuery,
         supabase
           .from(TABLE_MOTIVOS_PAUSA)
-          .select("id, slug, label, categoria, color_hex, activo, orden")
+          .select("id, slug, label, categoria, color_hex, activo, orden, tipos_maquina")
           .eq("activo", true)
           .order("categoria", { ascending: true })
           .order("orden", { ascending: true }),
@@ -495,36 +517,45 @@ export function PlanificacionOtsEjecucionTab({
       }
 
       // Cargar salidas del paso anterior para el encadenado (Bloque 2.5)
-      const salidaAnteriorByOt = new Map<string, SalidaAnteriorInfo>();
-      if (otNumeros.length > 0) {
+      const salidaAnteriorByOtId = new Map<string, SalidaAnteriorInfo>();
+      const otIds = [
+        ...new Set(
+          execRows
+            .map((r) => String(r.prod_ot_pasos?.ot_id ?? "").trim())
+            .filter(Boolean),
+        ),
+      ];
+      if (otIds.length > 0) {
         // Para cada ejecución activa, buscamos el último paso completado de la misma OT
         // cuyo proceso_id sea compatible como entrada (inputFromProcessIds del proceso actual)
-        const { data: pasosData } = await supabase
+        const { data: pasosData, error: pasosErr } = await supabase
           .from(TABLE_OT_PASOS)
-          .select("ot_numero, proceso_id, estado, datos_proceso, orden")
-          .in("ot_numero", otNumeros)
+          .select("ot_id, proceso_id, estado, datos_proceso, orden")
+          .in("ot_id", otIds)
           .eq("estado", "finalizado")
-          .order("ot_numero")
+          .order("ot_id")
           .order("orden", { ascending: false });
+        if (pasosErr) throw pasosErr;
 
-        const pasosPorOt = new Map<string, Array<{ proceso_id: number | null; datos_proceso: Record<string, unknown> | null; orden: number | null }>>();
-        for (const p of (pasosData ?? []) as Array<{ ot_numero: string; proceso_id: number | null; estado: string; datos_proceso: Record<string, unknown> | null; orden: number | null }>) {
-          const ot = String(p.ot_numero ?? "").trim();
-          if (!ot) continue;
-          const list = pasosPorOt.get(ot) ?? [];
+        const pasosPorOtId = new Map<string, Array<{ proceso_id: number | null; datos_proceso: Record<string, unknown> | null; orden: number | null }>>();
+        for (const p of (pasosData ?? []) as Array<{ ot_id: string; proceso_id: number | null; estado: string; datos_proceso: Record<string, unknown> | null; orden: number | null }>) {
+          const otId = String(p.ot_id ?? "").trim();
+          if (!otId) continue;
+          const list = pasosPorOtId.get(otId) ?? [];
           list.push({ proceso_id: p.proceso_id, datos_proceso: p.datos_proceso, orden: p.orden });
-          pasosPorOt.set(ot, list);
+          pasosPorOtId.set(otId, list);
         }
 
         for (const execRow of execRows) {
-          const ot = execRow.ot_numero.trim();
+          const otId = String(execRow.prod_ot_pasos?.ot_id ?? "").trim();
+          if (!otId) continue;
           const pid = execRow.prod_ot_pasos?.proceso_id;
           if (!pid) continue;
           const procesoConfig = PROCESO_CAMPOS_CONFIG[pid];
           const inputIds = procesoConfig?.inputFromProcessIds;
           if (!inputIds || inputIds.length === 0) continue;
 
-          const pasosOt = pasosPorOt.get(ot) ?? [];
+          const pasosOt = pasosPorOtId.get(otId) ?? [];
           // Busca el paso finalizado más reciente cuyo proceso sea compatible
           for (const candidatePid of inputIds) {
             const paso = pasosOt.find((p) => p.proceso_id === candidatePid);
@@ -534,7 +565,7 @@ export function PlanificacionOtsEjecucionTab({
             const rawVal = paso.datos_proceso[candidateConfig.outputField];
             const val = typeof rawVal === "number" ? rawVal : (typeof rawVal === "string" ? Number(rawVal) : null);
             if (val == null || !Number.isFinite(val)) continue;
-            salidaAnteriorByOt.set(ot, {
+            salidaAnteriorByOtId.set(otId, {
               procesoAnteriorId: candidatePid,
               salida: val,
               nombre: candidateConfig.procesoNombre,
@@ -548,7 +579,7 @@ export function PlanificacionOtsEjecucionTab({
         Object.fromEntries(Array.from(pauseMap.entries()).map(([k, v]) => [k, v] as const)),
       );
       setDespachoByOt(despachoMap);
-      setRows(execRows.map((r) => mapRow(r, pauseMap, salidaAnteriorByOt)));
+      setRows(execRows.map((r) => mapRow(r, pauseMap, salidaAnteriorByOtId)));
       setMotivosPausa(motivos);
       setMaquinas(
         maqRows.map((m) => ({
@@ -677,7 +708,11 @@ export function PlanificacionOtsEjecucionTab({
   );
 
   const beginExecution = useCallback(
-    async (row: MesaEjecucion) => {
+    async (
+      row: MesaEjecucion,
+      patch: Record<string, unknown> = {},
+      datosProcesoUpdate?: DatosProcesoGenerico | null,
+    ) => {
       if (row.estadoEjecucion !== "pendiente_inicio") {
         toast.error("Solo se pueden iniciar OTs pendientes.");
         return;
@@ -688,12 +723,20 @@ export function PlanificacionOtsEjecucionTab({
         const { error } = await supabase
           .from(TABLE_EJECUCIONES)
           .update({
+            ...patch,
             inicio_real_at: nowIso,
             estado_ejecucion: "en_curso",
             updated_at: nowIso,
           })
           .eq("id", row.id);
         if (error) throw error;
+        if (datosProcesoUpdate && row.otPasoId) {
+          const { error: dpErr } = await supabase
+            .from(TABLE_OT_PASOS)
+            .update({ datos_proceso: datosProcesoUpdate })
+            .eq("id", row.otPasoId);
+          if (dpErr) throw dpErr;
+        }
         toast.success(`OT ${row.ot} iniciada en máquina.`);
         await loadData();
       } catch (e) {
@@ -919,7 +962,7 @@ export function PlanificacionOtsEjecucionTab({
                       desviacion={desviacion}
                       saving={savingId === row.id}
                       onPatch={(patch, dp) => void patchExecution(row, patch, dp)}
-                      onBegin={() => void beginExecution(row)}
+                      onBegin={(patch, dp) => void beginExecution(row, patch, dp)}
                       onPause={(motivo) => void pauseExecution(row, motivo)}
                       onResume={(pauses) => void resumeExecution(row, pauses)}
                     />
@@ -953,7 +996,7 @@ function ExecutionCard({
   desviacion: number | null;
   saving: boolean;
   onPatch: (patch: Record<string, unknown>, datosProcesoUpdate?: DatosProcesoGenerico | null) => void;
-  onBegin: () => void;
+  onBegin: (patch: Record<string, unknown>, datosProcesoUpdate?: DatosProcesoGenerico | null) => void;
   onPause: (motivo: MotivoPausa | null) => void;
   onResume: (pauses: MesaEjecucionPausa[]) => void;
 }) {
@@ -964,6 +1007,10 @@ function ExecutionCard({
   const [pausePickerOpen, setPausePickerOpen] = useState(false);
   const [selectedMotivoId, setSelectedMotivoId] = useState("");
   const [datosProcesoOpen, setDatosProcesoOpen] = useState(false);
+  const motivosPausaDisponibles = useMemo(
+    () => motivosPausa.filter((motivo) => motivoAplicaATipoMaquina(motivo, row.maquinaTipo)),
+    [motivosPausa, row.maquinaTipo],
+  );
 
   const [datosProcesoLocal, setDatosProcesoLocal] = useState<DatosProcesoGenerico>(() => {
     const existing = (row.datosProcesoJson as DatosProcesoGenerico) ?? {};
@@ -1114,7 +1161,10 @@ function ExecutionCard({
           ? (PROCESO_CAMPOS_CONFIG[row.procesoAnteriorId ?? 0]?.outputUnit ?? "uds")
           : "uds";
         const cantidad = despacho?.cantidad ?? null;
-        const poses = (datosProcesoLocal.poses as number | undefined) ?? null;
+        const poses =
+          (datosProcesoLocal.poses as number | undefined) ??
+          despacho?.poses ??
+          null;
         const salidaRaw = row.salidaProcesoAnterior;
 
         let proyeccion: number | null = null;
@@ -1221,7 +1271,7 @@ function ExecutionCard({
             </button>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {motivosPausa.map((motivo) => {
+            {motivosPausaDisponibles.map((motivo) => {
               const selected = selectedMotivoId === motivo.id;
               return (
                 <button
@@ -1251,7 +1301,7 @@ function ExecutionCard({
             className="mt-2 w-full bg-[#002147] text-white hover:bg-[#001735]"
             disabled={saving || !selectedMotivoId}
             onClick={() => {
-              const motivo = motivosPausa.find((m) => m.id === selectedMotivoId) ?? null;
+              const motivo = motivosPausaDisponibles.find((m) => m.id === selectedMotivoId) ?? null;
               onPause(motivo);
               setPausePickerOpen(false);
               setSelectedMotivoId("");
@@ -1370,7 +1420,17 @@ function ExecutionCard({
               size="sm"
               className="bg-emerald-700 text-white hover:bg-emerald-800"
               disabled={saving}
-              onClick={onBegin}
+              onClick={() =>
+                onBegin(
+                  {
+                    maquinista: maquinista.trim() || null,
+                    incidencia: incidencia.trim() || null,
+                    accion_correctiva: accion.trim() || null,
+                    observaciones: observaciones.trim() || null,
+                  },
+                  hasCamposConfig ? datosProcesoLocal : null,
+                )
+              }
             >
               <Play className="mr-1 size-4" /> Iniciar
             </Button>

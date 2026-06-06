@@ -237,8 +237,9 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 
 #### Query (`planificacion-ots-ejecucion-tab.tsx`)
 - En `loadData`, tras cargar execRows y despacho, se hace una query a `prod_ot_pasos` filtrando `estado = "finalizado"` para las OTs activas
-- Se construye `salidaAnteriorByOt` (mapa `ot_numero → {procesoAnteriorId, salida, nombre}`)
+- Se construye `salidaAnteriorByOtId` (mapa `prod_ot_pasos.ot_id → {procesoAnteriorId, salida, nombre}`)
 - El mapa se pasa a `mapRow` que lo proyecta en `MesaEjecucion`
+- Fix aplicado: `prod_ot_pasos` no tiene `ot_numero`; el encadenado debe cruzar por `ot_id`
 
 #### UI (`ExecutionCard`)
 - Bloque compacto sobre "Datos del proceso" visible cuando `salidaProcesoAnterior != null`
@@ -257,8 +258,9 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 - ✅ `src/types/planificacion-mesa.ts` (`procesoAnteriorId`, `salidaProcesoAnterior`, `salidaProcesoAnteriorNombre`)
 - ✅ `src/lib/planificacion-analytics-query.ts` (compatibilidad nuevos campos)
 - ✅ `src/components/produccion/planificacion/planificacion-ots-ejecucion-tab.tsx`
-  - Query pasos finalizados + mapa `salidaAnteriorByOt`
+  - Query pasos finalizados + mapa `salidaAnteriorByOtId`
   - Bloque UI + semáforo en `ExecutionCard`
+  - Fix UX: `Iniciar` ahora guarda Maquinista/Incidencia/Acción/Observaciones antes de recargar
 
 ---
 

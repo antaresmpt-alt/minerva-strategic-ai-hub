@@ -126,6 +126,8 @@ export interface MotivoPausa {
   colorHex: string;
   activo: boolean;
   orden: number;
+  /** Tipos de máquina donde aplica. Null/vacío = motivo universal. */
+  tiposMaquina: string[] | null;
 }
 
 /** Registro operativo manual de una OT iniciada en máquina. */

@@ -211,24 +211,26 @@ function recomputeSlotOrdenPreservingLocked(
   return [...normalized].sort((a, b) => a.slotOrden - b.slotOrden);
 }
 
-function dedupeMesaByOt(items: MesaTrabajo[]): MesaTrabajo[] {
+function dedupeMesaByOtMaquina(items: MesaTrabajo[]): MesaTrabajo[] {
   const stateRank = (s: string) =>
     s === "en_ejecucion" ? 4 : s === "finalizada" ? 3 : s === "confirmado" ? 2 : s === "borrador" ? 1 : 0;
-  const byOt = new Map<string, MesaTrabajo>();
+  const byOtMaquina = new Map<string, MesaTrabajo>();
   for (const it of items) {
     const ot = String(it.ot ?? "").trim();
+    const maquinaId = String(it.maquinaId ?? "").trim();
     if (!ot) continue;
-    const prev = byOt.get(ot);
+    const key = `${ot}::${maquinaId}`;
+    const prev = byOtMaquina.get(key);
     if (!prev) {
-      byOt.set(ot, it);
+      byOtMaquina.set(key, it);
       continue;
     }
     const prevRank = stateRank(prev.estadoMesa);
     const nextRank = stateRank(it.estadoMesa);
-    if (nextRank > prevRank) byOt.set(ot, it);
-    else if (nextRank === prevRank && it.slotOrden < prev.slotOrden) byOt.set(ot, it);
+    if (nextRank > prevRank) byOtMaquina.set(key, it);
+    else if (nextRank === prevRank && it.slotOrden < prev.slotOrden) byOtMaquina.set(key, it);
   }
-  return Array.from(byOt.values());
+  return Array.from(byOtMaquina.values());
 }
 
 // ---------------------------------------------------------------------------
@@ -750,7 +752,7 @@ export function PlanificacionMesaDiariaTab() {
           horasPreviasEngomado: resumenPrevio?.engomado ?? 0,
         });
       }
-      return dedupeMesaByOt(out);
+      return dedupeMesaByOtMaquina(out);
     },
     [supabase],
   );
@@ -1347,7 +1349,7 @@ export function PlanificacionMesaDiariaTab() {
         .in("estado_mesa", EDITABLE_PLAN_ESTADOS as unknown as string[]);
       if (delErr) throw delErr;
 
-      const editableItems = dedupeMesaByOt(
+      const editableItems = dedupeMesaByOtMaquina(
         recomputeSlotOrdenPreservingLocked(items).filter(
           (it) => !isMesaTrabajoLocked(it),
         ),
