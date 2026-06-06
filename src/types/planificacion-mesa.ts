@@ -134,6 +134,16 @@ export interface MesaEjecucion {
   mesaTrabajoId: string | null;
   /** Paso de itinerario (`prod_ot_pasos`) al liberar la OT, si aplica. */
   otPasoId: string | null;
+  /** proceso_id del paso de itinerario (para motor de campos dinámicos). */
+  procesoId: number | null;
+  /** Datos de proceso almacenados en prod_ot_pasos.datos_proceso (JSONB). */
+  datosProcesoJson: Record<string, unknown> | null;
+  /** proceso_id del paso aguas arriba que actúa como entrada de este paso. */
+  procesoAnteriorId: number | null;
+  /** Valor real de salida del paso anterior (outputField de ese proceso). */
+  salidaProcesoAnterior: number | null;
+  /** Nombre del proceso anterior para mostrarlo en la UI. */
+  salidaProcesoAnteriorNombre: string | null;
   ot: string;
   maquinaId: string;
   maquinaNombre: string;

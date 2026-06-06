@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
   CheckCircle2,
+  ChevronDown,
   FileSpreadsheet,
   FileText,
   Loader2,
@@ -35,6 +36,9 @@ import {
 } from "@/lib/planificacion-ambito";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
+import { getCamposConfigByProcesoId, PROCESO_CAMPOS_CONFIG } from "@/lib/hoja-ruta-campos-config";
+import type { DatosProcesoGenerico } from "@/lib/hoja-ruta-campos-config";
+import { DatosProcesoForm } from "@/components/produccion/hoja-ruta/datos-proceso-form";
 import type {
   EstadoEjecucionMesa,
   MesaEjecucion,
@@ -48,6 +52,45 @@ const TABLE_EJECUCIONES_PAUSAS = "prod_mesa_ejecuciones_pausas";
 const TABLE_MOTIVOS_PAUSA = "sys_motivos_pausa";
 const TABLE_MAQUINAS = "prod_maquinas";
 const TABLE_MESA = "prod_mesa_planificacion_trabajos";
+const TABLE_OT_PASOS = "prod_ot_pasos";
+const TABLE_DESPACHO = "produccion_ot_despachadas";
+const TABLE_OTS_GENERAL = "prod_ots_general";
+const TABLE_TROQUELES = "prod_troqueles";
+
+type DespachoInfo = {
+  cliente: string | null;
+  cantidad: number | null;
+  titulo: string | null;
+  material: string | null;
+  gramaje: number | null;
+  tamanoHoja: string | null;
+  hojasBrutas: number | null;
+  hojasNetas: number | null;
+  tintas: string | null;
+  acabadoPral: string | null;
+  troquel: string | null;
+  poses: number | null;
+  tamanoCorte: string | null;
+  pinza: number | null;
+  expulsor: "mascle" | "femella" | "completo" | null;
+  cauchoAcrilico: string | null;
+  horasEntrada: number | null;
+  horasTiraje: number | null;
+  horasTroquelado: number | null;
+  horasEngomado: number | null;
+  fechaEntrega: string | null;
+};
+
+type TroquelInfoRow = {
+  num_troquel: string | null;
+  mides: string | null;
+  num_figuras: number | string | null;
+  figuras_hoja: number | string | null;
+  pinza: number | string | null;
+  expulsion: string | null;
+  num_expulsion: string | null;
+  caucho_acrilico: string | null;
+};
 
 type EjecucionRow = {
   id: string;
@@ -56,6 +99,7 @@ type EjecucionRow = {
   ot_numero: string;
   maquina_id: string;
   prod_maquinas?: { nombre: string | null; tipo_maquina: string | null } | null;
+  prod_ot_pasos?: { proceso_id: number | null; datos_proceso: Record<string, unknown> | null } | null;
   fecha_planificada: string | null;
   turno: string | null;
   slot_orden: number | null;
@@ -110,6 +154,37 @@ function parseNum(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function normalizeTroquelKey(value: unknown): string {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function mapExpulsor(value: unknown): DespachoInfo["expulsor"] {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (!raw) return null;
+  if (raw.includes("complet")) return "completo";
+  if (raw.includes("mascle") || raw.includes("macho")) return "mascle";
+  if (raw.includes("femella") || raw.includes("hembra")) return "femella";
+  return null;
+}
+
+function parseMeasurementNumber(value: unknown): number | null {
+  const raw = String(value ?? "").trim().replace(",", ".");
+  const match = raw.match(/-?\d+(?:\.\d+)?/);
+  if (!match) return null;
+  return parseNum(match[0]);
+}
+
+function mapTroquelRow(row: TroquelInfoRow) {
+  const poses = parseNum(row.num_figuras) ?? parseNum(row.figuras_hoja);
+  return {
+    tamanoCorte: row.mides?.trim() || null,
+    poses,
+    pinza: parseMeasurementNumber(row.pinza),
+    expulsor: mapExpulsor(row.expulsion ?? row.num_expulsion),
+    cauchoAcrilico: row.caucho_acrilico?.trim() || null,
+  };
+}
+
 function mapMotivoRow(row: MotivoPausaRow): MotivoPausa {
   return {
     id: row.id,
@@ -127,16 +202,31 @@ function pickMotivoJoin(value: PausaRow["sys_motivos_pausa"]): MotivoPausaRow | 
   return value ?? null;
 }
 
+type SalidaAnteriorInfo = {
+  procesoAnteriorId: number;
+  salida: number;
+  nombre: string;
+};
+
 function mapRow(
   r: EjecucionRow,
   pausesByExecutionId: Map<string, MesaEjecucionPausa[]>,
+  salidaAnteriorByOt: Map<string, SalidaAnteriorInfo>,
 ): MesaEjecucion {
   const pauses = pausesByExecutionId.get(r.id) ?? [];
   const openPause = pauses.find((p) => p.resumedAt == null) ?? null;
+  const pasoJoin = r.prod_ot_pasos;
+  const pid = pasoJoin?.proceso_id;
+  const salidaAnterior = salidaAnteriorByOt.get(r.ot_numero.trim()) ?? null;
   return {
     id: r.id,
     mesaTrabajoId: r.mesa_trabajo_id,
     otPasoId: r.ot_paso_id,
+    procesoId: typeof pid === "number" && Number.isFinite(pid) ? pid : null,
+    datosProcesoJson: pasoJoin?.datos_proceso ?? null,
+    procesoAnteriorId: salidaAnterior?.procesoAnteriorId ?? null,
+    salidaProcesoAnterior: salidaAnterior?.salida ?? null,
+    salidaProcesoAnteriorNombre: salidaAnterior?.nombre ?? null,
     ot: r.ot_numero,
     maquinaId: r.maquina_id,
     maquinaNombre: r.prod_maquinas?.nombre ?? "—",
@@ -189,6 +279,7 @@ export function PlanificacionOtsEjecucionTab({
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [rows, setRows] = useState<MesaEjecucion[]>([]);
   const [pausesByExecutionId, setPausesByExecutionId] = useState<Record<string, MesaEjecucionPausa[]>>({});
+  const [despachoByOt, setDespachoByOt] = useState<Record<string, DespachoInfo>>({});
   const [motivosPausa, setMotivosPausa] = useState<MotivoPausa[]>([]);
   const [maquinas, setMaquinas] = useState<Array<{ id: string; nombre: string }>>([]);
   const [selectedMaquina, setSelectedMaquina] = useState<string>("all");
@@ -241,7 +332,7 @@ export function PlanificacionOtsEjecucionTab({
       const [execRes, maqRes, motivosRes] = await Promise.all([
         supabase
           .from(TABLE_EJECUCIONES)
-          .select("*, prod_maquinas(nombre,tipo_maquina)")
+          .select("*, prod_maquinas(nombre,tipo_maquina), prod_ot_pasos(proceso_id,datos_proceso)")
           .order("updated_at", { ascending: false }),
         maqQuery,
         supabase
@@ -300,10 +391,164 @@ export function PlanificacionOtsEjecucionTab({
           pauseMap.set(executionId, list);
         }
       }
+      const otNumeros = [...new Set(execRows.map((r) => r.ot_numero.trim()).filter(Boolean))];
+      const despachoMap: Record<string, DespachoInfo> = {};
+      if (otNumeros.length > 0) {
+        const { data: despData } = await supabase
+          .from(TABLE_DESPACHO)
+          .select(`
+            ot_numero,
+            material,
+            gramaje,
+            tamano_hoja,
+            num_hojas_brutas,
+            num_hojas_netas,
+            tintas,
+            acabado_pral,
+            troquel,
+            poses,
+            horas_entrada,
+            horas_tiraje,
+            horas_estimadas_troquelado,
+            horas_estimadas_engomado
+          `)
+          .in("ot_numero", otNumeros);
+        const { data: generalData } = await supabase
+          .from(TABLE_OTS_GENERAL)
+          .select("num_pedido, cliente, cantidad, titulo, fecha_entrega")
+          .in("num_pedido", otNumeros);
+        const generalMap = new Map<string, { cliente: string | null; cantidad: number | null; titulo: string | null; fechaEntrega: string | null }>();
+        for (const g of (generalData ?? []) as Array<{ num_pedido?: string; cliente?: string | null; cantidad?: number | null; titulo?: string | null; fecha_entrega?: string | null }>) {
+          const ot = String(g.num_pedido ?? "").trim();
+          if (ot) {
+            generalMap.set(ot, {
+              cliente: g.cliente ?? null,
+              cantidad: typeof g.cantidad === "number" ? g.cantidad : null,
+              titulo: g.titulo ?? null,
+              fechaEntrega: g.fecha_entrega ?? null,
+            });
+          }
+        }
+        const troquelNums = [
+          ...new Set(
+            ((despData ?? []) as Array<{ troquel?: string | null }>)
+              .map((d) => String(d.troquel ?? "").trim())
+              .filter(Boolean),
+          ),
+        ];
+        const troquelMap = new Map<string, ReturnType<typeof mapTroquelRow>>();
+        if (troquelNums.length > 0) {
+          const { data: troqData, error: troqErr } = await supabase
+            .from(TABLE_TROQUELES)
+            .select("num_troquel,mides,num_figuras,figuras_hoja,pinza,expulsion,num_expulsion,caucho_acrilico")
+            .in("num_troquel", troquelNums);
+          if (troqErr) throw troqErr;
+          for (const t of (troqData ?? []) as TroquelInfoRow[]) {
+            const key = normalizeTroquelKey(t.num_troquel);
+            if (key) troquelMap.set(key, mapTroquelRow(t));
+          }
+        }
+        for (const d of (despData ?? []) as Array<{
+          ot_numero?: string;
+          material?: string | null;
+          gramaje?: number | null;
+          tamano_hoja?: string | null;
+          num_hojas_brutas?: number | null;
+          num_hojas_netas?: number | null;
+          tintas?: string | null;
+          acabado_pral?: string | null;
+          troquel?: string | null;
+          poses?: number | null;
+          horas_entrada?: number | null;
+          horas_tiraje?: number | null;
+          horas_estimadas_troquelado?: number | null;
+          horas_estimadas_engomado?: number | null;
+        }>) {
+          const ot = String(d.ot_numero ?? "").trim();
+          if (!ot) continue;
+          const gen = generalMap.get(ot);
+          const troq = troquelMap.get(normalizeTroquelKey(d.troquel));
+          despachoMap[ot] = {
+            cliente: gen?.cliente ?? null,
+            cantidad: gen?.cantidad ?? null,
+            titulo: gen?.titulo ?? null,
+            material: d.material ?? null,
+            gramaje: typeof d.gramaje === "number" ? d.gramaje : null,
+            tamanoHoja: d.tamano_hoja ?? null,
+            hojasBrutas: typeof d.num_hojas_brutas === "number" ? d.num_hojas_brutas : null,
+            hojasNetas: typeof d.num_hojas_netas === "number" ? d.num_hojas_netas : null,
+            tintas: d.tintas ?? null,
+            acabadoPral: d.acabado_pral ?? null,
+            troquel: d.troquel ?? null,
+            poses: parseNum(d.poses) ?? troq?.poses ?? null,
+            tamanoCorte: troq?.tamanoCorte ?? null,
+            pinza: troq?.pinza ?? null,
+            expulsor: troq?.expulsor ?? null,
+            cauchoAcrilico: troq?.cauchoAcrilico ?? null,
+            horasEntrada: typeof d.horas_entrada === "number" ? d.horas_entrada : null,
+            horasTiraje: typeof d.horas_tiraje === "number" ? d.horas_tiraje : null,
+            horasTroquelado: typeof d.horas_estimadas_troquelado === "number" ? d.horas_estimadas_troquelado : null,
+            horasEngomado: typeof d.horas_estimadas_engomado === "number" ? d.horas_estimadas_engomado : null,
+            fechaEntrega: gen?.fechaEntrega ?? null,
+          };
+        }
+      }
+
+      // Cargar salidas del paso anterior para el encadenado (Bloque 2.5)
+      const salidaAnteriorByOt = new Map<string, SalidaAnteriorInfo>();
+      if (otNumeros.length > 0) {
+        // Para cada ejecución activa, buscamos el último paso completado de la misma OT
+        // cuyo proceso_id sea compatible como entrada (inputFromProcessIds del proceso actual)
+        const { data: pasosData } = await supabase
+          .from(TABLE_OT_PASOS)
+          .select("ot_numero, proceso_id, estado, datos_proceso, orden")
+          .in("ot_numero", otNumeros)
+          .eq("estado", "finalizado")
+          .order("ot_numero")
+          .order("orden", { ascending: false });
+
+        const pasosPorOt = new Map<string, Array<{ proceso_id: number | null; datos_proceso: Record<string, unknown> | null; orden: number | null }>>();
+        for (const p of (pasosData ?? []) as Array<{ ot_numero: string; proceso_id: number | null; estado: string; datos_proceso: Record<string, unknown> | null; orden: number | null }>) {
+          const ot = String(p.ot_numero ?? "").trim();
+          if (!ot) continue;
+          const list = pasosPorOt.get(ot) ?? [];
+          list.push({ proceso_id: p.proceso_id, datos_proceso: p.datos_proceso, orden: p.orden });
+          pasosPorOt.set(ot, list);
+        }
+
+        for (const execRow of execRows) {
+          const ot = execRow.ot_numero.trim();
+          const pid = execRow.prod_ot_pasos?.proceso_id;
+          if (!pid) continue;
+          const procesoConfig = PROCESO_CAMPOS_CONFIG[pid];
+          const inputIds = procesoConfig?.inputFromProcessIds;
+          if (!inputIds || inputIds.length === 0) continue;
+
+          const pasosOt = pasosPorOt.get(ot) ?? [];
+          // Busca el paso finalizado más reciente cuyo proceso sea compatible
+          for (const candidatePid of inputIds) {
+            const paso = pasosOt.find((p) => p.proceso_id === candidatePid);
+            if (!paso?.datos_proceso) continue;
+            const candidateConfig = PROCESO_CAMPOS_CONFIG[candidatePid];
+            if (!candidateConfig?.outputField) continue;
+            const rawVal = paso.datos_proceso[candidateConfig.outputField];
+            const val = typeof rawVal === "number" ? rawVal : (typeof rawVal === "string" ? Number(rawVal) : null);
+            if (val == null || !Number.isFinite(val)) continue;
+            salidaAnteriorByOt.set(ot, {
+              procesoAnteriorId: candidatePid,
+              salida: val,
+              nombre: candidateConfig.procesoNombre,
+            });
+            break;
+          }
+        }
+      }
+
       setPausesByExecutionId(
         Object.fromEntries(Array.from(pauseMap.entries()).map(([k, v]) => [k, v] as const)),
       );
-      setRows(execRows.map((r) => mapRow(r, pauseMap)));
+      setDespachoByOt(despachoMap);
+      setRows(execRows.map((r) => mapRow(r, pauseMap, salidaAnteriorByOt)));
       setMotivosPausa(motivos);
       setMaquinas(
         maqRows.map((m) => ({
@@ -352,7 +597,7 @@ export function PlanificacionOtsEjecucionTab({
   }, [estado, filtered]);
 
   const patchExecution = useCallback(
-    async (row: MesaEjecucion, patch: Record<string, unknown>) => {
+    async (row: MesaEjecucion, patch: Record<string, unknown>, datosProcesoUpdate?: DatosProcesoGenerico | null) => {
       if (row.estadoEjecucion === "pendiente_inicio" && patch.estado_ejecucion === "finalizada") {
         toast.error("Inicia la OT antes de finalizarla.");
         return;
@@ -409,6 +654,13 @@ export function PlanificacionOtsEjecucionTab({
             .update({ estado_mesa: "finalizada" })
             .eq("id", row.mesaTrabajoId);
           if (mesaError) throw mesaError;
+        }
+        if (datosProcesoUpdate && row.otPasoId) {
+          const { error: dpErr } = await supabase
+            .from(TABLE_OT_PASOS)
+            .update({ datos_proceso: datosProcesoUpdate })
+            .eq("id", row.otPasoId);
+          if (dpErr) throw dpErr;
         }
         /* prod_planificacion_pool: sincronizado por trigger prod_trg_mesa_ejecucion_itinerario_finaliza
            (en_transito si quedan pasos; cerrada solo con itinerario completo; sin ot_paso_id -> cerrada). */
@@ -661,11 +913,12 @@ export function PlanificacionOtsEjecucionTab({
                     <ExecutionCard
                       key={`${row.id}-${row.updatedAt}`}
                       row={row}
+                      despacho={despachoByOt[row.ot] ?? null}
                       pauses={pausesByExecutionId[row.id] ?? []}
                       motivosPausa={motivosPausa}
                       desviacion={desviacion}
                       saving={savingId === row.id}
-                      onPatch={(patch) => void patchExecution(row, patch)}
+                      onPatch={(patch, dp) => void patchExecution(row, patch, dp)}
                       onBegin={() => void beginExecution(row)}
                       onPause={(motivo) => void pauseExecution(row, motivo)}
                       onResume={(pauses) => void resumeExecution(row, pauses)}
@@ -683,6 +936,7 @@ export function PlanificacionOtsEjecucionTab({
 
 function ExecutionCard({
   row,
+  despacho,
   pauses,
   motivosPausa,
   desviacion,
@@ -693,43 +947,98 @@ function ExecutionCard({
   onResume,
 }: {
   row: MesaEjecucion;
+  despacho: DespachoInfo | null;
   pauses: MesaEjecucionPausa[];
   motivosPausa: MotivoPausa[];
   desviacion: number | null;
   saving: boolean;
-  onPatch: (patch: Record<string, unknown>) => void;
+  onPatch: (patch: Record<string, unknown>, datosProcesoUpdate?: DatosProcesoGenerico | null) => void;
   onBegin: () => void;
   onPause: (motivo: MotivoPausa | null) => void;
   onResume: (pauses: MesaEjecucionPausa[]) => void;
 }) {
-  const [horas, setHoras] = useState(row.horasReales != null ? String(row.horasReales) : "");
-  const [horasEntrada, setHorasEntrada] = useState(
-    row.horasRealesEntrada != null ? String(row.horasRealesEntrada) : "",
-  );
-  const [horasTiraje, setHorasTiraje] = useState(
-    row.horasRealesTiraje != null ? String(row.horasRealesTiraje) : "",
-  );
-  const [horasTroquelado, setHorasTroquelado] = useState(
-    row.horasRealesTroquelado != null ? String(row.horasRealesTroquelado) : "",
-  );
-  const [horasEngomado, setHorasEngomado] = useState(
-    row.horasRealesEngomado != null ? String(row.horasRealesEngomado) : "",
-  );
-  const [numHojas, setNumHojas] = useState(
-    row.numHojasProducidas != null ? String(row.numHojasProducidas) : "",
-  );
-  const [cantidadUnidades, setCantidadUnidades] = useState(
-    row.cantidadUnidades != null ? String(row.cantidadUnidades) : "",
-  );
   const [incidencia, setIncidencia] = useState(row.incidencia ?? "");
   const [accion, setAccion] = useState(row.accionCorrectiva ?? "");
   const [maquinista, setMaquinista] = useState(row.maquinista ?? "");
   const [observaciones, setObservaciones] = useState(row.observaciones ?? "");
   const [pausePickerOpen, setPausePickerOpen] = useState(false);
   const [selectedMotivoId, setSelectedMotivoId] = useState("");
+  const [datosProcesoOpen, setDatosProcesoOpen] = useState(false);
+
+  const [datosProcesoLocal, setDatosProcesoLocal] = useState<DatosProcesoGenerico>(() => {
+    const existing = (row.datosProcesoJson as DatosProcesoGenerico) ?? {};
+    if (Object.keys(existing).length > 0) return existing;
+    if (!despacho || !row.procesoId) return {};
+    const pid = row.procesoId;
+    const base: DatosProcesoGenerico = {};
+    if (pid === 1 || pid === 2) {
+      if (despacho.hojasBrutas != null) base.hojas_brutas = despacho.hojasBrutas;
+      if (despacho.hojasNetas != null) base.hojas_netas = despacho.hojasNetas;
+      if (despacho.tamanoHoja) base.formato_hojas = despacho.tamanoHoja;
+      if (despacho.tintas) base.tintas_cara = despacho.tintas;
+      if (despacho.acabadoPral) base.acabado_principal = despacho.acabadoPral;
+      if (despacho.horasEntrada != null) base.horas_entrada_previsto = despacho.horasEntrada;
+      if (despacho.horasTiraje != null) base.horas_impresion_previsto = despacho.horasTiraje;
+    }
+    if (pid === 10) {
+      if (despacho.troquel) base.troquel = despacho.troquel;
+      if (despacho.poses != null) base.poses = despacho.poses;
+      if (despacho.tamanoCorte) base.tamano_corte = despacho.tamanoCorte;
+      if (despacho.pinza != null) base.pinza = despacho.pinza;
+      if (despacho.expulsor) base.expulsor = despacho.expulsor;
+      if (despacho.cauchoAcrilico) base.codigo_caucho = despacho.cauchoAcrilico;
+      if (despacho.hojasBrutas != null) base.hojas_troquelar = despacho.hojasBrutas;
+      if (despacho.horasTroquelado != null) {
+        base.horas_preparacion_previsto = Math.round(despacho.horasTroquelado * 0.3 * 10) / 10;
+        base.horas_tiraje_previsto = Math.round(despacho.horasTroquelado * 0.7 * 10) / 10;
+      }
+    }
+    if (pid === 12) {
+      if (despacho.cantidad != null) base.estuches_realizar = despacho.cantidad;
+      if (despacho.horasEngomado != null) base.tiempo_previsto = despacho.horasEngomado;
+    }
+    return base;
+  });
+
+  const hasCamposConfig = useMemo(
+    () => row.procesoId != null && getCamposConfigByProcesoId(row.procesoId) != null,
+    [row.procesoId],
+  );
 
   const isPendingStart = row.estadoEjecucion === "pendiente_inicio";
   const canEdit = row.estadoEjecucion !== "finalizada" && row.estadoEjecucion !== "cancelada";
+
+  const buildSyncPatch = useCallback((): Record<string, unknown> => {
+    const sync: Record<string, unknown> = {};
+    const dp = datosProcesoLocal;
+    const pid = row.procesoId;
+    if (!pid) return sync;
+    if (pid === 1 || pid === 2) {
+      const horasImpReal = parseNum(dp.horas_impresion_real);
+      if (horasImpReal != null) sync.horas_reales = horasImpReal;
+      const horasEntReal = parseNum(dp.horas_entrada_real);
+      if (horasEntReal != null) sync.horas_reales_entrada = horasEntReal;
+      const horasTirReal = parseNum(dp.horas_impresion_real);
+      if (horasTirReal != null) sync.horas_reales_tiraje = horasTirReal;
+      const hojasImp = parseNum(dp.hojas_impresas);
+      if (hojasImp != null) sync.num_hojas_producidas = hojasImp;
+    }
+    if (pid === 10) {
+      const hPrep = parseNum(dp.horas_preparacion_real);
+      const hTir = parseNum(dp.horas_tiraje_real);
+      const totalTroq = (hPrep ?? 0) + (hTir ?? 0);
+      if (totalTroq > 0) sync.horas_reales_troquelado = totalTroq;
+      const hojasTroq = parseNum(dp.hojas_troqueladas);
+      if (hojasTroq != null) sync.num_hojas_producidas = hojasTroq;
+    }
+    if (pid === 12) {
+      const tReal = parseNum(dp.tiempo_real);
+      if (tReal != null) sync.horas_reales_engomado = tReal;
+      const estEng = parseNum(dp.estuches_engomados);
+      if (estEng != null) sync.cantidad_unidades = estEng;
+    }
+    return sync;
+  }, [datosProcesoLocal, row.procesoId]);
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-xs">
@@ -762,57 +1071,28 @@ function ExecutionCard({
         </span>
       </div>
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        <div>
-          <Label className="text-xs">Horas reales</Label>
-          <Input value={horas} onChange={(e) => setHoras(e.target.value)} disabled={!canEdit || saving} />
+      {despacho ? (
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 rounded border border-slate-200 bg-slate-50/70 px-2 py-1.5 text-[10px] text-slate-600">
+          {despacho.cliente ? <span><b>Cliente:</b> {despacho.cliente}</span> : null}
+          {despacho.cantidad != null ? <span><b>Cant:</b> {despacho.cantidad.toLocaleString("es-ES")}</span> : null}
+          {despacho.titulo ? <span className="max-w-[200px] truncate" title={despacho.titulo}><b>Trabajo:</b> {despacho.titulo}</span> : null}
+          {despacho.fechaEntrega ? <span><b>Entrega:</b> {format(new Date(despacho.fechaEntrega), "dd/MM/yy", { locale: es })}</span> : null}
+          {despacho.material ? <span><b>Mat:</b> {despacho.material} {despacho.gramaje ? `${despacho.gramaje}g` : ""}</span> : null}
+          {despacho.tamanoHoja ? <span><b>Formato:</b> {despacho.tamanoHoja}</span> : null}
+          {despacho.hojasBrutas != null ? <span><b>H.brutas:</b> {despacho.hojasBrutas.toLocaleString("es-ES")}</span> : null}
+          {despacho.hojasNetas != null ? <span><b>H.netas:</b> {despacho.hojasNetas.toLocaleString("es-ES")}</span> : null}
+          {despacho.tintas ? <span><b>Tintas:</b> {despacho.tintas}</span> : null}
+          {despacho.acabadoPral ? <span><b>Acabado:</b> {despacho.acabadoPral}</span> : null}
+          {despacho.troquel ? <span><b>Troquel:</b> {despacho.troquel}</span> : null}
+          {despacho.poses != null ? <span><b>Poses:</b> {despacho.poses}</span> : null}
         </div>
+      ) : null}
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
         <div>
           <Label className="text-xs">Maquinista</Label>
           <Input value={maquinista} onChange={(e) => setMaquinista(e.target.value)} disabled={!canEdit || saving} />
         </div>
-      </div>
-      <div className="mt-2 grid gap-2 sm:grid-cols-2">
-        <div>
-          <Label className="text-xs">Horas entrada</Label>
-          <Input value={horasEntrada} onChange={(e) => setHorasEntrada(e.target.value)} disabled={!canEdit || saving} />
-        </div>
-        <div>
-          <Label className="text-xs">Horas tiraje</Label>
-          <Input value={horasTiraje} onChange={(e) => setHorasTiraje(e.target.value)} disabled={!canEdit || saving} />
-        </div>
-      </div>
-
-      <div className="mt-2 grid gap-2 sm:grid-cols-2">
-        <div>
-          <Label className="text-xs">Horas reales troquelado</Label>
-          <Input
-            value={horasTroquelado}
-            onChange={(e) => setHorasTroquelado(e.target.value)}
-            disabled={!canEdit || saving}
-          />
-        </div>
-        <div>
-          <Label className="text-xs">Horas reales engomado</Label>
-          <Input
-            value={horasEngomado}
-            onChange={(e) => setHorasEngomado(e.target.value)}
-            disabled={!canEdit || saving}
-          />
-        </div>
-      </div>
-      <div className="mt-2 grid gap-2 sm:grid-cols-2">
-        <div>
-          <Label className="text-xs">Núm. hojas producidas</Label>
-          <Input value={numHojas} onChange={(e) => setNumHojas(e.target.value)} disabled={!canEdit || saving} />
-        </div>
-        <div>
-          <Label className="text-xs">Cantidad unidades</Label>
-          <Input value={cantidadUnidades} onChange={(e) => setCantidadUnidades(e.target.value)} disabled={!canEdit || saving} />
-        </div>
-      </div>
-
-      <div className="mt-2 grid gap-2 sm:grid-cols-2">
         <div>
           <Label className="text-xs">Incidencia</Label>
           <Input value={incidencia} onChange={(e) => setIncidencia(e.target.value)} disabled={!canEdit || saving} />
@@ -824,9 +1104,103 @@ function ExecutionCard({
       </div>
 
       <div className="mt-2">
-        <Label className="text-xs">Observaciones / densidades</Label>
+        <Label className="text-xs">Observaciones</Label>
         <Input value={observaciones} onChange={(e) => setObservaciones(e.target.value)} disabled={!canEdit || saving} />
       </div>
+
+      {row.salidaProcesoAnterior != null && row.procesoId != null ? (() => {
+        const procesoConfig = PROCESO_CAMPOS_CONFIG[row.procesoId];
+        const outputUnit = procesoConfig?.inputFromProcessIds
+          ? (PROCESO_CAMPOS_CONFIG[row.procesoAnteriorId ?? 0]?.outputUnit ?? "uds")
+          : "uds";
+        const cantidad = despacho?.cantidad ?? null;
+        const poses = (datosProcesoLocal.poses as number | undefined) ?? null;
+        const salidaRaw = row.salidaProcesoAnterior;
+
+        let proyeccion: number | null = null;
+        let proyeccionLabel = "";
+        if (row.procesoId === 10) {
+          proyeccion = salidaRaw;
+          proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} hojas → sin datos de poses aún`;
+          if (poses != null && poses > 0) {
+            const est = Math.floor(salidaRaw * poses);
+            proyeccion = est;
+            proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} hojas × ${poses} poses = ${est.toLocaleString("es-ES")} estuches est.`;
+          }
+        } else if (row.procesoId === 12) {
+          proyeccion = salidaRaw;
+          proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} hojas troqueladas de entrada`;
+          if (poses != null && poses > 0) {
+            const est = Math.floor(salidaRaw * poses);
+            proyeccion = est;
+            proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} hojas × ${poses} poses = ${est.toLocaleString("es-ES")} estuches est.`;
+          }
+        } else {
+          proyeccion = salidaRaw;
+          proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} ${outputUnit}`;
+        }
+
+        const MARGEN_PCT = 0.05;
+        let semaforoColor = "";
+        let semaforoIcon = "";
+        let semaforoTexto = "";
+        if (cantidad != null && proyeccion != null) {
+          if (proyeccion >= cantidad) {
+            semaforoColor = "bg-emerald-50 border-emerald-300 text-emerald-800";
+            semaforoIcon = "🟢";
+            semaforoTexto = `OK — proyección (${proyeccion.toLocaleString("es-ES")}) ≥ pedido (${cantidad.toLocaleString("es-ES")})`;
+          } else if (proyeccion >= cantidad * (1 - MARGEN_PCT)) {
+            semaforoColor = "bg-amber-50 border-amber-300 text-amber-800";
+            semaforoIcon = "🟡";
+            semaforoTexto = `AJUSTADO — proyección (${proyeccion.toLocaleString("es-ES")}) dentro del ±5% del pedido (${cantidad.toLocaleString("es-ES")})`;
+          } else {
+            semaforoColor = "bg-red-50 border-red-300 text-red-800";
+            semaforoIcon = "🔴";
+            semaforoTexto = `DÉFICIT — proyección (${proyeccion.toLocaleString("es-ES")}) por debajo del pedido (${cantidad.toLocaleString("es-ES")})`;
+          }
+        }
+
+        return (
+          <div className={cn("mt-3 rounded-lg border px-3 py-2 text-[11px]", semaforoColor || "bg-slate-50 border-slate-200 text-slate-700")}>
+            <p className="font-semibold text-[10px] uppercase tracking-wide opacity-70 mb-1">
+              Entrada desde proceso anterior · {row.salidaProcesoAnteriorNombre}
+            </p>
+            <p className="font-mono font-bold text-sm">
+              {semaforoIcon} {salidaRaw.toLocaleString("es-ES")} {outputUnit}
+            </p>
+            <p className="mt-0.5 opacity-80">{proyeccionLabel}</p>
+            {semaforoTexto ? <p className="mt-1 font-semibold">{semaforoTexto}</p> : null}
+          </div>
+        );
+      })() : null}
+
+      {hasCamposConfig && row.procesoId != null ? (
+        <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50/40">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between px-3 py-2 text-sm font-semibold text-indigo-900 hover:bg-indigo-100/60"
+            onClick={() => setDatosProcesoOpen((o) => !o)}
+          >
+            <span>Datos del proceso</span>
+            <ChevronDown
+              className={cn(
+                "size-4 transition-transform",
+                datosProcesoOpen && "rotate-180",
+              )}
+            />
+          </button>
+          {datosProcesoOpen ? (
+            <div className="border-t border-indigo-200 px-3 py-3">
+              <DatosProcesoForm
+                procesoId={row.procesoId}
+                datosInicial={datosProcesoLocal}
+                onChange={setDatosProcesoLocal}
+                readonly={!canEdit}
+              />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {pausePickerOpen && row.estadoEjecucion === "en_curso" ? (
         <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/70 p-2">
@@ -961,25 +1335,16 @@ function ExecutionCard({
               variant="outline"
               disabled={saving}
               onClick={() =>
-                onPatch({
-                  horas_reales: Number(horas.replace(",", ".")) || null,
-                  horas_reales_entrada:
-                    Number(horasEntrada.replace(",", ".")) || null,
-                  horas_reales_tiraje:
-                    Number(horasTiraje.replace(",", ".")) || null,
-                  horas_reales_troquelado:
-                    Number(horasTroquelado.replace(",", ".")) || null,
-                  horas_reales_engomado:
-                    Number(horasEngomado.replace(",", ".")) || null,
-                  num_hojas_producidas:
-                    Number(numHojas.replace(",", ".")) || null,
-                  cantidad_unidades:
-                    Number(cantidadUnidades.replace(",", ".")) || null,
-                  maquinista: maquinista.trim() || null,
-                  incidencia: incidencia.trim() || null,
-                  accion_correctiva: accion.trim() || null,
-                  observaciones: observaciones.trim() || null,
-                })
+                onPatch(
+                  {
+                    maquinista: maquinista.trim() || null,
+                    incidencia: incidencia.trim() || null,
+                    accion_correctiva: accion.trim() || null,
+                    observaciones: observaciones.trim() || null,
+                    ...buildSyncPatch(),
+                  },
+                  hasCamposConfig ? datosProcesoLocal : null,
+                )
               }
             >
               {saving ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
@@ -1032,27 +1397,18 @@ function ExecutionCard({
               className="bg-[#002147] text-white hover:bg-[#001735]"
               disabled={saving}
               onClick={() => {
-                  onPatch({
-                  estado_ejecucion: "finalizada",
-                  fin_real_at: new Date().toISOString(),
-                  horas_reales: Number(horas.replace(",", ".")) || null,
-                  horas_reales_entrada:
-                    Number(horasEntrada.replace(",", ".")) || null,
-                  horas_reales_tiraje:
-                    Number(horasTiraje.replace(",", ".")) || null,
-                  horas_reales_troquelado:
-                    Number(horasTroquelado.replace(",", ".")) || null,
-                  horas_reales_engomado:
-                    Number(horasEngomado.replace(",", ".")) || null,
-                  num_hojas_producidas:
-                    Number(numHojas.replace(",", ".")) || null,
-                  cantidad_unidades:
-                    Number(cantidadUnidades.replace(",", ".")) || null,
-                  maquinista: maquinista.trim() || null,
-                  incidencia: incidencia.trim() || null,
-                  accion_correctiva: accion.trim() || null,
-                  observaciones: observaciones.trim() || null,
-                });
+                onPatch(
+                  {
+                    estado_ejecucion: "finalizada",
+                    fin_real_at: new Date().toISOString(),
+                    maquinista: maquinista.trim() || null,
+                    incidencia: incidencia.trim() || null,
+                    accion_correctiva: accion.trim() || null,
+                    observaciones: observaciones.trim() || null,
+                    ...buildSyncPatch(),
+                  },
+                  hasCamposConfig ? datosProcesoLocal : null,
+                );
               }}
             >
               <CheckCircle2 className="mr-1 size-4" /> Finalizar

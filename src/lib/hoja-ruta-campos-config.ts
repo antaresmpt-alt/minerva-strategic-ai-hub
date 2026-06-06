@@ -35,6 +35,19 @@ export type CampoDefinicion = {
 export type ProcesoConfigCampos = {
   procesoNombre: string;
   campos: CampoDefinicion[];
+  /**
+   * Campo de `datos_proceso` que representa la salida real de este proceso
+   * (lo que "viaja" al siguiente paso).
+   */
+  outputField?: string;
+  /** Unidad del campo de salida para mostrar en la UI. */
+  outputUnit?: string;
+  /**
+   * IDs de procesos aguas arriba cuya salida (outputField) es compatible
+   * como entrada de este proceso. Se leen en orden y se usa el primero
+   * con datos finalizados.
+   */
+  inputFromProcessIds?: number[];
 };
 
 // ============================================================================
@@ -107,6 +120,12 @@ const IMPRESION_OFFSET_CAMPOS: CampoDefinicion[] = [
   {
     id: 'hojas_merma',
     label: 'Nº hojas merma impresión',
+    tipo: 'number',
+    min: 0,
+  },
+  {
+    id: 'hojas_impresas',
+    label: 'Hojas impresas buenas (resultado real)',
     tipo: 'number',
     min: 0,
   },
@@ -210,6 +229,12 @@ const IMPRESION_DIGITAL_PLANA_CAMPOS: CampoDefinicion[] = [
   {
     id: 'hojas_merma',
     label: 'Nº hojas merma impresión',
+    tipo: 'number',
+    min: 0,
+  },
+  {
+    id: 'hojas_impresas',
+    label: 'Hojas impresas buenas (resultado real)',
     tipo: 'number',
     min: 0,
   },
@@ -625,12 +650,43 @@ const MANIPULADOS_INTERNOS_CAMPOS: CampoDefinicion[] = [
 // 17 Guillotina. Etiquetas (18/19/20) quedan fuera: ver Bloque 5.
 // ============================================================================
 export const PROCESO_CAMPOS_CONFIG: Record<number, ProcesoConfigCampos> = {
-  1: { procesoNombre: 'Impresión Offset', campos: IMPRESION_OFFSET_CAMPOS },
-  2: { procesoNombre: 'Impresión Digital (Plano)', campos: IMPRESION_DIGITAL_PLANA_CAMPOS },
-  10: { procesoNombre: 'Troquelado', campos: TROQUELADO_CAMPOS },
-  12: { procesoNombre: 'Engomado', campos: ENGOMADO_CAMPOS },
-  15: { procesoNombre: 'Manipulado/Encajado', campos: MANIPULADOS_INTERNOS_CAMPOS },
-  17: { procesoNombre: 'Guillotina', campos: GUILLOTINA_CAMPOS },
+  1: {
+    procesoNombre: 'Impresión Offset',
+    campos: IMPRESION_OFFSET_CAMPOS,
+    outputField: 'hojas_impresas',
+    outputUnit: 'hojas',
+  },
+  2: {
+    procesoNombre: 'Impresión Digital (Plano)',
+    campos: IMPRESION_DIGITAL_PLANA_CAMPOS,
+    outputField: 'hojas_impresas',
+    outputUnit: 'hojas',
+  },
+  10: {
+    procesoNombre: 'Troquelado',
+    campos: TROQUELADO_CAMPOS,
+    outputField: 'hojas_troqueladas',
+    outputUnit: 'hojas',
+    inputFromProcessIds: [1, 2],
+  },
+  12: {
+    procesoNombre: 'Engomado',
+    campos: ENGOMADO_CAMPOS,
+    outputField: 'estuches_engomados',
+    outputUnit: 'estuches',
+    inputFromProcessIds: [10],
+  },
+  15: {
+    procesoNombre: 'Manipulado/Encajado',
+    campos: MANIPULADOS_INTERNOS_CAMPOS,
+    inputFromProcessIds: [12, 10],
+  },
+  17: {
+    procesoNombre: 'Guillotina',
+    campos: GUILLOTINA_CAMPOS,
+    outputField: 'hojas_finales',
+    outputUnit: 'hojas',
+  },
 };
 
 export const PROCESOS_ETIQUETA_DIGITAL_IDS = new Set([18, 19, 20]);
@@ -676,6 +732,7 @@ export type DatosProcesoImpresionOffset = {
   hojas_netas?: number;
   formato_hojas?: string;
   hojas_merma?: number;
+  hojas_impresas?: number;
   tintas_cara?: string;
   tintas_dorso?: string;
   acabado_principal?: string;
@@ -695,6 +752,7 @@ export type DatosProcesoImpresionDigitalPlana = {
   hojas_netas?: number;
   formato_hojas?: string;
   hojas_merma?: number;
+  hojas_impresas?: number;
   tintas_cara?: number;
   tintas_dorso?: number;
   acabado_clear?: string;

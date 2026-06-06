@@ -123,16 +123,142 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 
 ---
 
-## 🎯 Bloque 2: Captura de Datos por Proceso desde Ejecución
+## 🎯 Bloque 2: Captura de Datos por Proceso desde Ejecución ✅ **COMPLETADO**
 
 **Objetivo**: Integrar el formulario dinámico en el flujo de ejecución existente (`prod_mesa_ejecuciones`).
 
-### Tareas
-- [ ] Detectar el proceso del paso actual en mesa de trabajo
-- [ ] Renderizar formulario dinámico según configuración del proceso
-- [ ] Guardar/actualizar `prod_ot_pasos.datos_proceso` al finalizar o pausar ejecución
-- [ ] Validaciones básicas (campos requeridos, rangos numéricos)
-- [ ] Mostrar campos "previsto" al iniciar + "real" al finalizar
+### Tareas ✅
+1. ✅ Detectar el proceso del paso actual en mesa de trabajo
+   - Join `prod_ot_pasos(proceso_id, datos_proceso)` en la query de ejecuciones
+   - FK `prod_mesa_ejecuciones.ot_paso_id → prod_ot_pasos.id` ya existente
+   - Nuevos campos en `MesaEjecucion`: `procesoId`, `datosProcesoJson`
+
+2. ✅ Renderizar formulario dinámico según configuración del proceso
+   - Sección colapsable "Datos del proceso" en cada `ExecutionCard`
+   - Solo visible si el proceso tiene configuración en `getCamposConfigByProcesoId`
+   - `DatosProcesoForm` integrado con estado local `datosProcesoLocal`
+   - Modo readonly para ejecuciones finalizadas/canceladas
+
+3. ✅ Guardar/actualizar `prod_ot_pasos.datos_proceso` al guardar o finalizar ejecución
+   - `patchExecution` acepta `datosProcesoUpdate` y hace UPDATE a `prod_ot_pasos`
+   - Se persiste tanto al clicar "Guardar" como al "Finalizar"
+
+4. ✅ Campo nuevo: `hojas_impresas` (resultado real) en Offset y Digital
+   - Diferenciado de `hojas_netas` (objetivo mínimo del jefe de producción)
+   - `hojas_netas` = PLAN, `hojas_impresas` = REAL
+   - Este campo es la "salida" que viajará al siguiente proceso (Bloque 2.5)
+
+### Archivos Modificados
+- ✅ `src/lib/hoja-ruta-campos-config.ts` (campo `hojas_impresas` + tipos)
+- ✅ `src/types/planificacion-mesa.ts` (`procesoId`, `datosProcesoJson` en `MesaEjecucion`)
+- ✅ `src/components/produccion/planificacion/planificacion-ots-ejecucion-tab.tsx` (join, form, save)
+- ✅ `src/lib/planificacion-analytics-query.ts` (compatibilidad nuevos campos)
+
+---
+
+## 🎨 Bloque 2.1: Cabecera + Prefill + Limpieza UI ✅ **COMPLETADO**
+
+**Objetivo**: Hacer la tarjeta de ejecución usable con contexto de despacho, datos previstos pre-rellenados, y sin redundancia de campos.
+
+### Tareas ✅
+1. ✅ **Cabecera informativa compacta** (datos de despacho)
+   - Query adicional a `produccion_ot_despachadas` + `prod_ots_general`
+   - Banda compacta con: Cliente, Cantidad, Trabajo, Entrega, Material+gramaje, Formato, H.brutas/netas, Tintas, Acabado, Troquel, Poses
+   - Siempre visible (no colapsable)
+
+2. ✅ **Prefill de previstos desde despacho** (si `datos_proceso` está vacío)
+   - Impresión (1,2): hojas_brutas, hojas_netas, formato, tintas, acabado, horas_entrada/impresión previstas
+   - Troquelado (10): troquel, poses, hojas_troquelar, horas prep/tiraje previstas (30%/70%)
+   - Engomado (12): estuches_realizar (=cantidad), tiempo_previsto
+
+3. ✅ **Limpieza de campos blancos redundantes**
+   - Eliminados de la UI: horas reales, horas entrada/tiraje, horas troquelado/engomado, núm. hojas, cantidad unidades
+   - Se mantienen: Maquinista, Incidencia, Acción correctiva, Observaciones
+
+4. ✅ **SYNC a columnas viejas** (compatibilidad analíticas)
+   - Función `buildSyncPatch()` extrae valores reales del motor dinámico
+   - Al guardar/finalizar, copia a: `horas_reales`, `horas_reales_*`, `num_hojas_producidas`, `cantidad_unidades`
+   - Mapeo por proceso: Impresión→horas+hojas, Troquelado→horas_troquelado+hojas, Engomado→horas_engomado+unidades
+
+### Archivos Modificados
+- ✅ `src/components/produccion/planificacion/planificacion-ots-ejecucion-tab.tsx`
+  - Tipo `DespachoInfo` + estado `despachoByOt`
+  - Query a `produccion_ot_despachadas` y `prod_ots_general`
+  - Cabecera compacta en `ExecutionCard`
+  - Prefill calculado en el inicializador de `useState(datosProcesoLocal)`
+  - `buildSyncPatch` callback para compatibilidad
+  - UI simplificada sin campos redundantes
+- ✅ **Fix timing (Opción A)**: la query de despacho se resuelve ANTES de los setters;
+  `setRows` + `setDespachoByOt` se ejecutan juntos para que `ExecutionCard` se monte
+  ya con `despacho` presente y el prefill se calcule en el primer render.
+
+---
+
+## 🔧 Bloque 2.2: Auto-enriquecimiento Troquelado desde `prod_troqueles` ✅ **BASE IMPLEMENTADA**
+
+**Objetivo**: cuando el campo `troquel` está informado en despacho, autocompletar campos técnicos del proceso de troquelado leyendo la ficha del troquel (y/o maestro de artículos).
+
+**Origen de datos**: tabla `prod_troqueles` (match por `num_troquel`).
+
+**Mapeo implementado** (`prod_troqueles` → `datos_proceso` troquelado):
+| Campo destino (config) | Origen `prod_troqueles` |
+|---|---|
+| `poses` | `num_figuras` / `figuras_hoja` |
+| `tamano_corte` | `mides` |
+| `pinza` | `pinza` |
+| `expulsor` | `expulsion` / `num_expulsion` |
+| `codigo_caucho` | `caucho_acrilico` *(preparado en datos; falta decidir si mostrar campo visible en Troquelado)* |
+
+**Estrategia actual**:
+- Si `datos_proceso` ya tiene datos, no se pisa nada.
+- Si `datos_proceso` está vacío, despacho aporta `troquel`, hojas/horas previstas y `prod_troqueles` completa poses, tamaño, pinza y expulsor.
+- Match por `produccion_ot_despachadas.troquel` → `prod_troqueles.num_troquel`.
+- Pendiente futuro: combinar con maestro de artículos cuando esté más completo.
+
+---
+
+## 🔗 Bloque 2.5: Encadenado Salida→Entrada + Semáforo de Aviso ✅ **COMPLETADO**
+
+**Objetivo**: Mostrar la salida real del proceso anterior como "entrada prevista" del proceso actual, y proyectar si la cantidad será suficiente para el pedido.
+
+### Implementación
+
+#### Config (`hoja-ruta-campos-config.ts`)
+- `outputField` + `outputUnit` añadidos a `ProcesoConfigCampos`
+- `inputFromProcessIds` define qué procesos aguas arriba son compatibles
+
+| Proceso | `outputField` | `inputFromProcessIds` |
+|---|---|---|
+| Offset (1) | `hojas_impresas` | — |
+| Digital (2) | `hojas_impresas` | — |
+| Troquelado (10) | `hojas_troqueladas` | [1, 2] |
+| Engomado (12) | `estuches_engomados` | [10] |
+| Guillotina (17) | `hojas_finales` | — |
+
+#### Query (`planificacion-ots-ejecucion-tab.tsx`)
+- En `loadData`, tras cargar execRows y despacho, se hace una query a `prod_ot_pasos` filtrando `estado = "finalizado"` para las OTs activas
+- Se construye `salidaAnteriorByOt` (mapa `ot_numero → {procesoAnteriorId, salida, nombre}`)
+- El mapa se pasa a `mapRow` que lo proyecta en `MesaEjecucion`
+
+#### UI (`ExecutionCard`)
+- Bloque compacto sobre "Datos del proceso" visible cuando `salidaProcesoAnterior != null`
+- Muestra: nombre del proceso anterior + valor real de salida + proyección calculada
+- Cálculo de proyección por proceso:
+  - **Troquelado**: `hojas_impresas × poses` = estuches estimados
+  - **Engomado**: `hojas_troqueladas × poses` = estuches estimados
+
+#### Semáforo (margen fijo 5%)
+- 🟢 proyección ≥ pedido
+- 🟡 proyección entre pedido y −5%
+- 🔴 proyección < pedido −5% → DÉFICIT (avisar responsable)
+
+### Archivos Modificados
+- ✅ `src/lib/hoja-ruta-campos-config.ts` (`outputField`, `outputUnit`, `inputFromProcessIds`)
+- ✅ `src/types/planificacion-mesa.ts` (`procesoAnteriorId`, `salidaProcesoAnterior`, `salidaProcesoAnteriorNombre`)
+- ✅ `src/lib/planificacion-analytics-query.ts` (compatibilidad nuevos campos)
+- ✅ `src/components/produccion/planificacion/planificacion-ots-ejecucion-tab.tsx`
+  - Query pasos finalizados + mapa `salidaAnteriorByOt`
+  - Bloque UI + semáforo en `ExecutionCard`
 
 ---
 
@@ -223,11 +349,14 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 - Componente de formulario dinámico operativo
 - Sin errores de linter
 
-⏳ **Bloque 2 PENDIENTE**: Captura desde ejecución
+✅ **Bloque 2 COMPLETADO** (5 jun 2026): Captura desde ejecución
+✅ **Bloque 2.1 COMPLETADO** (5 jun 2026): Cabecera + Prefill + Limpieza UI + fix timing
+✅ **Bloque 2.2 BASE IMPLEMENTADA** (6 jun 2026): Auto-enriquecimiento troquelado desde `prod_troqueles`
+✅ **Bloque 2.5 COMPLETADO** (6 jun 2026): Encadenado salida→entrada + semáforo de aviso (margen 5%)
 ⏳ **Bloque 3 PENDIENTE**: Vista global
 ⏳ **Bloque 4 PENDIENTE**: PDF token
 ⏳ **Bloque 5 PENDIENTE**: Integración Etiquetas ↔ Hoja de Ruta (flujo Hugo)
 
 ---
 
-**Última actualización**: 3 de junio de 2026 - 19:55
+**Última actualización**: 6 de junio de 2026 - 14:00
