@@ -13,7 +13,16 @@ export type CampoTipo =
   | 'textarea' 
   | 'array'
   | 'dimension' // Para campos como "largo x ancho"
-  | 'tintas';   // Para campos especiales de tintas (ej: "4+1")
+  | 'tintas'    // Para campos especiales de tintas (ej: "4+1")
+  | 'densidades'; // Lista de tintas con su valor de densidad (0–2)
+
+/**
+ * Ancho del campo dentro de la rejilla de 6 columnas del formulario.
+ * - full: ocupa toda la línea (1/1)
+ * - half: media línea (1/2) → dos campos por fila
+ * - third: un tercio (1/3) → tres campos por fila
+ */
+export type CampoWidth = 'full' | 'half' | 'third';
 
 export type CampoDefinicion = {
   id: string;
@@ -28,8 +37,19 @@ export type CampoDefinicion = {
   conditionalValue?: string | boolean; // Valor que debe tener el campo condicional
   min?: number; // Para number
   max?: number; // Para number
+  step?: number; // Para number (ej: 0.05 en densidades)
   arrayItemType?: 'text' | 'select'; // Para tipo array
   arrayItemOptions?: { value: string; label: string }[]; // Opciones para array de selects
+  width?: CampoWidth; // Layout: ancho en la rejilla (por defecto full)
+  emphasis?: 'real'; // Resalta el campo como "dato real" clave (resultado del operario)
+  hint?: string; // Texto auxiliar bajo el label
+};
+
+/** Un elemento de densidad de tinta capturado por el operario. */
+export type DensidadTinta = {
+  tinta: string;        // CYAN, MAGENTA, ... o PANTONE
+  densidad?: number;    // 0.00 – 2.00
+  ref?: string;         // Referencia Pantone cuando tinta === 'PANTONE'
 };
 
 export type ProcesoConfigCampos = {
@@ -99,58 +119,19 @@ const GUILLOTINA_CAMPOS: CampoDefinicion[] = [
 // IMPRESIÓN OFFSET
 // ============================================================================
 const IMPRESION_OFFSET_CAMPOS: CampoDefinicion[] = [
-  {
-    id: 'hojas_brutas',
-    label: 'Nº hojas brutas impresión',
-    tipo: 'number',
-    min: 0,
-  },
-  {
-    id: 'hojas_netas',
-    label: 'Nº hojas netas impresión',
-    tipo: 'number',
-    min: 0,
-  },
+  // — Formato (línea propia) —
   {
     id: 'formato_hojas',
     label: 'Formato hojas impresión',
     tipo: 'text',
     placeholder: 'ej: 70×100 cm',
-  },
-  {
-    id: 'hojas_merma',
-    label: 'Nº hojas merma impresión',
-    tipo: 'number',
-    min: 0,
-  },
-  {
-    id: 'hojas_impresas',
-    label: 'Hojas impresas buenas (resultado real)',
-    tipo: 'number',
-    min: 0,
-  },
-  {
-    id: 'tintas_cara',
-    label: 'Tintas CARA',
-    tipo: 'tintas',
-    placeholder: 'ej: 4+1 (cuatricromía + 1 pantone)',
-  },
-  {
-    id: 'tintas_dorso',
-    label: 'Tintas DORSO',
-    tipo: 'tintas',
-    placeholder: 'ej: 3+0',
-  },
-  {
-    id: 'acabado_principal',
-    label: 'Acabado principal',
-    tipo: 'text',
-    placeholder: 'barniz graso, barniz acrílico brillo, mate...',
+    width: 'half',
   },
   {
     id: 'caucho',
     label: 'Caucho',
     tipo: 'boolean',
+    width: 'half',
   },
   {
     id: 'codigo_caucho',
@@ -159,13 +140,63 @@ const IMPRESION_OFFSET_CAMPOS: CampoDefinicion[] = [
     conditionalOn: 'caucho',
     conditionalValue: true,
     placeholder: 'Código del caucho usado',
+    width: 'half',
+  },
+  // — Recuento de hojas: previsto (brutas/netas) y real (merma/buenas) —
+  {
+    id: 'hojas_brutas',
+    label: 'Hojas brutas (plan)',
+    tipo: 'number',
+    min: 0,
+    width: 'half',
   },
   {
-    id: 'acabados_secundarios',
-    label: 'Acabados secundarios',
-    tipo: 'array',
-    arrayItemType: 'text',
+    id: 'hojas_netas',
+    label: 'Hojas netas (plan)',
+    tipo: 'number',
+    min: 0,
+    width: 'half',
   },
+  {
+    id: 'hojas_merma',
+    label: 'Hojas merma',
+    tipo: 'number',
+    min: 0,
+    width: 'half',
+    emphasis: 'real',
+  },
+  {
+    id: 'hojas_impresas',
+    label: 'Hojas buenas impresas',
+    tipo: 'number',
+    min: 0,
+    width: 'half',
+    emphasis: 'real',
+    hint: 'Se calcula desde netas − merma; ajústalo si difiere.',
+  },
+  // — Tintas + acabado en una línea (tres tercios) —
+  {
+    id: 'tintas_cara',
+    label: 'Tintas CARA',
+    tipo: 'tintas',
+    placeholder: 'ej: 4+1',
+    width: 'third',
+  },
+  {
+    id: 'tintas_dorso',
+    label: 'Tintas DORSO',
+    tipo: 'tintas',
+    placeholder: 'ej: 3+0',
+    width: 'third',
+  },
+  {
+    id: 'acabado_principal',
+    label: 'Acabado principal',
+    tipo: 'text',
+    placeholder: 'barniz graso, acrílico brillo, mate...',
+    width: 'third',
+  },
+  // — Tiempos previsto/real —
   {
     id: 'horas_entrada',
     label: 'Horas entrada',
@@ -173,6 +204,7 @@ const IMPRESION_OFFSET_CAMPOS: CampoDefinicion[] = [
     hasPrevistoReal: true,
     min: 0,
     suffix: 'h',
+    width: 'half',
   },
   {
     id: 'horas_impresion',
@@ -181,12 +213,14 @@ const IMPRESION_OFFSET_CAMPOS: CampoDefinicion[] = [
     hasPrevistoReal: true,
     min: 0,
     suffix: 'h',
+    width: 'half',
   },
+  // — Densidades de tinta con valor (0–2) —
   {
     id: 'densidades_tintas',
     label: 'Densidades tintas',
-    tipo: 'array',
-    arrayItemType: 'select',
+    tipo: 'densidades',
+    width: 'full',
     arrayItemOptions: [
       { value: 'CYAN', label: 'Cyan' },
       { value: 'MAGENTA', label: 'Magenta' },
@@ -197,10 +231,18 @@ const IMPRESION_OFFSET_CAMPOS: CampoDefinicion[] = [
     ],
   },
   {
+    id: 'acabados_secundarios',
+    label: 'Acabados secundarios',
+    tipo: 'array',
+    arrayItemType: 'text',
+    width: 'full',
+  },
+  {
     id: 'incidencias',
     label: 'Incidencias',
     tipo: 'textarea',
     placeholder: 'Anotar incidencias durante el proceso...',
+    width: 'full',
   },
 ];
 
@@ -209,53 +251,17 @@ const IMPRESION_OFFSET_CAMPOS: CampoDefinicion[] = [
 // ============================================================================
 const IMPRESION_DIGITAL_PLANA_CAMPOS: CampoDefinicion[] = [
   {
-    id: 'hojas_brutas',
-    label: 'Nº hojas brutas impresión',
-    tipo: 'number',
-    min: 0,
-  },
-  {
-    id: 'hojas_netas',
-    label: 'Nº hojas netas impresión',
-    tipo: 'number',
-    min: 0,
-  },
-  {
     id: 'formato_hojas',
     label: 'Formato hojas impresión',
     tipo: 'text',
     placeholder: 'ej: A3, 50×70 cm',
-  },
-  {
-    id: 'hojas_merma',
-    label: 'Nº hojas merma impresión',
-    tipo: 'number',
-    min: 0,
-  },
-  {
-    id: 'hojas_impresas',
-    label: 'Hojas impresas buenas (resultado real)',
-    tipo: 'number',
-    min: 0,
-  },
-  {
-    id: 'tintas_cara',
-    label: 'Tintas CARA',
-    tipo: 'number',
-    min: 0,
-    max: 10,
-  },
-  {
-    id: 'tintas_dorso',
-    label: 'Tintas DORSO',
-    tipo: 'number',
-    min: 0,
-    max: 10,
+    width: 'half',
   },
   {
     id: 'acabado_clear',
     label: 'Acabado CLEAR',
     tipo: 'select',
+    width: 'half',
     options: [
       { value: 'no', label: 'No' },
       { value: '1_cara', label: '1 cara' },
@@ -263,10 +269,51 @@ const IMPRESION_DIGITAL_PLANA_CAMPOS: CampoDefinicion[] = [
     ],
   },
   {
-    id: 'acabados_secundarios',
-    label: 'Acabados secundarios',
-    tipo: 'array',
-    arrayItemType: 'text',
+    id: 'hojas_brutas',
+    label: 'Hojas brutas (plan)',
+    tipo: 'number',
+    min: 0,
+    width: 'half',
+  },
+  {
+    id: 'hojas_netas',
+    label: 'Hojas netas (plan)',
+    tipo: 'number',
+    min: 0,
+    width: 'half',
+  },
+  {
+    id: 'hojas_merma',
+    label: 'Hojas merma',
+    tipo: 'number',
+    min: 0,
+    width: 'half',
+    emphasis: 'real',
+  },
+  {
+    id: 'hojas_impresas',
+    label: 'Hojas buenas impresas',
+    tipo: 'number',
+    min: 0,
+    width: 'half',
+    emphasis: 'real',
+    hint: 'Se calcula desde netas − merma; ajústalo si difiere.',
+  },
+  {
+    id: 'tintas_cara',
+    label: 'Tintas CARA',
+    tipo: 'number',
+    min: 0,
+    max: 10,
+    width: 'half',
+  },
+  {
+    id: 'tintas_dorso',
+    label: 'Tintas DORSO',
+    tipo: 'number',
+    min: 0,
+    max: 10,
+    width: 'half',
   },
   {
     id: 'horas_entrada',
@@ -275,6 +322,7 @@ const IMPRESION_DIGITAL_PLANA_CAMPOS: CampoDefinicion[] = [
     hasPrevistoReal: true,
     min: 0,
     suffix: 'h',
+    width: 'half',
   },
   {
     id: 'horas_impresion',
@@ -283,12 +331,21 @@ const IMPRESION_DIGITAL_PLANA_CAMPOS: CampoDefinicion[] = [
     hasPrevistoReal: true,
     min: 0,
     suffix: 'h',
+    width: 'half',
+  },
+  {
+    id: 'acabados_secundarios',
+    label: 'Acabados secundarios',
+    tipo: 'array',
+    arrayItemType: 'text',
+    width: 'full',
   },
   {
     id: 'incidencias',
     label: 'Incidencias',
     tipo: 'textarea',
     placeholder: 'Anotar incidencias durante el proceso...',
+    width: 'full',
   },
 ];
 
@@ -743,7 +800,7 @@ export type DatosProcesoImpresionOffset = {
   horas_entrada_real?: number;
   horas_impresion_previsto?: number;
   horas_impresion_real?: number;
-  densidades_tintas?: string[];
+  densidades_tintas?: DensidadTinta[];
   incidencias?: string;
 };
 

@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, type ReactNode } from "react";
 import {
   getCamposConfigByProcesoId,
   type CampoDefinicion,
+  type CampoWidth,
   type DatosProcesoGenerico,
+  type DensidadTinta,
 } from "@/lib/hoja-ruta-campos-config";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,10 +25,93 @@ import { Plus, X } from "lucide-react";
 type DatosProcesoFormProps = {
   procesoId: number;
   procesoNombre?: string;
+  material?: string | null;
   datosInicial?: DatosProcesoGenerico;
   onChange?: (datos: DatosProcesoGenerico) => void;
   readonly?: boolean;
+  /**
+   * Permite derivar campos a partir del campo que se acaba de editar
+   * (ej: hojas buenas = netas − merma). Devuelve los datos ya ajustados.
+   */
+  computeDerived?: (
+    datos: DatosProcesoGenerico,
+    changedFieldId: string,
+  ) => DatosProcesoGenerico;
 };
+
+/** Traduce el ancho de un campo a clases de columna en una rejilla de 6. */
+function widthToColClass(width: CampoWidth | undefined): string {
+  switch (width) {
+    case "third":
+      return "col-span-6 sm:col-span-3 md:col-span-2";
+    case "half":
+      return "col-span-6 md:col-span-3";
+    case "full":
+    default:
+      return "col-span-6";
+  }
+}
+
+type MaterialFamilia = "estucado" | "offset" | "cartoncillo" | "generico";
+
+const MATERIAL_FAMILY_LABELS: Record<MaterialFamilia, string> = {
+  estucado: "estucado",
+  offset: "offset / sin estucar",
+  cartoncillo: "cartoncillo / folding",
+  generico: "genérico",
+};
+
+const DENSIDAD_RANGOS: Record<
+  MaterialFamilia,
+  Partial<Record<string, { min: number; max: number; label: string }>>
+> = {
+  estucado: {
+    BLACK: { min: 1.55, max: 1.75, label: "1.55-1.75" },
+    CYAN: { min: 1.4, max: 1.55, label: "1.40-1.55" },
+    MAGENTA: { min: 1.4, max: 1.55, label: "1.40-1.55" },
+    YELLOW: { min: 1, max: 1.1, label: "1.00-1.10" },
+  },
+  offset: {
+    BLACK: { min: 1.2, max: 1.4, label: "1.20-1.40" },
+    CYAN: { min: 1, max: 1.2, label: "1.00-1.20" },
+    MAGENTA: { min: 1, max: 1.2, label: "1.00-1.20" },
+    YELLOW: { min: 0.85, max: 0.95, label: "0.85-0.95" },
+  },
+  cartoncillo: {
+    BLACK: { min: 1.4, max: 1.65, label: "1.40-1.65" },
+    CYAN: { min: 1.3, max: 1.5, label: "1.30-1.50" },
+    MAGENTA: { min: 1.3, max: 1.5, label: "1.30-1.50" },
+    YELLOW: { min: 0.95, max: 1.05, label: "0.95-1.05" },
+  },
+  generico: {
+    BLACK: { min: 1.3, max: 1.7, label: "1.30-1.70" },
+    CYAN: { min: 1.3, max: 1.5, label: "1.30-1.50" },
+    MAGENTA: { min: 1.3, max: 1.5, label: "1.30-1.50" },
+    YELLOW: { min: 0.9, max: 1.05, label: "0.90-1.05" },
+  },
+};
+
+function classifyMaterialFamilia(material: string | null | undefined): MaterialFamilia {
+  const raw = String(material ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  if (!raw) return "generico";
+  if (/(zenith|aliking|folding|dorso gris|madera|reciclad|cartoncill)/.test(raw)) {
+    return "cartoncillo";
+  }
+  if (/(estucad|couche|couhe|mate|brillo)/.test(raw)) return "estucado";
+  if (/(offset|sin estucar|no estucad)/.test(raw)) return "offset";
+  return "generico";
+}
+
+function getDensidadRango(
+  familia: MaterialFamilia,
+  tinta: string,
+): { min: number; max: number; label: string } | null {
+  return DENSIDAD_RANGOS[familia][tinta] ?? DENSIDAD_RANGOS.generico[tinta] ?? null;
+}
 
 /**
  * Formulario dinámico que renderiza campos según la configuración del proceso.
@@ -34,9 +119,11 @@ type DatosProcesoFormProps = {
 export function DatosProcesoForm({
   procesoId,
   procesoNombre,
+  material,
   datosInicial = {},
   onChange,
   readonly = false,
+  computeDerived,
 }: DatosProcesoFormProps) {
   const [datos, setDatos] = useState<DatosProcesoGenerico>(datosInicial);
 
@@ -44,11 +131,12 @@ export function DatosProcesoForm({
 
   const handleChange = useCallback(
     (fieldId: string, value: unknown) => {
-      const newDatos = { ...datos, [fieldId]: value };
+      const merged = { ...datos, [fieldId]: value };
+      const newDatos = computeDerived ? computeDerived(merged, fieldId) : merged;
       setDatos(newDatos);
       onChange?.(newDatos);
     },
-    [datos, onChange]
+    [datos, onChange, computeDerived]
   );
 
   const handleArrayAdd = useCallback(
@@ -107,37 +195,60 @@ export function DatosProcesoForm({
         )}
       </div>
 
-      <div className="space-y-4">
+      <div className="grid grid-cols-6 gap-3">
         {config.campos.map((campo) => {
           if (!shouldShowField(campo)) return null;
 
-          // Campo con previsto/real → renderizar dos campos
+          const colClass = widthToColClass(campo.width);
+          let content: ReactNode;
+
+          // Campo con previsto/real: el operario solo debe tocar "Real".
           if (campo.hasPrevistoReal) {
-            return (
-              <div key={campo.id} className="grid grid-cols-2 gap-4">
-                <CampoInput
-                  campo={{ ...campo, id: `${campo.id}_previsto` }}
-                  label={`${campo.label} (Previsto)`}
-                  value={datos[`${campo.id}_previsto`]}
-                  onChange={(v) => handleChange(`${campo.id}_previsto`, v)}
-                  readonly={readonly}
-                />
-                <CampoInput
-                  campo={{ ...campo, id: `${campo.id}_real` }}
-                  label={`${campo.label} (Real)`}
-                  value={datos[`${campo.id}_real`]}
-                  onChange={(v) => handleChange(`${campo.id}_real`, v)}
-                  readonly={readonly}
-                />
+            content = (
+              <div className="h-full rounded-lg border border-slate-200 bg-white p-2.5">
+                <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-[#002147]">{campo.label}</p>
+                  <span className="rounded-full bg-[#C69C2B]/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#7A5B12]">
+                    Solo Real si cambia
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-md border border-slate-200 bg-slate-50/80 p-1.5">
+                    <CampoInput
+                      campo={{ ...campo, id: `${campo.id}_previsto` }}
+                      label="Previsto"
+                      value={datos[`${campo.id}_previsto`]}
+                      onChange={() => undefined}
+                      readonly={true}
+                      tone="previsto"
+                    />
+                  </div>
+                  <div className="rounded-md border border-[#C69C2B]/40 bg-[#C69C2B]/5 p-1.5 shadow-[inset_3px_0_0_rgba(198,156,43,0.75)]">
+                    <CampoInput
+                      campo={{ ...campo, id: `${campo.id}_real` }}
+                      label="Real"
+                      value={datos[`${campo.id}_real`]}
+                      onChange={(v) => handleChange(`${campo.id}_real`, v)}
+                      readonly={readonly}
+                      tone="real"
+                    />
+                  </div>
+                </div>
               </div>
             );
-          }
-
-          // Campo normal
-          if (campo.tipo === "array") {
-            return (
+          } else if (campo.tipo === "densidades") {
+            content = (
+              <CampoDensidades
+                campo={campo}
+                material={material}
+                value={normalizeDensidades(datos[campo.id])}
+                onChange={(next) => handleChange(campo.id, next)}
+                readonly={readonly}
+              />
+            );
+          } else if (campo.tipo === "array") {
+            content = (
               <CampoArray
-                key={campo.id}
                 campo={campo}
                 value={(datos[campo.id] as string[] | undefined) ?? []}
                 onAdd={() => handleArrayAdd(campo.id)}
@@ -146,17 +257,23 @@ export function DatosProcesoForm({
                 readonly={readonly}
               />
             );
+          } else {
+            content = (
+              <CampoInput
+                campo={campo}
+                label={campo.label}
+                value={datos[campo.id]}
+                onChange={(v) => handleChange(campo.id, v)}
+                readonly={readonly}
+                tone={campo.emphasis === "real" ? "real" : "normal"}
+              />
+            );
           }
 
           return (
-            <CampoInput
-              key={campo.id}
-              campo={campo}
-              label={campo.label}
-              value={datos[campo.id]}
-              onChange={(v) => handleChange(campo.id, v)}
-              readonly={readonly}
-            />
+            <div key={campo.id} className={colClass}>
+              {content}
+            </div>
           );
         })}
       </div>
@@ -173,16 +290,29 @@ type CampoInputProps = {
   value: unknown;
   onChange: (value: unknown) => void;
   readonly: boolean;
+  tone?: "normal" | "previsto" | "real";
 };
 
-function CampoInput({ campo, label, value, onChange, readonly }: CampoInputProps) {
+function CampoInput({ campo, label, value, onChange, readonly, tone = "normal" }: CampoInputProps) {
   const labelWithRequired = campo.required ? `${label} *` : label;
+  const labelClassName =
+    tone === "real"
+      ? "text-[#002147] font-semibold"
+      : tone === "previsto"
+        ? "text-slate-500"
+        : undefined;
+  const inputClassName =
+    tone === "real"
+      ? "border-[#C69C2B]/60 bg-white font-medium focus-visible:ring-[#C69C2B]/40"
+      : tone === "previsto"
+        ? "bg-slate-100 text-slate-500"
+        : undefined;
 
   // TEXT
   if (campo.tipo === "text" || campo.tipo === "tintas") {
     return (
       <div className="space-y-1.5">
-        <Label htmlFor={campo.id}>{labelWithRequired}</Label>
+        <Label htmlFor={campo.id} className={labelClassName}>{labelWithRequired}</Label>
         <Input
           id={campo.id}
           type="text"
@@ -190,6 +320,7 @@ function CampoInput({ campo, label, value, onChange, readonly }: CampoInputProps
           value={(value as string | undefined) ?? ""}
           onChange={(e) => onChange(e.target.value)}
           disabled={readonly}
+          className={inputClassName}
         />
         {campo.suffix && (
           <span className="text-xs text-muted-foreground">{campo.suffix}</span>
@@ -202,7 +333,7 @@ function CampoInput({ campo, label, value, onChange, readonly }: CampoInputProps
   if (campo.tipo === "dimension") {
     return (
       <div className="space-y-1.5">
-        <Label htmlFor={campo.id}>{labelWithRequired}</Label>
+        <Label htmlFor={campo.id} className={labelClassName}>{labelWithRequired}</Label>
         <Input
           id={campo.id}
           type="text"
@@ -210,6 +341,7 @@ function CampoInput({ campo, label, value, onChange, readonly }: CampoInputProps
           value={(value as string | undefined) ?? ""}
           onChange={(e) => onChange(e.target.value)}
           disabled={readonly}
+          className={inputClassName}
         />
         {campo.suffix && (
           <span className="text-xs text-muted-foreground">{campo.suffix}</span>
@@ -221,8 +353,8 @@ function CampoInput({ campo, label, value, onChange, readonly }: CampoInputProps
   // NUMBER
   if (campo.tipo === "number") {
     return (
-      <div className="space-y-1.5">
-        <Label htmlFor={campo.id}>{labelWithRequired}</Label>
+      <div className="space-y-1">
+        <Label htmlFor={campo.id} className={labelClassName}>{labelWithRequired}</Label>
         <div className="flex items-center gap-2">
           <Input
             id={campo.id}
@@ -234,7 +366,9 @@ function CampoInput({ campo, label, value, onChange, readonly }: CampoInputProps
             }
             min={campo.min}
             max={campo.max}
+            step={campo.step}
             disabled={readonly}
+            className={inputClassName}
           />
           {campo.suffix && (
             <span className="text-xs text-muted-foreground whitespace-nowrap">
@@ -242,6 +376,9 @@ function CampoInput({ campo, label, value, onChange, readonly }: CampoInputProps
             </span>
           )}
         </div>
+        {campo.hint && (
+          <p className="text-[10px] leading-tight text-slate-400">{campo.hint}</p>
+        )}
       </div>
     );
   }
@@ -256,7 +393,7 @@ function CampoInput({ campo, label, value, onChange, readonly }: CampoInputProps
           onCheckedChange={(checked) => onChange(checked === true)}
           disabled={readonly}
         />
-        <Label htmlFor={campo.id} className="cursor-pointer">
+        <Label htmlFor={campo.id} className={labelClassName ?? "cursor-pointer"}>
           {labelWithRequired}
         </Label>
       </div>
@@ -267,13 +404,13 @@ function CampoInput({ campo, label, value, onChange, readonly }: CampoInputProps
   if (campo.tipo === "select") {
     return (
       <div className="space-y-1.5">
-        <Label htmlFor={campo.id}>{labelWithRequired}</Label>
+        <Label htmlFor={campo.id} className={labelClassName}>{labelWithRequired}</Label>
         <Select
           value={(value as string | undefined) ?? ""}
           onValueChange={onChange}
           disabled={readonly}
         >
-          <SelectTrigger id={campo.id}>
+          <SelectTrigger id={campo.id} className={inputClassName}>
             <SelectValue placeholder="Seleccionar..." />
           </SelectTrigger>
           <SelectContent>
@@ -292,7 +429,7 @@ function CampoInput({ campo, label, value, onChange, readonly }: CampoInputProps
   if (campo.tipo === "textarea") {
     return (
       <div className="space-y-1.5">
-        <Label htmlFor={campo.id}>{labelWithRequired}</Label>
+        <Label htmlFor={campo.id} className={labelClassName}>{labelWithRequired}</Label>
         <Textarea
           id={campo.id}
           placeholder={campo.placeholder}
@@ -300,6 +437,7 @@ function CampoInput({ campo, label, value, onChange, readonly }: CampoInputProps
           onChange={(e) => onChange(e.target.value)}
           disabled={readonly}
           rows={3}
+          className={inputClassName}
         />
       </div>
     );
@@ -395,6 +533,176 @@ function CampoArray({
             )}
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Componente para densidades de tinta (tinta + valor 0–2 + ref Pantone)
+// ============================================================================
+
+/**
+ * Normaliza el valor guardado a DensidadTinta[]. Acepta el formato antiguo
+ * (string[] de nombres de tinta) y lo migra a objetos sin densidad.
+ */
+export function normalizeDensidades(raw: unknown): DensidadTinta[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item): DensidadTinta | null => {
+      if (typeof item === "string") {
+        const tinta = item.trim();
+        return tinta ? { tinta } : null;
+      }
+      if (item && typeof item === "object") {
+        const obj = item as Record<string, unknown>;
+        const tinta = String(obj.tinta ?? "").trim();
+        if (!tinta) return null;
+        const densidadNum = Number(obj.densidad);
+        return {
+          tinta,
+          densidad: Number.isFinite(densidadNum) ? densidadNum : undefined,
+          ref: obj.ref ? String(obj.ref) : undefined,
+        };
+      }
+      return null;
+    })
+    .filter((x): x is DensidadTinta => x !== null);
+}
+
+type CampoDensidadesProps = {
+  campo: CampoDefinicion;
+  material?: string | null;
+  value: DensidadTinta[];
+  onChange: (value: DensidadTinta[]) => void;
+  readonly: boolean;
+};
+
+function CampoDensidades({ campo, material, value, onChange, readonly }: CampoDensidadesProps) {
+  const opciones = campo.arrayItemOptions ?? [];
+  const familia = classifyMaterialFamilia(material);
+  const familiaLabel = MATERIAL_FAMILY_LABELS[familia];
+
+  const update = (index: number, patch: Partial<DensidadTinta>) => {
+    const next = value.map((it, i) => (i === index ? { ...it, ...patch } : it));
+    onChange(next);
+  };
+  const add = () => onChange([...value, { tinta: "CYAN" }]);
+  const remove = (index: number) => onChange(value.filter((_, i) => i !== index));
+
+  return (
+    <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-2.5">
+      <div className="flex items-center justify-between">
+        <div>
+          <Label className="text-xs font-semibold text-[#002147]">{campo.label}</Label>
+          <p className="text-[10px] leading-tight text-slate-400">
+            Guía ISO 12647 orientativa según material: {familiaLabel}. No bloquea el guardado.
+          </p>
+        </div>
+        {!readonly && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={add}
+            className="h-7 gap-1"
+          >
+            <Plus className="h-3 w-3" />
+            Tinta
+          </Button>
+        )}
+      </div>
+
+      {value.length === 0 && (
+        <div className="text-xs italic text-muted-foreground">
+          Sin densidades. Pulsa «Tinta» para añadir.
+        </div>
+      )}
+
+      <div className="space-y-1.5">
+        {value.map((item, index) => {
+          const esPantone = item.tinta === "PANTONE";
+          const rango = getDensidadRango(familia, item.tinta);
+          const fueraRango =
+            rango &&
+            item.densidad != null &&
+            (item.densidad < rango.min || item.densidad > rango.max);
+          return (
+            <div key={index} className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Select
+                  value={item.tinta}
+                  onValueChange={(v) => update(index, { tinta: v ?? "" })}
+                  disabled={readonly}
+                >
+                  <SelectTrigger className="h-8 flex-1">
+                    <SelectValue placeholder="Tinta..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {opciones.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {esPantone && (
+                  <Input
+                    type="text"
+                    value={item.ref ?? ""}
+                    onChange={(e) => update(index, { ref: e.target.value })}
+                    placeholder="nº Pantone"
+                    disabled={readonly}
+                    className="h-8 w-24"
+                  />
+                )}
+
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  step={0.01}
+                  min={0}
+                  max={2}
+                  value={item.densidad ?? ""}
+                  onChange={(e) =>
+                    update(index, {
+                      densidad: e.target.value === "" ? undefined : Number(e.target.value),
+                    })
+                  }
+                  placeholder={rango?.label ?? "0.00"}
+                  disabled={readonly}
+                  className={`h-8 w-20 text-right ${
+                    fueraRango ? "border-amber-400 bg-amber-50 focus-visible:ring-amber-300" : ""
+                  }`}
+                  aria-label="Densidad"
+                />
+
+                {!readonly && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => remove(index)}
+                    className="h-8 w-8 shrink-0 p-0"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              {rango ? (
+                <p
+                  className={`pl-1 text-[10px] leading-tight ${
+                    fueraRango ? "font-medium text-amber-700" : "text-slate-400"
+                  }`}
+                >
+                  Objetivo orientativo {familiaLabel}: {rango.label}
+                  {fueraRango ? " · revisar ajuste/papel" : ""}
+                </p>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

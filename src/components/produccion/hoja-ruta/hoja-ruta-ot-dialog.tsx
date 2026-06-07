@@ -37,6 +37,14 @@ const STEP_BADGE_STYLES: Record<string, string> = {
   finalizado: "bg-emerald-100 text-emerald-800",
 };
 
+const STEP_ACCENT_STYLES: Record<string, string> = {
+  pendiente: "border-l-slate-300",
+  disponible: "border-l-blue-400",
+  en_marcha: "border-l-amber-400",
+  pausado: "border-l-orange-400",
+  finalizado: "border-l-emerald-400",
+};
+
 function fmtDate(v: string | null | undefined): string {
   const raw = String(v ?? "").trim();
   if (!raw) return "—";
@@ -86,6 +94,38 @@ function formatValor(value: unknown): string | null {
   return raw.length > 0 ? raw : null;
 }
 
+const TINTA_LABELS: Record<string, string> = {
+  CYAN: "Cyan",
+  MAGENTA: "Magenta",
+  YELLOW: "Yellow",
+  BLACK: "Black",
+  BLANCO: "Blanco",
+  PANTONE: "Pantone",
+};
+
+/** Formatea densidades_tintas → "Cyan 1.25, Pantone 185C 1.10". */
+function formatDensidades(value: unknown): string | null {
+  if (!Array.isArray(value)) return null;
+  const items = value
+    .map((item) => {
+      if (item == null) return "";
+      if (typeof item === "string") return TINTA_LABELS[item] ?? item;
+      if (typeof item === "object") {
+        const obj = item as Record<string, unknown>;
+        const tintaRaw = String(obj.tinta ?? "").trim();
+        if (!tintaRaw) return "";
+        const tinta = TINTA_LABELS[tintaRaw] ?? tintaRaw;
+        const ref = obj.ref ? String(obj.ref).trim() : "";
+        const dens = Number(obj.densidad);
+        const densStr = Number.isFinite(dens) ? dens.toFixed(2) : "";
+        return [tinta, ref, densStr].filter(Boolean).join(" ");
+      }
+      return "";
+    })
+    .filter((s) => s.length > 0);
+  return items.length > 0 ? items.join(", ") : null;
+}
+
 type CampoVista = { label: string; valor: string };
 
 /**
@@ -109,6 +149,11 @@ function buildCamposVista(
       const real = formatValor(datos[`${campo.id}_real`]);
       if (prev != null) out.push({ label: `${campo.label} (prev.)`, valor: suffix(campo, prev) });
       if (real != null) out.push({ label: `${campo.label} (real)`, valor: suffix(campo, real) });
+      continue;
+    }
+    if (campo.tipo === "densidades") {
+      const d = formatDensidades(datos[campo.id]);
+      if (d != null) out.push({ label: campo.label, valor: d });
       continue;
     }
     const v = formatValor(datos[campo.id]);
@@ -267,7 +312,9 @@ export function HojaRutaOtDialog({
                     return (
                       <div
                         key={p.pasoId}
-                        className="rounded-lg border border-slate-200 bg-white p-3"
+                        className={`rounded-lg border border-l-4 border-slate-200 bg-white p-3 ${
+                          STEP_ACCENT_STYLES[p.estado] ?? STEP_ACCENT_STYLES.pendiente
+                        }`}
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="flex flex-wrap items-center gap-2">

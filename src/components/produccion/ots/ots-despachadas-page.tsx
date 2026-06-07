@@ -63,6 +63,7 @@ import {
   DetallesCompraDialog,
   type CompraDetalleVista,
 } from "@/components/produccion/ots/detalles-compra-dialog";
+import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
 import type { OtsDespachadasTableRow } from "@/types/prod-ots-despachadas";
 import type { ProdReferenciaRow } from "@/types/prod-referencias";
 
@@ -346,6 +347,8 @@ export function OtsDespachadasPage({
   const [compraDespachoRow, setCompraDespachoRow] =
     useState<OtsDespachadasTableRow | null>(null);
 
+  const [hojaRutaOt, setHojaRutaOt] = useState<string | null>(null);
+
   const [editOpen, setEditOpen] = useState(false);
   const [editRow, setEditRow] = useState<OtsDespachadasTableRow | null>(null);
   const [editForm, setEditForm] = useState<DespachoEditFormState>(
@@ -392,6 +395,10 @@ export function OtsDespachadasPage({
     setEditOpen(true);
   }, [resetEditItinerarioState]);
 
+  const handleVerHojaRuta = useCallback((row: OtsDespachadasTableRow) => {
+    setHojaRutaOt(String(row.ot_numero ?? "").trim() || null);
+  }, []);
+
   const isSeleccionCompraDeshabilitada = useCallback(
     (row: OtsDespachadasTableRow) =>
       !estadoMaterialPermiteNuevaCompra(row.estado_material),
@@ -403,6 +410,7 @@ export function OtsDespachadasPage({
       onVerCompra: handleVerCompra,
       onItinerario: handleEditarDespacho,
       onEditarDespacho: handleEditarDespacho,
+      onVerHojaRuta: handleVerHojaRuta,
       troquelExcelByCodigo,
       isSeleccionCompraDeshabilitada,
       umbralesOtsCompras,
@@ -410,6 +418,7 @@ export function OtsDespachadasPage({
     [
       handleVerCompra,
       handleEditarDespacho,
+      handleVerHojaRuta,
       troquelExcelByCodigo,
       isSeleccionCompraDeshabilitada,
       umbralesOtsCompras,
@@ -1065,6 +1074,14 @@ export function OtsDespachadasPage({
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-4">
+      <HojaRutaOtDialog
+        otNumero={hojaRutaOt}
+        open={hojaRutaOt != null}
+        onOpenChange={(o) => {
+          if (!o) setHojaRutaOt(null);
+        }}
+      />
+
       <DetallesCompraDialog
         open={compraOpen}
         onOpenChange={(o) => {

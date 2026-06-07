@@ -7,6 +7,7 @@ import {
   ArrowUpDown,
   Eye,
   Info,
+  Map as MapIcon,
   Pencil,
   Route,
 } from "lucide-react";
@@ -194,6 +195,8 @@ export type OtsDespachadasColumnsContext = {
   /** Abre el mismo modal de edición (despacho + itinerario). */
   onItinerario: (row: OtsDespachadasTableRow) => void;
   onEditarDespacho: (row: OtsDespachadasTableRow) => void;
+  /** Abre la Hoja de Ruta Virtual (lectura) de la OT. */
+  onVerHojaRuta: (row: OtsDespachadasTableRow) => void;
   troquelExcelByCodigo: Map<string, TroquelExcelTooltip>;
   /** true = checkbox deshabilitado (OT con gestión de compra ya iniciada). */
   isSeleccionCompraDeshabilitada: (row: OtsDespachadasTableRow) => boolean;
@@ -535,7 +538,7 @@ export function createOtsDespachadasColumns(
     },
     {
       id: "acciones",
-      size: 52,
+      size: 80,
       enableSorting: false,
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
@@ -543,13 +546,25 @@ export function createOtsDespachadasColumns(
         </span>
       ),
       cell: ({ row }) => (
-        <div className="flex justify-center px-0.5 py-0.5">
+        <div className="flex justify-center gap-0.5 px-0.5 py-0.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0 text-slate-600 hover:text-[#002147]"
+            aria-label={`Ver hoja de ruta OT ${row.original.ot_numero}`}
+            title="Ver hoja de ruta"
+            onClick={() => ctx.onVerHojaRuta(row.original)}
+          >
+            <MapIcon className="h-4 w-4" aria-hidden />
+          </Button>
           <Button
             type="button"
             variant="ghost"
             size="icon"
             className="h-7 w-7 shrink-0 text-slate-600 hover:text-[#002147]"
             aria-label={`Editar despacho OT ${row.original.ot_numero}`}
+            title="Editar despacho"
             onClick={() => ctx.onEditarDespacho(row.original)}
           >
             <Pencil className="h-4 w-4" aria-hidden />

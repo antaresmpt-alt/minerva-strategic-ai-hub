@@ -292,6 +292,43 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 
 ---
 
+## ✨ Bloque 3.1: Pulido de Captura — Impresión (Offset + Digital) ✅ **COMPLETADO**
+
+**Objetivo**: hacer la captura del operario más rápida, compacta y "enfocada" (que se vea de un golpe DÓNDE tiene que tocar), reduciendo al mínimo el picado de datos.
+
+### Hecho (7 jun 2026)
+- **Motor de layout por `width`** (`full` / `half` / `third`) sobre rejilla de 6 columnas en `DatosProcesoForm`. Tarjeta más compacta y responsive (colapsa a ancho completo en móvil/tablet).
+- **Reordenado Offset y Digital**: formato + caucho/clear arriba, pareja brutas/netas (plan), pareja **merma / buenas (real, resaltadas en dorado)**, tintas+acabado en una línea, tiempos previsto/real emparejados.
+- **Diferenciación previsto vs real**: campos `emphasis: 'real'` resaltados; bloque previsto (gris, solo lectura) vs real (dorado, editable).
+- **Captura por excepción / menos picado**:
+  - Real se pre-rellena desde Previsto si está vacío.
+  - Siembra inicial `hojas_impresas = netas`, `hojas_merma = 0`.
+  - **Derivación automática** `buenas ↔ merma` (`buenas = netas − merma` y viceversa) vía `computeDerived` (`computeDerivedDatosProceso`, solo procesos 1 y 2).
+- **Densidades de tinta con valor** (nuevo tipo de campo `densidades`):
+  - Cada fila = tinta (select) + valor (0–2, `step 0.01`) + nº Pantone (solo si tinta = Pantone).
+  - Se guarda como `DensidadTinta[]` (`{ tinta, densidad, ref }`); `normalizeDensidades` migra el formato antiguo (`string[]`).
+  - **Guía ISO 12647 orientativa** según `material` (clasificación ligera: estucado / offset / cartoncillo-folding / genérico) → placeholder + rango objetivo por tinta + aviso visual ámbar si está fuera de rango (NO bloquea guardado).
+  - Digital NO lleva densidades (es tóner, no tintero).
+- Vista de lectura (`HojaRutaOtDialog`) formatea densidades legibles ("Cyan 1.25, Pantone 185C 1.10").
+- `tsc --noEmit` y lint en verde.
+
+### Archivos modificados
+- ✅ `src/lib/hoja-ruta-campos-config.ts` (tipos `width`/`emphasis`/`densidades`/`DensidadTinta`, reordenado Offset/Digital)
+- ✅ `src/components/produccion/hoja-ruta/datos-proceso-form.tsx` (layout, densidades, guía ISO/material, hint)
+- ✅ `src/components/produccion/planificacion/planificacion-ots-ejecucion-tab.tsx` (`computeDerivedDatosProceso`, siembra, paso de `material`)
+- ✅ `src/components/produccion/hoja-ruta/hoja-ruta-ot-dialog.tsx` (formateo de densidades en lectura)
+
+### 🔜 PENDIENTE (próxima sesión): aplicar el mismo pulido a los demás procesos
+Replicar el patrón de Impresión (compactar con `width`, enfocar el dato real con `emphasis`, captura por excepción/derivaciones, info más útil) en:
+- [ ] **Troquelado** (10) — revisar orden, derivar troqueladas/merma, resaltar resultado real.
+- [ ] **Digital** (2) — repasar a fondo más allá de lo ya tocado.
+- [ ] **Engomado** (12) — compactar y enfocar estuches/bultos/palets reales.
+- [ ] **Guillotina** (17) — compactar tamaños/hojas, marcar salida real.
+
+> Nota: con un repaso similar al de Impresión se espera ganar bastante en agilidad y utilidad en estos procesos.
+
+---
+
 ## 📄 Bloque 4: PDF Acompañante
 
 **Objetivo**: Generar un PDF imprimible ultra-simple como "token físico".
@@ -424,7 +461,8 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 ✅ **Bloque 2.2 BASE IMPLEMENTADA** (6 jun 2026): Auto-enriquecimiento troquelado desde `prod_troqueles`
 ✅ **Bloque 2.5 COMPLETADO** (6 jun 2026): Encadenado salida→entrada + semáforo de aviso (margen 5%)
 ✅ **Motivos de pausa por proceso** (6 jun 2026): `sys_motivos_pausa.tipos_maquina` (NULL = universal) + filtrado por tipo de máquina en ejecución
-⏳ **Bloque 3 EN PROGRESO** (6 jun 2026): Hoja de Ruta Virtual (`HojaRutaOtDialog`) + loader `fetchHojaRutaOt`, enganchado en Pipeline
+⏳ **Bloque 3 EN PROGRESO** (6 jun 2026): Hoja de Ruta Virtual (`HojaRutaOtDialog`) + loader `fetchHojaRutaOt`, enganchado en Pipeline, OTs Despachadas, Planificación y tarjeta de Ejecución
+✅ **Bloque 3.1 COMPLETADO** (7 jun 2026): Pulido captura Impresión (Offset+Digital): layout `width`, previsto/real, derivación buenas/merma, densidades con valor + guía ISO 12647 por material. **Pendiente**: replicar en Troquelado/Digital/Engomado/Guillotina.
 ⏳ **Bloque 4 PENDIENTE**: PDF token
 ⏳ **Bloque 5 PENDIENTE**: Integración Etiquetas ↔ Hoja de Ruta (flujo Hugo)
 ⏳ **Bloque 6 PENDIENTE**: Producidas/Histórico (`prod_ot_producidas`, snapshot híbrido) + lifecycle de cierre (pendiente_revision → producida) + recálculo maestro
@@ -432,7 +470,7 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 
 ---
 
-**Última actualización**: 7 de junio de 2026 - 00:18
+**Última actualización**: 7 de junio de 2026 - 18:42
 
 
 ## 📌 Punto de continuación (próxima sesión)
@@ -459,4 +497,17 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 
 ---
 
-**Nota de cierre**: comprobado en Pipeline. La Hoja de Ruta Virtual pinta bien como base; quedan ajustes visuales y conexiones a otras pantallas para la próxima sesión.
+**Sesión 7 jun 2026 (tarde)** — Bloque 3.1: pulido de captura de **Impresión (Offset + Digital)** ✅
+
+### Hecho hoy
+- Layout compacto por `width`, diferenciación previsto/real, derivación automática buenas↔merma.
+- Densidades de tinta con valor (0–2) + nº Pantone, guía ISO 12647 orientativa según `material` (no bloqueante).
+- Fix: el botón "+" de densidades creaba fila vacía que el normalizador descartaba → ahora nace con `CYAN`.
+- `tsc --noEmit` y lint en verde.
+
+### 🔜 Próxima sesión (apuntado)
+- **Revisar y pulir los procesos restantes con el mismo criterio que Impresión**: Troquelado, Digital (a fondo), Engomado y Guillotina. Compactar (`width`), enfocar el dato real (`emphasis`), captura por excepción/derivaciones e info más útil. Se espera mejorar bastante agilidad y utilidad.
+
+---
+
+**Nota de cierre**: la captura de Impresión queda más compacta, con info más útil y enfocando dónde debe tocar el operario. Próxima sesión: replicar el patrón en Troquelado/Digital/Engomado/Guillotina.

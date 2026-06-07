@@ -8,6 +8,7 @@ import {
   FileSpreadsheet,
   FileText,
   Loader2,
+  Map as MapIcon,
   Pause,
   Play,
   RefreshCcw,
@@ -39,6 +40,7 @@ import { cn } from "@/lib/utils";
 import { getCamposConfigByProcesoId, PROCESO_CAMPOS_CONFIG } from "@/lib/hoja-ruta-campos-config";
 import type { DatosProcesoGenerico } from "@/lib/hoja-ruta-campos-config";
 import { DatosProcesoForm } from "@/components/produccion/hoja-ruta/datos-proceso-form";
+import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
 import type {
   EstadoEjecucionMesa,
   MesaEjecucion,
@@ -180,6 +182,78 @@ function parseMeasurementNumber(value: unknown): number | null {
   return parseNum(match[0]);
 }
 
+function isDatoProcesoEmpty(value: unknown): boolean {
+  if (value == null) return true;
+  if (typeof value === "string") return value.trim().length === 0;
+  return false;
+}
+
+function seedRealValuesFromPrevistos(
+  procesoId: number | null | undefined,
+  datos: DatosProcesoGenerico,
+): DatosProcesoGenerico {
+  if (!procesoId) return datos;
+  const config = getCamposConfigByProcesoId(procesoId);
+  if (!config) return datos;
+
+  let changed = false;
+  const next: DatosProcesoGenerico = { ...datos };
+  for (const campo of config.campos) {
+    if (!campo.hasPrevistoReal) continue;
+    const previstoKey = `${campo.id}_previsto`;
+    const realKey = `${campo.id}_real`;
+    const previsto = next[previstoKey];
+    if (isDatoProcesoEmpty(previsto) || !isDatoProcesoEmpty(next[realKey])) continue;
+    next[realKey] = previsto;
+    changed = true;
+  }
+
+  return changed ? next : datos;
+}
+
+const PROCESOS_IMPRESION = new Set([1, 2]);
+
+function toFiniteNum(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Deriva campos para reducir picado en impresión:
+ * hojas buenas ↔ merma se autocompletan a partir de las netas/brutas (base).
+ * El operario solo teca un valor y el otro se calcula.
+ */
+function computeDerivedDatosProceso(
+  procesoId: number | null | undefined,
+  datos: DatosProcesoGenerico,
+  changedFieldId: string,
+): DatosProcesoGenerico {
+  if (!procesoId || !PROCESOS_IMPRESION.has(procesoId)) return datos;
+  const base = toFiniteNum(datos.hojas_netas) ?? toFiniteNum(datos.hojas_brutas);
+  if (base == null) return datos;
+
+  if (changedFieldId === "hojas_merma") {
+    const merma = toFiniteNum(datos.hojas_merma);
+    if (merma == null) return datos;
+    return { ...datos, hojas_impresas: Math.max(0, base - merma) };
+  }
+
+  if (changedFieldId === "hojas_impresas") {
+    const buenas = toFiniteNum(datos.hojas_impresas);
+    if (buenas == null) return datos;
+    return { ...datos, hojas_merma: Math.max(0, base - buenas) };
+  }
+
+  // Si cambian las bases, recalculamos buenas desde la merma conocida.
+  if (changedFieldId === "hojas_netas" || changedFieldId === "hojas_brutas") {
+    const merma = toFiniteNum(datos.hojas_merma) ?? 0;
+    return { ...datos, hojas_impresas: Math.max(0, base - merma) };
+  }
+
+  return datos;
+}
+
 function mapTroquelRow(row: TroquelInfoRow) {
   const poses = parseNum(row.num_figuras) ?? parseNum(row.figuras_hoja);
   return {
@@ -309,6 +383,7 @@ export function PlanificacionOtsEjecucionTab({
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [planificacionRole, setPlanificacionRole] = useState<string | null>(null);
+  const [hojaRutaOt, setHojaRutaOt] = useState<string | null>(null);
 
   const etiquetaAmbitoEjecucion = useMemo(
     () => etiquetaAmbitoPlanificacion(getPlanificacionTipoMaquinaFilter(planificacionRole)),
@@ -870,6 +945,14 @@ export function PlanificacionOtsEjecucionTab({
   }, [filtered, selectedMaquinaLabel, estadoLabelFiltro, pausesByExecutionId]);
 
   return (
+    <>
+    <HojaRutaOtDialog
+      otNumero={hojaRutaOt}
+      open={hojaRutaOt != null}
+      onOpenChange={(o) => {
+        if (!o) setHojaRutaOt(null);
+      }}
+    />
     <Card className="border-slate-200/80 bg-white/95 shadow-sm backdrop-blur-sm">
       <CardHeader className="space-y-2 pb-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -965,6 +1048,7 @@ export function PlanificacionOtsEjecucionTab({
                       onBegin={(patch, dp) => void beginExecution(row, patch, dp)}
                       onPause={(motivo) => void pauseExecution(row, motivo)}
                       onResume={(pauses) => void resumeExecution(row, pauses)}
+                      onOpenHojaRuta={() => setHojaRutaOt(row.ot)}
                     />
                   );
                 })}
@@ -974,6 +1058,7 @@ export function PlanificacionOtsEjecucionTab({
         </div>
       </CardContent>
     </Card>
+    </>
   );
 }
 
@@ -988,6 +1073,7 @@ function ExecutionCard({
   onBegin,
   onPause,
   onResume,
+  onOpenHojaRuta,
 }: {
   row: MesaEjecucion;
   despacho: DespachoInfo | null;
@@ -999,6 +1085,7 @@ function ExecutionCard({
   onBegin: (patch: Record<string, unknown>, datosProcesoUpdate?: DatosProcesoGenerico | null) => void;
   onPause: (motivo: MotivoPausa | null) => void;
   onResume: (pauses: MesaEjecucionPausa[]) => void;
+  onOpenHojaRuta: () => void;
 }) {
   const [incidencia, setIncidencia] = useState(row.incidencia ?? "");
   const [accion, setAccion] = useState(row.accionCorrectiva ?? "");
@@ -1014,13 +1101,19 @@ function ExecutionCard({
 
   const [datosProcesoLocal, setDatosProcesoLocal] = useState<DatosProcesoGenerico>(() => {
     const existing = (row.datosProcesoJson as DatosProcesoGenerico) ?? {};
-    if (Object.keys(existing).length > 0) return existing;
+    if (Object.keys(existing).length > 0) {
+      return seedRealValuesFromPrevistos(row.procesoId, existing);
+    }
     if (!despacho || !row.procesoId) return {};
     const pid = row.procesoId;
     const base: DatosProcesoGenerico = {};
     if (pid === 1 || pid === 2) {
       if (despacho.hojasBrutas != null) base.hojas_brutas = despacho.hojasBrutas;
-      if (despacho.hojasNetas != null) base.hojas_netas = despacho.hojasNetas;
+      if (despacho.hojasNetas != null) {
+        base.hojas_netas = despacho.hojasNetas;
+        base.hojas_impresas = despacho.hojasNetas;
+        base.hojas_merma = 0;
+      }
       if (despacho.tamanoHoja) base.formato_hojas = despacho.tamanoHoja;
       if (despacho.tintas) base.tintas_cara = despacho.tintas;
       if (despacho.acabadoPral) base.acabado_principal = despacho.acabadoPral;
@@ -1044,7 +1137,7 @@ function ExecutionCard({
       if (despacho.cantidad != null) base.estuches_realizar = despacho.cantidad;
       if (despacho.horasEngomado != null) base.tiempo_previsto = despacho.horasEngomado;
     }
-    return base;
+    return seedRealValuesFromPrevistos(pid, base);
   });
 
   const hasCamposConfig = useMemo(
@@ -1105,17 +1198,30 @@ function ExecutionCard({
                 }`}
           </p>
         </div>
-        <span
-          className={cn(
-            "rounded-full px-2 py-1 text-[11px] font-semibold",
-            row.estadoEjecucion === "pendiente_inicio" && "bg-sky-100 text-sky-800",
-            row.estadoEjecucion === "en_curso" && "bg-emerald-100 text-emerald-800",
-            row.estadoEjecucion === "pausada" && "bg-amber-100 text-amber-800",
-            row.estadoEjecucion === "finalizada" && "bg-slate-100 text-slate-700",
-          )}
-        >
-          {estadoLabel(row.estadoEjecucion)}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1 px-2 text-[11px]"
+            onClick={onOpenHojaRuta}
+            title="Ver hoja de ruta completa"
+          >
+            <MapIcon className="size-3.5" />
+            Hoja de ruta
+          </Button>
+          <span
+            className={cn(
+              "rounded-full px-2 py-1 text-[11px] font-semibold",
+              row.estadoEjecucion === "pendiente_inicio" && "bg-sky-100 text-sky-800",
+              row.estadoEjecucion === "en_curso" && "bg-emerald-100 text-emerald-800",
+              row.estadoEjecucion === "pausada" && "bg-amber-100 text-amber-800",
+              row.estadoEjecucion === "finalizada" && "bg-slate-100 text-slate-700",
+            )}
+          >
+            {estadoLabel(row.estadoEjecucion)}
+          </span>
+        </div>
       </div>
 
       {despacho ? (
@@ -1243,9 +1349,13 @@ function ExecutionCard({
             <div className="border-t border-indigo-200 px-3 py-3">
               <DatosProcesoForm
                 procesoId={row.procesoId}
+                material={despacho?.material}
                 datosInicial={datosProcesoLocal}
                 onChange={setDatosProcesoLocal}
                 readonly={!canEdit}
+                computeDerived={(datos, changedFieldId) =>
+                  computeDerivedDatosProceso(row.procesoId, datos, changedFieldId)
+                }
               />
             </div>
           ) : null}

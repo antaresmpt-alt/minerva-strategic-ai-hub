@@ -8,6 +8,7 @@ import {
   Edit3,
   Eye,
   Loader2,
+  Map as MapIcon,
   Printer,
   Search,
   Send,
@@ -67,6 +68,7 @@ import {
   type ProdOtPasoVista,
 } from "@/lib/prod-ot-itinerario-client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
 
 const TABLE_DESPACHADAS = "produccion_ot_despachadas";
 const TABLE_OTS_GENERAL = "prod_ots_general";
@@ -327,6 +329,7 @@ export function PlanificacionPoolOtsTab() {
   const [compraEstadoFilter, setCompraEstadoFilter] = useState<string>("all");
   const [areaTipoFilter, setAreaTipoFilter] = useState<PoolAmbitoFiltroUi>("all");
   const [editingOt, setEditingOt] = useState<string | null>(null);
+  const [hojaRutaOt, setHojaRutaOt] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftRow | null>(null);
   const [poolEditDialogOpen, setPoolEditDialogOpen] = useState(false);
   const [poolEditOtGeneralId, setPoolEditOtGeneralId] = useState<string | null>(
@@ -1837,16 +1840,28 @@ export function PlanificacionPoolOtsTab() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="size-8 text-slate-600 hover:text-[#002147]"
-                        onClick={() => startEdit(r)}
-                        title="Editar despacho e itinerario"
-                      >
-                        <Edit3 className="size-4" />
-                      </Button>
+                      <div className="flex items-center gap-0.5">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-slate-600 hover:text-[#002147]"
+                          onClick={() => setHojaRutaOt(r.ot)}
+                          title="Ver hoja de ruta"
+                        >
+                          <MapIcon className="size-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-slate-600 hover:text-[#002147]"
+                          onClick={() => startEdit(r)}
+                          title="Editar despacho e itinerario"
+                        >
+                          <Edit3 className="size-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1855,6 +1870,13 @@ export function PlanificacionPoolOtsTab() {
           </div>
         )}
       </CardContent>
+      <HojaRutaOtDialog
+        otNumero={hojaRutaOt}
+        open={hojaRutaOt != null}
+        onOpenChange={(o) => {
+          if (!o) setHojaRutaOt(null);
+        }}
+      />
       <Dialog
         open={poolEditDialogOpen}
         onOpenChange={(o) => {
