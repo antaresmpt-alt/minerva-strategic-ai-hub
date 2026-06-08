@@ -318,14 +318,56 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 - ✅ `src/components/produccion/planificacion/planificacion-ots-ejecucion-tab.tsx` (`computeDerivedDatosProceso`, siembra, paso de `material`)
 - ✅ `src/components/produccion/hoja-ruta/hoja-ruta-ot-dialog.tsx` (formateo de densidades en lectura)
 
-### 🔜 PENDIENTE (próxima sesión): aplicar el mismo pulido a los demás procesos
-Replicar el patrón de Impresión (compactar con `width`, enfocar el dato real con `emphasis`, captura por excepción/derivaciones, info más útil) en:
-- [ ] **Troquelado** (10) — revisar orden, derivar troqueladas/merma, resaltar resultado real.
+### Estado de los demás procesos (mismo patrón que Impresión)
+- [x] **Troquelado** (10) — reordenado compacto (`troquel`/`tamaño corte` arriba; `expulsor`/`arreglos`/`hojas a troquelar` en una línea; `poses`/`pinza` compactos), `hojas_merma`/`hojas_troqueladas` resaltadas, siembra `troqueladas = a troquelar`, `merma = 0`, derivación `troqueladas ↔ merma` (8 jun 2026).
+- [x] **Engomado** (12) — reordenado compacto, `estuches_engomados`/`cantidad_total` resaltados, siembra desde plan, derivaciones `cantidad_total = estuches_engomados` y `palets = ceil(estuches / (estuches_por_bulto × bultos_por_palet))` (8 jun 2026). *(Pendiente lógica de "picos", ver Bloque 3.2.)*
 - [ ] **Digital** (2) — repasar a fondo más allá de lo ya tocado.
-- [ ] **Engomado** (12) — compactar y enfocar estuches/bultos/palets reales.
 - [ ] **Guillotina** (17) — compactar tamaños/hojas, marcar salida real.
 
-> Nota: con un repaso similar al de Impresión se espera ganar bastante en agilidad y utilidad en estos procesos.
+### Robustez de captura ✅ (8 jun 2026)
+- Los campos comunes (`maquinista`, `incidencia`, `accion_correctiva`, `observaciones`) y los `datos_proceso` ahora **persisten en TODAS las acciones**: Iniciar, Pausar, Reanudar, Guardar y Finalizar.
+- Implementado con helper único `buildCommonFieldsPatch()` en `ExecutionCard` + `pauseExecution`/`resumeExecution` aceptando patch y `datos_proceso`. Al ser componente compartido, aplica a todos los procesos.
+
+---
+
+## 🧮 Bloque 3.2: Engomado — Cálculo de bultos/picos + datos del Maestro ⏳ **PENDIENTE (próxima sesión)**
+
+**Objetivo**: que el sistema calcule al operario el reparto en bultos y palets, contemplando el caso habitual de "pico" (bulto incompleto), y nutrir el cálculo desde el Maestro de Artículos.
+
+### Problema actual
+- Hoy `palets = ceil(estuches_engomados / (estuches_por_bulto × bultos_por_palet))`, pero **falta el concepto de "pico"** (bulto parcial) y la regla de no abrir un palet extra por pocas cajas.
+
+### Lógica de "Pico" (a implementar)
+- Ejemplo: 15.300 estuches ÷ 500 por bulto = 30,6 → **30 bultos de 500 + 1 bulto "pico" de 300**.
+- **Nuevo campo `pico`** (cantidad del bulto incompleto) + cálculo derivado para el operario:
+  - `bultos_completos = floor(estuches / estuches_por_bulto)`
+  - `pico = estuches mod estuches_por_bulto` (si > 0 ⇒ hay un bulto extra parcial)
+  - `bultos_totales = bultos_completos + (pico > 0 ? 1 : 0)`
+- **Reparto en palets con tolerancia** (regla de negocio): cuando el exceso sobre un palet completo es **muy pequeño (≈ 1–3 cajas / un pico)**, NO abrir un palet nuevo: colocar esas cajas encima de un palet aunque quede "sobrecargado". Es preferible **1 palet cargado** que **2 palets** casi vacíos.
+  - ⇒ Sustituir el `ceil` puro por un cálculo con **umbral de tolerancia** (nº de bultos/cajas que se permite "subir" encima sin abrir palet). Definir el umbral (¿configurable? ¿por tipo de caja?).
+
+### Datos desde el Maestro de Artículos
+- El usuario rellenará en el Maestro la info de **bultos** y **caja de embalaje** (p. ej. caja MN2L → estuches por bulto, bultos por palet).
+- El usuario pasará una **tabla de cajas de embalaje y cantidades por palet** → usarla como fuente para prefill/cálculo (estuches_por_bulto, bultos_por_palet por tipo de caja).
+
+### Pendiente de aportar (usuario)
+- [ ] Tabla de cajas de embalaje + cantidades por palet.
+- [ ] Datos de bultos y caja de embalaje en el Maestro para el artículo de ejemplo.
+- [ ] Confirmar el umbral de tolerancia para "subir picos" sin abrir palet (¿1, 2, 3 cajas?).
+
+---
+
+## 🌳 Bloque 3.3: Maestro de Artículos — Campos FSC ⏳ **PENDIENTE**
+
+**Objetivo**: añadir trazabilidad de certificación FSC por artículo en el Maestro.
+
+### Campos nuevos (Maestro de Artículos)
+- [ ] `fsc` (Sí/No) — si el artículo está certificado FSC.
+- [ ] `fsc_fecha_validacion` (fecha) — cuándo se validó el FSC para ese artículo ("fecha corta").
+
+### Notas
+- Definir tabla/columnas reales del Maestro donde viven estos campos.
+- Valorar mostrar el flag FSC en despacho / hoja de ruta cuando aplique.
 
 ---
 
@@ -462,7 +504,9 @@ Replicar el patrón de Impresión (compactar con `width`, enfocar el dato real c
 ✅ **Bloque 2.5 COMPLETADO** (6 jun 2026): Encadenado salida→entrada + semáforo de aviso (margen 5%)
 ✅ **Motivos de pausa por proceso** (6 jun 2026): `sys_motivos_pausa.tipos_maquina` (NULL = universal) + filtrado por tipo de máquina en ejecución
 ⏳ **Bloque 3 EN PROGRESO** (6 jun 2026): Hoja de Ruta Virtual (`HojaRutaOtDialog`) + loader `fetchHojaRutaOt`, enganchado en Pipeline, OTs Despachadas, Planificación y tarjeta de Ejecución
-✅ **Bloque 3.1 COMPLETADO** (7 jun 2026): Pulido captura Impresión (Offset+Digital): layout `width`, previsto/real, derivación buenas/merma, densidades con valor + guía ISO 12647 por material. **Pendiente**: replicar en Troquelado/Digital/Engomado/Guillotina.
+✅ **Bloque 3.1 COMPLETADO** (7-8 jun 2026): Pulido captura Impresión + **Troquelado + Engomado** (layout `width`, previsto/real, derivaciones, resaltar resultado real). Robustez de captura: campos persisten en iniciar/pausar/reanudar/guardar/finalizar. **Pendiente**: Digital a fondo y Guillotina.
+⏳ **Bloque 3.2 PENDIENTE** (8 jun 2026): Engomado — cálculo de bultos/"picos" + reparto en palets con tolerancia + datos desde Maestro (tabla de cajas/palet).
+⏳ **Bloque 3.3 PENDIENTE** (8 jun 2026): Maestro de Artículos — campos `fsc` (Sí/No) y `fsc_fecha_validacion`.
 ⏳ **Bloque 4 PENDIENTE**: PDF token
 ⏳ **Bloque 5 PENDIENTE**: Integración Etiquetas ↔ Hoja de Ruta (flujo Hugo)
 ⏳ **Bloque 6 PENDIENTE**: Producidas/Histórico (`prod_ot_producidas`, snapshot híbrido) + lifecycle de cierre (pendiente_revision → producida) + recálculo maestro
@@ -470,7 +514,7 @@ Replicar el patrón de Impresión (compactar con `width`, enfocar el dato real c
 
 ---
 
-**Última actualización**: 7 de junio de 2026 - 18:42
+**Última actualización**: 8 de junio de 2026 - 19:42
 
 
 ## 📌 Punto de continuación (próxima sesión)
@@ -511,3 +555,19 @@ Replicar el patrón de Impresión (compactar con `width`, enfocar el dato real c
 ---
 
 **Nota de cierre**: la captura de Impresión queda más compacta, con info más útil y enfocando dónde debe tocar el operario. Próxima sesión: replicar el patrón en Troquelado/Digital/Engomado/Guillotina.
+
+---
+
+**Sesión 8 jun 2026** — Bloque 3.1: **Troquelado + Engomado** pulidos + robustez de captura ✅
+
+### Hecho hoy
+- **Troquelado** y **Engomado** con el patrón de Impresión: layout compacto por `width`, resultado real resaltado, siembra y derivaciones (`troqueladas ↔ merma`; `cantidad_total = estuches_engomados`, `palets = ceil(...)`).
+- Redistribución fina de Troquelado: `expulsor`/`arreglos`/`hojas a troquelar` en una línea; `poses`/`pinza` compactos.
+- **Robustez de captura**: maquinista, incidencia, acción, observaciones y `datos_proceso` persisten en **iniciar / pausar / reanudar / guardar / finalizar** (helper `buildCommonFieldsPatch` + pausar/reanudar persistiendo). Aplica a todos los procesos (componente compartido).
+- Lints en verde en los archivos tocados. (`tsc` global bloqueado por caché corrupta de `.next/dev/types`, ajena a estos cambios.)
+
+### 🔜 Próxima sesión (apuntado por el usuario)
+- **Bloque 3.2 — Engomado "picos"**: añadir campo `pico` (bulto incompleto) y cálculo de bultos completos + pico + bultos totales. Reparto en palets **con tolerancia**: no abrir palet extra por 1–3 cajas/un pico (mejor 1 palet cargado que 2). Definir umbral.
+  - El usuario aportará: tabla de cajas de embalaje + cantidades por palet, y rellenará bultos/caja en el Maestro para el artículo de ejemplo.
+- **Bloque 3.3 — Maestro de Artículos**: añadir `fsc` (Sí/No) y `fsc_fecha_validacion` (fecha de validación / "fecha corta").
+- Pendiente aún: pulir **Digital** a fondo y **Guillotina**.

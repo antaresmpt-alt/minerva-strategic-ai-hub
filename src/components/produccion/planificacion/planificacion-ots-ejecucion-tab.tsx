@@ -220,35 +220,85 @@ function toFiniteNum(value: unknown): number | null {
 }
 
 /**
- * Deriva campos para reducir picado en impresión:
- * hojas buenas ↔ merma se autocompletan a partir de las netas/brutas (base).
- * El operario solo teca un valor y el otro se calcula.
+ * Deriva campos para reducir picado en planta:
+ * - Impresión: buenas ↔ merma desde netas/brutas.
+ * - Troquelado: troqueladas ↔ merma desde hojas a troquelar.
+ * - Engomado: cantidad total = estuches engomados y palets por embalaje.
  */
 function computeDerivedDatosProceso(
   procesoId: number | null | undefined,
   datos: DatosProcesoGenerico,
   changedFieldId: string,
 ): DatosProcesoGenerico {
-  if (!procesoId || !PROCESOS_IMPRESION.has(procesoId)) return datos;
-  const base = toFiniteNum(datos.hojas_netas) ?? toFiniteNum(datos.hojas_brutas);
-  if (base == null) return datos;
+  if (!procesoId) return datos;
 
-  if (changedFieldId === "hojas_merma") {
-    const merma = toFiniteNum(datos.hojas_merma);
-    if (merma == null) return datos;
-    return { ...datos, hojas_impresas: Math.max(0, base - merma) };
+  if (PROCESOS_IMPRESION.has(procesoId)) {
+    const base = toFiniteNum(datos.hojas_netas) ?? toFiniteNum(datos.hojas_brutas);
+    if (base == null) return datos;
+
+    if (changedFieldId === "hojas_merma") {
+      const merma = toFiniteNum(datos.hojas_merma);
+      if (merma == null) return datos;
+      return { ...datos, hojas_impresas: Math.max(0, base - merma) };
+    }
+
+    if (changedFieldId === "hojas_impresas") {
+      const buenas = toFiniteNum(datos.hojas_impresas);
+      if (buenas == null) return datos;
+      return { ...datos, hojas_merma: Math.max(0, base - buenas) };
+    }
+
+    // Si cambian las bases, recalculamos buenas desde la merma conocida.
+    if (changedFieldId === "hojas_netas" || changedFieldId === "hojas_brutas") {
+      const merma = toFiniteNum(datos.hojas_merma) ?? 0;
+      return { ...datos, hojas_impresas: Math.max(0, base - merma) };
+    }
   }
 
-  if (changedFieldId === "hojas_impresas") {
-    const buenas = toFiniteNum(datos.hojas_impresas);
-    if (buenas == null) return datos;
-    return { ...datos, hojas_merma: Math.max(0, base - buenas) };
+  if (procesoId === 10) {
+    const base = toFiniteNum(datos.hojas_troquelar);
+    if (base == null) return datos;
+
+    if (changedFieldId === "hojas_merma") {
+      const merma = toFiniteNum(datos.hojas_merma);
+      if (merma == null) return datos;
+      return { ...datos, hojas_troqueladas: Math.max(0, base - merma) };
+    }
+
+    if (changedFieldId === "hojas_troqueladas") {
+      const troqueladas = toFiniteNum(datos.hojas_troqueladas);
+      if (troqueladas == null) return datos;
+      return { ...datos, hojas_merma: Math.max(0, base - troqueladas) };
+    }
+
+    if (changedFieldId === "hojas_troquelar") {
+      const merma = toFiniteNum(datos.hojas_merma) ?? 0;
+      return { ...datos, hojas_troqueladas: Math.max(0, base - merma) };
+    }
   }
 
-  // Si cambian las bases, recalculamos buenas desde la merma conocida.
-  if (changedFieldId === "hojas_netas" || changedFieldId === "hojas_brutas") {
-    const merma = toFiniteNum(datos.hojas_merma) ?? 0;
-    return { ...datos, hojas_impresas: Math.max(0, base - merma) };
+  if (procesoId === 12) {
+    const next: DatosProcesoGenerico = { ...datos };
+    const engomados = toFiniteNum(next.estuches_engomados);
+
+    if (engomados != null) {
+      next.cantidad_total = engomados;
+    }
+
+    const estuches = toFiniteNum(next.estuches_engomados);
+    const porBulto = toFiniteNum(next.estuches_por_bulto);
+    const bultosPorPalet = toFiniteNum(next.bultos_por_palet);
+    if (
+      estuches != null &&
+      porBulto != null &&
+      bultosPorPalet != null &&
+      porBulto > 0 &&
+      bultosPorPalet > 0
+    ) {
+      next.palets = Math.ceil(estuches / (porBulto * bultosPorPalet));
+    }
+
+    return next;
   }
 
   return datos;
@@ -825,7 +875,12 @@ export function PlanificacionOtsEjecucionTab({
   );
 
   const pauseExecution = useCallback(
-    async (row: MesaEjecucion, motivo: MotivoPausa | null) => {
+    async (
+      row: MesaEjecucion,
+      motivo: MotivoPausa | null,
+      patch: Record<string, unknown> = {},
+      datosProcesoUpdate?: DatosProcesoGenerico | null,
+    ) => {
       if (row.estadoEjecucion !== "en_curso") {
         toast.warning("Solo se pueden pausar OTs en curso.");
         return;
@@ -847,6 +902,7 @@ export function PlanificacionOtsEjecucionTab({
         const { error: updErr } = await supabase
           .from(TABLE_EJECUCIONES)
           .update({
+            ...patch,
             estado_ejecucion: "pausada",
             ha_estado_pausada: true,
             num_pausas: Math.max(0, row.numPausas) + 1,
@@ -854,6 +910,13 @@ export function PlanificacionOtsEjecucionTab({
           })
           .eq("id", row.id);
         if (updErr) throw updErr;
+        if (datosProcesoUpdate && row.otPasoId) {
+          const { error: dpErr } = await supabase
+            .from(TABLE_OT_PASOS)
+            .update({ datos_proceso: datosProcesoUpdate })
+            .eq("id", row.otPasoId);
+          if (dpErr) throw dpErr;
+        }
         toast.success("OT pausada.");
         await loadData();
       } catch (e) {
@@ -867,7 +930,12 @@ export function PlanificacionOtsEjecucionTab({
   );
 
   const resumeExecution = useCallback(
-    async (row: MesaEjecucion, pauses: MesaEjecucionPausa[]) => {
+    async (
+      row: MesaEjecucion,
+      pauses: MesaEjecucionPausa[],
+      patch: Record<string, unknown> = {},
+      datosProcesoUpdate?: DatosProcesoGenerico | null,
+    ) => {
       const openPause = pauses.find((p) => p.resumedAt == null);
       if (!openPause) {
         toast.error("No se encontró una pausa activa para reanudar.");
@@ -893,12 +961,20 @@ export function PlanificacionOtsEjecucionTab({
         const { error: execUpdErr } = await supabase
           .from(TABLE_EJECUCIONES)
           .update({
+            ...patch,
             estado_ejecucion: "en_curso",
             minutos_pausada_acum: Math.max(0, row.minutosPausadaAcum) + deltaMin,
             updated_at: nowIso,
           })
           .eq("id", row.id);
         if (execUpdErr) throw execUpdErr;
+        if (datosProcesoUpdate && row.otPasoId) {
+          const { error: dpErr } = await supabase
+            .from(TABLE_OT_PASOS)
+            .update({ datos_proceso: datosProcesoUpdate })
+            .eq("id", row.otPasoId);
+          if (dpErr) throw dpErr;
+        }
         toast.success("OT reanudada.");
         await loadData();
       } catch (e) {
@@ -1046,8 +1122,8 @@ export function PlanificacionOtsEjecucionTab({
                       saving={savingId === row.id}
                       onPatch={(patch, dp) => void patchExecution(row, patch, dp)}
                       onBegin={(patch, dp) => void beginExecution(row, patch, dp)}
-                      onPause={(motivo) => void pauseExecution(row, motivo)}
-                      onResume={(pauses) => void resumeExecution(row, pauses)}
+                      onPause={(motivo, patch, dp) => void pauseExecution(row, motivo, patch, dp)}
+                      onResume={(pauses, patch, dp) => void resumeExecution(row, pauses, patch, dp)}
                       onOpenHojaRuta={() => setHojaRutaOt(row.ot)}
                     />
                   );
@@ -1083,8 +1159,16 @@ function ExecutionCard({
   saving: boolean;
   onPatch: (patch: Record<string, unknown>, datosProcesoUpdate?: DatosProcesoGenerico | null) => void;
   onBegin: (patch: Record<string, unknown>, datosProcesoUpdate?: DatosProcesoGenerico | null) => void;
-  onPause: (motivo: MotivoPausa | null) => void;
-  onResume: (pauses: MesaEjecucionPausa[]) => void;
+  onPause: (
+    motivo: MotivoPausa | null,
+    patch?: Record<string, unknown>,
+    datosProcesoUpdate?: DatosProcesoGenerico | null,
+  ) => void;
+  onResume: (
+    pauses: MesaEjecucionPausa[],
+    patch?: Record<string, unknown>,
+    datosProcesoUpdate?: DatosProcesoGenerico | null,
+  ) => void;
   onOpenHojaRuta: () => void;
 }) {
   const [incidencia, setIncidencia] = useState(row.incidencia ?? "");
@@ -1127,14 +1211,22 @@ function ExecutionCard({
       if (despacho.pinza != null) base.pinza = despacho.pinza;
       if (despacho.expulsor) base.expulsor = despacho.expulsor;
       if (despacho.cauchoAcrilico) base.codigo_caucho = despacho.cauchoAcrilico;
-      if (despacho.hojasBrutas != null) base.hojas_troquelar = despacho.hojasBrutas;
+      if (despacho.hojasBrutas != null) {
+        base.hojas_troquelar = despacho.hojasBrutas;
+        base.hojas_troqueladas = despacho.hojasBrutas;
+        base.hojas_merma = 0;
+      }
       if (despacho.horasTroquelado != null) {
         base.horas_preparacion_previsto = Math.round(despacho.horasTroquelado * 0.3 * 10) / 10;
         base.horas_tiraje_previsto = Math.round(despacho.horasTroquelado * 0.7 * 10) / 10;
       }
     }
     if (pid === 12) {
-      if (despacho.cantidad != null) base.estuches_realizar = despacho.cantidad;
+      if (despacho.cantidad != null) {
+        base.estuches_realizar = despacho.cantidad;
+        base.estuches_engomados = despacho.cantidad;
+        base.cantidad_total = despacho.cantidad;
+      }
       if (despacho.horasEngomado != null) base.tiempo_previsto = despacho.horasEngomado;
     }
     return seedRealValuesFromPrevistos(pid, base);
@@ -1179,6 +1271,21 @@ function ExecutionCard({
     }
     return sync;
   }, [datosProcesoLocal, row.procesoId]);
+
+  // Campos que deben persistir en CUALQUIER acción (iniciar, pausar,
+  // reanudar, guardar, finalizar) para no perder lo tecleado.
+  const buildCommonFieldsPatch = useCallback(
+    (): Record<string, unknown> => ({
+      maquinista: maquinista.trim() || null,
+      incidencia: incidencia.trim() || null,
+      accion_correctiva: accion.trim() || null,
+      observaciones: observaciones.trim() || null,
+      ...buildSyncPatch(),
+    }),
+    [maquinista, incidencia, accion, observaciones, buildSyncPatch],
+  );
+
+  const datosProcesoPatch = hasCamposConfig ? datosProcesoLocal : null;
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-xs">
@@ -1412,7 +1519,7 @@ function ExecutionCard({
             disabled={saving || !selectedMotivoId}
             onClick={() => {
               const motivo = motivosPausaDisponibles.find((m) => m.id === selectedMotivoId) ?? null;
-              onPause(motivo);
+              onPause(motivo, buildCommonFieldsPatch(), datosProcesoPatch);
               setPausePickerOpen(false);
               setSelectedMotivoId("");
             }}
@@ -1494,18 +1601,7 @@ function ExecutionCard({
               size="sm"
               variant="outline"
               disabled={saving}
-              onClick={() =>
-                onPatch(
-                  {
-                    maquinista: maquinista.trim() || null,
-                    incidencia: incidencia.trim() || null,
-                    accion_correctiva: accion.trim() || null,
-                    observaciones: observaciones.trim() || null,
-                    ...buildSyncPatch(),
-                  },
-                  hasCamposConfig ? datosProcesoLocal : null,
-                )
-              }
+              onClick={() => onPatch(buildCommonFieldsPatch(), datosProcesoPatch)}
             >
               {saving ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
               Guardar
@@ -1530,17 +1626,7 @@ function ExecutionCard({
               size="sm"
               className="bg-emerald-700 text-white hover:bg-emerald-800"
               disabled={saving}
-              onClick={() =>
-                onBegin(
-                  {
-                    maquinista: maquinista.trim() || null,
-                    incidencia: incidencia.trim() || null,
-                    accion_correctiva: accion.trim() || null,
-                    observaciones: observaciones.trim() || null,
-                  },
-                  hasCamposConfig ? datosProcesoLocal : null,
-                )
-              }
+              onClick={() => onBegin(buildCommonFieldsPatch(), datosProcesoPatch)}
             >
               <Play className="mr-1 size-4" /> Iniciar
             </Button>
@@ -1552,7 +1638,7 @@ function ExecutionCard({
               variant="outline"
               disabled={saving}
               onClick={() => {
-                onResume(pauses);
+                onResume(pauses, buildCommonFieldsPatch(), datosProcesoPatch);
                 setPausePickerOpen(false);
                 setSelectedMotivoId("");
               }}
@@ -1571,13 +1657,9 @@ function ExecutionCard({
                   {
                     estado_ejecucion: "finalizada",
                     fin_real_at: new Date().toISOString(),
-                    maquinista: maquinista.trim() || null,
-                    incidencia: incidencia.trim() || null,
-                    accion_correctiva: accion.trim() || null,
-                    observaciones: observaciones.trim() || null,
-                    ...buildSyncPatch(),
+                    ...buildCommonFieldsPatch(),
                   },
-                  hasCamposConfig ? datosProcesoLocal : null,
+                  datosProcesoPatch,
                 );
               }}
             >

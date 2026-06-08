@@ -353,17 +353,13 @@ const IMPRESION_DIGITAL_PLANA_CAMPOS: CampoDefinicion[] = [
 // TROQUELADO
 // ============================================================================
 const TROQUELADO_CAMPOS: CampoDefinicion[] = [
+  // — Identificación / geometría (líneas anchas) —
   {
     id: 'troquel',
     label: 'Troquel',
     tipo: 'text',
     placeholder: 'Código o descripción del troquel',
-  },
-  {
-    id: 'poses',
-    label: 'Poses',
-    tipo: 'number',
-    min: 1,
+    width: 'half',
   },
   {
     id: 'tamano_corte',
@@ -371,18 +367,14 @@ const TROQUELADO_CAMPOS: CampoDefinicion[] = [
     tipo: 'dimension',
     placeholder: 'ej: 85 x 55',
     suffix: 'mm',
+    width: 'half',
   },
-  {
-    id: 'pinza',
-    label: 'Pinza',
-    tipo: 'number',
-    min: 0,
-    suffix: 'mm',
-  },
+  // — Expulsor / arreglos / hojas a troquelar en una línea —
   {
     id: 'expulsor',
     label: 'Expulsor',
     tipo: 'select',
+    width: 'third',
     options: [
       { value: 'mascle', label: 'Mascle' },
       { value: 'femella', label: 'Femella' },
@@ -393,13 +385,32 @@ const TROQUELADO_CAMPOS: CampoDefinicion[] = [
     id: 'arreglos',
     label: 'Arreglos',
     tipo: 'boolean',
+    width: 'third',
   },
   {
     id: 'hojas_troquelar',
-    label: 'Nº hojas a troquelar',
+    label: 'Hojas a troquelar (plan)',
     tipo: 'number',
     min: 0,
+    width: 'third',
   },
+  // — Poses y pinza compactos (valores pequeños) —
+  {
+    id: 'poses',
+    label: 'Poses',
+    tipo: 'number',
+    min: 1,
+    width: 'third',
+  },
+  {
+    id: 'pinza',
+    label: 'Pinza',
+    tipo: 'number',
+    min: 0,
+    suffix: 'mm',
+    width: 'third',
+  },
+  // — Tiempos previsto/real —
   {
     id: 'horas_preparacion',
     label: 'Horas preparación',
@@ -407,6 +418,7 @@ const TROQUELADO_CAMPOS: CampoDefinicion[] = [
     hasPrevistoReal: true,
     min: 0,
     suffix: 'h',
+    width: 'half',
   },
   {
     id: 'horas_tiraje',
@@ -415,18 +427,25 @@ const TROQUELADO_CAMPOS: CampoDefinicion[] = [
     hasPrevistoReal: true,
     min: 0,
     suffix: 'h',
+    width: 'half',
   },
-  {
-    id: 'hojas_troqueladas',
-    label: 'Hojas troqueladas',
-    tipo: 'number',
-    min: 0,
-  },
+  // — Resultado real —
   {
     id: 'hojas_merma',
     label: 'Hojas merma',
     tipo: 'number',
     min: 0,
+    width: 'half',
+    emphasis: 'real',
+  },
+  {
+    id: 'hojas_troqueladas',
+    label: 'Hojas troqueladas buenas',
+    tipo: 'number',
+    min: 0,
+    width: 'half',
+    emphasis: 'real',
+    hint: 'Se calcula desde hojas a troquelar − merma; ajústalo si difiere.',
   },
 ];
 
@@ -436,14 +455,16 @@ const TROQUELADO_CAMPOS: CampoDefinicion[] = [
 const ENGOMADO_CAMPOS: CampoDefinicion[] = [
   {
     id: 'estuches_realizar',
-    label: 'Nº estuches a realizar',
+    label: 'Estuches a realizar (plan)',
     tipo: 'number',
     min: 0,
+    width: 'half',
   },
   {
     id: 'tipo_engomado',
     label: 'Tipo de engomado',
     tipo: 'select',
+    width: 'half',
     options: [
       { value: 'lineal', label: 'Lineal' },
       { value: 'automatico', label: 'Automático' },
@@ -461,42 +482,54 @@ const ENGOMADO_CAMPOS: CampoDefinicion[] = [
     hasPrevistoReal: true,
     min: 0,
     suffix: 'h',
+    width: 'half',
   },
   {
     id: 'estuches_engomados',
-    label: 'Nº estuches engomados',
+    label: 'Estuches engomados buenos',
     tipo: 'number',
     min: 0,
+    width: 'half',
+    emphasis: 'real',
+    hint: 'Se siembra desde el plan y arrastra cantidad total.',
   },
   {
     id: 'estuches_por_bulto',
     label: 'Estuches por bulto',
     tipo: 'number',
     min: 1,
-  },
-  {
-    id: 'codigo_caja_embalaje',
-    label: 'Código caja embalaje',
-    tipo: 'text',
-    placeholder: 'Código de la caja donde va',
+    width: 'third',
   },
   {
     id: 'bultos_por_palet',
     label: 'Bultos por palet',
     tipo: 'number',
     min: 1,
+    width: 'third',
   },
   {
     id: 'palets',
     label: 'Palets',
     tipo: 'number',
     min: 0,
+    width: 'third',
+    hint: 'Calculado automáticamente redondeando hacia arriba.',
+  },
+  {
+    id: 'codigo_caja_embalaje',
+    label: 'Código caja embalaje',
+    tipo: 'text',
+    placeholder: 'Código de la caja donde va',
+    width: 'half',
   },
   {
     id: 'cantidad_total',
     label: 'Cantidad total',
     tipo: 'number',
     min: 0,
+    width: 'half',
+    emphasis: 'real',
+    hint: 'Sincronizado con estuches engomados.',
   },
 ];
 
