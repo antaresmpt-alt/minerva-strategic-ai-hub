@@ -524,6 +524,9 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 ✅ **Bloque 3.1 COMPLETADO** (7-8 jun 2026): Pulido captura Impresión + **Troquelado + Engomado** (layout `width`, previsto/real, derivaciones, resaltar resultado real). Robustez de captura: campos persisten en iniciar/pausar/reanudar/guardar/finalizar. **Pendiente**: Digital a fondo y Guillotina.
 ✅ **Bloque 3.2 IMPLEMENTADO** (9 jun 2026): tabla `prod_cajas_embalaje` + RLS + mantenimiento; Engomado con select de caja, prefill bultos/palet, cálculo de picos (`bultos_completos`/`pico`/`bultos_totales`) y reparto en palets con tolerancia (`PALET_TOLERANCIA_BULTOS=1`). Pendiente: meter valores reales de Gabri.
 ✅ **Bloque 3.3 IMPLEMENTADO** (9 jun 2026): Maestro de Artículos — campos `fsc` (Sí/No) y `fsc_fecha_validacion` (BD + formulario).
+✅ **Bloque 3.5 IMPLEMENTADO** (9 jun 2026): Tipo de engomado parametrizado + Homogeneidad pantalla "Despachadas".
+✅ **Bloque 3.6 IMPLEMENTADO** (9 jun 2026): Semáforo sobreproducción (🟠) configurable por proceso en Settings + proyección en Impresión.
+✅ **Bloque 3.7 IMPLEMENTADO** (9 jun 2026): CTP/Preimpresión + Desbroce + Manipulados con Retractilado + 5ª área de planificación "preimpresion". Ver detalle abajo.
 ⏳ **Bloque 4 PENDIENTE**: PDF token
 ⏳ **Bloque 5 PENDIENTE**: Integración Etiquetas ↔ Hoja de Ruta (flujo Hugo)
 ⏳ **Bloque 6 PENDIENTE**: Producidas/Histórico (`prod_ot_producidas`, snapshot híbrido) + lifecycle de cierre (pendiente_revision → producida) + recálculo maestro
@@ -531,7 +534,112 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 
 ---
 
-**Última actualización**: 9 de junio de 2026 - 17:30
+**Última actualización**: 9 de junio de 2026 - 19:10
+
+---
+
+---
+
+## 🔎 Bloque 3.5: Tipo de Engomado Parametrizado + Homogeneidad Despachadas ✅ **IMPLEMENTADO** (9 jun 2026)
+
+### Hecho
+- Reutilizado `prod_despacho_catalogo` con nuevo tipo `'tipo_engomado'` (check ampliado + seed de 11 tipos: Lineal, Fondo semi/auto, Lineal soporte interior 2p, Pegado 4/6 puntos, 2 solapas, de sobre, cónico, especial, compuesto).
+- **Settings** → Catálogos de despacho: gestiona "Tipo de engomado" (alta/edición/baja sin deploy).
+- **API** `/api/admin/prod-despacho-catalogo`: admite `tipo_engomado`.
+- **Despacho** (`master-ots-page`): campo "Tipo de engomado" como Input+datalist (libre + lista), guardado en `produccion_ot_despachadas.tipo_engomado`, clon de histórico de referencia o habitual del maestro.
+- **Maestro de Artículos**: campo `tipo_engomado_habitual` (BD + formulario, sección sugerencias técnicas). Excluido del import Excel.
+- **Tarjeta Engomado**: campo `combo` (Input+datalist), alimentado del catálogo, prefill desde despacho.
+- **Pantalla "Despachadas"** (`ots-despachadas-page`): campo `tipo_engomado` añadido al dialog de edición junto con sugerencias de catálogo para Material y Acabado PRAL. Homogéneo con el despacho principal.
+- `next build` en verde.
+
+### Flujo del dato
+Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable) → Tarjeta Engomado (prerelleno, editable). Histórico de referencia tiene prioridad.
+
+---
+
+## 📊 Bloque 3.6: Semáforo Sobreproducción Configurable ✅ **IMPLEMENTADO** (9 jun 2026)
+
+### Hecho
+- **Módulo de parámetros** `src/lib/sys-parametros-sobreproduccion.ts`:
+  - 3 claves en `sys_parametros`: `produccion_sobreprod_margen_impresion` (10 %), `produccion_sobreprod_margen_troquelado` (5 %), `produccion_sobreprod_margen_engomado` (5 %).
+  - Hook `useSysParametrosSobreproduccion` + helper `margenSobreproduccionPorProceso(procesoId, margenes)`.
+- **Settings** → Variables del Sistema: nueva tarjeta "Producción > Avisos de sobreproducción" con input por proceso y guardado independiente.
+- **Semáforo (`ExecutionCard`)**:
+  - **Impresión** (1/2): proyección desde `despacho.hojasNetas × poses` (antes no aparecía el semáforo).
+  - Nuevo estado **🟠 SOBREPRODUCCIÓN**: se activa si `proyección > pedido × (1 + margen%)`.
+  - Se suma al rango ya existente: 🟢 OK / 🟡 PRECAUCIÓN / 🔴 DÉFICIT / 🟠 SOBREPRODUCCIÓN.
+  - Si no hay `poses`, `proyeccion = null` → semáforo no compara (evita falsos positivos).
+- `next build` en verde.
+
+---
+
+## 🏭 Bloque 3.7: Nuevos Procesos — CTP, Desbroce, Manipulados + Retractilado ✅ **IMPLEMENTADO** (9 jun 2026)
+
+### Contexto
+El usuario necesitaba tres nuevos procesos en la Hoja de Ruta Digital:
+1. **CTP / Preimpresión**: se ejecuta al inicio de casi todas las OTs (verificar troquel, preparar planchas, aprobar colores). Requería una **5ª área de planificación** propia.
+2. **Desbroce**: proceso entre Troquelado y Engomado. La troqueladora entrega hojas con múltiples poses; el desbroce las separa en estuches unitarios antes de pasar a la engomadora.
+3. **Manipulados Internos** (ID 15): ampliar con funcionalidad de **Retractilado** (empaquetar en paquetes retractilados antes de encajar). Incluye campos condicionales.
+
+### Decisiones de diseño
+- **Desbroce** → área `engomado` (máquina ficticia `ENG-DESBROZ`): físicamente está en la zona de engomado; las engomadoras siempre desbrozán antes. Patrón idéntico a Guillotina.
+- **Manipulados** → área `engomado` (máquina ficticia `ENG-MANIP`): también zona de engomado.
+- **CTP** → nueva área `preimpresion` (máquina `CTP-MNRV`): Marc y Gemma tienen rol `preimpresion`; Carlos tendrá rol `produccion` (ve todo).
+
+### Hecho
+#### Base de datos (migración `20260609180000_procesos_ctp_desbroce_preimpresion.sql`)
+| Objeto | Cambio |
+|---|---|
+| `prod_procesos_cat` constraint | Ampliado: añade `'preimpresion'` |
+| `prod_maquinas` constraint | Ampliado: añade `'preimpresion'` + `'digital'` |
+| **Proceso ID 16** | `CTP / Preimpresión`, `tipo_planificacion = 'preimpresion'`, orden 5 |
+| **Proceso ID 22** | `Desbroce`, `tipo_planificacion = 'engomado'`, orden 122 |
+| **Proceso ID 15** | Manipulados/Encajado → `seccion_slug = 'engomado'`, `tipo_planificacion = 'engomado'` |
+| **Máquina `CTP-MNRV`** | "CTP MNRV", `tipo_maquina = 'preimpresion'` |
+| **Máquina `ENG-DESBROZ`** | "Desbroce MNRV", `tipo_maquina = 'engomado'`, orden 30 |
+| **Máquina `ENG-MANIP`** | "Manipulados MNRV", `tipo_maquina = 'engomado'`, orden 40 |
+
+#### TypeScript
+- **`planificacion-ambito.ts`**: `"preimpresion"` en tipo, array, orden UI (posición 0 = primera), etiqueta "CTP / Preimpresión", filtro por rol.
+- **`prod-procesos-cat/route.ts`**: `TipoPlanificacion` + `normalizeTipoPlanificacion` aceptan `"preimpresion"`.
+- **`hoja-ruta-campos-config.ts`**:
+  - Constantes `PROCESO_CTP_ID = 16`, `PROCESO_DESBROCE_ID = 22`.
+  - **`CTP_PREIMPRESION_CAMPOS`**: operador CTP, horas proceso (real), planchas nuevas (bool), verificación troquel (bool), prueba de color (bool), notas. *(Pendiente ampliar tras reunión con Gemma.)*
+  - **`DESBROCE_CAMPOS`**: hojas entrada, poses, estuches desbrozados (real), horas proceso, notas/incidencias.
+  - **`MANIPULADOS_INTERNOS_CAMPOS`** ampliado: descripción, unidades (real), tiempo total, **retractilar (bool)** → condicionales: `unidades_por_paquete` (ej. 25), `num_paquetes` (calc), notas.
+  - **`PROCESO_CAMPOS_CONFIG`** actualizado: CTP (sin output/encadenado), Desbroce (`outputField: estuches_desbrozados`, `outputUnit: estuches`, `inputFrom: [10]`), Engomado (`inputFrom: [22, 10]` — Desbroce tiene prioridad), Manipulados (`inputFrom: [12, 22, 10]`).
+- **`planificacion-ots-ejecucion-tab.tsx`** — semáforo:
+  - Nueva rama Desbroce (ID 22): hojas × poses → estuches.
+  - Rama Engomado corregida: si el predecesor ya da estuches (Desbroce), **no** multiplica por poses.
+- `next build` en verde, 0 errores TypeScript.
+
+### Campos CTP actuales (provisionales — pendiente ampliar con Gemma, 10 jun)
+| Campo | Tipo |
+|---|---|
+| Operador CTP | text |
+| Horas proceso | number (real) |
+| Planchas nuevas | boolean |
+| Verificación troquel | boolean |
+| Prueba de color | boolean |
+| Notas | textarea |
+
+### Encadenado de proyección
+```
+Impresión (1/2) → hojas_impresas
+  ↓
+Troquelado (10) → hojas_troqueladas  [inputFrom: 1,2]
+  ↓
+Desbroce (22) → estuches_desbrozados [inputFrom: 10]  hojas × poses
+  ↓
+Engomado (12) → estuches_engomados   [inputFrom: 22,10]  si predecesor=22 no multiplica, ya son estuches
+```
+CTP (16) está al inicio pero sin salida encadenada (solo captura).
+
+### Pendiente
+- [ ] Ampliar campos CTP tras reunión con Gemma (10 jun 2026).
+- [ ] Crear roles `preimpresion` en `profiles` para Marc y Gemma.
+- [ ] Añadir procesos CTP, Desbroce y Manipulados a las plantillas de ruta habituales en Settings.
+- [ ] Probar flujo completo con una OT real: CTP → Guillotina → Impresión → Troquelado → Desbroce → Engomado.
 
 ---
 
@@ -571,55 +679,27 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 
 ## 📌 Punto de continuación (próxima sesión)
 
-**Sesión 6-7 jun 2026** — Bloque 3 (Hoja de Ruta Virtual): **base funcionando en Pipeline** ✅
+**Sesión 9 jun 2026 (noche)** — Bloques 3.5, 3.6, 3.7 completados ✅
 
-### Hecho hoy
-- Loader `fetchHojaRutaOt(otNumero)` en `src/lib/hoja-ruta/hoja-ruta-query.ts`
-  (cabecera + despacho + pasos con `datos_proceso` + ejecución + pausas + externos).
-- Componente `HojaRutaOtDialog` en `src/components/produccion/hoja-ruta/hoja-ruta-ot-dialog.tsx`
-  (lectura, autocarga por `otNumero`, renderizador compacto de `datos_proceso`).
-- Sustituido el "modal GPS" inline del Pipeline por `<HojaRutaOtDialog />`.
-- Verificado en Pipeline: maqueta bien. `tsc --noEmit` y lint en verde.
+### Hecho hoy (resumen)
+- **Tipo engomado parametrizado** (catálogo, despacho, tarjeta, maestro, despachadas).
+- **Semáforo sobreproducción** (🟠) con márgenes configurables en Settings, + proyección en Impresión.
+- **CTP/Preimpresión** (ID 16, área `preimpresion`) + **Desbroce** (ID 22, área `engomado`) + **Manipulados ampliado** con retractilado condicional.
+- 3 máquinas nuevas: `CTP-MNRV`, `ENG-DESBROZ`, `ENG-MANIP`.
+- Migración aplicada en BD. `next build` en verde.
 
-### Pendiente de pulir (mañana)
-- [ ] Enganchar `HojaRutaOtDialog` en **OTs Despachadas**, **Planificación** y **tarjeta de Ejecución**
-      (el componente ya solo necesita `otNumero`).
-- [ ] Pulir maquetación / detalles visuales de la hoja (queda fino, pero hay cosas a afinar).
-- [ ] Mostrar comparativa previsto vs real más visual.
-- [ ] (Opcional) recuperar en la hoja los "atajos" útiles del modal antiguo si se echan en falta.
+### 🔜 Tareas para la próxima sesión
 
-### Siguiente bloque grande
-- Bloque 6: tabla `prod_ot_producidas` + lifecycle de cierre (`pendiente_revision` → `producida`).
+**Prioridad alta (pendiente del usuario)**
+- [ ] **Ampliar campos CTP** tras reunión con Gemma (10 jun). Añadir checkboxes adicionales al `CTP_PREIMPRESION_CAMPOS` en `hoja-ruta-campos-config.ts`.
+- [ ] **Crear roles `preimpresion`** en `profiles` para Marc y Gemma (desde panel Admin → Usuarios).
+- [ ] **Meter `bultos_por_palet_default`** reales de Gabri en cada caja (`prod_cajas_embalaje`) via Settings → Recursos → Cajas embalaje.
+- [ ] **Probar flujo completo** con una OT real: CTP → (Guillotina) → Impresión → Troquelado → Desbroce → Engomado → Manipulados.
 
----
+**Prioridad media**
+- [ ] Pulir **Digital** a fondo (resto Bloque 3.1).
+- [ ] Pulir **Guillotina** (compactar, marcar salida real).
+- [ ] Añadir los nuevos procesos (CTP, Desbroce) a las **plantillas de ruta** habituales en Settings.
 
-**Sesión 7 jun 2026 (tarde)** — Bloque 3.1: pulido de captura de **Impresión (Offset + Digital)** ✅
-
-### Hecho hoy
-- Layout compacto por `width`, diferenciación previsto/real, derivación automática buenas↔merma.
-- Densidades de tinta con valor (0–2) + nº Pantone, guía ISO 12647 orientativa según `material` (no bloqueante).
-- Fix: el botón "+" de densidades creaba fila vacía que el normalizador descartaba → ahora nace con `CYAN`.
-- `tsc --noEmit` y lint en verde.
-
-### 🔜 Próxima sesión (apuntado)
-- **Revisar y pulir los procesos restantes con el mismo criterio que Impresión**: Troquelado, Digital (a fondo), Engomado y Guillotina. Compactar (`width`), enfocar el dato real (`emphasis`), captura por excepción/derivaciones e info más útil. Se espera mejorar bastante agilidad y utilidad.
-
----
-
-**Nota de cierre**: la captura de Impresión queda más compacta, con info más útil y enfocando dónde debe tocar el operario. Próxima sesión: replicar el patrón en Troquelado/Digital/Engomado/Guillotina.
-
----
-
-**Sesión 8 jun 2026** — Bloque 3.1: **Troquelado + Engomado** pulidos + robustez de captura ✅
-
-### Hecho hoy
-- **Troquelado** y **Engomado** con el patrón de Impresión: layout compacto por `width`, resultado real resaltado, siembra y derivaciones (`troqueladas ↔ merma`; `cantidad_total = estuches_engomados`, `palets = ceil(...)`).
-- Redistribución fina de Troquelado: `expulsor`/`arreglos`/`hojas a troquelar` en una línea; `poses`/`pinza` compactos.
-- **Robustez de captura**: maquinista, incidencia, acción, observaciones y `datos_proceso` persisten en **iniciar / pausar / reanudar / guardar / finalizar** (helper `buildCommonFieldsPatch` + pausar/reanudar persistiendo). Aplica a todos los procesos (componente compartido).
-- Lints en verde en los archivos tocados. (`tsc` global bloqueado por caché corrupta de `.next/dev/types`, ajena a estos cambios.)
-
-### 🔜 Próxima sesión (apuntado por el usuario)
-- **Bloque 3.2 — Engomado "picos"**: añadir campo `pico` (bulto incompleto) y cálculo de bultos completos + pico + bultos totales. Reparto en palets **con tolerancia**: no abrir palet extra por 1–3 cajas/un pico (mejor 1 palet cargado que 2). Definir umbral.
-  - El usuario aportará: tabla de cajas de embalaje + cantidades por palet, y rellenará bultos/caja en el Maestro para el artículo de ejemplo.
-- **Bloque 3.3 — Maestro de Artículos**: añadir `fsc` (Sí/No) y `fsc_fecha_validacion` (fecha de validación / "fecha corta").
-- Pendiente aún: pulir **Digital** a fondo y **Guillotina**.
+**Siguiente bloque grande**
+- **Bloque 6**: tabla `prod_ot_producidas` + lifecycle de cierre (`pendiente_revision` → `producida`) + snapshot híbrido + recálculo maestro.
