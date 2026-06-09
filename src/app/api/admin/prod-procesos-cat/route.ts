@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { requireSettingsAdmin } from "@/lib/api/require-settings-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
-type TipoPlanificacion = "impresion" | "digital" | "troquelado" | "engomado";
+type TipoPlanificacion = "impresion" | "digital" | "troquelado" | "engomado" | "preimpresion";
 type ProcesoPayload = {
   id?: number;
   nombre?: string;
@@ -20,7 +20,8 @@ function normalizeTipoPlanificacion(v: unknown): TipoPlanificacion | null {
     s === "impresion" ||
     s === "digital" ||
     s === "troquelado" ||
-    s === "engomado"
+    s === "engomado" ||
+    s === "preimpresion"
   ) {
     return s;
   }

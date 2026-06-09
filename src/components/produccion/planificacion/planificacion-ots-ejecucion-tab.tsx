@@ -38,7 +38,11 @@ import {
 import { useSysParametrosSobreproduccion } from "@/hooks/use-sys-parametros-sobreproduccion";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
-import { getCamposConfigByProcesoId, PROCESO_CAMPOS_CONFIG } from "@/lib/hoja-ruta-campos-config";
+import {
+  getCamposConfigByProcesoId,
+  PROCESO_CAMPOS_CONFIG,
+  PROCESO_DESBROCE_ID,
+} from "@/lib/hoja-ruta-campos-config";
 import type { DatosProcesoGenerico } from "@/lib/hoja-ruta-campos-config";
 import {
   margenSobreproduccionPorProceso,
@@ -1532,13 +1536,30 @@ function ExecutionCard({
             proyeccion = est;
             proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} hojas × ${poses} poses = ${est.toLocaleString("es-ES")} estuches est.`;
           }
-        } else if (procesoId === 12) {
+        } else if (procesoId === PROCESO_DESBROCE_ID) {
+          // Desbroce: hojas troqueladas × poses → estuches planos
           semaforoTitulo = `Entrada desde proceso anterior · ${row.salidaProcesoAnteriorNombre}`;
-          proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} hojas troqueladas de entrada`;
+          proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} hojas → sin datos de poses aún`;
           if (poses != null && poses > 0) {
             const est = Math.floor(salidaRaw * poses);
             proyeccion = est;
             proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} hojas × ${poses} poses = ${est.toLocaleString("es-ES")} estuches est.`;
+          }
+        } else if (procesoId === 12) {
+          semaforoTitulo = `Entrada desde proceso anterior · ${row.salidaProcesoAnteriorNombre}`;
+          // Si el predecesor ya produce estuches (Desbroce), no multiplicamos por poses
+          const anteriorOutputUnit =
+            PROCESO_CAMPOS_CONFIG[row.procesoAnteriorId ?? 0]?.outputUnit ?? "uds";
+          if (anteriorOutputUnit === "estuches") {
+            proyeccion = Math.floor(salidaRaw);
+            proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} estuches desbrozados (sin multiplicar por poses)`;
+          } else {
+            proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} hojas troqueladas de entrada`;
+            if (poses != null && poses > 0) {
+              const est = Math.floor(salidaRaw * poses);
+              proyeccion = est;
+              proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} hojas × ${poses} poses = ${est.toLocaleString("es-ES")} estuches est.`;
+            }
           }
         } else {
           semaforoTitulo = `Entrada desde proceso anterior · ${row.salidaProcesoAnteriorNombre}`;

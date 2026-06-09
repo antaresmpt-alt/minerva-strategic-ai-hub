@@ -9,11 +9,13 @@ export type PlanificacionTipoMaquina =
   | "impresion"
   | "digital"
   | "troquelado"
-  | "engomado";
+  | "engomado"
+  | "preimpresion";
 
 export type PlanificacionDraftScope = PlanificacionTipoMaquina | "todas";
 
 export const PLANIFICACION_TIPOS_MAQUINA: PlanificacionTipoMaquina[] = [
+  "preimpresion",
   "impresion",
   "digital",
   "troquelado",
@@ -22,10 +24,11 @@ export const PLANIFICACION_TIPOS_MAQUINA: PlanificacionTipoMaquina[] = [
 
 /** Orden UI cuando el usuario ve todas las áreas: evita que la primera máquina sea siempre offset. */
 const PLANIFICACION_TIPO_UI_ORDER: Record<PlanificacionTipoMaquina, number> = {
-  digital: 0,
-  troquelado: 1,
-  engomado: 2,
-  impresion: 3,
+  preimpresion: 0,
+  digital: 1,
+  troquelado: 2,
+  engomado: 3,
+  impresion: 4,
 };
 
 export type MaquinaPlanificacionSortRow = {
@@ -53,6 +56,7 @@ export function sortMaquinasPlanificacionUiOrder<T extends MaquinaPlanificacionS
 }
 
 const DRAFT_SCOPES: PlanificacionDraftScope[] = [
+  "preimpresion",
   "impresion",
   "digital",
   "troquelado",
@@ -75,6 +79,7 @@ export function getPlanificacionTipoMaquinaFilter(
   const r = normalizeDbRole(role ?? null);
   if (!r) return null;
   if (r === "admin" || r === "gerencia" || r === "produccion") return null;
+  if (r === "preimpresion") return "preimpresion";
   if (r === "impresion") return "impresion";
   if (r === "digital") return "digital";
   if (r === "troquelado") return "troquelado";
@@ -116,9 +121,10 @@ export function inferPlanificacionTipoFromProceso(
   const nom = (nombreProceso ?? "").toLowerCase().trim();
   if (!slug && !nom) return null;
   const s = `${slug} ${nom}`;
+  if (s.includes("preimpres") || s.includes("ctp")) return "preimpresion";
   if (s.includes("digital")) return "digital";
-  if (s.includes("troquel")) return "troquelado";
-  if (s.includes("engom")) return "engomado";
+  if (s.includes("troquel") || s.includes("desbroc")) return "troquelado";
+  if (s.includes("engom") || s.includes("desbroz") || s.includes("manipul")) return "engomado";
   if (slug.includes("offset") || s.includes("offset")) return "impresion";
   if (s.includes("impres") && !s.includes("digital")) return "impresion";
   return null;
@@ -128,6 +134,7 @@ export function etiquetaAmbitoPlanificacion(
   tipo: PlanificacionTipoMaquina | null,
 ): string {
   if (!tipo) return "Todas las áreas";
+  if (tipo === "preimpresion") return "CTP / Preimpresión";
   if (tipo === "impresion") return "Impresión offset";
   if (tipo === "digital") return "Impresión digital";
   if (tipo === "troquelado") return "Troquelado";

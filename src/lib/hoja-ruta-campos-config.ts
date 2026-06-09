@@ -746,12 +746,15 @@ const MANIPULADOS_INTERNOS_CAMPOS: CampoDefinicion[] = [
     tipo: 'textarea',
     placeholder: 'Descripción detallada del manipulado (encajar, montar, manipular, pegar, retractilar...)',
     required: true,
+    width: 'full',
   },
   {
     id: 'unidades',
     label: 'Unidades',
     tipo: 'number',
     min: 0,
+    width: 'half',
+    emphasis: 'real',
   },
   {
     id: 'tiempo_total',
@@ -759,14 +762,153 @@ const MANIPULADOS_INTERNOS_CAMPOS: CampoDefinicion[] = [
     tipo: 'number',
     min: 0,
     suffix: 'h',
+    width: 'half',
+  },
+  // — Retractilado (aparece solo si retractilar = true) —
+  {
+    id: 'retractilar',
+    label: 'Retractilar',
+    tipo: 'boolean',
+    width: 'half',
+    hint: 'Activa los campos de retractilado.',
+  },
+  {
+    id: 'unidades_por_paquete',
+    label: 'Uds. por paquete',
+    tipo: 'number',
+    min: 1,
+    width: 'third',
+    conditionalOn: 'retractilar',
+    conditionalValue: true,
+    hint: 'Ej: 25 uds. por paquete retractilado.',
+  },
+  {
+    id: 'num_paquetes',
+    label: 'Nº paquetes',
+    tipo: 'number',
+    min: 0,
+    width: 'third',
+    conditionalOn: 'retractilar',
+    conditionalValue: true,
+    hint: 'Calculado: unidades ÷ uds. por paquete.',
+  },
+  {
+    id: 'notas',
+    label: 'Notas',
+    tipo: 'textarea',
+    width: 'full',
+    placeholder: 'Observaciones del manipulado o retractilado...',
   },
 ];
 
 // ============================================================================
+// CTP / PREIMPRESIÓN
+// ============================================================================
+const CTP_PREIMPRESION_CAMPOS: CampoDefinicion[] = [
+  {
+    id: 'operador_ctp',
+    label: 'Operador CTP',
+    tipo: 'text',
+    placeholder: 'Nombre del operador',
+    width: 'half',
+  },
+  {
+    id: 'horas_proceso',
+    label: 'Horas proceso',
+    tipo: 'number',
+    min: 0,
+    suffix: 'h',
+    width: 'half',
+    emphasis: 'real',
+  },
+  // — Tareas (checkboxes rápidos para fichar desde PC) —
+  {
+    id: 'planchas_nuevas',
+    label: 'Planchas nuevas',
+    tipo: 'boolean',
+    width: 'third',
+  },
+  {
+    id: 'verificacion_troquel',
+    label: 'Verificación troquel',
+    tipo: 'boolean',
+    width: 'third',
+  },
+  {
+    id: 'prueba_color',
+    label: 'Prueba de color',
+    tipo: 'boolean',
+    width: 'third',
+  },
+  // — Notas libres —
+  {
+    id: 'notas',
+    label: 'Notas',
+    tipo: 'textarea',
+    placeholder: 'Observaciones del trabajo de preimpresión...',
+    width: 'full',
+  },
+];
+
+// ============================================================================
+// DESBROCE
+// ============================================================================
+const DESBROCE_CAMPOS: CampoDefinicion[] = [
+  {
+    id: 'hojas_entrada',
+    label: 'Hojas de entrada',
+    tipo: 'number',
+    min: 0,
+    width: 'half',
+    hint: 'Hojas troqueladas recibidas de la troqueladora.',
+  },
+  {
+    id: 'poses',
+    label: 'Poses',
+    tipo: 'number',
+    min: 1,
+    width: 'half',
+    hint: 'Estuches por hoja (se toma del despacho si está informado).',
+  },
+  {
+    id: 'estuches_desbrozados',
+    label: 'Estuches desbrozados',
+    tipo: 'number',
+    min: 0,
+    width: 'half',
+    emphasis: 'real',
+    hint: 'Calculado: hojas × poses.',
+  },
+  {
+    id: 'horas_proceso',
+    label: 'Horas proceso',
+    tipo: 'number',
+    min: 0,
+    suffix: 'h',
+    width: 'half',
+  },
+  {
+    id: 'notas',
+    label: 'Notas / incidencias',
+    tipo: 'textarea',
+    width: 'full',
+    placeholder: 'Observaciones del desbroce...',
+  },
+];
+
+// ============================================================================
+// IDs de proceso conocidos (deben coincidir con prod_procesos_cat en BD)
+// ============================================================================
+/** @internal IDs de proceso para la lógica de encadenado y semáforo. */
+export const PROCESO_CTP_ID = 16;
+export const PROCESO_DESBROCE_ID = 22;
+
+// ============================================================================
 // MAPEO: Proceso ID real → Config
 // Catálogo actual prod_procesos_cat:
-// 1 Offset, 2 Digital plano, 10 Troquelado, 12 Engomado, 15 Manipulado,
-// 17 Guillotina. Etiquetas (18/19/20) quedan fuera: ver Bloque 5.
+// 1 Offset, 2 Digital plano, 10 Troquelado, 12 Engomado, 15 Manipulados (Int),
+// 16 CTP/Preimpresión, 17 Guillotina. Etiquetas (18/19/20) quedan fuera.
+// 22 Desbroce.
 // ============================================================================
 export const PROCESO_CAMPOS_CONFIG: Record<number, ProcesoConfigCampos> = {
   1: {
@@ -793,18 +935,32 @@ export const PROCESO_CAMPOS_CONFIG: Record<number, ProcesoConfigCampos> = {
     campos: ENGOMADO_CAMPOS,
     outputField: 'estuches_engomados',
     outputUnit: 'estuches',
-    inputFromProcessIds: [10],
+    // 22 (Desbroce) tiene prioridad: si hay desbroce previo, toma estuches ya separados.
+    // 10 (Troquelado) es el fallback cuando no hay desbroce.
+    inputFromProcessIds: [PROCESO_DESBROCE_ID, 10],
   },
   15: {
-    procesoNombre: 'Manipulado/Encajado',
+    procesoNombre: 'Manipulados internos',
     campos: MANIPULADOS_INTERNOS_CAMPOS,
-    inputFromProcessIds: [12, 10],
+    inputFromProcessIds: [12, PROCESO_DESBROCE_ID, 10],
+  },
+  [PROCESO_CTP_ID]: {
+    procesoNombre: 'CTP / Preimpresión',
+    campos: CTP_PREIMPRESION_CAMPOS,
+    // Sin outputField: CTP no produce unidades que encadenen al siguiente proceso.
   },
   17: {
     procesoNombre: 'Guillotina',
     campos: GUILLOTINA_CAMPOS,
     outputField: 'hojas_finales',
     outputUnit: 'hojas',
+  },
+  [PROCESO_DESBROCE_ID]: {
+    procesoNombre: 'Desbroce',
+    campos: DESBROCE_CAMPOS,
+    outputField: 'estuches_desbrozados',
+    outputUnit: 'estuches',
+    inputFromProcessIds: [10],
   },
 };
 
@@ -924,4 +1080,25 @@ export type DatosProcesoManipuladosInternos = {
   descripcion?: string;
   unidades?: number;
   tiempo_total?: number;
+  retractilar?: boolean;
+  unidades_por_paquete?: number;
+  num_paquetes?: number;
+  notas?: string;
+};
+
+export type DatosProcesoCTP = {
+  operador_ctp?: string;
+  horas_proceso?: number;
+  planchas_nuevas?: boolean;
+  verificacion_troquel?: boolean;
+  prueba_color?: boolean;
+  notas?: string;
+};
+
+export type DatosProcesoDesbroce = {
+  hojas_entrada?: number;
+  poses?: number;
+  estuches_desbrozados?: number;
+  horas_proceso?: number;
+  notas?: string;
 };
