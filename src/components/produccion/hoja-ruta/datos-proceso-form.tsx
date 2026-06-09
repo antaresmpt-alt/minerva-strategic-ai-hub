@@ -37,6 +37,11 @@ type DatosProcesoFormProps = {
     datos: DatosProcesoGenerico,
     changedFieldId: string,
   ) => DatosProcesoGenerico;
+  /**
+   * Opciones dinámicas por id de campo select (ej: cajas de embalaje cargadas
+   * de BD). Si existe entrada para un campo, sustituye `campo.options`.
+   */
+  dynamicOptions?: Record<string, { value: string; label: string }[]>;
 };
 
 /** Traduce el ancho de un campo a clases de columna en una rejilla de 6. */
@@ -124,6 +129,7 @@ export function DatosProcesoForm({
   onChange,
   readonly = false,
   computeDerived,
+  dynamicOptions,
 }: DatosProcesoFormProps) {
   const [datos, setDatos] = useState<DatosProcesoGenerico>(datosInicial);
 
@@ -258,9 +264,10 @@ export function DatosProcesoForm({
               />
             );
           } else {
+            const overrideOptions = dynamicOptions?.[campo.id];
             content = (
               <CampoInput
-                campo={campo}
+                campo={overrideOptions ? { ...campo, options: overrideOptions } : campo}
                 label={campo.label}
                 value={datos[campo.id]}
                 onChange={(v) => handleChange(campo.id, v)}
@@ -396,6 +403,34 @@ function CampoInput({ campo, label, value, onChange, readonly, tone = "normal" }
         <Label htmlFor={campo.id} className={labelClassName ?? "cursor-pointer"}>
           {labelWithRequired}
         </Label>
+      </div>
+    );
+  }
+
+  // COMBO (input con sugerencias: opciones + texto libre)
+  if (campo.tipo === "combo") {
+    const listId = `${campo.id}-suggestions`;
+    return (
+      <div className="space-y-1.5">
+        <Label htmlFor={campo.id} className={labelClassName}>{labelWithRequired}</Label>
+        <Input
+          id={campo.id}
+          type="text"
+          list={listId}
+          placeholder={campo.placeholder ?? "Selecciona o escribe…"}
+          value={(value as string | undefined) ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={readonly}
+          className={inputClassName}
+        />
+        <datalist id={listId}>
+          {campo.options?.map((opt) => (
+            <option key={opt.value} value={opt.label} />
+          ))}
+        </datalist>
+        {campo.hint && (
+          <p className="text-[10px] leading-tight text-slate-400">{campo.hint}</p>
+        )}
       </div>
     );
   }

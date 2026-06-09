@@ -35,10 +35,15 @@ import {
   getPlanificacionTipoMaquinaFilter,
   PLANIFICACION_TIPOS_MAQUINA,
 } from "@/lib/planificacion-ambito";
+import { useSysParametrosSobreproduccion } from "@/hooks/use-sys-parametros-sobreproduccion";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
 import { getCamposConfigByProcesoId, PROCESO_CAMPOS_CONFIG } from "@/lib/hoja-ruta-campos-config";
 import type { DatosProcesoGenerico } from "@/lib/hoja-ruta-campos-config";
+import {
+  margenSobreproduccionPorProceso,
+  type SobreproduccionMargenesParametros,
+} from "@/lib/sys-parametros-sobreproduccion";
 import { DatosProcesoForm } from "@/components/produccion/hoja-ruta/datos-proceso-form";
 import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
 import type {
@@ -80,6 +85,7 @@ type DespachoInfo = {
   horasTiraje: number | null;
   horasTroquelado: number | null;
   horasEngomado: number | null;
+  tipoEngomado: string | null;
   fechaEntrega: string | null;
 };
 
@@ -212,11 +218,76 @@ function seedRealValuesFromPrevistos(
 }
 
 const PROCESOS_IMPRESION = new Set([1, 2]);
+const PROCESO_ENGOMADO = 12;
+
+type CajaEmbalajeOption = {
+  codigo: string;
+  descripcion: string | null;
+  bultos_por_palet_default: number | null;
+};
+
+/**
+ * Tolerancia de bultos "sueltos" que se aceptan apilados sobre un palet ya
+ * existente antes de abrir uno nuevo. Regla de logística (Gabri): es preferible
+ * un palet algo cargado que dos casi vacíos por un pico de pocas cajas.
+ */
+const PALET_TOLERANCIA_BULTOS = 1;
 
 function toFiniteNum(value: unknown): number | null {
   if (value == null || value === "") return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Reparto en bultos/picos/palets para Engomado.
+ * - bultos_completos = floor(estuches / estuches_por_bulto)
+ * - pico = resto (estuches del bulto incompleto)
+ * - bultos_totales = completos + (pico > 0 ? 1 : 0)
+ * - palets: con tolerancia, no abre palet nuevo por un pico de <= tolerancia bultos.
+ */
+function computeEngomadoReparto(
+  estuches: number | null,
+  porBulto: number | null,
+  bultosPorPalet: number | null,
+): {
+  bultos_completos?: number;
+  pico?: number;
+  bultos_totales?: number;
+  palets?: number;
+} {
+  const result: {
+    bultos_completos?: number;
+    pico?: number;
+    bultos_totales?: number;
+    palets?: number;
+  } = {};
+  if (estuches == null || porBulto == null || porBulto <= 0) return result;
+
+  const completos = Math.floor(estuches / porBulto);
+  const pico = estuches - completos * porBulto;
+  const totales = completos + (pico > 0 ? 1 : 0);
+  result.bultos_completos = completos;
+  result.pico = pico;
+  result.bultos_totales = totales;
+
+  if (bultosPorPalet != null && bultosPorPalet > 0 && totales > 0) {
+    const full = Math.floor(totales / bultosPorPalet);
+    const resto = totales - full * bultosPorPalet;
+    let palets: number;
+    if (resto === 0) {
+      palets = full;
+    } else if (full >= 1 && resto <= PALET_TOLERANCIA_BULTOS) {
+      palets = full; // el pico se sube encima de un palet existente
+    } else {
+      palets = full + 1;
+    }
+    result.palets = Math.max(palets, 1);
+  } else if (totales > 0) {
+    result.palets = undefined;
+  }
+
+  return result;
 }
 
 /**
@@ -285,18 +356,15 @@ function computeDerivedDatosProceso(
       next.cantidad_total = engomados;
     }
 
-    const estuches = toFiniteNum(next.estuches_engomados);
+    const estuches = toFiniteNum(next.estuches_engomados) ?? toFiniteNum(next.cantidad_total);
     const porBulto = toFiniteNum(next.estuches_por_bulto);
     const bultosPorPalet = toFiniteNum(next.bultos_por_palet);
-    if (
-      estuches != null &&
-      porBulto != null &&
-      bultosPorPalet != null &&
-      porBulto > 0 &&
-      bultosPorPalet > 0
-    ) {
-      next.palets = Math.ceil(estuches / (porBulto * bultosPorPalet));
-    }
+
+    const reparto = computeEngomadoReparto(estuches, porBulto, bultosPorPalet);
+    if (reparto.bultos_completos != null) next.bultos_completos = reparto.bultos_completos;
+    if (reparto.pico != null) next.pico = reparto.pico;
+    if (reparto.bultos_totales != null) next.bultos_totales = reparto.bultos_totales;
+    if (reparto.palets != null) next.palets = reparto.palets;
 
     return next;
   }
@@ -423,10 +491,14 @@ export function PlanificacionOtsEjecucionTab({
   tabletMode?: boolean;
 }) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const { margenes: margenesSobreproduccion } =
+    useSysParametrosSobreproduccion();
   const [rows, setRows] = useState<MesaEjecucion[]>([]);
   const [pausesByExecutionId, setPausesByExecutionId] = useState<Record<string, MesaEjecucionPausa[]>>({});
   const [despachoByOt, setDespachoByOt] = useState<Record<string, DespachoInfo>>({});
   const [motivosPausa, setMotivosPausa] = useState<MotivoPausa[]>([]);
+  const [cajasEmbalaje, setCajasEmbalaje] = useState<CajaEmbalajeOption[]>([]);
+  const [tipoEngomadoOptions, setTipoEngomadoOptions] = useState<string[]>([]);
   const [maquinas, setMaquinas] = useState<Array<{ id: string; nombre: string }>>([]);
   const [selectedMaquina, setSelectedMaquina] = useState<string>("all");
   const [estado, setEstado] = useState<"activas" | EstadoEjecucionMesa | "all">("activas");
@@ -476,7 +548,7 @@ export function PlanificacionOtsEjecucionTab({
         maqQuery = maqQuery.in("tipo_maquina", PLANIFICACION_TIPOS_MAQUINA);
       }
 
-      const [execRes, maqRes, motivosRes] = await Promise.all([
+      const [execRes, maqRes, motivosRes, cajasRes, engomadoRes] = await Promise.all([
         supabase
           .from(TABLE_EJECUCIONES)
           .select("*, prod_maquinas(nombre,tipo_maquina), prod_ot_pasos(ot_id,orden,proceso_id,datos_proceso)")
@@ -488,11 +560,29 @@ export function PlanificacionOtsEjecucionTab({
           .eq("activo", true)
           .order("categoria", { ascending: true })
           .order("orden", { ascending: true }),
+        supabase
+          .from("prod_cajas_embalaje")
+          .select("codigo, descripcion, bultos_por_palet_default")
+          .eq("activo", true)
+          .order("orden", { ascending: true })
+          .order("codigo", { ascending: true }),
+        supabase
+          .from("prod_despacho_catalogo")
+          .select("label")
+          .eq("tipo", "tipo_engomado")
+          .eq("activo", true)
+          .order("orden", { ascending: true })
+          .order("label", { ascending: true }),
       ]);
       if (execRes.error) throw execRes.error;
       if (maqRes.error) throw maqRes.error;
       if (motivosRes.error) throw motivosRes.error;
       const motivos = ((motivosRes.data ?? []) as MotivoPausaRow[]).map(mapMotivoRow);
+      const cajas = (cajasRes.error ? [] : (cajasRes.data ?? [])) as CajaEmbalajeOption[];
+      const tiposEngomado = (
+        engomadoRes.error ? [] : (engomadoRes.data ?? [])
+      ).map((r) => String((r as { label?: string | null }).label ?? "").trim())
+        .filter(Boolean);
       const maqRowsRaw = (maqRes.data ?? []) as Array<{
         id: string;
         nombre: string;
@@ -557,7 +647,8 @@ export function PlanificacionOtsEjecucionTab({
             horas_entrada,
             horas_tiraje,
             horas_estimadas_troquelado,
-            horas_estimadas_engomado
+            horas_estimadas_engomado,
+            tipo_engomado
           `)
           .in("ot_numero", otNumeros);
         const { data: generalData } = await supabase
@@ -610,6 +701,7 @@ export function PlanificacionOtsEjecucionTab({
           horas_tiraje?: number | null;
           horas_estimadas_troquelado?: number | null;
           horas_estimadas_engomado?: number | null;
+          tipo_engomado?: string | null;
         }>) {
           const ot = String(d.ot_numero ?? "").trim();
           if (!ot) continue;
@@ -636,6 +728,7 @@ export function PlanificacionOtsEjecucionTab({
             horasTiraje: typeof d.horas_tiraje === "number" ? d.horas_tiraje : null,
             horasTroquelado: typeof d.horas_estimadas_troquelado === "number" ? d.horas_estimadas_troquelado : null,
             horasEngomado: typeof d.horas_estimadas_engomado === "number" ? d.horas_estimadas_engomado : null,
+            tipoEngomado: d.tipo_engomado ?? null,
             fechaEntrega: gen?.fechaEntrega ?? null,
           };
         }
@@ -706,6 +799,8 @@ export function PlanificacionOtsEjecucionTab({
       setDespachoByOt(despachoMap);
       setRows(execRows.map((r) => mapRow(r, pauseMap, salidaAnteriorByOtId)));
       setMotivosPausa(motivos);
+      setCajasEmbalaje(cajas);
+      setTipoEngomadoOptions(tiposEngomado);
       setMaquinas(
         maqRows.map((m) => ({
           id: m.id,
@@ -1118,6 +1213,9 @@ export function PlanificacionOtsEjecucionTab({
                       despacho={despachoByOt[row.ot] ?? null}
                       pauses={pausesByExecutionId[row.id] ?? []}
                       motivosPausa={motivosPausa}
+                      cajasEmbalaje={cajasEmbalaje}
+                      tipoEngomadoOptions={tipoEngomadoOptions}
+                      margenesSobreproduccion={margenesSobreproduccion}
                       desviacion={desviacion}
                       saving={savingId === row.id}
                       onPatch={(patch, dp) => void patchExecution(row, patch, dp)}
@@ -1143,6 +1241,9 @@ function ExecutionCard({
   despacho,
   pauses,
   motivosPausa,
+  cajasEmbalaje,
+  tipoEngomadoOptions,
+  margenesSobreproduccion,
   desviacion,
   saving,
   onPatch,
@@ -1155,6 +1256,9 @@ function ExecutionCard({
   despacho: DespachoInfo | null;
   pauses: MesaEjecucionPausa[];
   motivosPausa: MotivoPausa[];
+  cajasEmbalaje: CajaEmbalajeOption[];
+  tipoEngomadoOptions: string[];
+  margenesSobreproduccion: SobreproduccionMargenesParametros;
   desviacion: number | null;
   saving: boolean;
   onPatch: (patch: Record<string, unknown>, datosProcesoUpdate?: DatosProcesoGenerico | null) => void;
@@ -1182,6 +1286,27 @@ function ExecutionCard({
     () => motivosPausa.filter((motivo) => motivoAplicaATipoMaquina(motivo, row.maquinaTipo)),
     [motivosPausa, row.maquinaTipo],
   );
+
+  const cajasDynamicOptions = useMemo(
+    () => ({
+      codigo_caja_embalaje: cajasEmbalaje.map((c) => ({
+        value: c.codigo,
+        label: c.descripcion?.trim() ? `${c.codigo} · ${c.descripcion}` : c.codigo,
+      })),
+      tipo_engomado: tipoEngomadoOptions.map((label) => ({ value: label, label })),
+    }),
+    [cajasEmbalaje, tipoEngomadoOptions],
+  );
+
+  const cajasDefaultByCodigo = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const c of cajasEmbalaje) {
+      if (c.bultos_por_palet_default != null) {
+        map.set(c.codigo, c.bultos_por_palet_default);
+      }
+    }
+    return map;
+  }, [cajasEmbalaje]);
 
   const [datosProcesoLocal, setDatosProcesoLocal] = useState<DatosProcesoGenerico>(() => {
     const existing = (row.datosProcesoJson as DatosProcesoGenerico) ?? {};
@@ -1228,6 +1353,7 @@ function ExecutionCard({
         base.cantidad_total = despacho.cantidad;
       }
       if (despacho.horasEngomado != null) base.tiempo_previsto = despacho.horasEngomado;
+      if (despacho.tipoEngomado) base.tipo_engomado = despacho.tipoEngomado;
     }
     return seedRealValuesFromPrevistos(pid, base);
   });
@@ -1368,30 +1494,46 @@ function ExecutionCard({
         <Input value={observaciones} onChange={(e) => setObservaciones(e.target.value)} disabled={!canEdit || saving} />
       </div>
 
-      {row.salidaProcesoAnterior != null && row.procesoId != null ? (() => {
-        const procesoConfig = PROCESO_CAMPOS_CONFIG[row.procesoId];
-        const outputUnit = procesoConfig?.inputFromProcessIds
-          ? (PROCESO_CAMPOS_CONFIG[row.procesoAnteriorId ?? 0]?.outputUnit ?? "uds")
-          : "uds";
+      {row.procesoId != null ? (() => {
+        const procesoId = row.procesoId;
+        const isImpresion = procesoId === 1 || procesoId === 2;
+        const procesoConfig = PROCESO_CAMPOS_CONFIG[procesoId];
+        const outputUnit = isImpresion
+          ? "hojas"
+          : procesoConfig?.inputFromProcessIds
+            ? (PROCESO_CAMPOS_CONFIG[row.procesoAnteriorId ?? 0]?.outputUnit ?? "uds")
+            : "uds";
         const cantidad = despacho?.cantidad ?? null;
         const poses =
           (datosProcesoLocal.poses as number | undefined) ??
           despacho?.poses ??
           null;
-        const salidaRaw = row.salidaProcesoAnterior;
+        const salidaRaw = isImpresion
+          ? despacho?.hojasNetas ?? null
+          : row.salidaProcesoAnterior;
+        if (salidaRaw == null) return null;
 
         let proyeccion: number | null = null;
         let proyeccionLabel = "";
-        if (row.procesoId === 10) {
-          proyeccion = salidaRaw;
+        let semaforoTitulo = "";
+        if (isImpresion) {
+          semaforoTitulo = "Proyección desde despacho · hojas netas a imprimir";
+          proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} hojas netas → sin datos de poses aún`;
+          if (poses != null && poses > 0) {
+            const est = Math.floor(salidaRaw * poses);
+            proyeccion = est;
+            proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} hojas netas × ${poses} poses = ${est.toLocaleString("es-ES")} estuches est.`;
+          }
+        } else if (procesoId === 10) {
+          semaforoTitulo = `Entrada desde proceso anterior · ${row.salidaProcesoAnteriorNombre}`;
           proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} hojas → sin datos de poses aún`;
           if (poses != null && poses > 0) {
             const est = Math.floor(salidaRaw * poses);
             proyeccion = est;
             proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} hojas × ${poses} poses = ${est.toLocaleString("es-ES")} estuches est.`;
           }
-        } else if (row.procesoId === 12) {
-          proyeccion = salidaRaw;
+        } else if (procesoId === 12) {
+          semaforoTitulo = `Entrada desde proceso anterior · ${row.salidaProcesoAnteriorNombre}`;
           proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} hojas troqueladas de entrada`;
           if (poses != null && poses > 0) {
             const est = Math.floor(salidaRaw * poses);
@@ -1399,20 +1541,30 @@ function ExecutionCard({
             proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} hojas × ${poses} poses = ${est.toLocaleString("es-ES")} estuches est.`;
           }
         } else {
+          semaforoTitulo = `Entrada desde proceso anterior · ${row.salidaProcesoAnteriorNombre}`;
           proyeccion = salidaRaw;
           proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} ${outputUnit}`;
         }
 
-        const MARGEN_PCT = 0.05;
+        const MARGEN_DEFICIT_PCT = 0.05;
+        const margenSobreproduccionPct =
+          margenSobreproduccionPorProceso(procesoId, margenesSobreproduccion);
         let semaforoColor = "";
         let semaforoIcon = "";
         let semaforoTexto = "";
         if (cantidad != null && proyeccion != null) {
-          if (proyeccion >= cantidad) {
+          if (
+            margenSobreproduccionPct != null &&
+            proyeccion > cantidad * (1 + margenSobreproduccionPct / 100)
+          ) {
+            semaforoColor = "bg-orange-50 border-orange-300 text-orange-900";
+            semaforoIcon = "🟠";
+            semaforoTexto = `SOBREPRODUCCIÓN — proyección (${proyeccion.toLocaleString("es-ES")}) supera el pedido (${cantidad.toLocaleString("es-ES")}) en más del ${margenSobreproduccionPct.toLocaleString("es-ES")}%`;
+          } else if (proyeccion >= cantidad) {
             semaforoColor = "bg-emerald-50 border-emerald-300 text-emerald-800";
             semaforoIcon = "🟢";
             semaforoTexto = `OK — proyección (${proyeccion.toLocaleString("es-ES")}) ≥ pedido (${cantidad.toLocaleString("es-ES")})`;
-          } else if (proyeccion >= cantidad * (1 - MARGEN_PCT)) {
+          } else if (proyeccion >= cantidad * (1 - MARGEN_DEFICIT_PCT)) {
             semaforoColor = "bg-amber-50 border-amber-300 text-amber-800";
             semaforoIcon = "🟡";
             semaforoTexto = `AJUSTADO — proyección (${proyeccion.toLocaleString("es-ES")}) dentro del ±5% del pedido (${cantidad.toLocaleString("es-ES")})`;
@@ -1426,7 +1578,7 @@ function ExecutionCard({
         return (
           <div className={cn("mt-3 rounded-lg border px-3 py-2 text-[11px]", semaforoColor || "bg-slate-50 border-slate-200 text-slate-700")}>
             <p className="font-semibold text-[10px] uppercase tracking-wide opacity-70 mb-1">
-              Entrada desde proceso anterior · {row.salidaProcesoAnteriorNombre}
+              {semaforoTitulo}
             </p>
             <p className="font-mono font-bold text-sm">
               {semaforoIcon} {salidaRaw.toLocaleString("es-ES")} {outputUnit}
@@ -1460,9 +1612,27 @@ function ExecutionCard({
                 datosInicial={datosProcesoLocal}
                 onChange={setDatosProcesoLocal}
                 readonly={!canEdit}
-                computeDerived={(datos, changedFieldId) =>
-                  computeDerivedDatosProceso(row.procesoId, datos, changedFieldId)
-                }
+                dynamicOptions={cajasDynamicOptions}
+                computeDerived={(datos, changedFieldId) => {
+                  let base = datos;
+                  // Al elegir caja, proponemos su bultos/palet por defecto.
+                  if (
+                    changedFieldId === "codigo_caja_embalaje" &&
+                    row.procesoId === PROCESO_ENGOMADO
+                  ) {
+                    const def = cajasDefaultByCodigo.get(
+                      String(datos.codigo_caja_embalaje ?? ""),
+                    );
+                    if (def != null) base = { ...datos, bultos_por_palet: def };
+                  }
+                  return computeDerivedDatosProceso(
+                    row.procesoId,
+                    base,
+                    changedFieldId === "codigo_caja_embalaje"
+                      ? "bultos_por_palet"
+                      : changedFieldId,
+                  );
+                }}
               />
             </div>
           ) : null}

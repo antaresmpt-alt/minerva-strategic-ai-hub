@@ -24,6 +24,11 @@ export type ProdReferenciaRow = {
   tintas_habituales: string | null;
   acabado_habitual: string | null;
   ruta_habitual: string | null;
+  tipo_engomado_habitual: string | null;
+
+  /** Certificación FSC */
+  fsc: boolean;
+  fsc_fecha_validacion: string | null;
 
   /** Trazabilidad histórica (actualizado automáticamente por el sistema) */
   ultima_ot_numero: string | null;

@@ -195,6 +195,7 @@ type DespachoEditFormState = {
   horas_tiraje: string;
   horas_estimadas_troquelado: string;
   horas_estimadas_engomado: string;
+  tipo_engomado: string;
   troquel: string;
   poses: string;
   acabado_pral: string;
@@ -217,6 +218,7 @@ function emptyDespachoEditForm(): DespachoEditFormState {
     horas_tiraje: "",
     horas_estimadas_troquelado: "",
     horas_estimadas_engomado: "",
+    tipo_engomado: "",
     troquel: "",
     poses: "",
     acabado_pral: "",
@@ -236,11 +238,12 @@ const DESPACHO_EDIT_CLONE_FIELDS = [
   "troquel",
   "poses",
   "acabado_pral",
+  "tipo_engomado",
   "notas",
 ] as const;
 
 const DESPACHO_EDIT_CLONE_SELECT =
-  "tintas, material, tamano_hoja, gramaje, troquel, poses, acabado_pral, notas, despachado_at";
+  "tintas, material, tamano_hoja, gramaje, troquel, poses, acabado_pral, tipo_engomado, notas, despachado_at";
 
 function applyEditClonePrefill(
   form: DespachoEditFormState,
@@ -304,6 +307,7 @@ function rowToEditForm(row: OtsDespachadasTableRow): DespachoEditFormState {
     horas_tiraje: numStr(row.horas_tiraje),
     horas_estimadas_troquelado: numStr(row.horas_estimadas_troquelado),
     horas_estimadas_engomado: numStr(row.horas_estimadas_engomado),
+    tipo_engomado: row.tipo_engomado?.trim() ?? "",
     troquel: row.troquel?.trim() ?? "",
     poses: row.poses != null && Number.isFinite(row.poses) ? String(row.poses) : "",
     acabado_pral: row.acabado_pral?.trim() ?? "",
@@ -348,6 +352,22 @@ export function OtsDespachadasPage({
     useState<OtsDespachadasTableRow | null>(null);
 
   const [hojaRutaOt, setHojaRutaOt] = useState<string | null>(null);
+
+  const [despachoCatalog, setDespachoCatalog] = useState<
+    Array<{ tipo: "material" | "acabado_pral" | "tipo_engomado"; label: string }>
+  >([]);
+  const despachoMaterialSuggestions = useMemo(
+    () => despachoCatalog.filter((x) => x.tipo === "material").map((x) => x.label),
+    [despachoCatalog],
+  );
+  const despachoAcabadoSuggestions = useMemo(
+    () => despachoCatalog.filter((x) => x.tipo === "acabado_pral").map((x) => x.label),
+    [despachoCatalog],
+  );
+  const despachoEngomadoSuggestions = useMemo(
+    () => despachoCatalog.filter((x) => x.tipo === "tipo_engomado").map((x) => x.label),
+    [despachoCatalog],
+  );
 
   const [editOpen, setEditOpen] = useState(false);
   const [editRow, setEditRow] = useState<OtsDespachadasTableRow | null>(null);
@@ -429,6 +449,30 @@ export function OtsDespachadasPage({
     () => createOtsDespachadasColumns(columnCtx),
     [columnCtx]
   );
+
+  useEffect(() => {
+    if (!editOpen || despachoCatalog.length > 0) return;
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase
+        .from("prod_despacho_catalogo")
+        .select("tipo, label")
+        .eq("activo", true)
+        .order("tipo", { ascending: true })
+        .order("orden", { ascending: true })
+        .order("label", { ascending: true });
+      if (cancelled || error) return;
+      setDespachoCatalog(
+        (data ?? []) as Array<{
+          tipo: "material" | "acabado_pral" | "tipo_engomado";
+          label: string;
+        }>,
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [editOpen, despachoCatalog.length, supabase]);
 
   useEffect(() => {
     if (!compraOpen || !compraOt) return;
@@ -598,6 +642,7 @@ export function OtsDespachadasPage({
           horas_tiraje: num(d.horas_tiraje),
           horas_estimadas_troquelado: num(d.horas_estimadas_troquelado),
           horas_estimadas_engomado: num(d.horas_estimadas_engomado),
+          tipo_engomado: (d.tipo_engomado as string | null) ?? null,
           tintas: (d.tintas as string | null) ?? null,
           notas: (d.notas as string | null) ?? null,
           estado_material: (d.estado_material as string | null) ?? null,
@@ -1030,6 +1075,7 @@ export function OtsDespachadasPage({
           horas_estimadas_engomado: parseOptionalDecimalInput(
             editForm.horas_estimadas_engomado
           ),
+          tipo_engomado: editForm.tipo_engomado.trim() || null,
           troquel: editForm.troquel.trim() || null,
           poses: parseOptionalIntInput(editForm.poses),
           acabado_pral: editForm.acabado_pral.trim() || null,
@@ -1217,11 +1263,17 @@ export function OtsDespachadasPage({
               <Input
                 id="edit-despacho-material"
                 className="h-8 text-xs"
+                list="edit-despacho-material-suggestions"
                 value={editForm.material}
                 onChange={(e) =>
                   setEditForm((f) => ({ ...f, material: e.target.value }))
                 }
               />
+              <datalist id="edit-despacho-material-suggestions">
+                {despachoMaterialSuggestions.map((v) => (
+                  <option key={v} value={v} />
+                ))}
+              </datalist>
             </div>
             <div className="grid gap-1">
               <Label htmlFor="edit-despacho-tamano" className="text-xs">
@@ -1361,6 +1413,26 @@ export function OtsDespachadasPage({
                 }
               />
             </div>
+            <div className="grid gap-1">
+              <Label htmlFor="edit-despacho-tipo-engomado" className="text-xs">
+                Tipo de engomado
+              </Label>
+              <Input
+                id="edit-despacho-tipo-engomado"
+                className="h-8 text-xs"
+                list="edit-despacho-tipo-engomado-suggestions"
+                placeholder="Selecciona o escribe…"
+                value={editForm.tipo_engomado}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, tipo_engomado: e.target.value }))
+                }
+              />
+              <datalist id="edit-despacho-tipo-engomado-suggestions">
+                {despachoEngomadoSuggestions.map((v) => (
+                  <option key={v} value={v} />
+                ))}
+              </datalist>
+            </div>
             <div className="grid gap-1 sm:col-span-2">
               <TroquelPickerField
                 id="edit-despacho-troquel"
@@ -1399,11 +1471,17 @@ export function OtsDespachadasPage({
               <Input
                 id="edit-despacho-acabado"
                 className="h-8 text-xs"
+                list="edit-despacho-acabado-suggestions"
                 value={editForm.acabado_pral}
                 onChange={(e) =>
                   setEditForm((f) => ({ ...f, acabado_pral: e.target.value }))
                 }
               />
+              <datalist id="edit-despacho-acabado-suggestions">
+                {despachoAcabadoSuggestions.map((v) => (
+                  <option key={v} value={v} />
+                ))}
+              </datalist>
             </div>
             <div className="grid gap-1 sm:col-span-2">
               <Label htmlFor="edit-despacho-notas" className="text-xs">

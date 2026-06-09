@@ -24,6 +24,18 @@ import {
   type SysParamOtsComprasClave,
   type SysParametroOtsCompraRow,
 } from "@/lib/sys-parametros-ots-compras";
+import {
+  DEFAULT_SOBREPRODUCCION_MARGENES,
+  mergeSobreproduccionMargenesDesdeFilas,
+  SYS_PARAM_CLAVE_SOBREPROD_ENGOMADO,
+  SYS_PARAM_CLAVE_SOBREPROD_IMPRESION,
+  SYS_PARAM_CLAVE_SOBREPROD_TROQUELADO,
+  SYS_PARAM_SOBREPROD_CLAVES,
+  type SysParamSobreproduccionClave,
+  type SysParametroSobreproduccionRow,
+} from "@/lib/sys-parametros-sobreproduccion";
+
+type SysParametroRow = SysParametroOtsCompraRow | SysParametroSobreproduccionRow;
 
 const TITULO_PARAM: Record<SysParamOtsComprasClave, string> = {
   [SYS_PARAM_CLAVE_OTS_COMPRAS_ROJO]: "Días crítico (semáforo rojo)",
@@ -40,11 +52,42 @@ const DESCRIPCION_FALLBACK: Record<SysParamOtsComprasClave, string> = {
     "Si los días hasta entrega superan este umbral, junto al número de OT se muestra el icono de euro (sobrestock / entrega lejana).",
 };
 
+const TITULO_SOBREPROD_PARAM: Record<SysParamSobreproduccionClave, string> = {
+  [SYS_PARAM_CLAVE_SOBREPROD_IMPRESION]: "Margen exceso Impresión (%)",
+  [SYS_PARAM_CLAVE_SOBREPROD_TROQUELADO]: "Margen exceso Troquelado (%)",
+  [SYS_PARAM_CLAVE_SOBREPROD_ENGOMADO]: "Margen exceso Engomado (%)",
+};
+
+const DESCRIPCION_SOBREPROD_FALLBACK: Record<
+  SysParamSobreproduccionClave,
+  string
+> = {
+  [SYS_PARAM_CLAVE_SOBREPROD_IMPRESION]:
+    "Si la proyección de Impresión (hojas netas del despacho × poses) supera el pedido por encima de este porcentaje, se muestra aviso de sobreproducción.",
+  [SYS_PARAM_CLAVE_SOBREPROD_TROQUELADO]:
+    "Si la proyección de Troquelado (entrada desde Impresión × poses) supera el pedido por encima de este porcentaje, se muestra aviso de sobreproducción.",
+  [SYS_PARAM_CLAVE_SOBREPROD_ENGOMADO]:
+    "Si la proyección de Engomado supera el pedido por encima de este porcentaje, se muestra aviso de sobreproducción.",
+};
+
 function draftToValores(
   draft: Record<SysParamOtsComprasClave, string>
 ): Record<string, number> | null {
   const out: Record<string, number> = {};
   for (const clave of SYS_PARAM_OTS_COMPRAS_CLAVES) {
+    const raw = draft[clave].trim();
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) return null;
+    out[clave] = n;
+  }
+  return out;
+}
+
+function draftSobreprodToValores(
+  draft: Record<SysParamSobreproduccionClave, string>
+): Record<string, number> | null {
+  const out: Record<string, number> = {};
+  for (const clave of SYS_PARAM_SOBREPROD_CLAVES) {
     const raw = draft[clave].trim();
     const n = Number(raw);
     if (!Number.isFinite(n) || n < 0) return null;
@@ -60,6 +103,11 @@ export function VariablesSistemaTab() {
   const [metaByClave, setMetaByClave] = useState<
     Partial<Record<SysParamOtsComprasClave, SysParametroOtsCompraRow>>
   >({});
+  const [metaSobreprodByClave, setMetaSobreprodByClave] = useState<
+    Partial<
+      Record<SysParamSobreproduccionClave, SysParametroSobreproduccionRow>
+    >
+  >({});
   const [draft, setDraft] = useState<Record<SysParamOtsComprasClave, string>>(
     () => ({
       [SYS_PARAM_CLAVE_OTS_COMPRAS_ROJO]: String(
@@ -73,21 +121,51 @@ export function VariablesSistemaTab() {
       ),
     })
   );
+  const [draftSobreprod, setDraftSobreprod] = useState<
+    Record<SysParamSobreproduccionClave, string>
+  >(() => ({
+    [SYS_PARAM_CLAVE_SOBREPROD_IMPRESION]: String(
+      DEFAULT_SOBREPRODUCCION_MARGENES.impresion
+    ),
+    [SYS_PARAM_CLAVE_SOBREPROD_TROQUELADO]: String(
+      DEFAULT_SOBREPRODUCCION_MARGENES.troquelado
+    ),
+    [SYS_PARAM_CLAVE_SOBREPROD_ENGOMADO]: String(
+      DEFAULT_SOBREPRODUCCION_MARGENES.engomado
+    ),
+  }));
 
-  const applyRows = useCallback((rows: SysParametroOtsCompraRow[]) => {
+  const applyRows = useCallback((rows: SysParametroRow[]) => {
     const map: Partial<Record<SysParamOtsComprasClave, SysParametroOtsCompraRow>> =
       {};
+    const sobreprodMap: Partial<
+      Record<SysParamSobreproduccionClave, SysParametroSobreproduccionRow>
+    > = {};
     for (const r of rows) {
       if (SYS_PARAM_OTS_COMPRAS_CLAVES.includes(r.clave as SysParamOtsComprasClave)) {
         map[r.clave as SysParamOtsComprasClave] = r;
       }
+      if (
+        SYS_PARAM_SOBREPROD_CLAVES.includes(
+          r.clave as SysParamSobreproduccionClave
+        )
+      ) {
+        sobreprodMap[r.clave as SysParamSobreproduccionClave] = r;
+      }
     }
     setMetaByClave(map);
+    setMetaSobreprodByClave(sobreprodMap);
     const merged = mergeOtsComprasUmbralesDesdeFilas(rows);
     setDraft({
       [SYS_PARAM_CLAVE_OTS_COMPRAS_ROJO]: String(merged.criticoRojo),
       [SYS_PARAM_CLAVE_OTS_COMPRAS_NARANJA]: String(merged.avisoNaranja),
       [SYS_PARAM_CLAVE_OTS_COMPRAS_SOBRESTOCK]: String(merged.sobrestockUmbral),
+    });
+    const sobreprod = mergeSobreproduccionMargenesDesdeFilas(rows);
+    setDraftSobreprod({
+      [SYS_PARAM_CLAVE_SOBREPROD_IMPRESION]: String(sobreprod.impresion),
+      [SYS_PARAM_CLAVE_SOBREPROD_TROQUELADO]: String(sobreprod.troquelado),
+      [SYS_PARAM_CLAVE_SOBREPROD_ENGOMADO]: String(sobreprod.engomado),
     });
   }, []);
 
@@ -97,7 +175,7 @@ export function VariablesSistemaTab() {
     try {
       const res = await fetch("/api/admin/sys-parametros");
       const data = (await res.json()) as {
-        rows?: SysParametroOtsCompraRow[];
+        rows?: SysParametroRow[];
         error?: string;
       };
       if (!res.ok) {
@@ -127,6 +205,10 @@ export function VariablesSistemaTab() {
   }, [draft]);
 
   const valoresParseados = useMemo(() => draftToValores(draft), [draft]);
+  const valoresSobreprodParseados = useMemo(
+    () => draftSobreprodToValores(draftSobreprod),
+    [draftSobreprod]
+  );
 
   const handleGuardar = useCallback(async () => {
     const valores = draftToValores(draft);
@@ -164,7 +246,35 @@ export function VariablesSistemaTab() {
     }
   }, [draft, fetchRows]);
 
+  const handleGuardarSobreprod = useCallback(async () => {
+    const valores = draftSobreprodToValores(draftSobreprod);
+    if (!valores) {
+      toast.error("Introduce porcentajes válidos (≥ 0) en los tres campos.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/admin/sys-parametros", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ valores }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok) {
+        toast.error(data.error ?? "No se pudo guardar.");
+        return;
+      }
+      toast.success("Márgenes de sobreproducción actualizados.");
+      await fetchRows();
+    } catch {
+      toast.error("No se pudo guardar.");
+    } finally {
+      setSaving(false);
+    }
+  }, [draftSobreprod, fetchRows]);
+
   return (
+    <div className="space-y-6">
     <Card className="border-border/80 shadow-sm">
       <CardHeader className="pb-4">
         <CardTitle className="text-lg">Producción &gt; OTs &gt; Compras</CardTitle>
@@ -254,5 +364,92 @@ export function VariablesSistemaTab() {
         </Button>
       </CardContent>
     </Card>
+    <Card className="border-border/80 shadow-sm">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-lg">
+          Producción &gt; Avisos de sobreproducción
+        </CardTitle>
+        <CardDescription>
+          Márgenes máximos por proceso antes de marcar una proyección como
+          sobreproducción. Los valores se guardan como porcentaje en{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">
+            public.sys_parametros
+          </code>
+          .
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {loadError ? (
+          <p className="text-sm text-destructive" role="alert">
+            {loadError}
+          </p>
+        ) : null}
+
+        {loading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+            Cargando parámetros…
+          </div>
+        ) : null}
+
+        <div className="space-y-5">
+          {SYS_PARAM_SOBREPROD_CLAVES.map((clave) => {
+            const meta = metaSobreprodByClave[clave];
+            const descripcion =
+              meta?.descripcion?.trim() || DESCRIPCION_SOBREPROD_FALLBACK[clave];
+            const updated = meta?.updated_at?.trim();
+            return (
+              <div key={clave} className="space-y-2">
+                <Label
+                  htmlFor={`sys-param-${clave}`}
+                  className="text-sm font-medium"
+                >
+                  {TITULO_SOBREPROD_PARAM[clave]}
+                </Label>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {descripcion}
+                </p>
+                <Input
+                  id={`sys-param-${clave}`}
+                  type="number"
+                  min={0}
+                  step={1}
+                  className="max-w-[12rem] font-mono text-sm"
+                  disabled={loading}
+                  value={draftSobreprod[clave]}
+                  onChange={(e) =>
+                    setDraftSobreprod((prev) => ({
+                      ...prev,
+                      [clave]: e.target.value,
+                    }))
+                  }
+                />
+                {updated ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Última actualización: {updated}
+                  </p>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+
+        <Button
+          type="button"
+          onClick={() => void handleGuardarSobreprod()}
+          disabled={loading || saving || !valoresSobreprodParseados}
+        >
+          {saving ? (
+            <>
+              <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
+              Guardando…
+            </>
+          ) : (
+            "Guardar márgenes"
+          )}
+        </Button>
+      </CardContent>
+    </Card>
+    </div>
   );
 }

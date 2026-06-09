@@ -10,6 +10,7 @@ export type CampoTipo =
   | 'number' 
   | 'boolean' 
   | 'select' 
+  | 'combo'     // Input con sugerencias (datalist): opciones + texto libre
   | 'textarea' 
   | 'array'
   | 'dimension' // Para campos como "largo x ancho"
@@ -463,8 +464,9 @@ const ENGOMADO_CAMPOS: CampoDefinicion[] = [
   {
     id: 'tipo_engomado',
     label: 'Tipo de engomado',
-    tipo: 'select',
+    tipo: 'combo',
     width: 'half',
+    hint: 'Elige del catálogo o escribe uno libre.',
     options: [
       { value: 'lineal', label: 'Lineal' },
       { value: 'automatico', label: 'Automático' },
@@ -494,6 +496,14 @@ const ENGOMADO_CAMPOS: CampoDefinicion[] = [
     hint: 'Se siembra desde el plan y arrastra cantidad total.',
   },
   {
+    id: 'codigo_caja_embalaje',
+    label: 'Caja de embalaje',
+    tipo: 'select',
+    width: 'half',
+    options: [], // Se rellena dinámicamente desde prod_cajas_embalaje.
+    hint: 'Al elegirla se propone bultos/palet por defecto (editable).',
+  },
+  {
     id: 'estuches_por_bulto',
     label: 'Estuches por bulto',
     tipo: 'number',
@@ -506,6 +516,32 @@ const ENGOMADO_CAMPOS: CampoDefinicion[] = [
     tipo: 'number',
     min: 1,
     width: 'third',
+    hint: 'Por defecto el de la caja; ajústalo si el cliente admite otra altura.',
+  },
+  {
+    id: 'bultos_completos',
+    label: 'Bultos completos',
+    tipo: 'number',
+    min: 0,
+    width: 'third',
+    hint: 'Calculado: estuches ÷ estuches por bulto (entero).',
+  },
+  {
+    id: 'pico',
+    label: 'Pico (bulto incompleto)',
+    tipo: 'number',
+    min: 0,
+    width: 'third',
+    hint: 'Estuches sueltos del último bulto parcial.',
+  },
+  {
+    id: 'bultos_totales',
+    label: 'Bultos totales',
+    tipo: 'number',
+    min: 0,
+    width: 'third',
+    emphasis: 'real',
+    hint: 'Bultos completos + 1 si hay pico.',
   },
   {
     id: 'palets',
@@ -513,14 +549,7 @@ const ENGOMADO_CAMPOS: CampoDefinicion[] = [
     tipo: 'number',
     min: 0,
     width: 'third',
-    hint: 'Calculado automáticamente redondeando hacia arriba.',
-  },
-  {
-    id: 'codigo_caja_embalaje',
-    label: 'Código caja embalaje',
-    tipo: 'text',
-    placeholder: 'Código de la caja donde va',
-    width: 'half',
+    hint: 'Calculado con tolerancia: no abre palet por un pico suelto.',
   },
   {
     id: 'cantidad_total',
@@ -879,6 +908,9 @@ export type DatosProcesoEngomado = {
   estuches_por_bulto?: number;
   codigo_caja_embalaje?: string;
   bultos_por_palet?: number;
+  bultos_completos?: number;
+  pico?: number;
+  bultos_totales?: number;
   palets?: number;
   cantidad_total?: number;
 };

@@ -61,7 +61,15 @@ export function nextCodigoMinerva(existing: string[]): string {
 
 export type ArticuloImportRow = Omit<
   ProdReferenciaRow,
-  "id" | "created_at" | "updated_at" | "ultima_ot_numero" | "ultima_ot_fecha" | "total_repeticiones"
+  | "id"
+  | "created_at"
+  | "updated_at"
+  | "ultima_ot_numero"
+  | "ultima_ot_fecha"
+  | "total_repeticiones"
+  | "fsc"
+  | "fsc_fecha_validacion"
+  | "tipo_engomado_habitual"
 > & {
   __presentFields?: Partial<Record<keyof ArticuloImportDbRow, boolean>>;
 };

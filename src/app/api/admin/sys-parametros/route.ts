@@ -5,7 +5,20 @@ import {
   SYS_PARAM_OTS_COMPRAS_CLAVES,
   type SysParametroOtsCompraRow,
 } from "@/lib/sys-parametros-ots-compras";
+import {
+  SYS_PARAM_SOBREPROD_CLAVES,
+  type SysParametroSobreproduccionRow,
+} from "@/lib/sys-parametros-sobreproduccion";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+
+const SYS_PARAM_ALLOWED_CLAVES = [
+  ...SYS_PARAM_OTS_COMPRAS_CLAVES,
+  ...SYS_PARAM_SOBREPROD_CLAVES,
+] as const;
+
+type SysParametroRow =
+  | SysParametroOtsCompraRow
+  | SysParametroSobreproduccionRow;
 
 export async function GET() {
   const gate = await requireSettingsAdmin();
@@ -16,7 +29,7 @@ export async function GET() {
     const { data, error } = await admin
       .from("sys_parametros")
       .select("id, seccion, clave, valor_num, descripcion, updated_at")
-      .in("clave", [...SYS_PARAM_OTS_COMPRAS_CLAVES])
+      .in("clave", [...SYS_PARAM_ALLOWED_CLAVES])
       .order("clave");
 
     if (error) {
@@ -24,7 +37,7 @@ export async function GET() {
     }
 
     return NextResponse.json({
-      rows: (data ?? []) as SysParametroOtsCompraRow[],
+      rows: (data ?? []) as SysParametroRow[],
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error interno";
@@ -58,7 +71,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "valores requerido" }, { status: 400 });
   }
 
-  const allowed = new Set<string>([...SYS_PARAM_OTS_COMPRAS_CLAVES]);
+  const allowed = new Set<string>([...SYS_PARAM_ALLOWED_CLAVES]);
   try {
     const admin = createSupabaseAdminClient();
     for (const [clave, raw] of Object.entries(valores)) {

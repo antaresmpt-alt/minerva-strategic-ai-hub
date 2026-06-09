@@ -87,6 +87,9 @@ type ArticuloForm = {
   tintas_habituales: string;
   acabado_habitual: string;
   ruta_habitual: string;
+  tipo_engomado_habitual: string;
+  fsc: boolean;
+  fsc_fecha_validacion: string;
   notas: string;
 };
 
@@ -107,6 +110,9 @@ const EMPTY_FORM: ArticuloForm = {
   tintas_habituales: "",
   acabado_habitual: "",
   ruta_habitual: "",
+  tipo_engomado_habitual: "",
+  fsc: false,
+  fsc_fecha_validacion: "",
   notas: "",
 };
 
@@ -140,6 +146,9 @@ function rowToForm(row: ProdReferenciaRow): ArticuloForm {
     tintas_habituales: row.tintas_habituales ?? "",
     acabado_habitual: row.acabado_habitual ?? "",
     ruta_habitual: row.ruta_habitual ?? "",
+    tipo_engomado_habitual: row.tipo_engomado_habitual ?? "",
+    fsc: row.fsc ?? false,
+    fsc_fecha_validacion: row.fsc_fecha_validacion ?? "",
     notas: row.notas ?? "",
   };
 }
@@ -166,6 +175,9 @@ function formToPayload(form: ArticuloForm) {
     tintas_habituales: form.tintas_habituales.trim() || null,
     acabado_habitual: form.acabado_habitual.trim() || null,
     ruta_habitual: form.ruta_habitual.trim() || null,
+    tipo_engomado_habitual: form.tipo_engomado_habitual.trim() || null,
+    fsc: form.fsc,
+    fsc_fecha_validacion: form.fsc ? form.fsc_fecha_validacion.trim() || null : null,
     notas: form.notas.trim() || null,
   };
 }
@@ -437,6 +449,43 @@ function ArticuloFormDialog({
                 onChange={(e) => set("ruta_habitual", e.target.value)}
               />
             </div>
+            <div className="grid gap-1">
+              <Label className="text-xs">Tipo de engomado habitual</Label>
+              <Input
+                className="h-8 text-xs"
+                placeholder="Pegado 4 puntos"
+                value={form.tipo_engomado_habitual}
+                onChange={(e) => set("tipo_engomado_habitual", e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* FSC */}
+          <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            Certificación FSC
+          </p>
+          <div className="grid grid-cols-2 items-end gap-3">
+            <div className="flex items-center gap-2 pb-1">
+              <Checkbox
+                id="fsc-check"
+                checked={form.fsc}
+                onCheckedChange={(v) => set("fsc", Boolean(v))}
+              />
+              <Label htmlFor="fsc-check" className="cursor-pointer text-xs">
+                Artículo certificado FSC
+              </Label>
+            </div>
+            {form.fsc ? (
+              <div className="grid gap-1">
+                <Label className="text-xs">Fecha validación FSC</Label>
+                <Input
+                  className="h-8 text-xs"
+                  type="date"
+                  value={form.fsc_fecha_validacion}
+                  onChange={(e) => set("fsc_fecha_validacion", e.target.value)}
+                />
+              </div>
+            ) : null}
           </div>
 
           {/* Notas */}

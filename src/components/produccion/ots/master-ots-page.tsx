@@ -141,7 +141,11 @@ type DespachoMeta = {
   pedido_cliente: string;
   fecha_entrega: string;
 };
-type DespachoCatalogItem = { id: string; tipo: "material" | "acabado_pral"; label: string };
+type DespachoCatalogItem = {
+  id: string;
+  tipo: "material" | "acabado_pral" | "tipo_engomado";
+  label: string;
+};
 type ReferenciaHistorialRow = {
   ot_numero: string;
   despachado_at: string | null;
@@ -164,6 +168,7 @@ type DespachoFormState = {
   horas_tiraje: string;
   horas_estimadas_troquelado: string;
   horas_estimadas_engomado: string;
+  tipo_engomado: string;
   troquel: string;
   poses: string;
   acabado_pral: string;
@@ -189,6 +194,7 @@ function emptyDespachoForm(): DespachoFormState {
     horas_tiraje: "",
     horas_estimadas_troquelado: "",
     horas_estimadas_engomado: "",
+    tipo_engomado: "",
     troquel: "",
     poses: "",
     acabado_pral: "",
@@ -209,12 +215,13 @@ const DESPACHO_CLONE_FIELDS = [
   "troquel",
   "poses",
   "acabado_pral",
+  "tipo_engomado",
   "notas",
 ] as const;
 
 /** Columnas de despacho que se leen para clonar de una OT/referencia anterior. */
 const DESPACHO_CLONE_SELECT =
-  "tintas, material, tamano_hoja, gramaje, troquel, poses, acabado_pral, notas, despachado_at";
+  "tintas, material, tamano_hoja, gramaje, troquel, poses, acabado_pral, tipo_engomado, notas, despachado_at";
 
 /**
  * Aplica los datos de una OT/referencia anterior SOLO sobre campos vacíos del formulario
@@ -855,6 +862,13 @@ export function MasterOtsPage() {
         .map((x) => x.label),
     [despachoCatalog],
   );
+  const despachoEngomadoSuggestions = useMemo(
+    () =>
+      despachoCatalog
+        .filter((x) => x.tipo === "tipo_engomado")
+        .map((x) => x.label),
+    [despachoCatalog],
+  );
 
   const hydrateDespachoForOt = useCallback(
     async (otRaw: string) => {
@@ -916,7 +930,7 @@ export function MasterOtsPage() {
           supabase
             .from(TABLE_OT_DESPACHADAS)
             .select(
-              "tintas, material, tamano_hoja, gramaje, num_hojas_brutas, num_hojas_netas, horas_entrada, horas_tiraje, horas_estimadas_troquelado, horas_estimadas_engomado, troquel, poses, acabado_pral, notas, referencia_id, ot_anterior_numero, ot_anterior_id"
+              "tintas, material, tamano_hoja, gramaje, num_hojas_brutas, num_hojas_netas, horas_entrada, horas_tiraje, horas_estimadas_troquelado, horas_estimadas_engomado, tipo_engomado, troquel, poses, acabado_pral, notas, referencia_id, ot_anterior_numero, ot_anterior_id"
             )
             .eq("ot_numero", sel.num_pedido)
             .maybeSingle(),
@@ -960,6 +974,7 @@ export function MasterOtsPage() {
             d.horas_estimadas_engomado == null
               ? ""
               : String(d.horas_estimadas_engomado),
+          tipo_engomado: String(d.tipo_engomado ?? ""),
           troquel: String(d.troquel ?? ""),
           poses: d.poses == null ? "" : String(d.poses),
           acabado_pral: String(d.acabado_pral ?? ""),
@@ -1075,14 +1090,23 @@ export function MasterOtsPage() {
           .limit(1)
           .maybeSingle();
         if (error) throw error;
+        const tipoEngomadoHabitual = String(
+          (row as { tipo_engomado_habitual?: string | null }).tipo_engomado_habitual ?? "",
+        ).trim();
         setDespachoForm((f) => {
           const base: DespachoFormState = {
             ...f,
             referencia_id: row.id,
             referencia_codigo: row.codigo,
           };
-          if (!data) return base;
-          return applyClonePrefill(base, data as Record<string, unknown>).next;
+          const next = data
+            ? applyClonePrefill(base, data as Record<string, unknown>).next
+            : base;
+          // El habitual del maestro rellena solo si el histórico no aportó tipo.
+          if (!next.tipo_engomado && tipoEngomadoHabitual) {
+            return { ...next, tipo_engomado: tipoEngomadoHabitual };
+          }
+          return next;
         });
         if (!data) {
           toast.info(
@@ -1316,6 +1340,7 @@ export function MasterOtsPage() {
         horas_estimadas_engomado: parseOptionalDecimalInput(
           despachoForm.horas_estimadas_engomado
         ),
+        tipo_engomado: despachoForm.tipo_engomado.trim() || null,
         troquel: despachoForm.troquel.trim() || null,
         poses: integerOrZeroForDespacho(despachoForm.poses),
         acabado_pral: despachoForm.acabado_pral.trim() || null,
@@ -1998,6 +2023,29 @@ ${otsContextJson}
                   }))
                 }
               />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="despacho-tipo-engomado" className="text-xs">
+                Tipo de engomado
+              </Label>
+              <Input
+                id="despacho-tipo-engomado"
+                className="h-8 text-xs"
+                list="despacho-tipo-engomado-suggestions"
+                placeholder="Selecciona o escribe…"
+                value={despachoForm.tipo_engomado}
+                onChange={(e) =>
+                  setDespachoForm((f) => ({
+                    ...f,
+                    tipo_engomado: e.target.value,
+                  }))
+                }
+              />
+              <datalist id="despacho-tipo-engomado-suggestions">
+                {despachoEngomadoSuggestions.map((v) => (
+                  <option key={v} value={v} />
+                ))}
+              </datalist>
             </div>
             <div className="grid gap-1 sm:col-span-2">
               <TroquelPickerField

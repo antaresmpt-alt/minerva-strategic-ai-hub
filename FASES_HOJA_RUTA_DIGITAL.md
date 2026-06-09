@@ -330,7 +330,23 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 
 ---
 
-## 🧮 Bloque 3.2: Engomado — Cálculo de bultos/picos + datos del Maestro ⏳ **PENDIENTE (próxima sesión)**
+## 🧮 Bloque 3.2: Engomado — Cálculo de bultos/picos + datos del Maestro ✅ **IMPLEMENTADO** (9 jun 2026)
+
+**Hecho:**
+- **Mini-maestro de cajas de embalaje** `prod_cajas_embalaje` (tabla nueva + RLS lectura `authenticated`, escrituras vía API admin):
+  - Campos: `codigo` (MN2L…), `descripcion` (incl. medidas), `bultos_por_palet_default` (orientativo de Gabri), `con_logo`, `activo`, `orden`, `notas`.
+  - Sembradas 11 cajas del listado Optimus (MN1L, BP1N, CR2L, BP2L, BP2N, MN2L, MN2N, MN3L, MN3N, BP3N, RULOL) con `bultos_por_palet_default` vacío (pendiente meter los valores de Gabri).
+  - Mantenimiento en **Ajustes → Recursos de Producción → Cajas embalaje** (`RecursosCajasEmbalajePanel` + `/api/admin/prod-cajas-embalaje`).
+- **Engomado** ahora usa `codigo_caja_embalaje` como **select dinámico** (lee `prod_cajas_embalaje`). Al elegir caja se propone `bultos_por_palet` por defecto (editable, porque no siempre es fijo).
+- **Cálculo de picos** (`computeEngomadoReparto`): `bultos_completos = floor(estuches / estuches_por_bulto)`, `pico = resto`, `bultos_totales = completos + (pico>0?1:0)`. Nuevos campos en config + tipo.
+- **Reparto en palets con tolerancia**: `PALET_TOLERANCIA_BULTOS = 1` → no abre palet nuevo si el sobrante es ≤ tolerancia (se apila encima). Constante ajustable.
+
+**Pendiente del usuario:**
+- [ ] Meter los `bultos_por_palet_default` reales de Gabri en cada caja (vía la pantalla de mantenimiento).
+- [ ] Rellenar `estuches_por_bulto` en el Maestro / OT del artículo de ejemplo.
+- [ ] Confirmar si la tolerancia (1 bulto) es la correcta o subirla a 2-3.
+
+### Diseño original (referencia)
 
 **Objetivo**: que el sistema calcule al operario el reparto en bultos y palets, contemplando el caso habitual de "pico" (bulto incompleto), y nutrir el cálculo desde el Maestro de Artículos.
 
@@ -357,17 +373,18 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 
 ---
 
-## 🌳 Bloque 3.3: Maestro de Artículos — Campos FSC ⏳ **PENDIENTE**
+## 🌳 Bloque 3.3: Maestro de Artículos — Campos FSC ✅ **IMPLEMENTADO** (9 jun 2026)
 
 **Objetivo**: añadir trazabilidad de certificación FSC por artículo en el Maestro.
 
-### Campos nuevos (Maestro de Artículos)
-- [ ] `fsc` (Sí/No) — si el artículo está certificado FSC.
-- [ ] `fsc_fecha_validacion` (fecha) — cuándo se validó el FSC para ese artículo ("fecha corta").
+### Hecho
+- [x] `fsc` (boolean, default false) en `prod_referencias`.
+- [x] `fsc_fecha_validacion` (date, nullable) en `prod_referencias`.
+- [x] Tipo `ProdReferenciaRow` + formulario del Maestro (`ArticuloFormDialog`): checkbox "Artículo certificado FSC" y, si está activo, selector de fecha de validación.
+- [x] La importación Excel ignora FSC (no rompe el flujo de import existente).
 
-### Notas
-- Definir tabla/columnas reales del Maestro donde viven estos campos.
-- Valorar mostrar el flag FSC en despacho / hoja de ruta cuando aplique.
+### Pendiente (futuro)
+- [ ] Valorar mostrar el flag FSC en despacho / hoja de ruta cuando aplique.
 
 ---
 
@@ -505,8 +522,8 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 ✅ **Motivos de pausa por proceso** (6 jun 2026): `sys_motivos_pausa.tipos_maquina` (NULL = universal) + filtrado por tipo de máquina en ejecución
 ⏳ **Bloque 3 EN PROGRESO** (6 jun 2026): Hoja de Ruta Virtual (`HojaRutaOtDialog`) + loader `fetchHojaRutaOt`, enganchado en Pipeline, OTs Despachadas, Planificación y tarjeta de Ejecución
 ✅ **Bloque 3.1 COMPLETADO** (7-8 jun 2026): Pulido captura Impresión + **Troquelado + Engomado** (layout `width`, previsto/real, derivaciones, resaltar resultado real). Robustez de captura: campos persisten en iniciar/pausar/reanudar/guardar/finalizar. **Pendiente**: Digital a fondo y Guillotina.
-⏳ **Bloque 3.2 PENDIENTE** (8 jun 2026): Engomado — cálculo de bultos/"picos" + reparto en palets con tolerancia + datos desde Maestro (tabla de cajas/palet).
-⏳ **Bloque 3.3 PENDIENTE** (8 jun 2026): Maestro de Artículos — campos `fsc` (Sí/No) y `fsc_fecha_validacion`.
+✅ **Bloque 3.2 IMPLEMENTADO** (9 jun 2026): tabla `prod_cajas_embalaje` + RLS + mantenimiento; Engomado con select de caja, prefill bultos/palet, cálculo de picos (`bultos_completos`/`pico`/`bultos_totales`) y reparto en palets con tolerancia (`PALET_TOLERANCIA_BULTOS=1`). Pendiente: meter valores reales de Gabri.
+✅ **Bloque 3.3 IMPLEMENTADO** (9 jun 2026): Maestro de Artículos — campos `fsc` (Sí/No) y `fsc_fecha_validacion` (BD + formulario).
 ⏳ **Bloque 4 PENDIENTE**: PDF token
 ⏳ **Bloque 5 PENDIENTE**: Integración Etiquetas ↔ Hoja de Ruta (flujo Hugo)
 ⏳ **Bloque 6 PENDIENTE**: Producidas/Histórico (`prod_ot_producidas`, snapshot híbrido) + lifecycle de cierre (pendiente_revision → producida) + recálculo maestro
@@ -514,7 +531,42 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 
 ---
 
-**Última actualización**: 8 de junio de 2026 - 19:42
+**Última actualización**: 9 de junio de 2026 - 17:30
+
+---
+
+**Sesión 9 jun 2026 (tarde)** — Tipo de engomado parametrizado ✅
+
+### Hecho
+- **Parametrizado** (no hardcode) reutilizando el catálogo genérico `prod_despacho_catalogo` con nuevo `tipo='tipo_engomado'` (check ampliado + seed de 11 tipos: Lineal, Fondo semi/auto, Lineal soporte interior 2p, Pegado 4/6 puntos, 2 solapas, de sobre, cónico, especial, compuesto).
+- **Settings**: panel "Catálogos de despacho" ahora gestiona también "Tipo de engomado" (alta/edición/baja, sin deploy).
+- **API** `/api/admin/prod-despacho-catalogo`: admite `tipo_engomado`.
+- **Despacho** (`master-ots-page`): nuevo campo "Tipo de engomado" como **Input + datalist** (lista + texto libre), guardado en `produccion_ot_despachadas.tipo_engomado`, se clona del histórico de la referencia y se prerellena desde el habitual del maestro si el histórico no aporta.
+- **Maestro de Artículos**: campo `tipo_engomado_habitual` (BD + formulario, en sugerencias técnicas). Excluido de la importación Excel.
+- **Tarjeta de Engomado**: nuevo tipo de campo `combo` (Input+datalist) para `tipo_engomado`, alimentado del catálogo; **prefill** desde el despacho. Sustituye al `select` cerrado anterior.
+- `next build` en verde.
+
+### Flujo del dato
+Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, lista+libre) → Tarjeta Engomado (prerelleno, editable). El histórico de la referencia tiene prioridad sobre el habitual.
+
+### Pendiente
+- Meter `bultos_por_palet` reales de Gabri en las cajas.
+- Pulir Digital a fondo y Guillotina (resto Bloque 3.1).
+
+---
+
+**Sesión 9 jun 2026** — Cajas de embalaje + Bloques 3.2 y 3.3 ✅
+
+### Hecho hoy
+- **Tabla `prod_cajas_embalaje`** (mini-maestro) + RLS + seed (11 cajas, bultos/palet vacíos) + pantalla de mantenimiento en Ajustes → Recursos de Producción → "Cajas embalaje".
+- **Engomado (Bloque 3.2)**: `codigo_caja_embalaje` como select dinámico, prefill de `bultos_por_palet` desde la caja, cálculo de `bultos_completos`/`pico`/`bultos_totales` y palets con tolerancia (no abre palet por un pico ≤ 1 bulto).
+- **Maestro de Artículos (Bloque 3.3)**: campos `fsc` y `fsc_fecha_validacion` (BD + formulario).
+- `next build` en verde.
+
+### 🔜 Próxima sesión
+- Meter los valores reales de `bultos_por_palet` (Gabri) en cada caja.
+- Pulir **Digital** a fondo y **Guillotina** (resto del Bloque 3.1).
+- Bloque 6: `prod_ot_producidas` + lifecycle de cierre.
 
 
 ## 📌 Punto de continuación (próxima sesión)

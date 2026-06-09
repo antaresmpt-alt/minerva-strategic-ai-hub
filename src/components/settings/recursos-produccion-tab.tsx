@@ -1,9 +1,10 @@
 "use client";
 
-import { Factory, Loader2, Plus, Route, Save, Tag, Trash2 } from "lucide-react";
+import { Box, Factory, Loader2, Plus, Route, Save, Tag, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { RecursosCajasEmbalajePanel } from "@/components/settings/recursos-cajas-embalaje-panel";
 import { RecursosEtiquetasDigitalPanel } from "@/components/settings/recursos-etiquetas-digital-panel";
 import { RecursosPlantillasRutasPanel } from "@/components/settings/recursos-plantillas-rutas-panel";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,13 @@ const SUBTAB_TRIGGER_CLASS =
   "flex h-full min-h-8 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs data-active:bg-[#C69C2B]/20 data-active:font-semibold data-active:text-[#002147] data-active:shadow-sm data-active:ring-2 data-active:ring-[#C69C2B]/45 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm";
 
 type TipoMaquina = "impresion" | "digital" | "troquelado" | "engomado";
-type CatalogTipo = "material" | "acabado_pral";
+type CatalogTipo = "material" | "acabado_pral" | "tipo_engomado";
+
+const CATALOG_TIPO_LABELS: Record<CatalogTipo, string> = {
+  material: "Material",
+  acabado_pral: "Acabado PRAL",
+  tipo_engomado: "Tipo de engomado",
+};
 type DespachoCatalogRow = {
   id: string;
   tipo: CatalogTipo;
@@ -406,6 +413,10 @@ export function RecursosProduccionTab() {
             </TabsTrigger>
             <TabsTrigger value="catalogos" className={SUBTAB_TRIGGER_CLASS}>
               Catálogos de despacho
+            </TabsTrigger>
+            <TabsTrigger value="cajas-embalaje" className={SUBTAB_TRIGGER_CLASS}>
+              <Box className="size-4 shrink-0 opacity-90" aria-hidden />
+              Cajas embalaje
             </TabsTrigger>
             <TabsTrigger value="etiquetas-digital" className={SUBTAB_TRIGGER_CLASS}>
               <Tag className="size-4 shrink-0 opacity-90" aria-hidden />
@@ -849,6 +860,7 @@ export function RecursosProduccionTab() {
                 >
                   <option value="material">Material</option>
                   <option value="acabado_pral">Acabado PRAL</option>
+                  <option value="tipo_engomado">Tipo de engomado</option>
                 </select>
                 <Input
                   placeholder="Valor"
@@ -924,7 +936,7 @@ export function RecursosProduccionTab() {
                       <div key={row.id} className="rounded-md border border-slate-200 p-3">
                         <div className="grid gap-2 md:grid-cols-8">
                           <Input
-                            value={row.tipo === "material" ? "Material" : "Acabado PRAL"}
+                            value={CATALOG_TIPO_LABELS[row.tipo] ?? row.tipo}
                             readOnly
                           />
                           <Input
@@ -1032,6 +1044,9 @@ export function RecursosProduccionTab() {
                 </div>
               )}
             </section>
+          </TabsContent>
+          <TabsContent value="cajas-embalaje" className="mt-0 space-y-4 outline-none">
+            <RecursosCajasEmbalajePanel />
           </TabsContent>
           <TabsContent value="etiquetas-digital" className="mt-0 space-y-4 outline-none">
             <RecursosEtiquetasDigitalPanel />
