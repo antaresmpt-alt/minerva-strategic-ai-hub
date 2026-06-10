@@ -5,6 +5,7 @@ import {
   type CalendarioFiltros,
   type CalendarioResumenMes,
 } from "@/lib/etiquetas-calendario-filters";
+import { formatEtiquetasKpi } from "@/lib/etiquetas-hoja-ruta-kpis";
 import type {
   CalendarioEventoAuto,
   CalendarioSemanaLaboral,
@@ -218,7 +219,7 @@ function drawResumenFooter(
       ? ` · Día más cargado: ${resumen.diaMaxYmd.slice(8, 10)}/${resumen.diaMaxYmd.slice(5, 7)} (${resumen.diaMaxTotal})`
       : "";
   doc.text(
-    `Resumen: I=${resumen.totalI} T=${resumen.totalT} N=${resumen.totalN} · Apuntes=${resumen.totalApuntes} · Días con actividad=${resumen.diasConActividad} · Festivos=${resumen.festivosEnMes}${diaMax}`,
+    `Resumen: I=${resumen.totalI} T=${resumen.totalT} N=${resumen.totalN} · Etiquetas OTs=${formatEtiquetasKpi(resumen.totalEtiquetas)} · Apuntes=${resumen.totalApuntes} · Días con actividad=${resumen.diasConActividad} · Festivos=${resumen.festivosEnMes}${diaMax}`,
     MARGIN,
     y
   );

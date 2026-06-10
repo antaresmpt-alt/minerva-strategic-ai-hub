@@ -602,28 +602,30 @@ export function EtiquetasCalendarioMensualTab() {
     [apuntesMapRaw, filtros]
   );
 
+  const hojaRutaById = useMemo(() => {
+    const m = new Map<string, ProdEtiquetasHojaRutaRow>();
+    for (const r of hojaRuta) m.set(r.id, r);
+    return m;
+  }, [hojaRuta]);
+
   const resumen = useMemo(
     () =>
       buildCalendarioResumenMes(eventosMapRaw, apuntesMapRaw, filtros, {
         festivosEnMes: countFestivosEnRango(festivosMapRaw, start, end),
         diasLaborablesGrid: countDiasLaborablesEnGrid(semanas),
+        hojaRutaById,
       }),
     [
       eventosMapRaw,
       apuntesMapRaw,
       filtros,
       festivosMapRaw,
+      hojaRutaById,
       start,
       end,
       semanas,
     ]
   );
-
-  const hojaRutaById = useMemo(() => {
-    const m = new Map<string, ProdEtiquetasHojaRutaRow>();
-    for (const r of hojaRuta) m.set(r.id, r);
-    return m;
-  }, [hojaRuta]);
 
   const load = useCallback(async () => {
     setLoading(true);
