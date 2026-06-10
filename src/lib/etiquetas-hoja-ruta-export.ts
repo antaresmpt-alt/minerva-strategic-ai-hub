@@ -305,6 +305,7 @@ function buildSummaryAoa(
     ["Orden", filters.ordenLabel],
     ["Selección", filters.selectionLabel?.trim() || "Según filtros aplicados"],
     ["Registros exportados (filtros)", rowCount],
+    ["Etiquetas OTs (cantidad, selección)", formatEtiquetasKpi(etiquetasOts)],
   ];
 
   if (options.includeKpis) {
@@ -316,7 +317,6 @@ function buildSummaryAoa(
         "Nota",
         "Etiquetas OTs respeta la selección exportada; el resto de KPIs son globales.",
       ],
-      ["Etiquetas OTs (cantidad, selección)", formatEtiquetasKpi(etiquetasOts)],
       ["Metros hoy (Konica)", formatMetrosKpi(k.metrosHoy)],
       ["Metros este mes (Konica)", formatMetrosKpi(k.metrosMes)],
       ["Cola Konica (OTs)", k.colaKonica],
@@ -448,6 +448,7 @@ export function exportEtiquetasHojaRutaPdf(
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   const generated = fmtNowEs();
   const titleSuffix = options.includeKpis ? " (con indicadores)" : "";
+  const etiquetasOts = sumEtiquetasOts(rows);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
@@ -470,7 +471,11 @@ export function exportEtiquetasHojaRutaPdf(
     headerX + 3,
     24
   );
-  doc.text(`Registros en listado: ${rows.length}`, headerX + 3, 29);
+  doc.text(
+    `Registros en listado: ${rows.length} · Etiquetas OTs: ${formatEtiquetasKpi(etiquetasOts)} (Cantidad OT)`,
+    headerX + 3,
+    29
+  );
   doc.setFontSize(7);
   doc.text(
     "P = plazo (circulo)  |  I / T / N = Kon / Troq / Num (tick)",

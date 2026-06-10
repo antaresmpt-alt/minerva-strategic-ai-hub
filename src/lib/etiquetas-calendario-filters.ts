@@ -1,5 +1,7 @@
 import type { CalendarioEventoAuto, CalendarioMaquinaTipo } from "@/lib/etiquetas-calendario-mensual";
+import { cantidadEtiquetasKpi } from "@/lib/etiquetas-hoja-ruta-kpis";
 import type { ProdEtiquetasCalendarioApunteRow } from "@/types/prod-etiquetas-calendario-apunte";
+import type { ProdEtiquetasHojaRutaRow } from "@/types/prod-etiquetas-hoja-ruta";
 
 export type CalendarioFiltros = {
   showI: boolean;
@@ -88,6 +90,7 @@ export type CalendarioResumenMes = {
   totalI: number;
   totalT: number;
   totalN: number;
+  totalEtiquetas: number;
   totalApuntes: number;
   diasConActividad: number;
   diaMaxYmd: string | null;
@@ -100,13 +103,18 @@ export function buildCalendarioResumenMes(
   eventosMap: Map<string, CalendarioEventoAuto[]>,
   apuntesMap: Map<string, ProdEtiquetasCalendarioApunteRow[]>,
   filtros: CalendarioFiltros,
-  opts: { festivosEnMes: number; diasLaborablesGrid: number }
+  opts: {
+    festivosEnMes: number;
+    diasLaborablesGrid: number;
+    hojaRutaById?: Map<string, Pick<ProdEtiquetasHojaRutaRow, "cantidad">>;
+  }
 ): CalendarioResumenMes {
   let totalI = 0;
   let totalT = 0;
   let totalN = 0;
   let totalApuntes = 0;
   const porDia = new Map<string, number>();
+  const hojaRutaIdsConActividad = new Set<string>();
 
   const bump = (ymd: string, tipo?: CalendarioMaquinaTipo) => {
     porDia.set(ymd, (porDia.get(ymd) ?? 0) + 1);
@@ -118,7 +126,14 @@ export function buildCalendarioResumenMes(
   for (const [ymd, list] of eventosMap) {
     for (const ev of filtrarEventos(list, filtros)) {
       bump(ymd, ev.tipo);
+      hojaRutaIdsConActividad.add(ev.hojaRutaId);
     }
+  }
+
+  let totalEtiquetas = 0;
+  for (const id of hojaRutaIdsConActividad) {
+    const row = opts.hojaRutaById?.get(id);
+    totalEtiquetas += cantidadEtiquetasKpi(row?.cantidad) ?? 0;
   }
 
   if (filtros.showApuntes) {
@@ -148,6 +163,7 @@ export function buildCalendarioResumenMes(
     totalI,
     totalT,
     totalN,
+    totalEtiquetas,
     totalApuntes,
     diasConActividad: porDia.size,
     diaMaxYmd,
