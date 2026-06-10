@@ -26,6 +26,7 @@ import {
 import { EtiquetasHojaRutaDuplicadoDialog } from "@/components/produccion/etiquetas-digital/etiquetas-hoja-ruta-duplicado-dialog";
 import {
   findHojaRutaPorOtNumero,
+  isOtFicticia,
   normalizaOtNumero,
 } from "@/lib/etiquetas-hoja-ruta-duplicados";
 import { buildMaquinaFieldsForSaveFromForm } from "@/lib/etiquetas-hoja-ruta-maquina";
@@ -201,6 +202,26 @@ export function EtiquetasEntradaExpressDialog({
     }
     setLoadingOt(true);
     try {
+      const numFicticia = normalizaOtNumero(ot);
+      if (isOtFicticia(numFicticia)) {
+        const existentes = await findHojaRutaPorOtNumero(supabase, numFicticia);
+        const activas = existentes.filter((r) => !r.finalizado);
+        if (existentes.length > 0) {
+          toast.warning(
+            activas.length > 0
+              ? `Ya hay ${activas.length} fila${activas.length === 1 ? "" : "s"} activa${activas.length === 1 ? "" : "s"} para ${numFicticia}. Al guardar se te ofrecerá abrir la existente.`
+              : `Existen ${existentes.length} fila${existentes.length === 1 ? "" : "s"} históricas para ${numFicticia}. Al guardar se te ofrecerá abrirla en vez de duplicar.`
+          );
+        }
+        setForm({
+          ...emptyForm(),
+          ot_numero: numFicticia,
+          fecha_entrada_depto: todayYmd(),
+        });
+        toast.success(`${numFicticia} lista para rellenar a mano.`);
+        return;
+      }
+
       const { data: master, error: errM } = await supabase
         .from(TABLE_OT)
         .select("id, num_pedido, cliente, titulo, cantidad, fecha_entrega")
@@ -393,8 +414,8 @@ export function EtiquetasEntradaExpressDialog({
             Entrada express — Hoja de ruta
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Escribe el nº de OT y pulsa Enter para rellenar desde el maestro. Ajusta
-            campos y pulsa Guardar o{" "}
+            Escribe el nº de OT y pulsa Enter para rellenar desde el maestro.
+            Usa FICT-... para trabajos sin OT. Ajusta campos y pulsa Guardar o{" "}
             <kbd className="rounded bg-slate-100 px-1 font-mono text-[10px]">
               Ctrl+Enter
             </kbd>
@@ -423,7 +444,7 @@ export function EtiquetasEntradaExpressDialog({
                     void hydrate();
                   }
                 }}
-                placeholder="Nº OT y Enter"
+                placeholder="Nº OT o FICT-... y Enter"
                 autoComplete="off"
               />
               <Button

@@ -24,6 +24,11 @@ export function normalizaOtNumero(input: string | null | undefined): string {
     .toUpperCase();
 }
 
+/** OTs manuales de etiquetas que no existen en OT maestro (ej: FICT-001). */
+export function isOtFicticia(input: string | null | undefined): boolean {
+  return /^FICT-.+$/i.test(String(input ?? "").trim());
+}
+
 /**
  * Devuelve todas las filas en `prod_etiquetas_hoja_ruta` que coinciden con
  * `otNumero` (tras normalizar). Ordenadas de más reciente a más antigua.

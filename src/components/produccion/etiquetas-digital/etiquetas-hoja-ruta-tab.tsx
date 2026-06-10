@@ -1232,6 +1232,7 @@ export function EtiquetasHojaRutaTab() {
                     <EntregaPlazoSemaforo
                       fechaEntregaOt={r.fecha_entrega_ot}
                       urgente={r.urgencia === "urgente"}
+                      finalizado={Boolean(r.finalizado)}
                     />
                   </TableCell>
                   {MAQUINA_COLS.map(({ field, title }) => (

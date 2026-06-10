@@ -10,7 +10,7 @@ export type ProdEtiquetasTroquelRow = {
   codigo: string;
   
   /** Nombre original de la carpeta de donde se extrajo el troquel. */
-  carpeta_original: string;
+  carpeta_original: string | null;
   
   /** Ruta de la carpeta en el sistema de archivos. */
   carpeta_path: string | null;
@@ -53,6 +53,9 @@ export type ProdEtiquetasTroquelRow = {
   
   /** Notas adicionales sobre el troquel. */
   notas: string | null;
+
+  /** Última fecha conocida de reparación/actualización del troquel. */
+  fecha_ult_reparacion: string | null;
   
   /** Array JSON con metadatos de documentos asociados. */
   documentos: TroquelDocumento[] | null;
@@ -116,6 +119,7 @@ export type TroquelExcelRow = {
   trabajo: string;
   necesita_revision: string;
   notas: string;
+  fecha_ult_reparacion: string;
   carpeta_path: string;
   documentos: string;
   documentos_detalle: string;

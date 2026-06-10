@@ -33,6 +33,17 @@ function parseDecimal(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function parseDateYmd(value: unknown): string | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const match = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if (!match) return null;
+  const [, dd, mm, yyyyRaw] = match;
+  const yyyy = yyyyRaw.length === 2 ? `20${yyyyRaw}` : yyyyRaw;
+  return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+}
+
 /**
  * Parsea los documentos desde el JSON string en la columna documentos_detalle.
  */
@@ -93,6 +104,7 @@ export async function parseExcelFile(file: File): Promise<ProdEtiquetasTroquelIn
           estado: row.estado ? String(row.estado).trim() : "activo",
           necesita_revision: parseSiNo(row.necesita_revision),
           notas: row.notas ? String(row.notas).trim() : null,
+          fecha_ult_reparacion: parseDateYmd(row.fecha_ult_reparacion),
           documentos: parseDocumentos(row.documentos_detalle),
         }));
         
@@ -154,6 +166,8 @@ function sonIguales(
     excel.estado === bd.estado &&
     excel.necesita_revision === bd.necesita_revision &&
     (excel.notas ?? null) === (bd.notas ?? null) &&
+    (excel.fecha_ult_reparacion ?? null) ===
+      (bd.fecha_ult_reparacion ?? null) &&
     JSON.stringify(excel.documentos ?? null) === JSON.stringify(bd.documentos ?? null)
   );
 }
@@ -255,6 +269,7 @@ export async function aplicarDiff(
           estado: excel.estado,
           necesita_revision: excel.necesita_revision,
           notas: excel.notas,
+          fecha_ult_reparacion: excel.fecha_ult_reparacion,
           documentos: excel.documentos,
         })
         .eq("id", bd.id);
@@ -291,6 +306,7 @@ export function exportarTroquelesAExcel(rows: ProdEtiquetasTroquelRow[]): void {
     trabajo: row.trabajo || "",
     necesita_revision: row.necesita_revision ? "Sí" : "No",
     notas: row.notas || "",
+    fecha_ult_reparacion: row.fecha_ult_reparacion || "",
     carpeta_path: row.carpeta_path || "",
     documentos: row.documentos
       ? [...new Set(row.documentos.map((d) => d.tipo))].join(" | ")
@@ -319,6 +335,7 @@ export function exportarTroquelesAExcel(rows: ProdEtiquetasTroquelRow[]): void {
     { wch: 32 },
     { wch: 16 },
     { wch: 32 },
+    { wch: 18 },
     { wch: 90 },
     { wch: 24 },
     { wch: 120 },

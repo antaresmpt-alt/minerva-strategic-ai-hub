@@ -55,6 +55,7 @@ type EditForm = {
   estado: string;
   necesita_revision: boolean;
   notas: string;
+  fecha_ult_reparacion: string;
 };
 
 const ESTADO_OPTIONS: Option[] = [
@@ -66,7 +67,7 @@ const ESTADO_OPTIONS: Option[] = [
 function rowToForm(row: ProdEtiquetasTroquelRow): EditForm {
   return {
     codigo: row.codigo,
-    carpeta_original: row.carpeta_original,
+    carpeta_original: row.carpeta_original ?? "",
     carpeta_path: row.carpeta_path ?? "",
     forma: row.forma ?? "",
     ancho_mm: row.ancho_mm != null ? String(row.ancho_mm) : "",
@@ -81,6 +82,7 @@ function rowToForm(row: ProdEtiquetasTroquelRow): EditForm {
     estado: row.estado,
     necesita_revision: row.necesita_revision,
     notas: row.notas ?? "",
+    fecha_ult_reparacion: row.fecha_ult_reparacion ?? "",
   };
 }
 
@@ -174,7 +176,7 @@ export function EtiquetasTroquelesTab() {
       const textoMatch =
         !filtroTexto ||
         row.codigo.toLowerCase().includes(filtroTexto.toLowerCase()) ||
-        row.carpeta_original.toLowerCase().includes(filtroTexto.toLowerCase()) ||
+        (row.carpeta_original ?? "").toLowerCase().includes(filtroTexto.toLowerCase()) ||
         (row.cliente ?? "").toLowerCase().includes(filtroTexto.toLowerCase()) ||
         (row.trabajo ?? "").toLowerCase().includes(filtroTexto.toLowerCase());
       
@@ -272,7 +274,7 @@ export function EtiquetasTroquelesTab() {
       const { error: updateError } = await supabase
         .from("prod_etiquetas_troqueles")
         .update({
-          carpeta_original: editForm.carpeta_original,
+          carpeta_original: editForm.carpeta_original.trim() || null,
           carpeta_path: editForm.carpeta_path || null,
           forma: editForm.forma || null,
           ancho_mm: parseOptionalDecimal(editForm.ancho_mm),
@@ -287,6 +289,8 @@ export function EtiquetasTroquelesTab() {
           estado: editForm.estado,
           necesita_revision: editForm.necesita_revision,
           notas: editForm.notas || null,
+          fecha_ult_reparacion:
+            editForm.fecha_ult_reparacion.trim() || null,
         })
         .eq("id", editingRow.id);
       
@@ -358,6 +362,7 @@ export function EtiquetasTroquelesTab() {
       estado: "activo",
       necesita_revision: false,
       notas: "",
+      fecha_ult_reparacion: "",
     });
     setCreateDialogOpen(true);
   }, [rows]);
@@ -365,8 +370,8 @@ export function EtiquetasTroquelesTab() {
   const handleSaveCreate = useCallback(async () => {
     if (!createForm) return;
     
-    if (!createForm.codigo || !createForm.carpeta_original) {
-      alert("El código y la carpeta original son obligatorios");
+    if (!createForm.codigo.trim()) {
+      alert("El código es obligatorio");
       return;
     }
     
@@ -374,8 +379,8 @@ export function EtiquetasTroquelesTab() {
     
     try {
       const newRow: ProdEtiquetasTroquelInsert = {
-        codigo: createForm.codigo,
-        carpeta_original: createForm.carpeta_original,
+        codigo: createForm.codigo.trim(),
+        carpeta_original: createForm.carpeta_original.trim() || null,
         carpeta_path: createForm.carpeta_path || null,
         forma: createForm.forma || null,
         ancho_mm: parseOptionalDecimal(createForm.ancho_mm),
@@ -390,6 +395,8 @@ export function EtiquetasTroquelesTab() {
         estado: createForm.estado,
         necesita_revision: createForm.necesita_revision,
         notas: createForm.notas || null,
+        fecha_ult_reparacion:
+          createForm.fecha_ult_reparacion.trim() || null,
         documentos: null,
       };
       
@@ -598,6 +605,7 @@ export function EtiquetasTroquelesTab() {
               <th className="px-2 py-2 text-left font-semibold">Cliente</th>
               <th className="px-2 py-2 text-left font-semibold">Trabajo</th>
               <th className="px-2 py-2 text-left font-semibold">Estado</th>
+              <th className="px-2 py-2 text-left font-semibold">F. últ. reparación</th>
               <th className="px-2 py-2 text-center font-semibold">Rev.</th>
               <th className="px-2 py-2 text-center font-semibold">Acciones</th>
             </tr>
@@ -605,7 +613,7 @@ export function EtiquetasTroquelesTab() {
           <tbody>
             {rowsFiltradas.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-2 py-8 text-center text-slate-500">
+                <td colSpan={9} className="px-2 py-8 text-center text-slate-500">
                   No hay troqueles que coincidan con los filtros
                 </td>
               </tr>
@@ -632,6 +640,9 @@ export function EtiquetasTroquelesTab() {
                       >
                         {row.estado}
                       </span>
+                    </td>
+                    <td className="px-2 py-2 tabular-nums">
+                      {row.fecha_ult_reparacion || "-"}
                     </td>
                     <td className="px-2 py-2 text-center">
                       {row.necesita_revision ? (
@@ -738,7 +749,7 @@ export function EtiquetasTroquelesTab() {
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
           {editForm && (
             <div className="grid gap-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <Label htmlFor="edit-codigo" className="text-xs">
                     Código
@@ -764,11 +775,28 @@ export function EtiquetasTroquelesTab() {
                     options={ESTADO_OPTIONS}
                   />
                 </div>
+                <div>
+                  <Label htmlFor="edit-fecha-reparacion" className="text-xs">
+                    Fecha últ. reparación
+                  </Label>
+                  <Input
+                    id="edit-fecha-reparacion"
+                    type="date"
+                    value={editForm.fecha_ult_reparacion}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        fecha_ult_reparacion: e.target.value,
+                      })
+                    }
+                    className="mt-1"
+                  />
+                </div>
               </div>
               
               <div>
                 <Label htmlFor="edit-carpeta" className="text-xs">
-                  Carpeta original *
+                  Carpeta original
                 </Label>
                 <Input
                   id="edit-carpeta"
@@ -1092,7 +1120,7 @@ export function EtiquetasTroquelesTab() {
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
           {createForm && (
             <div className="grid gap-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <Label htmlFor="create-codigo" className="text-xs">
                     Código *
@@ -1120,11 +1148,28 @@ export function EtiquetasTroquelesTab() {
                     options={ESTADO_OPTIONS}
                   />
                 </div>
+                <div>
+                  <Label htmlFor="create-fecha-reparacion" className="text-xs">
+                    Fecha últ. reparación
+                  </Label>
+                  <Input
+                    id="create-fecha-reparacion"
+                    type="date"
+                    value={createForm.fecha_ult_reparacion}
+                    onChange={(e) =>
+                      setCreateForm({
+                        ...createForm,
+                        fecha_ult_reparacion: e.target.value,
+                      })
+                    }
+                    className="mt-1"
+                  />
+                </div>
               </div>
               
               <div>
                 <Label htmlFor="create-carpeta" className="text-xs">
-                  Carpeta original *
+                  Carpeta original
                 </Label>
                 <Input
                   id="create-carpeta"
