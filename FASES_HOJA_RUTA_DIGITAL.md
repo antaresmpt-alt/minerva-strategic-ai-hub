@@ -388,17 +388,44 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 
 ---
 
-## 📄 Bloque 4: PDF Acompañante
+## 📄 Bloque 4: PDF Acompañante ✅ **BETA IMPLEMENTADA** (11 jun 2026)
 
-**Objetivo**: Generar un PDF imprimible ultra-simple como "token físico".
+**Objetivo**: Generar un PDF imprimible de la Hoja de Ruta Virtual, pensado como "shop traveler" / hoja viajera física para acompañar el trabajo y presentar de forma clara el estado de la OT.
 
-### Tareas
-- [ ] Plantilla PDF con:
-  - Cabecera de OT (cliente, cantidad, descripción, pedido, fecha)
-  - Checkboxes de procesos de la ruta
-  - Código QR con enlace a vista digital (opcional)
-- [ ] Botón "Imprimir Hoja de Ruta" desde modal de despacho
-- [ ] Almacenar PDF generado (opcional) o generar on-demand
+### Hecho — Beta "en casa" (11 jun 2026)
+- [x] Botón **PDF** en `HojaRutaOtDialog`, generando on-demand `hoja-ruta-{OT}.pdf` en A4 vertical.
+- [x] Botón **Recargar** en el modal para refrescar la hoja de ruta viva antes de exportar.
+- [x] Cabecera PDF con OT, cliente, trabajo, cantidad, fecha entrega, estado y ficha técnica de despacho (material, gramaje, formato, tintas, troquel, poses, acabado).
+- [x] Itinerario visual con badges de procesos y estado.
+- [x] Tarjetas por proceso con altura dinámica y color estilo modal (barra lateral + cabecera suave por estado):
+  - Datos de proceso (`datos_proceso`) formateados con helpers compartidos.
+  - Ejecución real: maquinista, duración real (usa `horas_reales` si existe; si no, deriva de inicio/fin), inicio/fin, incidencias, acciones correctivas y observaciones.
+  - Externos: proveedor, estado, fecha envío y fecha prevista.
+  - Placeholder **"Pendiente de ejecución"** cuando un paso aún no tiene datos.
+- [x] Detalle de pausas:
+  - Ampliado `fetchHojaRutaOt` para traer `prod_mesa_ejecuciones_pausas` + `sys_motivos_pausa`.
+  - PDF muestra proceso, motivo, duración, pausa/reanudación y observación.
+- [x] Bloque **Previsto vs Real por proceso**:
+  - Barras por proceso (no suma procesos secuenciales para evitar contar doble las mismas hojas).
+  - Muestra previsto, real, % cumplimiento y merma real.
+  - Ejemplo validado con OT 99906: Impresión 99,9 %, Troquelado 81,8 %.
+- [x] Botones decorativos no operativos en modal:
+  - **Recalcular presupuesto** (futuro: FSC + cartelas recepción material + presupuesto).
+  - **Ficha técnica** (futuro: generación/archivo/impresión desde datos capturados, densidades, proceso, etc.).
+- [x] Helpers compartidos `hoja-ruta-formatters.ts` para reutilizar `buildCamposVista`, densidades, fechas y cantidades en modal + PDF.
+- [x] Lints en verde en archivos tocados.
+
+### Archivos
+- ✅ `src/lib/hoja-ruta/hoja-ruta-pdf.ts` (nuevo exportador PDF)
+- ✅ `src/lib/hoja-ruta/hoja-ruta-formatters.ts` (helpers compartidos)
+- ✅ `src/lib/hoja-ruta/hoja-ruta-query.ts` (detalle de pausas)
+- ✅ `src/components/produccion/hoja-ruta/hoja-ruta-ot-dialog.tsx` (botones PDF/Recargar + placeholders futuro)
+
+### Pendiente / siguiente iteración
+- [ ] Afinar diseño visual tras feedback de Hugo/Gemma.
+- [ ] Decidir si guardar PDF generado en Storage o mantener generación on-demand.
+- [ ] QR / enlace directo a vista digital cuando haya URL estable y permisos definidos.
+- [ ] Integrar FSC, cartelas de recepción de material y ficha técnica automática cuando esos bloques estén completos.
 
 ---
 
@@ -527,14 +554,14 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 ✅ **Bloque 3.5 IMPLEMENTADO** (9 jun 2026): Tipo de engomado parametrizado + Homogeneidad pantalla "Despachadas".
 ✅ **Bloque 3.6 IMPLEMENTADO** (9 jun 2026): Semáforo sobreproducción (🟠) configurable por proceso en Settings + proyección en Impresión.
 ✅ **Bloque 3.7 IMPLEMENTADO** (9 jun 2026): CTP/Preimpresión + Desbroce + Manipulados con Retractilado + 5ª área de planificación "preimpresion". Ver detalle abajo.
-⏳ **Bloque 4 PENDIENTE**: PDF token
+✅ **Bloque 4 BETA IMPLEMENTADA** (11 jun 2026): PDF acompañante desde `HojaRutaOtDialog` (A4 vertical) con cabecera, itinerario, tarjetas por proceso, detalle de pausas, gráfico previsto/real por proceso, botones Recargar/PDF y placeholders Recalcular presupuesto/Ficha técnica.
 ⏳ **Bloque 5 PENDIENTE**: Integración Etiquetas ↔ Hoja de Ruta (flujo Hugo)
 ⏳ **Bloque 6 PENDIENTE**: Producidas/Histórico (`prod_ot_producidas`, snapshot híbrido) + lifecycle de cierre (pendiente_revision → producida) + recálculo maestro
 ⏳ **Bloque 7 PENDIENTE**: Expedición/Albarán (depende de Bloque 6 + decisión Odoo)
 
 ---
 
-**Última actualización**: 9 de junio de 2026 - 19:10
+**Última actualización**: 11 de junio de 2026 - 21:15
 
 ---
 
