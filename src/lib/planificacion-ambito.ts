@@ -123,8 +123,9 @@ export function inferPlanificacionTipoFromProceso(
   const s = `${slug} ${nom}`;
   if (s.includes("preimpres") || s.includes("ctp")) return "preimpresion";
   if (s.includes("digital")) return "digital";
-  if (s.includes("troquel") || s.includes("desbroc")) return "troquelado";
   if (s.includes("engom") || s.includes("desbroz") || s.includes("manipul")) return "engomado";
+  if (s.includes("desbroc")) return "engomado";
+  if (s.includes("troquel")) return "troquelado";
   if (slug.includes("offset") || s.includes("offset")) return "impresion";
   if (s.includes("impres") && !s.includes("digital")) return "impresion";
   return null;

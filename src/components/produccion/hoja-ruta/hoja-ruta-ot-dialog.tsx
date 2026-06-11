@@ -412,11 +412,55 @@ export function HojaRutaOtDialog({
                               {p.externo.proveedorNombre
                                 ? ` · Proveedor: ${p.externo.proveedorNombre}`
                                 : ""}
+                              {p.externo.acabadoNombre
+                                ? ` · Acabado: ${p.externo.acabadoNombre}`
+                                : ""}
                             </p>
                             <p className="text-xs text-slate-600">
                               Envío: {fmtDate(p.externo.fechaEnvio)} · Previsto:{" "}
                               {fmtDate(p.externo.fechaPrevista)}
+                              {p.externo.fechaRecepcionMuelle
+                                ? ` · Muelle: ${fmtDate(p.externo.fechaRecepcionMuelle)}`
+                                : ""}
                             </p>
+                            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
+                              {p.externo.hojasEnviadas != null ? (
+                                <span>
+                                  <span className="font-medium">Hojas enviadas:</span>{" "}
+                                  {fmtCantidad(p.externo.hojasEnviadas)}
+                                </span>
+                              ) : null}
+                              {p.externo.hojasRecibidasMuelle != null ? (
+                                <span>
+                                  <span className="font-medium">Hojas recibidas:</span>{" "}
+                                  {fmtCantidad(p.externo.hojasRecibidasMuelle)}
+                                </span>
+                              ) : null}
+                              {p.externo.unidades != null ? (
+                                <span>
+                                  <span className="font-medium">Unidades envío:</span>{" "}
+                                  {fmtCantidad(p.externo.unidades)}
+                                </span>
+                              ) : null}
+                              {p.externo.unidadesRecibidasMuelle != null ? (
+                                <span>
+                                  <span className="font-medium">Unidades recibidas:</span>{" "}
+                                  {fmtCantidad(p.externo.unidadesRecibidasMuelle)}
+                                </span>
+                              ) : null}
+                              {p.externo.palets != null ? (
+                                <span>
+                                  <span className="font-medium">Palets envío:</span>{" "}
+                                  {fmtCantidad(p.externo.palets)}
+                                </span>
+                              ) : null}
+                              {p.externo.paletsRecibidosMuelle != null ? (
+                                <span>
+                                  <span className="font-medium">Palets recibidos:</span>{" "}
+                                  {fmtCantidad(p.externo.paletsRecibidosMuelle)}
+                                </span>
+                              ) : null}
+                            </div>
                             {p.externo.observaciones ? (
                               <p className="text-xs text-slate-600">
                                 Obs: {p.externo.observaciones}

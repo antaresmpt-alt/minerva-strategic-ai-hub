@@ -120,6 +120,7 @@ const ACTIVE_MESA_ESTADOS = [
 ] as const;
 const POOL_BLOCKING_MESA_ESTADOS = ["borrador", "confirmado", "en_ejecucion"] as const;
 const EDITABLE_PLAN_ESTADOS = ["borrador", "confirmado"] as const;
+const CTP_HORAS_PLANIFICACION_DEFAULT = 0.25;
 
 // ---------------------------------------------------------------------------
 // Helpers locales (versión recortada de los del semanal)
@@ -144,6 +145,7 @@ function horasPlanificadasFromDespRow(
   }
   if (tipoEfectivo === "troquelado") return hTroquelado;
   if (tipoEfectivo === "engomado") return hEngomado;
+  if (tipoEfectivo === "preimpresion") return CTP_HORAS_PLANIFICACION_DEFAULT;
   return hEntrada + hTiraje + hTroquelado + hEngomado;
 }
 

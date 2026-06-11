@@ -265,6 +265,11 @@ type SeguimientoRow = {
   unidades?: number | null;
   prioridad?: string | null;
   palets?: number | null;
+  hojas_enviadas?: number | null;
+  hojas_recibidas_muelle?: number | null;
+  unidades_recibidas_muelle?: number | null;
+  palets_recibidos_muelle?: number | null;
+  fecha_recepcion_muelle?: string | null;
   /** Opcional en BD; en UI se prefiere cálculo entre fechas */
   dias_en_externo?: number | null;
   observaciones?: string | null;
@@ -410,7 +415,8 @@ function InlineFechaSeguimientoCell({
   const serverYmd = isoToDateInput(isoValue);
   const [local, setLocal] = useState(serverYmd);
   useEffect(() => {
-    setLocal(serverYmd);
+    const t = window.setTimeout(() => setLocal(serverYmd), 0);
+    return () => window.clearTimeout(t);
   }, [rowId, serverYmd]);
   return (
     <Input
@@ -949,6 +955,11 @@ export function GestionExternosPage() {
   const [editSegUnidades, setEditSegUnidades] = useState("");
   const [editSegPrioridad, setEditSegPrioridad] = useState("");
   const [editSegPalets, setEditSegPalets] = useState("");
+  const [editSegHojasEnviadas, setEditSegHojasEnviadas] = useState("");
+  const [editSegHojasRecibidas, setEditSegHojasRecibidas] = useState("");
+  const [editSegUnidadesRecibidas, setEditSegUnidadesRecibidas] = useState("");
+  const [editSegPaletsRecibidos, setEditSegPaletsRecibidos] = useState("");
+  const [editSegFechaRecepcionMuelle, setEditSegFechaRecepcionMuelle] = useState("");
   const [editSegFechaEnvio, setEditSegFechaEnvio] = useState("");
   const [editSegEstado, setEditSegEstado] = useState("");
   const [editSegCliente, setEditSegCliente] = useState("");
@@ -1703,7 +1714,7 @@ export function GestionExternosPage() {
     return () => {
       cancelled = true;
     };
-  }, [seguimientoSheetOpen, seguimientoEditing?.id, supabase]);
+  }, [seguimientoSheetOpen, seguimientoEditing, supabase]);
 
   useEffect(() => {
     if (!envProveedorId) {
@@ -2424,6 +2435,27 @@ export function GestionExternosPage() {
     setEditSegPalets(
       row.palets != null && row.palets !== undefined ? String(row.palets) : ""
     );
+    setEditSegHojasEnviadas(
+      row.hojas_enviadas != null && row.hojas_enviadas !== undefined
+        ? String(row.hojas_enviadas)
+        : ""
+    );
+    setEditSegHojasRecibidas(
+      row.hojas_recibidas_muelle != null && row.hojas_recibidas_muelle !== undefined
+        ? String(row.hojas_recibidas_muelle)
+        : ""
+    );
+    setEditSegUnidadesRecibidas(
+      row.unidades_recibidas_muelle != null && row.unidades_recibidas_muelle !== undefined
+        ? String(row.unidades_recibidas_muelle)
+        : ""
+    );
+    setEditSegPaletsRecibidos(
+      row.palets_recibidos_muelle != null && row.palets_recibidos_muelle !== undefined
+        ? String(row.palets_recibidos_muelle)
+        : ""
+    );
+    setEditSegFechaRecepcionMuelle(isoToDateInput(row.fecha_recepcion_muelle));
     setEditSegFechaEnvio(isoToDateInput(row.fecha_envio));
     setEditSegEstado(row.estado ?? "");
     setSeguimientoSheetOpen(true);
@@ -2464,8 +2496,16 @@ export function GestionExternosPage() {
     const now = new Date().toISOString();
     const uStr = editSegUnidades.trim().replace(",", ".");
     const palStr = editSegPalets.trim().replace(",", ".");
+    const hojasEnvStr = editSegHojasEnviadas.trim().replace(",", ".");
+    const hojasRecStr = editSegHojasRecibidas.trim().replace(",", ".");
+    const unidadesRecStr = editSegUnidadesRecibidas.trim().replace(",", ".");
+    const paletsRecStr = editSegPaletsRecibidos.trim().replace(",", ".");
     const unidadesNum = uStr ? Number(uStr) : NaN;
     const paletsNum = palStr ? Number(palStr) : NaN;
+    const hojasEnvNum = hojasEnvStr ? Number(hojasEnvStr) : NaN;
+    const hojasRecNum = hojasRecStr ? Number(hojasRecStr) : NaN;
+    const unidadesRecNum = unidadesRecStr ? Number(unidadesRecStr) : NaN;
+    const paletsRecNum = paletsRecStr ? Number(paletsRecStr) : NaN;
     let fechaEnvioPatch: string | null =
       editSegFechaEnvio.length === 10
         ? dateInputToTimestamptz(editSegFechaEnvio)
@@ -2498,6 +2538,14 @@ export function GestionExternosPage() {
       prioridad: editSegPrioridad.trim() || null,
       unidades: Number.isFinite(unidadesNum) ? Math.trunc(unidadesNum) : null,
       palets: Number.isFinite(paletsNum) ? Math.trunc(paletsNum) : null,
+      hojas_enviadas: Number.isFinite(hojasEnvNum) ? Math.trunc(hojasEnvNum) : null,
+      hojas_recibidas_muelle: Number.isFinite(hojasRecNum) ? Math.trunc(hojasRecNum) : null,
+      unidades_recibidas_muelle: Number.isFinite(unidadesRecNum) ? Math.trunc(unidadesRecNum) : null,
+      palets_recibidos_muelle: Number.isFinite(paletsRecNum) ? Math.trunc(paletsRecNum) : null,
+      fecha_recepcion_muelle:
+        editSegFechaRecepcionMuelle.length === 10
+          ? dateInputToTimestamptz(editSegFechaRecepcionMuelle)
+          : null,
       updated_at: now,
     };
     setSaving(true);
@@ -5140,6 +5188,77 @@ export function GestionExternosPage() {
                     onChange={(e) => setEditSegFechaEnvio(e.target.value)}
                     className="h-8 min-h-8 w-full text-sm px-2 py-1"
                   />
+                </div>
+              </div>
+              <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-2.5">
+                <p className="mb-2 text-xs font-semibold text-[#002147]">
+                  Retorno externo / muelle
+                </p>
+                <div className="grid gap-2 sm:grid-cols-5">
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="edit-seg-h-env" className="text-xs font-medium text-slate-700">
+                      Hojas enviadas
+                    </Label>
+                    <Input
+                      id="edit-seg-h-env"
+                      inputMode="numeric"
+                      value={editSegHojasEnviadas}
+                      onChange={(e) => setEditSegHojasEnviadas(e.target.value)}
+                      placeholder="—"
+                      className="h-8 min-h-8 text-sm px-2 py-1"
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="edit-seg-h-rec" className="text-xs font-medium text-slate-700">
+                      Hojas recibidas
+                    </Label>
+                    <Input
+                      id="edit-seg-h-rec"
+                      inputMode="numeric"
+                      value={editSegHojasRecibidas}
+                      onChange={(e) => setEditSegHojasRecibidas(e.target.value)}
+                      placeholder="—"
+                      className="h-8 min-h-8 text-sm px-2 py-1"
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="edit-seg-ud-rec" className="text-xs font-medium text-slate-700">
+                      Ud. recibidas
+                    </Label>
+                    <Input
+                      id="edit-seg-ud-rec"
+                      inputMode="numeric"
+                      value={editSegUnidadesRecibidas}
+                      onChange={(e) => setEditSegUnidadesRecibidas(e.target.value)}
+                      placeholder="—"
+                      className="h-8 min-h-8 text-sm px-2 py-1"
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="edit-seg-pal-rec" className="text-xs font-medium text-slate-700">
+                      Pal. recibidos
+                    </Label>
+                    <Input
+                      id="edit-seg-pal-rec"
+                      inputMode="numeric"
+                      value={editSegPaletsRecibidos}
+                      onChange={(e) => setEditSegPaletsRecibidos(e.target.value)}
+                      placeholder="—"
+                      className="h-8 min-h-8 text-sm px-2 py-1"
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="edit-seg-f-rec" className="text-xs font-medium text-slate-700">
+                      F. recepción
+                    </Label>
+                    <Input
+                      id="edit-seg-f-rec"
+                      type="date"
+                      value={editSegFechaRecepcionMuelle}
+                      onChange={(e) => setEditSegFechaRecepcionMuelle(e.target.value)}
+                      className="h-8 min-h-8 text-sm px-2 py-1"
+                    />
+                  </div>
                 </div>
               </div>
               <div className="grid gap-1.5">

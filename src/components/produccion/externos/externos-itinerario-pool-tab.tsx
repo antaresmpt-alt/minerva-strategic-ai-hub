@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, RefreshCw, Route } from "lucide-react";
+import { Eye, Loader2, RefreshCw, Route } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -276,6 +276,7 @@ export function ExternosItinerarioPoolTab({
           fecha_envio: null,
           fecha_prevista: fechaPrevIso,
           notas_logistica: `Desde itinerario: ${row.proceso_nombre}`.trim(),
+          hojas_enviadas: row.num_hojas_netas ?? row.num_hojas_brutas ?? null,
           unidades: null,
           prioridad: null,
           palets: null,
@@ -421,13 +422,26 @@ export function ExternosItinerarioPoolTab({
                     </TableHead>
                     <TableHead className="whitespace-nowrap px-2">OT</TableHead>
                     <TableHead className="px-2">Próximo paso</TableHead>
+                    <TableHead className="px-2">Acabado / pistas</TableHead>
                     <TableHead className="px-2">Cliente</TableHead>
                     <TableHead className="min-w-[10rem] px-2">Trabajo</TableHead>
                     <TableHead className="whitespace-nowrap px-2">Entrega OT</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rows.map((r) => (
+                  {rows.map((r) => {
+                    const despachoResumen = [
+                      r.acabado_pral ? `Acabado: ${r.acabado_pral}` : null,
+                      r.material ? `Material: ${r.material}` : null,
+                      r.tamano_hoja ? `Formato: ${r.tamano_hoja}` : null,
+                      r.num_hojas_netas != null
+                        ? `H. netas: ${r.num_hojas_netas.toLocaleString("es-ES")}`
+                        : null,
+                      r.num_hojas_brutas != null
+                        ? `H. brutas: ${r.num_hojas_brutas.toLocaleString("es-ES")}`
+                        : null,
+                    ].filter(Boolean).join(" · ");
+                    return (
                     <TableRow key={r.ot_paso_id}>
                       <TableCell className="px-2 py-2">
                         <input
@@ -442,6 +456,27 @@ export function ExternosItinerarioPoolTab({
                         {r.ot_numero}
                       </TableCell>
                       <TableCell className="px-2 py-2 text-sm">{r.proceso_nombre || "—"}</TableCell>
+                      <TableCell className="max-w-[16rem] px-2 py-2 text-xs">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          {r.acabado_pral ? (
+                            <span className="truncate rounded-full bg-blue-50 px-2 py-0.5 font-semibold text-blue-800">
+                              {r.acabado_pral}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                          {despachoResumen ? (
+                            <button
+                              type="button"
+                              className="inline-flex size-6 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                              title={despachoResumen}
+                              aria-label={`Ver resumen de despacho OT ${r.ot_numero}`}
+                            >
+                              <Eye className="size-3.5" aria-hidden />
+                            </button>
+                          ) : null}
+                        </div>
+                      </TableCell>
                       <TableCell className="max-w-[12rem] truncate px-2 py-2 text-sm">
                         {r.cliente || "—"}
                       </TableCell>
@@ -454,7 +489,8 @@ export function ExternosItinerarioPoolTab({
                           : "—"}
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
