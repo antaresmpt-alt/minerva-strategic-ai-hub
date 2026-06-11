@@ -86,12 +86,45 @@ function fmtDate(iso: string | null): string {
   });
 }
 
-const MAQUINA_COLS: { field: MaquinaHojaRutaField; label: string; title: string }[] =
-  [
-    { field: "konica", label: "Kon", title: "Konica (imprimir)" },
-    { field: "troqueladora", label: "Troq", title: "Troqueladora" },
-    { field: "numeradora", label: "Num", title: "Numeradora" },
-  ];
+function fmtDateShort(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso + "T12:00:00");
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+  });
+}
+
+const MAQUINA_COLS: {
+  field: MaquinaHojaRutaField;
+  fechaField:
+    | "fecha_fin_konica"
+    | "fecha_fin_troqueladora"
+    | "fecha_fin_numeradora";
+  label: string;
+  title: string;
+}[] = [
+  {
+    field: "konica",
+    fechaField: "fecha_fin_konica",
+    label: "Kon",
+    title: "Konica (imprimir)",
+  },
+  {
+    field: "troqueladora",
+    fechaField: "fecha_fin_troqueladora",
+    label: "Troq",
+    title: "Troqueladora",
+  },
+  {
+    field: "numeradora",
+    fechaField: "fecha_fin_numeradora",
+    label: "Num",
+    title: "Numeradora",
+  },
+];
 
 type ExportFormat = "excel" | "pdf";
 type ExportMode = "screen" | "date";
@@ -356,7 +389,10 @@ export function EtiquetasHojaRutaTab() {
   }, [supabase]);
 
   useEffect(() => {
-    void loadRows();
+    const timer = window.setTimeout(() => {
+      void loadRows();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [loadRows]);
 
   const papelesUnicos = useMemo(() => {
@@ -513,7 +549,7 @@ export function EtiquetasHojaRutaTab() {
     }
     const start = exportRange.start <= exportRange.end ? exportRange.start : exportRange.end;
     const end = exportRange.start <= exportRange.end ? exportRange.end : exportRange.start;
-    return `Rango: ${exportDateFieldLabel} · ${exportPresetLabel} · ${fmtDate(start)} → ${fmtDate(end)}`;
+    return `Rango: ${exportDateFieldLabel} · ${exportPresetLabel} (${fmtDateShort(start)} → ${fmtDateShort(end)})`;
   }, [exportDateFieldLabel, exportMode, exportPresetLabel, exportRange.end, exportRange.start]);
 
   const exportFiltersForDialog = useMemo(
@@ -603,18 +639,39 @@ export function EtiquetasHojaRutaTab() {
   const toggleFinalizado = useCallback(
     async (r: ProdEtiquetasHojaRutaRow, next: boolean) => {
       setTogglingId(r.id);
-      const prev = r.finalizado;
+      const prev = {
+        finalizado: r.finalizado,
+        fecha_fin_produccion: r.fecha_fin_produccion,
+      };
+      const fechaFinProduccion = next
+        ? (r.fecha_fin_produccion ?? ymdLocal())
+        : null;
       setRows((list) =>
-        list.map((x) => (x.id === r.id ? { ...x, finalizado: next } : x))
+        list.map((x) =>
+          x.id === r.id
+            ? { ...x, finalizado: next, fecha_fin_produccion: fechaFinProduccion }
+            : x
+        )
       );
       const { error } = await supabase
         .from(TABLE)
-        .update({ finalizado: next })
+        .update({
+          finalizado: next,
+          fecha_fin_produccion: fechaFinProduccion,
+        })
         .eq("id", r.id);
       setTogglingId(null);
       if (error) {
         setRows((list) =>
-          list.map((x) => (x.id === r.id ? { ...x, finalizado: prev } : x))
+          list.map((x) =>
+            x.id === r.id
+              ? {
+                  ...x,
+                  finalizado: prev.finalizado,
+                  fecha_fin_produccion: prev.fecha_fin_produccion,
+                }
+              : x
+          )
         );
         toast.error("No se pudo actualizar el estado", {
           description: error.message,
@@ -1111,7 +1168,7 @@ export function EtiquetasHojaRutaTab() {
                 {MAQUINA_COLS.map(({ label, title }) => (
                   <TableHead
                     key={label}
-                    className="w-9 px-1 text-center text-[10px] font-semibold text-[#002147]"
+                    className="w-14 px-1 text-center text-[10px] font-semibold text-[#002147]"
                     title={title}
                   >
                     {label}
@@ -1119,9 +1176,6 @@ export function EtiquetasHojaRutaTab() {
                 ))}
                 <TableHead className="whitespace-nowrap font-semibold text-[#002147]">
                   Troquel
-                </TableHead>
-                <TableHead className="whitespace-nowrap font-semibold text-[#002147]">
-                  I / F prod.
                 </TableHead>
                 <TableHead className="text-right font-semibold text-[#002147]">
                   Caj / Bob / Etq
@@ -1235,13 +1289,13 @@ export function EtiquetasHojaRutaTab() {
                       finalizado={Boolean(r.finalizado)}
                     />
                   </TableCell>
-                  {MAQUINA_COLS.map(({ field, title }) => (
+                  {MAQUINA_COLS.map(({ field, fechaField, title }) => (
                     <TableCell
                       key={field}
                       className="px-1 text-center align-middle"
                     >
                       <label
-                        className="inline-flex cursor-pointer justify-center py-0.5"
+                        className="inline-flex cursor-pointer flex-col items-center justify-center gap-0.5 py-0.5"
                         title={title}
                       >
                         <input
@@ -1254,6 +1308,9 @@ export function EtiquetasHojaRutaTab() {
                             void toggleMaquina(r, field, e.target.checked);
                           }}
                         />
+                        <span className="min-h-3 text-[9px] leading-none text-slate-500 tabular-nums">
+                          {Boolean(r[field]) ? fmtDateShort(r[fechaField]) : ""}
+                        </span>
                       </label>
                     </TableCell>
                   ))}
@@ -1265,15 +1322,6 @@ export function EtiquetasHojaRutaTab() {
                     title={resolveTroquelDisplay(r, troquelesById)}
                   >
                     {resolveTroquelDisplay(r, troquelesById)}
-                  </TableCell>
-                  <TableCell
-                    className={cn(
-                      "whitespace-nowrap tabular-nums",
-                      compactMode ? "py-1 text-[10px]" : "text-[10px]"
-                    )}
-                  >
-                    {fmtDate(r.fecha_inicio_produccion)} /{" "}
-                    {fmtDate(r.fecha_fin_produccion)}
                   </TableCell>
                   <TableCell
                     className={cn(

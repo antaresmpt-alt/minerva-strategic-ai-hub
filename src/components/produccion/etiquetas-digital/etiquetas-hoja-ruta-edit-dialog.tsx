@@ -83,8 +83,6 @@ type EditForm = {
   metros_impresion: string;
   troquel_id: string;
   troquel_utillaje: string;
-  fecha_inicio_produccion: string;
-  fecha_fin_produccion: string;
   cajas: string;
   bobinas: string;
   etiquetas: string;
@@ -115,8 +113,6 @@ function rowToForm(r: ProdEtiquetasHojaRutaRow): EditForm {
         : String(r.metros_impresion).replace(".", ","),
     troquel_id: r.troquel_id == null ? "" : String(r.troquel_id),
     troquel_utillaje: String(r.troquel_utillaje ?? "").trim(),
-    fecha_inicio_produccion: isoToDateInput(r.fecha_inicio_produccion),
-    fecha_fin_produccion: isoToDateInput(r.fecha_fin_produccion),
     cajas: r.cajas == null ? "" : String(r.cajas),
     bobinas: r.bobinas == null ? "" : String(r.bobinas),
     etiquetas: r.etiquetas == null ? "" : String(r.etiquetas),
@@ -171,7 +167,7 @@ export function EtiquetasHojaRutaEditDialog({
       setSaving(false);
       setDeleting(false);
     }
-  }, [open, row?.id]);
+  }, [open, row]);
 
   const troquelOptions = useMemo(
     () => buildTroquelOptions(troqueles, troquelQuery),
@@ -251,8 +247,9 @@ export function EtiquetasHojaRutaEditDialog({
         ),
         troquel_id: form.troquel_id ? Number(form.troquel_id) : null,
         troquel_utillaje: form.troquel_utillaje.trim() || null,
-        fecha_inicio_produccion: form.fecha_inicio_produccion.trim() || null,
-        fecha_fin_produccion: form.fecha_fin_produccion.trim() || null,
+        fecha_fin_produccion: form.finalizado
+          ? (row.fecha_fin_produccion ?? todayYmdLocal())
+          : null,
         cajas: parseOptionalInt(form.cajas),
         bobinas: parseOptionalInt(form.bobinas),
         etiquetas: parseOptionalInt(form.etiquetas),
@@ -650,32 +647,6 @@ export function EtiquetasHojaRutaEditDialog({
               />
               Marcar fila como cerrada
             </label>
-          </div>
-          <div className="grid gap-1">
-            <Label className="text-xs">F. inicio producción</Label>
-            <Input
-              type="date"
-              className="h-8 text-xs"
-              value={form.fecha_inicio_produccion}
-              onChange={(e) =>
-                setForm((f) =>
-                  f ? { ...f, fecha_inicio_produccion: e.target.value } : f
-                )
-              }
-            />
-          </div>
-          <div className="grid gap-1">
-            <Label className="text-xs">F. fin producción</Label>
-            <Input
-              type="date"
-              className="h-8 text-xs"
-              value={form.fecha_fin_produccion}
-              onChange={(e) =>
-                setForm((f) =>
-                  f ? { ...f, fecha_fin_produccion: e.target.value } : f
-                )
-              }
-            />
           </div>
           <div className="grid gap-1">
             <Label className="text-xs">Cajas</Label>

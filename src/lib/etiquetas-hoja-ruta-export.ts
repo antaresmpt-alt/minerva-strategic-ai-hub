@@ -58,6 +58,20 @@ function fmtDateEs(iso: string | null | undefined): string {
   });
 }
 
+function fmtDateEsShort(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const raw = String(iso).trim();
+  const d = /^\d{4}-\d{2}-\d{2}/.test(raw)
+    ? new Date(raw.slice(0, 10) + "T12:00:00")
+    : new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toLocaleDateString("es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+  });
+}
+
 function boolTxt(v: boolean) {
   return v ? "Sí" : "No";
 }
@@ -89,19 +103,17 @@ function rowToCells(
     fmtDateEs(r.fecha_entrega_ot),
     fmtDateEs(r.fecha_entrada_depto),
     r.urgencia === "urgente" ? "Urgente" : "Normal",
-    entregaPlazoSemaforo(r.fecha_entrega_ot),
-    entregaPlazoTitle(r.fecha_entrega_ot),
+    r.finalizado ? "Finalizada" : entregaPlazoSemaforo(r.fecha_entrega_ot),
+    r.finalizado ? "Trabajo finalizado" : entregaPlazoTitle(r.fecha_entrega_ot),
     r.observacion ?? "—",
     boolTxt(r.konica),
     boolTxt(r.troqueladora),
     boolTxt(r.numeradora),
-    fmtDateEs(r.fecha_fin_konica),
-    fmtDateEs(r.fecha_fin_troqueladora),
-    fmtDateEs(r.fecha_fin_numeradora),
+    fmtDateEsShort(r.fecha_fin_konica),
+    fmtDateEsShort(r.fecha_fin_troqueladora),
+    fmtDateEsShort(r.fecha_fin_numeradora),
     fmtMetros(r.metros_impresion),
     resolveTroquelDisplay(r, troquelesById),
-    fmtDateEs(r.fecha_inicio_produccion),
-    fmtDateEs(r.fecha_fin_produccion),
     r.cajas != null ? String(r.cajas) : "—",
     r.bobinas != null ? String(r.bobinas) : "—",
     r.etiquetas != null ? String(r.etiquetas) : "—",
@@ -130,8 +142,6 @@ const EXCEL_HEADERS = [
   "F. fin Numeradora",
   "Metros impresión",
   "Troquel (utillaje)",
-  "F. inicio prod.",
-  "F. fin prod.",
   "Cajas",
   "Bobinas",
   "Etiquetas",
@@ -154,8 +164,6 @@ const PDF_HEADERS = [
   "T",
   "N",
   "Troquel",
-  "Inicio",
-  "Fin",
   "Caj",
   "Bob",
   "Etq",
@@ -168,13 +176,13 @@ const PDF_PLAZO_COL = 8;
 const PDF_I_COL = 10;
 const PDF_T_COL = 11;
 const PDF_N_COL = 12;
-const PDF_FIN_COL = 21;
+const PDF_FIN_COL = 19;
 
 const PDF_MARGIN = { left: 8, right: 8 } as const;
 
 /** Pesos relativos; el ancho total se reparte en toda la página. */
 const PDF_COL_WEIGHTS: number[] = [
-  9, 24, 44, 14, 8, 11, 11, 5, 5, 18, 5, 5, 5, 9, 11, 11, 6, 6, 7, 8, 12, 5,
+  9, 24, 44, 14, 8, 11, 11, 5, 5, 18, 10, 10, 10, 11, 6, 6, 7, 8, 12, 5,
 ];
 
 const PDF_COL_WEIGHT_SUM = PDF_COL_WEIGHTS.reduce((a, b) => a + b, 0);
@@ -186,7 +194,6 @@ const PDF_CENTER_COLS = new Set([
   PDF_N_COL,
   PDF_FIN_COL,
   7,
-  13,
 ]);
 
 const PLAZO_FILL: Record<EntregaPlazoSemaforo, [number, number, number]> = {
@@ -222,7 +229,7 @@ function pdfColumnStyles(tableWidth: number): Record<number, PdfColStyle> {
       overflow: "ellipsize",
       halign: PDF_CENTER_COLS.has(i)
         ? "center"
-        : i === 4 || (i >= 16 && i <= 19)
+        : i === 4 || (i >= 14 && i <= 17)
           ? "right"
           : "left",
     };
@@ -230,15 +237,22 @@ function pdfColumnStyles(tableWidth: number): Record<number, PdfColStyle> {
   return styles;
 }
 
-function drawPdfCheck(doc: jsPDF, cx: number, cy: number): void {
-  const s = 0.85;
-  doc.setDrawColor(...NAVY);
-  doc.setLineWidth(0.22);
+function drawPdfCheck(
+  doc: jsPDF,
+  cx: number,
+  cy: number,
+  color: [number, number, number] = NAVY,
+  lineWidth = 0.22,
+  scale = 0.85
+): void {
+  const s = scale;
+  doc.setDrawColor(...color);
+  doc.setLineWidth(lineWidth);
   doc.line(cx - s, cy + 0.1, cx - s * 0.25, cy + s * 0.55);
   doc.line(cx - s * 0.25, cy + s * 0.55, cx + s, cy - s * 0.45);
 }
 
-/** Fila PDF compacta (sin plazo texto ni fechas fin máquina). */
+/** Fila PDF compacta (sin plazo texto; I/T/N se muestran como fecha corta). */
 function rowToPdfBody(
   r: ProdEtiquetasHojaRutaRow,
   troquelesById: Map<number, ProdEtiquetasTroquelRow>
@@ -254,12 +268,10 @@ function rowToPdfBody(
     r.urgencia === "urgente" ? "!" : "",
     "",
     pdfTxt(r.observacion),
-    "",
-    "",
-    "",
+    fmtDateEsShort(r.fecha_fin_konica),
+    fmtDateEsShort(r.fecha_fin_troqueladora),
+    fmtDateEsShort(r.fecha_fin_numeradora),
     pdfTxt(resolveTroquelDisplay(r, troquelesById)),
-    fmtDateEs(r.fecha_inicio_produccion),
-    fmtDateEs(r.fecha_fin_produccion),
     r.cajas != null ? String(r.cajas) : "—",
     r.bobinas != null ? String(r.bobinas) : "—",
     r.etiquetas != null ? String(r.etiquetas) : "—",
@@ -459,7 +471,7 @@ export function exportEtiquetasHojaRutaPdf(
 
   doc.setDrawColor(203, 213, 225);
   doc.setFillColor(...LIGHT_BG);
-  doc.roundedRect(headerX, 13, tableW, 18, 2, 2, "FD");
+  doc.roundedRect(headerX, 13, tableW, 22, 2, 2, "FD");
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(...SLATE);
@@ -470,19 +482,24 @@ export function exportEtiquetasHojaRutaPdf(
     headerX + 3,
     24
   );
-  doc.text(`Registros en listado: ${rows.length}`, headerX + 3, 29);
+  doc.text(
+    `Selección: ${filters.selectionLabel?.trim() || "Según filtros aplicados"}`,
+    headerX + 3,
+    29
+  );
+  doc.text(`Registros en listado: ${rows.length}`, headerX + 3, 34);
   doc.setFontSize(7);
   doc.text(
-    "P = plazo (circulo)  |  I / T / N = Kon / Troq / Num (tick)",
+    "P = plazo; finalizadas = check verde  |  I / T / N = fechas Kon / Troq / Num",
     headerX + tableW,
-    29,
+    34,
     { align: "right" }
   );
   doc.setTextColor(0, 0, 0);
 
-  let tableStartY = 36;
+  let tableStartY = 40;
   if (options.includeKpis) {
-    tableStartY = drawKpisBlock(doc, options.kpis, rows, 34);
+    tableStartY = drawKpisBlock(doc, options.kpis, rows, 38);
   }
 
   const troquelesById = options.troquelesById ?? new Map();
@@ -512,9 +529,6 @@ export function exportEtiquetasHojaRutaPdf(
       const idx = hook.column.index;
       if (
         idx === PDF_PLAZO_COL ||
-        idx === PDF_I_COL ||
-        idx === PDF_T_COL ||
-        idx === PDF_N_COL ||
         idx === PDF_FIN_COL
       ) {
         hook.cell.text = [];
@@ -530,6 +544,10 @@ export function exportEtiquetasHojaRutaPdf(
       const cy = hook.cell.y + hook.cell.height / 2;
 
       if (idx === PDF_PLAZO_COL) {
+        if (row.finalizado) {
+          drawPdfCheck(doc, cx, cy, [16, 185, 129], 0.38, 1.15);
+          return;
+        }
         const nivel = entregaPlazoSemaforo(row.fecha_entrega_ot);
         doc.setFillColor(...PLAZO_FILL[nivel]);
         doc.circle(cx, cy, 1.05, "F");
@@ -541,17 +559,7 @@ export function exportEtiquetasHojaRutaPdf(
         return;
       }
 
-      const machine =
-        idx === PDF_I_COL
-          ? row.konica
-          : idx === PDF_T_COL
-            ? row.troqueladora
-            : idx === PDF_N_COL
-              ? row.numeradora
-              : idx === PDF_FIN_COL
-                ? row.finalizado
-                : false;
-      if (machine) {
+      if (idx === PDF_FIN_COL && row.finalizado) {
         drawPdfCheck(doc, cx, cy);
       }
     },

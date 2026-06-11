@@ -93,8 +93,6 @@ type ExpressForm = {
   metros_impresion: string;
   troquel_id: string;
   troquel_utillaje: string;
-  fecha_inicio_produccion: string;
-  fecha_fin_produccion: string;
   cajas: string;
   bobinas: string;
   etiquetas: string;
@@ -123,8 +121,6 @@ function emptyForm(): ExpressForm {
     metros_impresion: "",
     troquel_id: "",
     troquel_utillaje: "",
-    fecha_inicio_produccion: "",
-    fecha_fin_produccion: "",
     cajas: "",
     bobinas: "",
     etiquetas: "",
@@ -347,8 +343,7 @@ export function EtiquetasEntradaExpressDialog({
         ),
         troquel_id: form.troquel_id ? Number(form.troquel_id) : null,
         troquel_utillaje: form.troquel_utillaje.trim() || null,
-        fecha_inicio_produccion: form.fecha_inicio_produccion.trim() || null,
-        fecha_fin_produccion: form.fecha_fin_produccion.trim() || null,
+        fecha_fin_produccion: form.finalizado ? todayYmd() : null,
         cajas: parseOptionalInt(form.cajas),
         bobinas: parseOptionalInt(form.bobinas),
         etiquetas: parseOptionalInt(form.etiquetas),
@@ -735,34 +730,6 @@ export function EtiquetasEntradaExpressDialog({
               />
               Marcar fila como cerrada
             </label>
-          </div>
-          <div className="grid gap-1">
-            <Label className="text-xs">F. inicio producción</Label>
-            <Input
-              type="date"
-              className="h-8 text-xs"
-              value={form.fecha_inicio_produccion}
-              onChange={(e) =>
-                setForm((f) => ({
-                  ...f,
-                  fecha_inicio_produccion: e.target.value,
-                }))
-              }
-            />
-          </div>
-          <div className="grid gap-1">
-            <Label className="text-xs">F. fin producción</Label>
-            <Input
-              type="date"
-              className="h-8 text-xs"
-              value={form.fecha_fin_produccion}
-              onChange={(e) =>
-                setForm((f) => ({
-                  ...f,
-                  fecha_fin_produccion: e.target.value,
-                }))
-              }
-            />
           </div>
           <div className="grid gap-1">
             <Label className="text-xs">Cajas</Label>
