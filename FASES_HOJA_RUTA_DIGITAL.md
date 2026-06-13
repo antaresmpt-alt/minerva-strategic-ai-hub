@@ -264,7 +264,7 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 
 ---
 
-## 🖼️ Bloque 3: Hoja de Ruta Virtual (componente único) ⏳ **EN PROGRESO**
+## 🖼️ Bloque 3: Hoja de Ruta Virtual (componente único) ✅ **COMPLETADO**
 
 **Objetivo**: Convertir el actual "modal GPS" del Pipeline en la **Hoja de Ruta Virtual** completa: una vista única, bien maquetada, que muestre TODOS los campos capturados por proceso (`datos_proceso`), reutilizable desde varios puntos de entrada.
 
@@ -287,8 +287,8 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
   - Zona por proceso con: máquina, fechas, estado, **datos del proceso (`datos_proceso`)**, ejecución real (maquinista/horas/incidencias) y externo si aplica
 - [x] Reutiliza `DatosProcesoForm` en modo `readonly` para pintar `datos_proceso`
 - [x] Enganchado en Pipeline (sustituye el modal GPS)
-- [ ] Enganchar también en OTs Despachadas, Planificación y tarjeta de Ejecución (siguientes pasadas)
-- [ ] Comparativa previsto vs real más visual (fase posterior)
+- [x] Enganchado en OTs Despachadas, Planificación y tarjeta de Ejecución
+- [ ] Comparativa previsto vs real más visual (mejora posterior; parcialmente cubierta por el PDF del Bloque 4)
 
 ---
 
@@ -547,7 +547,7 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 ✅ **Bloque 2.2 BASE IMPLEMENTADA** (6 jun 2026): Auto-enriquecimiento troquelado desde `prod_troqueles`
 ✅ **Bloque 2.5 COMPLETADO** (6 jun 2026): Encadenado salida→entrada + semáforo de aviso (margen 5%)
 ✅ **Motivos de pausa por proceso** (6 jun 2026): `sys_motivos_pausa.tipos_maquina` (NULL = universal) + filtrado por tipo de máquina en ejecución
-⏳ **Bloque 3 EN PROGRESO** (6 jun 2026): Hoja de Ruta Virtual (`HojaRutaOtDialog`) + loader `fetchHojaRutaOt`, enganchado en Pipeline, OTs Despachadas, Planificación y tarjeta de Ejecución
+✅ **Bloque 3 COMPLETADO** (6-13 jun 2026): Hoja de Ruta Virtual (`HojaRutaOtDialog`) + loader `fetchHojaRutaOt`, enganchado en Pipeline, OTs Despachadas, Planificación y tarjeta de Ejecución. Pendiente solo como mejora posterior: comparativa previsto/real más visual.
 ✅ **Bloque 3.1 COMPLETADO** (7-8 jun 2026): Pulido captura Impresión + **Troquelado + Engomado** (layout `width`, previsto/real, derivaciones, resaltar resultado real). Robustez de captura: campos persisten en iniciar/pausar/reanudar/guardar/finalizar. **Pendiente**: Digital a fondo y Guillotina.
 ✅ **Bloque 3.2 IMPLEMENTADO** (9 jun 2026): tabla `prod_cajas_embalaje` + RLS + mantenimiento; Engomado con select de caja, prefill bultos/palet, cálculo de picos (`bultos_completos`/`pico`/`bultos_totales`) y reparto en palets con tolerancia (`PALET_TOLERANCIA_BULTOS=1`). Pendiente: meter valores reales de Gabri.
 ✅ **Bloque 3.3 IMPLEMENTADO** (9 jun 2026): Maestro de Artículos — campos `fsc` (Sí/No) y `fsc_fecha_validacion` (BD + formulario).

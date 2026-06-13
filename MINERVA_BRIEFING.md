@@ -3,6 +3,8 @@
 > **Para qué sirve este documento**
 > Es un *briefing* pensado para poner en contexto a un modelo de IA (p. ej. Claude) antes de
 > una sesión de brainstorming / diseño de producto, sin necesidad de leer el código.
+> **Documento secundario**: la fuente de verdad maestra es `MINERVA_HUB_CONTEXTO_MAESTRO.md`.
+> Usar este archivo como onboarding narrativo largo cuando haga falta más explicación.
 > Si se necesita bajar al detalle técnico (estructura de carpetas, configs, tipos, migraciones),
 > ver el documento complementario **`MINERVA_CONTEXTO_TECNICO.md`**.
 >
