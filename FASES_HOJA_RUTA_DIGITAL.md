@@ -555,13 +555,15 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 ✅ **Bloque 3.6 IMPLEMENTADO** (9 jun 2026): Semáforo sobreproducción (🟠) configurable por proceso en Settings + proyección en Impresión.
 ✅ **Bloque 3.7 IMPLEMENTADO** (9 jun 2026): CTP/Preimpresión + Desbroce + Manipulados con Retractilado + 5ª área de planificación "preimpresion". Ver detalle abajo.
 ✅ **Bloque 4 BETA IMPLEMENTADA** (11 jun 2026): PDF acompañante desde `HojaRutaOtDialog` (A4 vertical) con cabecera, itinerario, tarjetas por proceso, detalle de pausas, gráfico previsto/real por proceso, botones Recargar/PDF y placeholders Recalcular presupuesto/Ficha técnica.
+✅ **Maestro troqueles etiquetas simplificado** (13 jun 2026): `prod_etiquetas_troqueles` — eliminadas columnas `cliente`/`trabajo` (migración `20260613142500_drop_etiquetas_troqueles_cliente_trabajo.sql` + UI/tipos/import-export/script). Dimensiones solo `dimensiones_texto` en el modal (sin ancho/alto/diámetro). `necesita_revision` conservado como checkbox. Fix UI: select "Estado" pisaba el campo de fecha (añadido `min-w-0`).
+
 ⏳ **Bloque 5 PENDIENTE**: Integración Etiquetas ↔ Hoja de Ruta (flujo Hugo)
 ⏳ **Bloque 6 PENDIENTE**: Producidas/Histórico (`prod_ot_producidas`, snapshot híbrido) + lifecycle de cierre (pendiente_revision → producida) + recálculo maestro
 ⏳ **Bloque 7 PENDIENTE**: Expedición/Albarán (depende de Bloque 6 + decisión Odoo)
 
 ---
 
-**Última actualización**: 11 de junio de 2026 - 21:15
+**Última actualización**: 13 de junio de 2026 - simplificación maestro troqueles etiquetas
 
 ---
 

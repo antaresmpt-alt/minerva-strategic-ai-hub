@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 13 jun 2026
+> Última actualización: 13 jun 2026 (incluye simplificación maestro troqueles etiquetas)
 
 ---
 
@@ -103,6 +103,7 @@ Software a medida para la planta de producción gráfica/impresión de la empres
 - Flujo independiente: calendario I-/T-/N-, muelle, metros Konica
 - Procesos: KONICA (id 18), Troq_ETIQUETA (id 19), Num_ETIQUETA (id 20)
 - Entrada manual por diálogo express (pendiente auto-generación desde despacho)
+- **Maestro de troqueles de etiquetas**: tabla `prod_etiquetas_troqueles` (pestaña "Troqueles etiq."). Simplificado para Hugo (13 jun): eliminadas columnas `cliente`/`trabajo` (BD + UI); dimensiones solo como `dimensiones_texto` (sin ancho/alto/diámetro en el modal); se mantiene `necesita_revision` como checkbox interno.
 
 ### ✅ Maestro de Artículos / Referencias
 - Tabla: `prod_referencias`
@@ -318,6 +319,7 @@ repositorio/              ← documentación adicional
 | `prod_procesos_cat` | Catálogo de procesos |
 | `prod_maquinas` | Máquinas (incluye ficticias: ENG-DESBROZ, ENG-MANIP, CTP-MNRV) |
 | `prod_etiquetas_hoja_ruta` | Hoja de ruta de etiquetas (flujo Hugo) |
+| `prod_etiquetas_troqueles` | Maestro de troqueles de etiquetas (sin `cliente`/`trabajo` desde 13 jun) |
 | `prod_seguimiento_externos` | Externos por OT |
 | `prod_cajas_embalaje` | Mini-maestro cajas embalaje (Bloque 3.2) |
 | `prod_despacho_catalogo` | Catálogos genéricos (tipo engomado, etc.) |
