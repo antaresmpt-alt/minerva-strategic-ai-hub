@@ -4,8 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  Download,
   ExternalLink,
+  FileText,
   Loader2,
+  RefreshCw,
   Route,
 } from "lucide-react";
 
@@ -25,9 +28,13 @@ import {
   type HojaRutaPaso,
 } from "@/lib/hoja-ruta/hoja-ruta-query";
 import {
-  getCamposConfigByProcesoId,
-  type CampoDefinicion,
-} from "@/lib/hoja-ruta-campos-config";
+  buildCamposVista,
+  fmtDate,
+  fmtCantidad,
+  tipoMaquinaLabel,
+  type CampoVista,
+} from "@/lib/hoja-ruta/hoja-ruta-formatters";
+import { exportHojaRutaPdf } from "@/lib/hoja-ruta/hoja-ruta-pdf";
 
 const STEP_BADGE_STYLES: Record<string, string> = {
   pendiente: "bg-slate-100 text-slate-700",
@@ -45,33 +52,6 @@ const STEP_ACCENT_STYLES: Record<string, string> = {
   finalizado: "border-l-emerald-400",
 };
 
-function fmtDate(v: string | null | undefined): string {
-  const raw = String(v ?? "").trim();
-  if (!raw) return "—";
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat("es-ES", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(d);
-}
-
-function fmtCantidad(v: number | null | undefined): string {
-  if (v == null || !Number.isFinite(v)) return "—";
-  return new Intl.NumberFormat("es-ES").format(v);
-}
-
-function tipoMaquinaLabel(v: string | null | undefined): string {
-  const t = String(v ?? "").trim().toLowerCase();
-  if (t === "impresion") return "Impresión";
-  if (t === "digital") return "Digital";
-  if (t === "troquelado") return "Troquelado";
-  if (t === "engomado") return "Engomado";
-  return "";
-}
-
 function machineLabel(paso: HojaRutaPaso): string {
   const nombre = String(paso.maquinaNombre ?? "").trim();
   const tipo = tipoMaquinaLabel(paso.tipoMaquina);
@@ -79,87 +59,6 @@ function machineLabel(paso: HojaRutaPaso): string {
   if (nombre) return nombre;
   if (tipo) return tipo;
   return "Sin máquina asignada";
-}
-
-function formatValor(value: unknown): string | null {
-  if (value == null) return null;
-  if (typeof value === "boolean") return value ? "Sí" : "No";
-  if (Array.isArray(value)) {
-    const items = value
-      .map((v) => String(v ?? "").trim())
-      .filter((v) => v.length > 0);
-    return items.length > 0 ? items.join(", ") : null;
-  }
-  const raw = String(value).trim();
-  return raw.length > 0 ? raw : null;
-}
-
-const TINTA_LABELS: Record<string, string> = {
-  CYAN: "Cyan",
-  MAGENTA: "Magenta",
-  YELLOW: "Yellow",
-  BLACK: "Black",
-  BLANCO: "Blanco",
-  PANTONE: "Pantone",
-};
-
-/** Formatea densidades_tintas → "Cyan 1.25, Pantone 185C 1.10". */
-function formatDensidades(value: unknown): string | null {
-  if (!Array.isArray(value)) return null;
-  const items = value
-    .map((item) => {
-      if (item == null) return "";
-      if (typeof item === "string") return TINTA_LABELS[item] ?? item;
-      if (typeof item === "object") {
-        const obj = item as Record<string, unknown>;
-        const tintaRaw = String(obj.tinta ?? "").trim();
-        if (!tintaRaw) return "";
-        const tinta = TINTA_LABELS[tintaRaw] ?? tintaRaw;
-        const ref = obj.ref ? String(obj.ref).trim() : "";
-        const dens = Number(obj.densidad);
-        const densStr = Number.isFinite(dens) ? dens.toFixed(2) : "";
-        return [tinta, ref, densStr].filter(Boolean).join(" ");
-      }
-      return "";
-    })
-    .filter((s) => s.length > 0);
-  return items.length > 0 ? items.join(", ") : null;
-}
-
-type CampoVista = { label: string; valor: string };
-
-/**
- * Extrae solo los campos rellenados de `datos_proceso` según la config del
- * proceso, en orden, gestionando previsto/real. No muestra campos vacíos.
- */
-function buildCamposVista(
-  procesoId: number | null,
-  datos: Record<string, unknown> | null,
-): CampoVista[] {
-  if (procesoId == null || !datos) return [];
-  const config = getCamposConfigByProcesoId(procesoId);
-  if (!config) return [];
-  const out: CampoVista[] = [];
-  const suffix = (campo: CampoDefinicion, v: string) =>
-    campo.suffix ? `${v} ${campo.suffix}` : v;
-
-  for (const campo of config.campos) {
-    if (campo.hasPrevistoReal) {
-      const prev = formatValor(datos[`${campo.id}_previsto`]);
-      const real = formatValor(datos[`${campo.id}_real`]);
-      if (prev != null) out.push({ label: `${campo.label} (prev.)`, valor: suffix(campo, prev) });
-      if (real != null) out.push({ label: `${campo.label} (real)`, valor: suffix(campo, real) });
-      continue;
-    }
-    if (campo.tipo === "densidades") {
-      const d = formatDensidades(datos[campo.id]);
-      if (d != null) out.push({ label: campo.label, valor: d });
-      continue;
-    }
-    const v = formatValor(datos[campo.id]);
-    if (v != null) out.push({ label: campo.label, valor: suffix(campo, v) });
-  }
-  return out;
 }
 
 export function HojaRutaOtDialog({
@@ -300,6 +199,33 @@ export function HojaRutaOtDialog({
                 </div>
               ) : null}
 
+              {/* Funciones en desarrollo (decorativas) */}
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2">
+                <span className="text-xs font-medium text-slate-600">Próximamente:</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled
+                  className="h-7 gap-1.5 text-xs opacity-60"
+                  title="Próximamente · Enlazará con FSC y cartelas de recepción de material"
+                >
+                  <RefreshCw className="size-3.5" />
+                  Recalcular presupuesto
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled
+                  className="h-7 gap-1.5 text-xs opacity-60"
+                  title="Próximamente · Vinculado a la pestaña de Fichas Técnicas"
+                >
+                  <FileText className="size-3.5" />
+                  Ficha técnica
+                </Button>
+              </div>
+
               {/* Pasos detallados */}
               {data.pasos.length === 0 ? (
                 <p className="text-sm text-slate-600">
@@ -433,16 +359,40 @@ export function HojaRutaOtDialog({
           )}
         </div>
 
-        <DialogFooter className="shrink-0 flex-row items-center justify-between gap-2 border-t border-slate-100 px-4 py-3 sm:px-5">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => router.push("/produccion/ots?tab=despachadas")}
-          >
-            <Route className="mr-2 size-4" />
-            Ver en Despachadas
-          </Button>
+        <DialogFooter className="shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-3 sm:flex-row sm:px-5">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => router.push("/produccion/ots?tab=despachadas")}
+            >
+              <Route className="mr-2 size-4" />
+              Ver en Despachadas
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={loading}
+              onClick={() => void load()}
+              title="Recargar datos de la hoja de ruta"
+            >
+              <RefreshCw className={`mr-2 size-4 ${loading ? "animate-spin" : ""}`} />
+              Recargar
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={loading || !data}
+              onClick={() => data && exportHojaRutaPdf(data)}
+              title="Descargar PDF de la hoja de ruta"
+            >
+              <Download className="mr-2 size-4" />
+              PDF
+            </Button>
+          </div>
           <Button
             type="button"
             size="sm"

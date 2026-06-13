@@ -99,8 +99,6 @@ export async function parseExcelFile(file: File): Promise<ProdEtiquetasTroquelIn
           especial: parseSiNo(row.especial),
           multiple: parseSiNo(row.multiple),
           con_hendido: parseSiNo(row.con_hendido),
-          cliente: row.cliente ? String(row.cliente).trim() : null,
-          trabajo: row.trabajo ? String(row.trabajo).trim() : null,
           estado: row.estado ? String(row.estado).trim() : "activo",
           necesita_revision: parseSiNo(row.necesita_revision),
           notas: row.notas ? String(row.notas).trim() : null,
@@ -161,8 +159,6 @@ function sonIguales(
     excel.especial === bd.especial &&
     excel.multiple === bd.multiple &&
     excel.con_hendido === bd.con_hendido &&
-    (excel.cliente ?? null) === (bd.cliente ?? null) &&
-    (excel.trabajo ?? null) === (bd.trabajo ?? null) &&
     excel.estado === bd.estado &&
     excel.necesita_revision === bd.necesita_revision &&
     (excel.notas ?? null) === (bd.notas ?? null) &&
@@ -264,8 +260,6 @@ export async function aplicarDiff(
           especial: excel.especial,
           multiple: excel.multiple,
           con_hendido: excel.con_hendido,
-          cliente: excel.cliente,
-          trabajo: excel.trabajo,
           estado: excel.estado,
           necesita_revision: excel.necesita_revision,
           notas: excel.notas,
@@ -302,8 +296,6 @@ export function exportarTroquelesAExcel(rows: ProdEtiquetasTroquelRow[]): void {
     especial: row.especial ? "Sí" : "No",
     multiple: row.multiple ? "Sí" : "No",
     con_hendido: row.con_hendido ? "Sí" : "No",
-    cliente: row.cliente || "",
-    trabajo: row.trabajo || "",
     necesita_revision: row.necesita_revision ? "Sí" : "No",
     notas: row.notas || "",
     fecha_ult_reparacion: row.fecha_ult_reparacion || "",
@@ -331,8 +323,6 @@ export function exportarTroquelesAExcel(rows: ProdEtiquetasTroquelRow[]): void {
     { wch: 10 },
     { wch: 10 },
     { wch: 12 },
-    { wch: 18 },
-    { wch: 32 },
     { wch: 16 },
     { wch: 32 },
     { wch: 18 },

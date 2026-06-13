@@ -6,7 +6,6 @@ export function formatTroquelCatalogLabel(troquel: ProdEtiquetasTroquelRow): str
     troquel.codigo,
     troquel.dimensiones_texto,
     troquel.forma,
-    troquel.cliente,
   ]
     .map((part) => String(part ?? "").trim())
     .filter(Boolean);
@@ -32,8 +31,6 @@ export function buildTroquelOptions(
         troquel.codigo,
         troquel.dimensiones_texto,
         troquel.forma,
-        troquel.cliente,
-        troquel.trabajo,
         troquel.carpeta_original,
       ]
         .map((part) => String(part ?? "").toLowerCase())

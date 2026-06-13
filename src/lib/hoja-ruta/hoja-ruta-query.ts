@@ -19,6 +19,7 @@ const TABLE_OTS = "prod_ots_general";
 const TABLE_DESPACHADAS = "produccion_ot_despachadas";
 const TABLE_PASOS = "prod_ot_pasos";
 const TABLE_EJECUCIONES = "prod_mesa_ejecuciones";
+const TABLE_PAUSAS = "prod_mesa_ejecuciones_pausas";
 const TABLE_EXTERNOS = "prod_seguimiento_externos";
 
 const EJECUCION_PICK_ORDER = new Map<string, number>([
@@ -28,6 +29,17 @@ const EJECUCION_PICK_ORDER = new Map<string, number>([
   ["finalizada", 3],
   ["cancelada", 4],
 ]);
+
+export type HojaRutaPausa = {
+  pausaId: string;
+  pausedAt: string | null;
+  resumedAt: string | null;
+  minutosPausa: number | null;
+  motivoLabel: string | null;
+  motivoCategoria: string | null;
+  motivoColor: string | null;
+  observacionesPausa: string | null;
+};
 
 export type HojaRutaEjecucion = {
   estado: string;
@@ -42,6 +54,7 @@ export type HojaRutaEjecucion = {
   observaciones: string | null;
   numPausas: number;
   haEstadoPausada: boolean;
+  pausas: HojaRutaPausa[];
 };
 
 export type HojaRutaExterno = {
@@ -145,6 +158,19 @@ type ExtRow = {
     | null;
 };
 
+type PausaRow = {
+  id: string;
+  ejecucion_id: string | null;
+  paused_at: string | null;
+  resumed_at: string | null;
+  minutos_pausa: number | string | null;
+  observaciones_pausa: string | null;
+  sys_motivos_pausa:
+    | { label: string | null; categoria: string | null; color_hex: string | null }
+    | { label: string | null; categoria: string | null; color_hex: string | null }[]
+    | null;
+};
+
 function pickJoin<T>(value: T | T[] | null | undefined): T | null {
   if (Array.isArray(value)) return value[0] ?? null;
   return value ?? null;
@@ -245,6 +271,37 @@ export async function fetchHojaRutaOt(
       }
     }
 
+    const pausasByEjecId = new Map<string, HojaRutaPausa[]>();
+    const ejecIds = Array.from(ejecByPaso.values()).map((e) => str(e.id)).filter(Boolean) as string[];
+    if (ejecIds.length > 0) {
+      const { data: pausasData, error: pausasErr } = await supabase
+        .from(TABLE_PAUSAS)
+        .select(
+          "id, ejecucion_id, paused_at, resumed_at, minutos_pausa, observaciones_pausa, sys_motivos_pausa(label, categoria, color_hex)",
+        )
+        .in("ejecucion_id", ejecIds)
+        .order("paused_at", { ascending: false });
+      if (pausasErr) throw pausasErr;
+      for (const row of (pausasData ?? []) as PausaRow[]) {
+        const ejecId = str(row.ejecucion_id);
+        if (!ejecId) continue;
+        const motivo = pickJoin(row.sys_motivos_pausa);
+        const pausa: HojaRutaPausa = {
+          pausaId: str(row.id) ?? "",
+          pausedAt: dateIso(row.paused_at),
+          resumedAt: dateIso(row.resumed_at),
+          minutosPausa: num(row.minutos_pausa),
+          motivoLabel: str(motivo?.label),
+          motivoCategoria: str(motivo?.categoria),
+          motivoColor: str(motivo?.color_hex),
+          observacionesPausa: str(row.observaciones_pausa),
+        };
+        const list = pausasByEjecId.get(ejecId) ?? [];
+        list.push(pausa);
+        pausasByEjecId.set(ejecId, list);
+      }
+    }
+
     const extByPaso = new Map<string, ExtRow>();
     if (pasoIds.length > 0) {
       const { data: extData, error: extErr } = await supabase
@@ -308,6 +365,7 @@ export async function fetchHojaRutaOt(
               observaciones: str(ejec.observaciones),
               numPausas: Math.max(0, Math.trunc(num(ejec.num_pausas) ?? 0)),
               haEstadoPausada: Boolean(ejec.ha_estado_pausada),
+              pausas: pausasByEjecId.get(str(ejec.id) ?? "") ?? [],
             }
           : null,
         externo: ext

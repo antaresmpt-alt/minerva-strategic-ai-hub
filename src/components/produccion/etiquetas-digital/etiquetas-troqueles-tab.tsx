@@ -43,15 +43,10 @@ type EditForm = {
   carpeta_original: string;
   carpeta_path: string;
   forma: string;
-  ancho_mm: string;
-  alto_mm: string;
-  diametro_mm: string;
   dimensiones_texto: string;
   especial: boolean;
   multiple: boolean;
   con_hendido: boolean;
-  cliente: string;
-  trabajo: string;
   estado: string;
   necesita_revision: boolean;
   notas: string;
@@ -70,27 +65,15 @@ function rowToForm(row: ProdEtiquetasTroquelRow): EditForm {
     carpeta_original: row.carpeta_original ?? "",
     carpeta_path: row.carpeta_path ?? "",
     forma: row.forma ?? "",
-    ancho_mm: row.ancho_mm != null ? String(row.ancho_mm) : "",
-    alto_mm: row.alto_mm != null ? String(row.alto_mm) : "",
-    diametro_mm: row.diametro_mm != null ? String(row.diametro_mm) : "",
     dimensiones_texto: row.dimensiones_texto ?? "",
     especial: row.especial,
     multiple: row.multiple,
     con_hendido: row.con_hendido,
-    cliente: row.cliente ?? "",
-    trabajo: row.trabajo ?? "",
     estado: row.estado,
     necesita_revision: row.necesita_revision,
     notas: row.notas ?? "",
     fecha_ult_reparacion: row.fecha_ult_reparacion ?? "",
   };
-}
-
-function parseOptionalDecimal(value: string): number | null {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const n = Number(trimmed.replace(",", "."));
-  return Number.isFinite(n) ? n : null;
 }
 
 export function EtiquetasTroquelesTab() {
@@ -101,8 +84,6 @@ export function EtiquetasTroquelesTab() {
   const [filtroTexto, setFiltroTexto] = useState("");
   const [filtroForma, setFiltroForma] = useState("todas");
   const [filtroEstado, setFiltroEstado] = useState("todos");
-  const [filtroCliente, setFiltroCliente] = useState("todos");
-  const [filtroNecesitaRevision, setFiltroNecesitaRevision] = useState(false);
   
   const [editingRow, setEditingRow] = useState<ProdEtiquetasTroquelRow | null>(null);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
@@ -110,7 +91,6 @@ export function EtiquetasTroquelesTab() {
   const [deletingEdit, setDeletingEdit] = useState(false);
   
   const [importDialogOpen, setImportDialogOpen] = useState(false);
-  const [importFile, setImportFile] = useState<File | null>(null);
   const [importDiff, setImportDiff] = useState<TroquelesDiffResult | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importIncluirModificados, setImportIncluirModificados] = useState(false);
@@ -176,18 +156,14 @@ export function EtiquetasTroquelesTab() {
       const textoMatch =
         !filtroTexto ||
         row.codigo.toLowerCase().includes(filtroTexto.toLowerCase()) ||
-        (row.carpeta_original ?? "").toLowerCase().includes(filtroTexto.toLowerCase()) ||
-        (row.cliente ?? "").toLowerCase().includes(filtroTexto.toLowerCase()) ||
-        (row.trabajo ?? "").toLowerCase().includes(filtroTexto.toLowerCase());
+        (row.carpeta_original ?? "").toLowerCase().includes(filtroTexto.toLowerCase());
       
       const formaMatch = filtroForma === "todas" || row.forma === filtroForma;
       const estadoMatch = filtroEstado === "todos" || row.estado === filtroEstado;
-      const clienteMatch = filtroCliente === "todos" || row.cliente === filtroCliente;
-      const revisionMatch = !filtroNecesitaRevision || row.necesita_revision;
       
-      return textoMatch && formaMatch && estadoMatch && clienteMatch && revisionMatch;
+      return textoMatch && formaMatch && estadoMatch;
     });
-  }, [rows, filtroTexto, filtroForma, filtroEstado, filtroCliente, filtroNecesitaRevision]);
+  }, [rows, filtroTexto, filtroForma, filtroEstado]);
   
   const formasUnicas = useMemo(() => {
     return Array.from(new Set(rows.map((r) => r.forma).filter((f): f is string => !!f))).sort();
@@ -195,10 +171,6 @@ export function EtiquetasTroquelesTab() {
   
   const estadosUnicos = useMemo(() => {
     return Array.from(new Set(rows.map((r) => r.estado))).sort();
-  }, [rows]);
-  
-  const clientesUnicos = useMemo(() => {
-    return Array.from(new Set(rows.map((r) => r.cliente).filter((c): c is string => !!c))).sort();
   }, [rows]);
   
   const handleExportar = useCallback(() => {
@@ -210,7 +182,6 @@ export function EtiquetasTroquelesTab() {
       const file = event.target.files?.[0];
       if (!file) return;
       
-      setImportFile(file);
       setImportLoading(true);
       setImportError(null);
       setImportDiff(null);
@@ -242,7 +213,6 @@ export function EtiquetasTroquelesTab() {
       await loadData();
       
       setImportDialogOpen(false);
-      setImportFile(null);
       setImportDiff(null);
       setImportIncluirModificados(false);
       
@@ -277,15 +247,10 @@ export function EtiquetasTroquelesTab() {
           carpeta_original: editForm.carpeta_original.trim() || null,
           carpeta_path: editForm.carpeta_path || null,
           forma: editForm.forma || null,
-          ancho_mm: parseOptionalDecimal(editForm.ancho_mm),
-          alto_mm: parseOptionalDecimal(editForm.alto_mm),
-          diametro_mm: parseOptionalDecimal(editForm.diametro_mm),
           dimensiones_texto: editForm.dimensiones_texto || null,
           especial: editForm.especial,
           multiple: editForm.multiple,
           con_hendido: editForm.con_hendido,
-          cliente: editForm.cliente || null,
-          trabajo: editForm.trabajo || null,
           estado: editForm.estado,
           necesita_revision: editForm.necesita_revision,
           notas: editForm.notas || null,
@@ -350,15 +315,10 @@ export function EtiquetasTroquelesTab() {
       carpeta_original: "",
       carpeta_path: "",
       forma: "",
-      ancho_mm: "",
-      alto_mm: "",
-      diametro_mm: "",
       dimensiones_texto: "",
       especial: false,
       multiple: false,
       con_hendido: false,
-      cliente: "",
-      trabajo: "",
       estado: "activo",
       necesita_revision: false,
       notas: "",
@@ -383,15 +343,13 @@ export function EtiquetasTroquelesTab() {
         carpeta_original: createForm.carpeta_original.trim() || null,
         carpeta_path: createForm.carpeta_path || null,
         forma: createForm.forma || null,
-        ancho_mm: parseOptionalDecimal(createForm.ancho_mm),
-        alto_mm: parseOptionalDecimal(createForm.alto_mm),
-        diametro_mm: parseOptionalDecimal(createForm.diametro_mm),
+        ancho_mm: null,
+        alto_mm: null,
+        diametro_mm: null,
         dimensiones_texto: createForm.dimensiones_texto || null,
         especial: createForm.especial,
         multiple: createForm.multiple,
         con_hendido: createForm.con_hendido,
-        cliente: createForm.cliente || null,
-        trabajo: createForm.trabajo || null,
         estado: createForm.estado,
         necesita_revision: createForm.necesita_revision,
         notas: createForm.notas || null,
@@ -483,7 +441,7 @@ export function EtiquetasTroquelesTab() {
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex-1 min-w-52">
           <Label htmlFor="filtro-texto" className="text-xs">
-            Buscar (código, carpeta, cliente, trabajo)
+            Buscar (código o carpeta)
           </Label>
           <Input
             id="filtro-texto"
@@ -533,35 +491,6 @@ export function EtiquetasTroquelesTab() {
           </Select>
         </div>
         
-        <div className="w-40">
-          <Label htmlFor="filtro-cliente" className="text-xs">
-            Cliente
-          </Label>
-          <Select value={filtroCliente} onValueChange={(v) => setFiltroCliente(v ?? "todos")}>
-            <SelectTrigger id="filtro-cliente" className="mt-1">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos</SelectItem>
-              {clientesUnicos.map((cliente) => (
-                <SelectItem key={cliente} value={cliente}>
-                  {cliente}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="filtro-revision"
-            checked={filtroNecesitaRevision}
-            onCheckedChange={(checked) => setFiltroNecesitaRevision(!!checked)}
-          />
-          <Label htmlFor="filtro-revision" className="text-xs cursor-pointer">
-            Solo necesitan revisión
-          </Label>
-        </div>
       </div>
       
       <div className="flex flex-wrap gap-2">
@@ -602,18 +531,15 @@ export function EtiquetasTroquelesTab() {
               <th className="px-2 py-2 text-left font-semibold">Código</th>
               <th className="px-2 py-2 text-left font-semibold">Forma</th>
               <th className="px-2 py-2 text-left font-semibold">Dimensiones</th>
-              <th className="px-2 py-2 text-left font-semibold">Cliente</th>
-              <th className="px-2 py-2 text-left font-semibold">Trabajo</th>
               <th className="px-2 py-2 text-left font-semibold">Estado</th>
               <th className="px-2 py-2 text-left font-semibold">F. últ. reparación</th>
-              <th className="px-2 py-2 text-center font-semibold">Rev.</th>
               <th className="px-2 py-2 text-center font-semibold">Acciones</th>
             </tr>
           </thead>
           <tbody>
             {rowsFiltradas.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-2 py-8 text-center text-slate-500">
+                <td colSpan={6} className="px-2 py-8 text-center text-slate-500">
                   No hay troqueles que coincidan con los filtros
                 </td>
               </tr>
@@ -626,8 +552,6 @@ export function EtiquetasTroquelesTab() {
                     <td className="px-2 py-2 font-mono">{row.codigo}</td>
                     <td className="px-2 py-2">{row.forma || "-"}</td>
                     <td className="px-2 py-2">{row.dimensiones_texto || "-"}</td>
-                    <td className="px-2 py-2">{row.cliente || "-"}</td>
-                    <td className="px-2 py-2">{row.trabajo || "-"}</td>
                     <td className="px-2 py-2">
                       <span
                         className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${
@@ -643,15 +567,6 @@ export function EtiquetasTroquelesTab() {
                     </td>
                     <td className="px-2 py-2 tabular-nums">
                       {row.fecha_ult_reparacion || "-"}
-                    </td>
-                    <td className="px-2 py-2 text-center">
-                      {row.necesita_revision ? (
-                        <span className="inline-block rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-800">
-                          Sí
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">-</span>
-                      )}
                     </td>
                     <td className="px-2 py-2 text-center">
                       <div className="flex items-center justify-center gap-1">
@@ -767,7 +682,7 @@ export function EtiquetasTroquelesTab() {
                   </Label>
                   <NativeSelect
                     id="edit-estado"
-                    className="mt-1"
+                    className="mt-1 min-w-0"
                     value={editForm.estado}
                     onChange={(e) =>
                       setEditForm({ ...editForm, estado: e.target.value })
@@ -832,71 +747,6 @@ export function EtiquetasTroquelesTab() {
                       setEditForm({ ...editForm, dimensiones_texto: e.target.value })
                     }
                     placeholder="100x60mm, 50mm, etc"
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <Label htmlFor="edit-ancho" className="text-xs">
-                    Ancho (mm)
-                  </Label>
-                  <Input
-                    id="edit-ancho"
-                    value={editForm.ancho_mm}
-                    onChange={(e) => setEditForm({ ...editForm, ancho_mm: e.target.value })}
-                    placeholder="100"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-alto" className="text-xs">
-                    Alto (mm)
-                  </Label>
-                  <Input
-                    id="edit-alto"
-                    value={editForm.alto_mm}
-                    onChange={(e) => setEditForm({ ...editForm, alto_mm: e.target.value })}
-                    placeholder="60"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-diametro" className="text-xs">
-                    Diámetro (mm)
-                  </Label>
-                  <Input
-                    id="edit-diametro"
-                    value={editForm.diametro_mm}
-                    onChange={(e) => setEditForm({ ...editForm, diametro_mm: e.target.value })}
-                    placeholder="50"
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="edit-cliente" className="text-xs">
-                    Cliente
-                  </Label>
-                  <Input
-                    id="edit-cliente"
-                    value={editForm.cliente}
-                    onChange={(e) => setEditForm({ ...editForm, cliente: e.target.value })}
-                    placeholder="TURRIS, VINESTAR, etc"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-trabajo" className="text-xs">
-                    Trabajo
-                  </Label>
-                  <Input
-                    id="edit-trabajo"
-                    value={editForm.trabajo}
-                    onChange={(e) => setEditForm({ ...editForm, trabajo: e.target.value })}
                     className="mt-1"
                   />
                 </div>
@@ -1084,7 +934,6 @@ export function EtiquetasTroquelesTab() {
               variant="outline"
               onClick={() => {
                 setImportDialogOpen(false);
-                setImportFile(null);
                 setImportDiff(null);
                 setImportIncluirModificados(false);
                 setImportError(null);
@@ -1140,7 +989,7 @@ export function EtiquetasTroquelesTab() {
                   </Label>
                   <NativeSelect
                     id="create-estado"
-                    className="mt-1"
+                    className="mt-1 min-w-0"
                     value={createForm.estado}
                     onChange={(e) =>
                       setCreateForm({ ...createForm, estado: e.target.value })
@@ -1205,73 +1054,6 @@ export function EtiquetasTroquelesTab() {
                       setCreateForm({ ...createForm, dimensiones_texto: e.target.value })
                     }
                     placeholder="100x60mm, 50mm, etc"
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <Label htmlFor="create-ancho" className="text-xs">
-                    Ancho (mm)
-                  </Label>
-                  <Input
-                    id="create-ancho"
-                    value={createForm.ancho_mm}
-                    onChange={(e) => setCreateForm({ ...createForm, ancho_mm: e.target.value })}
-                    placeholder="100"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="create-alto" className="text-xs">
-                    Alto (mm)
-                  </Label>
-                  <Input
-                    id="create-alto"
-                    value={createForm.alto_mm}
-                    onChange={(e) => setCreateForm({ ...createForm, alto_mm: e.target.value })}
-                    placeholder="60"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="create-diametro" className="text-xs">
-                    Diámetro (mm)
-                  </Label>
-                  <Input
-                    id="create-diametro"
-                    value={createForm.diametro_mm}
-                    onChange={(e) =>
-                      setCreateForm({ ...createForm, diametro_mm: e.target.value })
-                    }
-                    placeholder="50"
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="create-cliente" className="text-xs">
-                    Cliente
-                  </Label>
-                  <Input
-                    id="create-cliente"
-                    value={createForm.cliente}
-                    onChange={(e) => setCreateForm({ ...createForm, cliente: e.target.value })}
-                    placeholder="TURRIS, VINESTAR, etc"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="create-trabajo" className="text-xs">
-                    Trabajo
-                  </Label>
-                  <Input
-                    id="create-trabajo"
-                    value={createForm.trabajo}
-                    onChange={(e) => setCreateForm({ ...createForm, trabajo: e.target.value })}
                     className="mt-1"
                   />
                 </div>
