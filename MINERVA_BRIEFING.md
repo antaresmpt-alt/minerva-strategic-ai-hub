@@ -313,6 +313,8 @@ mismo contexto.
 |---|---|
 | `MINERVA_BRIEFING.md` | **Este documento.** Contexto estratégico/producto para brainstorming. |
 | `MINERVA_CONTEXTO_TECNICO.md` | Árbol del proyecto, `package.json`, configs clave, tipos, migraciones, reglas. |
+| `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` | Brief específico para diseñar Producidas, histórico, cierre/reapertura de OT y recálculo del Maestro. |
+| `MINERVA_BLOQUE7_ODOO_ALBARANES.md` | Brief específico para decidir Odoo, expedición, pre-albaranes, entregas parciales e integración futura. |
 | `FASES_HOJA_RUTA_DIGITAL.md` | Roadmap detallado por bloques de la Hoja de Ruta Digital (estado y pendientes). |
 | `FASES_MAESTRO_ARTICULOS.md` | Plan de fases del Maestro de Artículos. |
 | `DATA_MAPPING_PIPELINE_MVP.md` | Auditoría real de tablas/campos y contrato de datos del Pipeline. |
