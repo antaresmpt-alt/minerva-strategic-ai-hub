@@ -39,12 +39,6 @@ export type ProdEtiquetasTroquelRow = {
   /** Indica si el troquel incluye hendido (true) o no (false). */
   con_hendido: boolean;
   
-  /** Nombre del cliente asociado al troquel (TURRIS, VINESTAR, etc). */
-  cliente: string | null;
-  
-  /** Descripción del trabajo o proyecto asociado al troquel. */
-  trabajo: string | null;
-  
   /** Estado actual del troquel: activo, vacio, mantenimiento, etc. */
   estado: string;
   
@@ -115,8 +109,6 @@ export type TroquelExcelRow = {
   especial: string;
   multiple: string;
   con_hendido: string;
-  cliente: string;
-  trabajo: string;
   necesita_revision: string;
   notas: string;
   fecha_ult_reparacion: string;

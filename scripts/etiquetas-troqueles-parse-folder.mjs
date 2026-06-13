@@ -7,16 +7,6 @@ const SOURCE_DIR =
 const OUTPUT_PATH =
   "C:\\Users\\USUARIO\\Downloads\\ETIQUETAS\\TROQUELES\\TROQUELES\\troqueles-etiquetas-MAESTRO.xlsx";
 
-const CLIENTES = [
-  { canonical: "TURRIS", patterns: [/TURRIS/i] },
-  { canonical: "VINESTAR", patterns: [/VINESTAR/i] },
-  { canonical: "SANTA EULALIA", patterns: [/SANTA\s+EULALIA/i] },
-  { canonical: "ISSE SAFETY", patterns: [/ISSE[-\s]+SAFETY/i] },
-  { canonical: "MAYMO", patterns: [/MAYM[OÓ]/i] },
-  { canonical: "BONAPARTE", patterns: [/BONAPARTE/i] },
-  { canonical: "VERMONT BREAD", patterns: [/VERMONT\s+BREAD/i] },
-];
-
 const SHAPE_PATTERNS = [
   { forma: "redondo", patterns: [/REDONDO/i] },
   { forma: "ovalado", patterns: [/OVALADO/i] },
@@ -43,15 +33,6 @@ function normalizeCodigo(raw) {
   const n = Number.parseInt(String(raw), 10);
   if (!Number.isFinite(n)) return "";
   return String(n).padStart(4, "0");
-}
-
-function detectCliente(text) {
-  for (const cliente of CLIENTES) {
-    if (cliente.patterns.some((pattern) => pattern.test(text))) {
-      return cliente.canonical;
-    }
-  }
-  return "";
 }
 
 function detectDocumentType(name) {
@@ -127,28 +108,6 @@ function parseDimensions(text, forma) {
   };
 }
 
-function extractTrabajo(text, cliente) {
-  let work = text
-    .replace(/^TROQ\s*\d+\s*\.?/i, "")
-    .replace(/\bmnv_?/gi, "")
-    .replace(/\d+(?:[,.]\d+)?\s*(?:mm)?\s*x\s*\d+(?:[,.]\d+)?\s*(?:mm)?/gi, "")
-    .replace(/\d+(?:[,.]\d+)?\s*mm/gi, "")
-    .replace(/\bREDONDO\b|\bOVALADO\b|\bTRI[ÁA]NGULO\b|\bHEXAGONAL\b/gi, "")
-    .replace(/\bTROQUEL\b|\bESPECIAL\b|\bMULTIPLE\b|\bM[ÚU]LTIPLE\b|\bDOBLE\b/gi, "")
-    .replace(/\bCON HENDIDO\b/gi, "")
-    .replace(/\bVACIO\b/gi, "")
-    .replace(/[?.]/g, " ")
-    .replace(/[-_]/g, " ");
-
-  if (cliente) {
-    work = work.replace(new RegExp(cliente.replace(/\s+/g, "\\s+"), "gi"), "");
-    if (cliente === "MAYMO") work = work.replace(/MAYM[OÓ]/gi, "");
-    if (cliente === "ISSE SAFETY") work = work.replace(/ISSE[-\s]+SAFETY/gi, "");
-  }
-
-  return cleanSpaces(work);
-}
-
 function parseFolderName(folderName, folderPath) {
   const match = folderName.match(/^TROQ\s*(\d+)\s*\.?\s*(.*)$/i);
   const codigo = match ? normalizeCodigo(match[1]) : "";
@@ -160,7 +119,6 @@ function parseFolderName(folderName, folderPath) {
   const multiple = /\b(DOBLE|MULTIPLE|M[ÚU]LTIPLE)\b/i.test(folderName);
   const conHendido = /CON\s+HENDIDO/i.test(folderName);
   const necesitaRevision = /[?\uF028\uF029]/.test(folderName);
-  const cliente = detectCliente(folderName);
 
   let forma = "";
   for (const shape of SHAPE_PATTERNS) {
@@ -208,8 +166,6 @@ function parseFolderName(folderName, folderPath) {
     especial: boolEs(especial),
     multiple: boolEs(multiple),
     con_hendido: boolEs(conHendido),
-    cliente,
-    trabajo: extractTrabajo(folderName, cliente),
     necesita_revision: boolEs(necesitaRevision || (!dimensions.dimensiones_texto && estado !== "vacio")),
     notas: notes.join(" | "),
     carpeta_path: folderPath,
@@ -233,7 +189,12 @@ function countBy(rows, key) {
 }
 
 function worksheetFromRows(rows) {
-  const publicRows = rows.map(({ _sort, _upper, ...row }) => row);
+  const publicRows = rows.map((row) => {
+    const publicRow = { ...row };
+    delete publicRow._sort;
+    delete publicRow._upper;
+    return publicRow;
+  });
   return XLSX.utils.json_to_sheet(publicRows);
 }
 
@@ -267,27 +228,24 @@ function main() {
     {},
     ...countBy(rows, "forma").map((row) => ({ seccion: "Por forma", ...row })),
     {},
-    ...countBy(rows, "cliente").map((row) => ({ seccion: "Por cliente", ...row })),
-    {},
     ...countBy(rows, "estado").map((row) => ({ seccion: "Por estado", ...row })),
   ];
 
   const revisarRows = rows
     .filter((r) => r.necesita_revision === "Sí" || !r.dimensiones_texto || r.estado === "vacio")
-    .map(({ codigo, carpeta_original, estado, forma, dimensiones_texto, cliente, notas }) => ({
+    .map(({ codigo, carpeta_original, estado, forma, dimensiones_texto, notas }) => ({
       codigo,
       carpeta_original,
       estado,
       forma,
       dimensiones_texto,
-      cliente,
       notas,
     }));
 
   const wb = XLSX.utils.book_new();
   const wsTroqueles = worksheetFromRows(rows);
   setColumnWidths(wsTroqueles, [
-    10, 55, 12, 14, 12, 12, 12, 22, 10, 10, 12, 18, 32, 16, 32, 90, 24, 120, 36,
+    10, 55, 12, 14, 12, 12, 12, 22, 10, 10, 12, 16, 32, 90, 24, 120, 36,
   ]);
   wsTroqueles["!freeze"] = { xSplit: 0, ySplit: 1 };
 
@@ -297,7 +255,7 @@ function main() {
   setColumnWidths(wsResumen, [22, 38, 12]);
 
   const wsRevision = XLSX.utils.json_to_sheet(revisarRows);
-  setColumnWidths(wsRevision, [10, 55, 12, 14, 22, 18, 42]);
+  setColumnWidths(wsRevision, [10, 55, 12, 14, 22, 42]);
   wsRevision["!freeze"] = { xSplit: 0, ySplit: 1 };
 
   XLSX.utils.book_append_sheet(wb, wsTroqueles, "Troqueles");
@@ -312,7 +270,6 @@ function main() {
     sinDimensiones: rows.filter((r) => !r.dimensiones_texto && r.estado !== "vacio").length,
     vacios: rows.filter((r) => r.estado === "vacio").length,
     porForma: countBy(rows, "forma"),
-    porCliente: countBy(rows, "cliente"),
     dudosos: rows
       .filter((r) => r.necesita_revision === "Sí")
       .map((r) => `${r.codigo} · ${r.carpeta_original}`),
