@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { DespachoItinerarioSlot } from "@/components/produccion/ots/despacho-itinerario-picker";
+import { PROCESO_DESBROCE_ID } from "@/lib/hoja-ruta-campos-config";
 
 export const TABLE_PROD_OT_PASOS = "prod_ot_pasos";
 export const TABLE_PROD_OTS_GENERAL = "prod_ots_general";
@@ -134,10 +135,24 @@ export async function replaceProdOtItinerarioSlots(
     .eq("ot_id", otId);
   if (errDel) throw errDel;
   if (slots.length === 0) return;
+  let desbroceMaquinaId: string | null = null;
+  if (slots.some((s) => s.procesoId === PROCESO_DESBROCE_ID)) {
+    const { data: maqData, error: maqErr } = await supabase
+      .from("prod_maquinas")
+      .select("id")
+      .eq("codigo", "ENG-DESBROZ")
+      .maybeSingle();
+    if (maqErr) throw maqErr;
+    desbroceMaquinaId =
+      typeof (maqData as { id?: unknown } | null)?.id === "string"
+        ? String((maqData as { id: string }).id).trim() || null
+        : null;
+  }
   const pasoRows = slots.map((s, i) => ({
     ot_id: otId,
     orden: i + 1,
     proceso_id: s.procesoId,
+    maquina_id: s.procesoId === PROCESO_DESBROCE_ID ? desbroceMaquinaId : null,
     estado: i === 0 ? "disponible" : "pendiente",
   }));
   const { error: errIns } = await supabase

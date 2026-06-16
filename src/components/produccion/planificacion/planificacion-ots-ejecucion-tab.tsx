@@ -41,6 +41,7 @@ import { cn } from "@/lib/utils";
 import {
   getCamposConfigByProcesoId,
   PROCESO_CAMPOS_CONFIG,
+  PROCESO_CTP_ID,
   PROCESO_DESBROCE_ID,
 } from "@/lib/hoja-ruta-campos-config";
 import type { DatosProcesoGenerico } from "@/lib/hoja-ruta-campos-config";
@@ -65,6 +66,7 @@ const TABLE_MAQUINAS = "prod_maquinas";
 const TABLE_MESA = "prod_mesa_planificacion_trabajos";
 const TABLE_OT_PASOS = "prod_ot_pasos";
 const TABLE_DESPACHO = "produccion_ot_despachadas";
+const TABLE_DESPACHO_MATERIALES_LINEAS = "prod_despacho_materiales_lineas";
 const TABLE_OTS_GENERAL = "prod_ots_general";
 const TABLE_TROQUELES = "prod_troqueles";
 
@@ -91,6 +93,14 @@ type DespachoInfo = {
   horasEngomado: number | null;
   tipoEngomado: string | null;
   fechaEntrega: string | null;
+  materiales: MaterialLineaInfo[];
+};
+
+type MaterialLineaInfo = {
+  descripcion: string;
+  tipo: string | null;
+  orden: number | null;
+  soporteImpresion: boolean;
 };
 
 type TroquelInfoRow = {
@@ -294,6 +304,56 @@ function computeEngomadoReparto(
   return result;
 }
 
+function normalizeSearchText(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function isLikelyImpressionSupport(value: unknown): boolean {
+  const raw = normalizeSearchText(value);
+  if (!raw) return false;
+  if (/(microcanal|onduforma|ondulado|contracol|canal|carton ondulado)/.test(raw)) {
+    return false;
+  }
+  if (/(dorso gris|folding|cartoncill|estucad|couche|cartulina|zenith|aliking|offset|kraft)/.test(raw)) {
+    return true;
+  }
+  return true;
+}
+
+function materialOptionsForDespacho(despacho: DespachoInfo | null): { value: string; label: string }[] {
+  const seen = new Set<string>();
+  const options: { value: string; label: string }[] = [];
+  const push = (value: unknown, labelSuffix?: string) => {
+    const text = String(value ?? "").trim();
+    if (!text) return;
+    const key = normalizeSearchText(text);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    options.push({ value: text, label: labelSuffix ? `${text} · ${labelSuffix}` : text });
+  };
+
+  const sorted = [...(despacho?.materiales ?? [])].sort((a, b) => {
+    if (a.soporteImpresion !== b.soporteImpresion) return a.soporteImpresion ? -1 : 1;
+    return (a.orden ?? 9999) - (b.orden ?? 9999);
+  });
+  for (const linea of sorted) {
+    push(linea.descripcion, linea.tipo?.trim() || undefined);
+  }
+  push(despacho?.material, "material despacho");
+  return options;
+}
+
+function pickMaterialImpresion(despacho: DespachoInfo | null): string | null {
+  const options = materialOptionsForDespacho(despacho).map((opt) => opt.value);
+  const marcado = despacho?.materiales.find((m) => m.soporteImpresion && m.descripcion.trim());
+  if (marcado) return marcado.descripcion.trim();
+  return options.find(isLikelyImpressionSupport) ?? options[0] ?? null;
+}
+
 /**
  * Deriva campos para reducir picado en planta:
  * - Impresión: buenas ↔ merma desde netas/brutas.
@@ -373,6 +433,14 @@ function computeDerivedDatosProceso(
     return next;
   }
 
+  if (procesoId === PROCESO_DESBROCE_ID) {
+    const hojas = toFiniteNum(datos.hojas_entrada);
+    const poses = toFiniteNum(datos.poses);
+    if (hojas != null && poses != null && poses > 0) {
+      return { ...datos, estuches_desbrozados: Math.max(0, Math.floor(hojas * poses)) };
+    }
+  }
+
   return datos;
 }
 
@@ -425,17 +493,23 @@ type SalidaAnteriorInfo = {
   nombre: string;
 };
 
+function salidaAnteriorKey(otId: string, procesoId: number | null | undefined): string | null {
+  if (!otId || !procesoId) return null;
+  return `${otId}::${procesoId}`;
+}
+
 function mapRow(
   r: EjecucionRow,
   pausesByExecutionId: Map<string, MesaEjecucionPausa[]>,
-  salidaAnteriorByOtId: Map<string, SalidaAnteriorInfo>,
+  salidaAnteriorByPasoKey: Map<string, SalidaAnteriorInfo>,
 ): MesaEjecucion {
   const pauses = pausesByExecutionId.get(r.id) ?? [];
   const openPause = pauses.find((p) => p.resumedAt == null) ?? null;
   const pasoJoin = r.prod_ot_pasos;
   const pid = pasoJoin?.proceso_id;
   const otId = String(pasoJoin?.ot_id ?? "").trim();
-  const salidaAnterior = otId ? salidaAnteriorByOtId.get(otId) ?? null : null;
+  const salidaKey = salidaAnteriorKey(otId, pid);
+  const salidaAnterior = salidaKey ? salidaAnteriorByPasoKey.get(salidaKey) ?? null : null;
   return {
     id: r.id,
     mesaTrabajoId: r.mesa_trabajo_id,
@@ -659,6 +733,12 @@ export function PlanificacionOtsEjecucionTab({
           .from(TABLE_OTS_GENERAL)
           .select("num_pedido, cliente, cantidad, titulo, fecha_entrega")
           .in("num_pedido", otNumeros);
+        const { data: materialesData } = await supabase
+          .from(TABLE_DESPACHO_MATERIALES_LINEAS)
+          .select("ot_numero, tipo, descripcion, orden, soporte_impresion")
+          .in("ot_numero", otNumeros)
+          .order("ot_numero", { ascending: true })
+          .order("orden", { ascending: true });
         const generalMap = new Map<string, { cliente: string | null; cantidad: number | null; titulo: string | null; fechaEntrega: string | null }>();
         for (const g of (generalData ?? []) as Array<{ num_pedido?: string; cliente?: string | null; cantidad?: number | null; titulo?: string | null; fecha_entrega?: string | null }>) {
           const ot = String(g.num_pedido ?? "").trim();
@@ -670,6 +750,26 @@ export function PlanificacionOtsEjecucionTab({
               fechaEntrega: g.fecha_entrega ?? null,
             });
           }
+        }
+        const materialesByOt = new Map<string, MaterialLineaInfo[]>();
+        for (const m of (materialesData ?? []) as Array<{
+          ot_numero?: string | null;
+          tipo?: string | null;
+          descripcion?: string | null;
+          orden?: number | string | null;
+          soporte_impresion?: boolean | null;
+        }>) {
+          const ot = String(m.ot_numero ?? "").trim();
+          const descripcion = String(m.descripcion ?? "").trim();
+          if (!ot || !descripcion) continue;
+          const list = materialesByOt.get(ot) ?? [];
+          list.push({
+            descripcion,
+            tipo: m.tipo ?? null,
+            orden: parseNum(m.orden),
+            soporteImpresion: Boolean(m.soporte_impresion),
+          });
+          materialesByOt.set(ot, list);
         }
         const troquelNums = [
           ...new Set(
@@ -711,6 +811,7 @@ export function PlanificacionOtsEjecucionTab({
           if (!ot) continue;
           const gen = generalMap.get(ot);
           const troq = troquelMap.get(normalizeTroquelKey(d.troquel));
+          const materiales = materialesByOt.get(ot) ?? [];
           despachoMap[ot] = {
             cliente: gen?.cliente ?? null,
             cantidad: gen?.cantidad ?? null,
@@ -734,12 +835,13 @@ export function PlanificacionOtsEjecucionTab({
             horasEngomado: typeof d.horas_estimadas_engomado === "number" ? d.horas_estimadas_engomado : null,
             tipoEngomado: d.tipo_engomado ?? null,
             fechaEntrega: gen?.fechaEntrega ?? null,
+            materiales,
           };
         }
       }
 
       // Cargar salidas del paso anterior para el encadenado (Bloque 2.5)
-      const salidaAnteriorByOtId = new Map<string, SalidaAnteriorInfo>();
+      const salidaAnteriorByPasoKey = new Map<string, SalidaAnteriorInfo>();
       const otIds = [
         ...new Set(
           execRows
@@ -773,6 +875,8 @@ export function PlanificacionOtsEjecucionTab({
           if (!otId) continue;
           const pid = execRow.prod_ot_pasos?.proceso_id;
           if (!pid) continue;
+          const key = salidaAnteriorKey(otId, pid);
+          if (!key) continue;
           const procesoConfig = PROCESO_CAMPOS_CONFIG[pid];
           const inputIds = procesoConfig?.inputFromProcessIds;
           if (!inputIds || inputIds.length === 0) continue;
@@ -787,7 +891,7 @@ export function PlanificacionOtsEjecucionTab({
             const rawVal = paso.datos_proceso[candidateConfig.outputField];
             const val = typeof rawVal === "number" ? rawVal : (typeof rawVal === "string" ? Number(rawVal) : null);
             if (val == null || !Number.isFinite(val)) continue;
-            salidaAnteriorByOtId.set(otId, {
+            salidaAnteriorByPasoKey.set(key, {
               procesoAnteriorId: candidatePid,
               salida: val,
               nombre: candidateConfig.procesoNombre,
@@ -801,7 +905,7 @@ export function PlanificacionOtsEjecucionTab({
         Object.fromEntries(Array.from(pauseMap.entries()).map(([k, v]) => [k, v] as const)),
       );
       setDespachoByOt(despachoMap);
-      setRows(execRows.map((r) => mapRow(r, pauseMap, salidaAnteriorByOtId)));
+      setRows(execRows.map((r) => mapRow(r, pauseMap, salidaAnteriorByPasoKey)));
       setMotivosPausa(motivos);
       setCajasEmbalaje(cajas);
       setTipoEngomadoOptions(tiposEngomado);
@@ -1207,7 +1311,9 @@ export function PlanificacionOtsEjecucionTab({
               <div className="grid gap-3 lg:grid-cols-2">
                 {section.rows.map((row) => {
                   const desviacion =
-                    row.horasReales != null && row.horasPlanificadasSnapshot != null
+                    row.procesoId !== PROCESO_CTP_ID &&
+                    row.horasReales != null &&
+                    row.horasPlanificadasSnapshot != null
                       ? row.horasReales - row.horasPlanificadasSnapshot
                       : null;
                   return (
@@ -1293,13 +1399,14 @@ function ExecutionCard({
 
   const cajasDynamicOptions = useMemo(
     () => ({
+      material_impresion: materialOptionsForDespacho(despacho),
       codigo_caja_embalaje: cajasEmbalaje.map((c) => ({
         value: c.codigo,
         label: c.descripcion?.trim() ? `${c.codigo} · ${c.descripcion}` : c.codigo,
       })),
       tipo_engomado: tipoEngomadoOptions.map((label) => ({ value: label, label })),
     }),
-    [cajasEmbalaje, tipoEngomadoOptions],
+    [cajasEmbalaje, despacho, tipoEngomadoOptions],
   );
 
   const cajasDefaultByCodigo = useMemo(() => {
@@ -1321,6 +1428,8 @@ function ExecutionCard({
     const pid = row.procesoId;
     const base: DatosProcesoGenerico = {};
     if (pid === 1 || pid === 2) {
+      const materialImpresion = pickMaterialImpresion(despacho);
+      if (materialImpresion) base.material_impresion = materialImpresion;
       if (despacho.hojasBrutas != null) base.hojas_brutas = despacho.hojasBrutas;
       if (despacho.hojasNetas != null) {
         base.hojas_netas = despacho.hojasNetas;
@@ -1358,6 +1467,15 @@ function ExecutionCard({
       }
       if (despacho.horasEngomado != null) base.tiempo_previsto = despacho.horasEngomado;
       if (despacho.tipoEngomado) base.tipo_engomado = despacho.tipoEngomado;
+    }
+    if (pid === PROCESO_DESBROCE_ID) {
+      if (row.salidaProcesoAnterior != null) base.hojas_entrada = row.salidaProcesoAnterior;
+      if (despacho.poses != null) base.poses = despacho.poses;
+      const hojas = toFiniteNum(base.hojas_entrada);
+      const poses = toFiniteNum(base.poses);
+      if (hojas != null && poses != null && poses > 0) {
+        base.estuches_desbrozados = Math.max(0, Math.floor(hojas * poses));
+      }
     }
     return seedRealValuesFromPrevistos(pid, base);
   });
@@ -1777,14 +1895,20 @@ function ExecutionCard({
       ) : null}
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-slate-600">
-          Plan: {row.horasPlanificadasSnapshot ?? "—"}h · Real: {row.horasReales ?? "—"}h
-          {desviacion != null ? (
-            <span className={cn("ml-2 font-semibold", desviacion > 0 ? "text-red-700" : "text-emerald-700")}>
-              Desv. {desviacion >= 0 ? "+" : ""}{desviacion.toFixed(1)}h
-            </span>
-          ) : null}
-        </p>
+        {row.procesoId === PROCESO_CTP_ID ? (
+          <p className="text-xs text-slate-600">
+            Horas CTP: se guardan en datos del proceso y no computan contra Plan/Desv.
+          </p>
+        ) : (
+          <p className="text-xs text-slate-600">
+            Plan: {row.horasPlanificadasSnapshot ?? "—"}h · Real: {row.horasReales ?? "—"}h
+            {desviacion != null ? (
+              <span className={cn("ml-2 font-semibold", desviacion > 0 ? "text-red-700" : "text-emerald-700")}>
+                Desv. {desviacion >= 0 ? "+" : ""}{desviacion.toFixed(1)}h
+              </span>
+            ) : null}
+          </p>
+        )}
         <div className="flex gap-1.5">
           {canEdit ? (
             <Button

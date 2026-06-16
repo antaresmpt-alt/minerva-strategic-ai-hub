@@ -120,6 +120,14 @@ const GUILLOTINA_CAMPOS: CampoDefinicion[] = [
 // IMPRESIÓN OFFSET
 // ============================================================================
 const IMPRESION_OFFSET_CAMPOS: CampoDefinicion[] = [
+  {
+    id: 'material_impresion',
+    label: 'Material soporte impresión',
+    tipo: 'combo',
+    placeholder: 'Selecciona el soporte que entra en máquina...',
+    width: 'full',
+    hint: 'Se propone desde las líneas de material marcadas como soporte o por heurística; puedes corregirlo.',
+  },
   // — Formato (línea propia) —
   {
     id: 'formato_hojas',
@@ -251,6 +259,14 @@ const IMPRESION_OFFSET_CAMPOS: CampoDefinicion[] = [
 // IMPRESIÓN DIGITAL PLANA
 // ============================================================================
 const IMPRESION_DIGITAL_PLANA_CAMPOS: CampoDefinicion[] = [
+  {
+    id: 'material_impresion',
+    label: 'Material soporte impresión',
+    tipo: 'combo',
+    placeholder: 'Selecciona el soporte que entra en máquina...',
+    width: 'full',
+    hint: 'Se propone desde las líneas de material marcadas como soporte o por heurística; puedes corregirlo.',
+  },
   {
     id: 'formato_hojas',
     label: 'Formato hojas impresión',
@@ -572,6 +588,37 @@ const EXTERNO_CAMPOS_COMUNES: CampoDefinicion[] = [
     tipo: 'text',
     placeholder: 'ID o referencia del registro en Gestión de Externos',
   },
+  {
+    id: 'hojas_enviadas',
+    label: 'Hojas enviadas',
+    tipo: 'number',
+    min: 0,
+    width: 'half',
+    hint: 'Cantidad enviada al proveedor externo.',
+  },
+  {
+    id: 'hojas_recibidas_muelle',
+    label: 'Hojas recibidas muelle',
+    tipo: 'number',
+    min: 0,
+    width: 'half',
+    emphasis: 'real',
+    hint: 'Dato de retorno; si existe, tiene prioridad sobre hojas enviadas.',
+  },
+  {
+    id: 'unidades_recibidas_muelle',
+    label: 'Unidades recibidas muelle',
+    tipo: 'number',
+    min: 0,
+    width: 'half',
+  },
+  {
+    id: 'palets_recibidos_muelle',
+    label: 'Palets recibidos muelle',
+    tipo: 'number',
+    min: 0,
+    width: 'half',
+  },
 ];
 
 // ============================================================================
@@ -806,11 +853,71 @@ const MANIPULADOS_INTERNOS_CAMPOS: CampoDefinicion[] = [
 // ============================================================================
 const CTP_PREIMPRESION_CAMPOS: CampoDefinicion[] = [
   {
-    id: 'operador_ctp',
-    label: 'Operador CTP',
-    tipo: 'text',
-    placeholder: 'Nombre del operador',
-    width: 'half',
+    id: 'retoque_diseno',
+    label: 'Retoque diseño',
+    tipo: 'boolean',
+    width: 'third',
+  },
+  {
+    id: 'gestion_troquel',
+    label: 'Gestión troquel',
+    tipo: 'boolean',
+    width: 'third',
+    hint: 'Troquel nuevo o recuperado de archivo.',
+  },
+  {
+    id: 'gestion_relieves_stamping',
+    label: 'Relieves / stamping / varios',
+    tipo: 'boolean',
+    width: 'third',
+  },
+  {
+    id: 'prueba_gmg',
+    label: 'Prueba GMG',
+    tipo: 'boolean',
+    width: 'third',
+    hint: 'Prueba contractual de color cuando aplique.',
+  },
+  {
+    id: 'prueba_digital',
+    label: 'Prueba digital',
+    tipo: 'boolean',
+    width: 'third',
+  },
+  {
+    id: 'maqueta',
+    label: 'Maqueta',
+    tipo: 'boolean',
+    width: 'third',
+  },
+  {
+    id: 'gestion_fsc',
+    label: 'Gestión FSC',
+    tipo: 'boolean',
+    width: 'third',
+  },
+  {
+    id: 'preparacion_montaje',
+    label: 'Preparación montaje',
+    tipo: 'boolean',
+    width: 'third',
+  },
+  {
+    id: 'planchas_hechas',
+    label: 'Planchas hechas',
+    tipo: 'boolean',
+    width: 'third',
+  },
+  {
+    id: 'num_planchas',
+    label: 'Nº de planchas',
+    tipo: 'number',
+    min: 0,
+    width: 'third',
+    emphasis: 'real',
+    conditionalOn: 'planchas_hechas',
+    conditionalValue: true,
+    hint: 'Dato clave pedido por preimpresión.',
   },
   {
     id: 'horas_proceso',
@@ -818,35 +925,9 @@ const CTP_PREIMPRESION_CAMPOS: CampoDefinicion[] = [
     tipo: 'number',
     min: 0,
     suffix: 'h',
-    width: 'half',
+    width: 'third',
     emphasis: 'real',
-  },
-  // — Tareas (checkboxes rápidos para fichar desde PC) —
-  {
-    id: 'planchas_nuevas',
-    label: 'Planchas nuevas',
-    tipo: 'boolean',
-    width: 'third',
-  },
-  {
-    id: 'verificacion_troquel',
-    label: 'Verificación troquel',
-    tipo: 'boolean',
-    width: 'third',
-  },
-  {
-    id: 'prueba_color',
-    label: 'Prueba de color',
-    tipo: 'boolean',
-    width: 'third',
-  },
-  // — Notas libres —
-  {
-    id: 'notas',
-    label: 'Notas',
-    tipo: 'textarea',
-    placeholder: 'Observaciones del trabajo de preimpresión...',
-    width: 'full',
+    hint: 'Horas reales dedicadas al trabajo CTP/preimpresión.',
   },
 ];
 

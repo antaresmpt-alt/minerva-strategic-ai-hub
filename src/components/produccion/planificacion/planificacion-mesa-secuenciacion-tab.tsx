@@ -139,6 +139,7 @@ const TABLE_CAPACIDAD = "prod_mesa_capacidad_turnos";
 const TABLE_MAQUINAS = "prod_maquinas";
 const TABLE_EJECUCIONES = "prod_mesa_ejecuciones";
 const TABLE_SYS_PARAMETROS = "sys_parametros";
+const CTP_HORAS_PLANIFICACION_DEFAULT = 0.25;
 
 // Estados visibles en la Mesa. `finalizada` queda como trazabilidad operativa.
 const ACTIVE_MESA_ESTADOS = [
@@ -643,6 +644,7 @@ export function PlanificacionMesaSecuenciacionTab() {
       }
       if (tipoEfectivo === "troquelado") return hTroquelado;
       if (tipoEfectivo === "engomado") return hEngomado;
+      if (tipoEfectivo === "preimpresion") return CTP_HORAS_PLANIFICACION_DEFAULT;
       return hEntrada + hTiraje + hTroquelado + hEngomado;
     };
     const ejecByMesaId = new Map<
@@ -943,6 +945,7 @@ export function PlanificacionMesaSecuenciacionTab() {
       }
       if (tipoEfectivo === "troquelado") return hTroquelado;
       if (tipoEfectivo === "engomado") return hEngomado;
+      if (tipoEfectivo === "preimpresion") return CTP_HORAS_PLANIFICACION_DEFAULT;
       return hEntrada + hTiraje + hTroquelado + hEngomado;
     };
 

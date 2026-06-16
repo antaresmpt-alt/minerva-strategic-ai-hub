@@ -60,8 +60,16 @@ export type HojaRutaEjecucion = {
 export type HojaRutaExterno = {
   estado: string | null;
   proveedorNombre: string | null;
+  acabadoNombre: string | null;
   fechaEnvio: string | null;
   fechaPrevista: string | null;
+  fechaRecepcionMuelle: string | null;
+  hojasEnviadas: number | null;
+  hojasRecibidasMuelle: number | null;
+  unidades: number | null;
+  unidadesRecibidasMuelle: number | null;
+  palets: number | null;
+  paletsRecibidosMuelle: number | null;
   observaciones: string | null;
 };
 
@@ -150,9 +158,20 @@ type ExtRow = {
   estado: string | null;
   fecha_envio: string | null;
   fecha_prevista: string | null;
+  fecha_recepcion_muelle: string | null;
+  hojas_enviadas: number | string | null;
+  hojas_recibidas_muelle: number | string | null;
+  unidades: number | string | null;
+  unidades_recibidas_muelle: number | string | null;
+  palets: number | string | null;
+  palets_recibidos_muelle: number | string | null;
   observaciones: string | null;
   updated_at: string | null;
   prod_proveedores:
+    | { nombre: string | null }
+    | { nombre: string | null }[]
+    | null;
+  prod_cat_acabados:
     | { nombre: string | null }
     | { nombre: string | null }[]
     | null;
@@ -307,7 +326,7 @@ export async function fetchHojaRutaOt(
       const { data: extData, error: extErr } = await supabase
         .from(TABLE_EXTERNOS)
         .select(
-          "id, ot_paso_id, estado, fecha_envio, fecha_prevista, observaciones, updated_at, prod_proveedores(nombre)",
+          "id, ot_paso_id, estado, fecha_envio, fecha_prevista, fecha_recepcion_muelle, hojas_enviadas, hojas_recibidas_muelle, unidades, unidades_recibidas_muelle, palets, palets_recibidos_muelle, observaciones, updated_at, prod_proveedores(nombre), prod_cat_acabados(nombre)",
         )
         .in("ot_paso_id", pasoIds)
         .order("updated_at", { ascending: false });
@@ -372,8 +391,16 @@ export async function fetchHojaRutaOt(
           ? {
               estado: str(ext.estado),
               proveedorNombre: str(pickJoin(ext.prod_proveedores)?.nombre),
+              acabadoNombre: str(pickJoin(ext.prod_cat_acabados)?.nombre),
               fechaEnvio: dateIso(ext.fecha_envio),
               fechaPrevista: dateIso(ext.fecha_prevista),
+              fechaRecepcionMuelle: dateIso(ext.fecha_recepcion_muelle),
+              hojasEnviadas: num(ext.hojas_enviadas),
+              hojasRecibidasMuelle: num(ext.hojas_recibidas_muelle),
+              unidades: num(ext.unidades),
+              unidadesRecibidasMuelle: num(ext.unidades_recibidas_muelle),
+              palets: num(ext.palets),
+              paletsRecibidosMuelle: num(ext.palets_recibidos_muelle),
               observaciones: str(ext.observaciones),
             }
           : null,

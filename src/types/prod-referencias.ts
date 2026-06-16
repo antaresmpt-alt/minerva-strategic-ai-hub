@@ -50,6 +50,7 @@ export type ProdDespachoMaterialLineaRow = {
   cantidad: number | null;
   unidad: string | null;
   orden: number | null;
+  soporte_impresion: boolean;
   notas: string | null;
   created_at: string | null;
   updated_at: string | null;

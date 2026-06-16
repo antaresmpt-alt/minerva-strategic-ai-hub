@@ -554,9 +554,9 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 ✅ **Bloque 3.5 IMPLEMENTADO** (9 jun 2026): Tipo de engomado parametrizado + Homogeneidad pantalla "Despachadas".
 ✅ **Bloque 3.6 IMPLEMENTADO** (9 jun 2026): Semáforo sobreproducción (🟠) configurable por proceso en Settings + proyección en Impresión.
 ✅ **Bloque 3.7 IMPLEMENTADO** (9 jun 2026): CTP/Preimpresión + Desbroce + Manipulados con Retractilado + 5ª área de planificación "preimpresion". Ver detalle abajo.
+✅ **Bloque 3.8 IMPLEMENTADO** (11 jun 2026, rama `feature/fase0.6-hoja-ruta-virtual`): pruebas de campo del flujo nuevo → CTP fuera del cómputo productivo (0.25h plan), material de soporte en Impresión (flag `soporte_impresion` + heurística + combo), info de Externos (acabado + ojo + datos de retorno por muelle), fix encadenado por paso (1099 vs 900) y máquina Desbroce MNRV. Ver detalle abajo.
 ✅ **Bloque 4 BETA IMPLEMENTADA** (11 jun 2026): PDF acompañante desde `HojaRutaOtDialog` (A4 vertical) con cabecera, itinerario, tarjetas por proceso, detalle de pausas, gráfico previsto/real por proceso, botones Recargar/PDF y placeholders Recalcular presupuesto/Ficha técnica.
 ✅ **Maestro troqueles etiquetas simplificado** (13 jun 2026): `prod_etiquetas_troqueles` — eliminadas columnas `cliente`/`trabajo` (migración `20260613142500_drop_etiquetas_troqueles_cliente_trabajo.sql` + UI/tipos/import-export/script). Dimensiones solo `dimensiones_texto` en el modal (sin ancho/alto/diámetro). `necesita_revision` conservado como checkbox. Fix UI: select "Estado" pisaba el campo de fecha (añadido `min-w-0`).
-
 ⏳ **Bloque 5 PENDIENTE**: Integración Etiquetas ↔ Hoja de Ruta (flujo Hugo)
 ⏳ **Bloque 6 PENDIENTE**: Producidas/Histórico (`prod_ot_producidas`, snapshot híbrido) + lifecycle de cierre (pendiente_revision → producida) + recálculo maestro
 ⏳ **Bloque 7 PENDIENTE**: Expedición/Albarán (depende de Bloque 6 + decisión Odoo)
@@ -672,6 +672,80 @@ CTP (16) está al inicio pero sin salida encadenada (solo captura).
 
 ---
 
+## 🧪 Bloque 3.8: Pruebas de campo CTP/Desbroce/Externos + Ajustes ✅ **IMPLEMENTADO** (11 jun 2026)
+
+> Rama: `feature/fase0.6-hoja-ruta-virtual`. Sesión de prueba real del flujo nuevo (CTP → Impresión → Troquelado → Desbroce → Engomado) con el usuario reportando incidencias en vivo. Se corrigieron 6 puntos.
+
+### 1. CTP — horas fuera del cómputo productivo
+**Problema**: las horas de CTP se estaban sumando como si fueran horas de impresión/troquelado/engomado, distorsionando plan/real de producción.
+**Solución**:
+- En la tarjeta de ejecución (`ExecutionCard`), para CTP (`PROCESO_CTP_ID`) se **oculta** "Plan: Xh · Real: Yh · Desv. Zh" y se muestra un aviso de que las horas de CTP se registran en `datos_proceso` pero **no computan** en plan/desviación.
+- En planificación (`planificacion-mesa-diaria-tab.tsx` y `planificacion-mesa-secuenciacion-tab.tsx`): los procesos `preimpresion` usan un valor fijo `CTP_HORAS_PLANIFICACION_DEFAULT = 0.25h` en `horasPlanificadasFromDespRow` en lugar de heredar las horas totales de la OT. Así CTP pesa "un poquito" para tener control horario futuro, pero no infla la carga.
+
+### 2. Impresión — material de soporte correcto (multi-material)
+**Problema**: en OTs con varios materiales, Impresión auto-rellenaba el material de la posición 2 ("MICROCANAL") en vez del soporte real de impresión ("DORSO GRIS 250GRAMOS", posición 1).
+**Solución** (flag + heurística + selector manual):
+- Nuevo campo `soporte_impresion boolean` en `prod_despacho_materiales_lineas` (migración) y en el tipo `ProdDespachoMaterialLineaRow`.
+- Carga de líneas de material por OT (`prod_despacho_materiales_lineas`) → `materialesByOt` → `despacho.materiales` (con `descripcion`, `tipo`, `orden`, `soporteImpresion`).
+- `pickMaterialImpresion`: prioriza línea marcada `soporte_impresion`; si no hay, aplica heurística (`isLikelyImpressionSupport`, descarta microcanal/ondulado y similares); fallback a la primera línea.
+- Nuevo campo `material_impresion` (tipo `combo`) en Impresión Offset y Digital: combo **editable** con todos los materiales de la OT para corrección manual.
+
+### 3. Externos — más información en la zona de entrada (pool de Ramón)
+**Problema**: al llegar un trabajo a Externos, Ramón no veía de un vistazo qué acabado se espera (PP brillo, mate, contracolar…) sin entrar al detalle.
+**Solución** (`externos-itinerario-pool-tab.tsx` + `externos-itinerario-queue.ts`):
+- La cola enriquece cada fila con `acabado_pral`, `material`, `tamano_hoja`, `num_hojas_netas`, `num_hojas_brutas` desde `produccion_ot_despachadas`.
+- Nueva columna "Acabado / pistas": **chip** con el `acabado_pral` + icono **ojo** (👁) que en hover abre popover con resumen de despacho (material, formato, hojas netas/brutas).
+- Al generar el seguimiento externo, `hojas_enviadas` se siembra con `num_hojas_netas ?? num_hojas_brutas`.
+
+### 4. Externos — datos de retorno en el modal de Hoja de Ruta
+**Problema**: al volver un externo (contracolar, plastificar…) el modal no mostraba cuántas hojas se enviaron/recibieron.
+**Solución**:
+- Nuevos campos en `prod_seguimiento_externos` (migración): `hojas_enviadas`, `hojas_recibidas_muelle`, `unidades_recibidas_muelle`, `palets_recibidos_muelle`, `fecha_recepcion_muelle`.
+- Prioridad informativa: **recibidas por muelle** primero; si no están, cae a enviadas.
+- `hoja-ruta-query.ts`: `HojaRutaExterno` extendido + query a `prod_seguimiento_externos` con join `prod_cat_acabados(nombre)`.
+- `hoja-ruta-ot-dialog.tsx`: la sección "Externo" muestra acabado, fecha recepción muelle, hojas enviadas/recibidas, unidades y palets.
+- `gestion-externos-page.tsx`: sección colapsable "Retorno externo / muelle" en el diálogo de edición para informar estos campos.
+
+### 5. Desbroce — fix encadenado (1099 vs 900) + prefill
+**Problema**: Desbroce recibía "1099 del proceso anterior" cuando la troqueladora había hecho 900 buenas. Además `hojas_entrada` y `poses` no venían pre-rellenadas.
+**Causa raíz**: `salidaAnteriorByOtId` se indexaba **solo por `otId`**, así que varios pasos de la misma OT se pisaban el "salida anterior" entre sí.
+**Solución**:
+- Clave compuesta `otId::procesoId` (`salidaAnteriorKey` + `salidaAnteriorByPasoKey`) → cada paso recupera la salida de **su** predecesor real.
+- Prefill Desbroce: `hojas_entrada` = salida real del proceso anterior, `poses` = `despacho.poses`, y `estuches_desbrozados` derivado (`computeDerivedDatosProceso`).
+- Márgenes: se reutiliza la variable de engomadora (es su zona física), acordado con el usuario.
+
+### 6. Engomadora — OT 99906 no aparecía en el pool
+**Causa**: error de asignación de máquina; los pasos de Desbroce (`proceso_id = 22`) no apuntaban a "Desbroce MNRV", lo que descuadraba el pool de engomado.
+**Solución**:
+- `planificacion-ambito.ts`: `inferPlanificacionTipoFromProceso` prioriza "desbroc" → `engomado` antes que "troquelado".
+- `prod-ot-itinerario-client.ts`: `replaceProdOtItinerarioSlots` asigna `maquina_id` de "ENG-DESBROZ" a los pasos de Desbroce.
+- Migración: `update prod_ot_pasos set maquina_id = (Desbroce MNRV) where proceso_id = 22`.
+
+### Migraciones
+- `20260611152819_ctp_preimpresion_motivos_pausa.sql` — motivos de pausa específicos `preimpresion`.
+- `20260611184500_hoja_ruta_material_externos_detalle.sql` — `soporte_impresion` + detalle de retorno de externos + corrección de máquina Desbroce.
+
+### Archivos modificados
+- `src/components/produccion/planificacion/planificacion-ots-ejecucion-tab.tsx` (clave por paso, prefill material/desbroce, tarjeta CTP, combo material)
+- `src/components/produccion/planificacion/planificacion-mesa-diaria-tab.tsx` y `…-secuenciacion-tab.tsx` (CTP 0.25h)
+- `src/lib/hoja-ruta-campos-config.ts` (campo `material_impresion`, campos de externos)
+- `src/lib/hoja-ruta/hoja-ruta-query.ts` + `src/components/produccion/hoja-ruta/hoja-ruta-ot-dialog.tsx` (datos retorno externo)
+- `src/lib/externos-itinerario-queue.ts` + `src/components/produccion/externos/externos-itinerario-pool-tab.tsx` (acabado + ojo)
+- `src/components/produccion/externos/gestion-externos-page.tsx` (retorno externo / muelle)
+- `src/lib/planificacion-ambito.ts` + `src/lib/prod-ot-itinerario-client.ts` (máquina Desbroce)
+- `src/types/prod-referencias.ts` (`soporte_impresion`)
+
+### Validación
+- `tsc --noEmit` y `eslint` en verde (corregidos un error de `setState` síncrono en efecto y un warning de dependencia faltante).
+- Migración aplicada en BD remota; verificado que existen las nuevas columnas y que los pasos `proceso_id = 22` apuntan a "Desbroce MNRV".
+
+### Pendiente
+- [ ] Ampliar campos CTP tras reunión con Gemma.
+- [ ] Marcar `soporte_impresion` en las líneas de material desde el maestro/despacho (hoy depende de heurística).
+- [ ] Probar flujo completo extremo a extremo con varias OTs reales.
+
+---
+
 **Sesión 9 jun 2026 (tarde)** — Tipo de engomado parametrizado ✅
 
 ### Hecho
@@ -732,3 +806,23 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 
 **Siguiente bloque grande**
 - **Bloque 6**: tabla `prod_ot_producidas` + lifecycle de cierre (`pendiente_revision` → `producida`) + snapshot híbrido + recálculo maestro.
+
+---
+
+**Sesión 11 jun 2026** — Bloque 3.8: pruebas de campo + ajustes ✅ (rama `feature/fase0.6-hoja-ruta-virtual`)
+
+### Hecho hoy (resumen)
+- **CTP fuera del cómputo productivo**: oculto plan/real/desv. en su tarjeta; 0.25h de peso en planificación (control horario sin inflar carga).
+- **Material de soporte en Impresión**: flag `soporte_impresion` (BD + tipo) + heurística + combo editable `material_impresion` para multi-material.
+- **Externos**: pool con chip de acabado + icono ojo (resumen despacho); nuevos campos de retorno por muelle (hojas/unidades/palets recibidos, fecha) en BD, modal de hoja de ruta y diálogo de gestión.
+- **Fix encadenado (1099 vs 900)**: clave `otId::procesoId` para `salidaAnterior` + prefill Desbroce (`hojas_entrada`/`poses`/`estuches_desbrozados`).
+- **Engomadora / OT 99906**: corregida asignación de máquina Desbroce MNRV (inferencia de ámbito + itinerario + migración).
+- 2 migraciones aplicadas. `tsc` + `eslint` en verde.
+
+### 🔜 Próxima sesión
+- [ ] Mergear `feature/fase0.6-hoja-ruta-virtual` a `main` tras validación del usuario.
+- [ ] Ampliar campos CTP tras reunión con Gemma.
+- [ ] Marcar `soporte_impresion` en líneas de material desde maestro/despacho (hoy heurística).
+- [ ] Probar flujo completo extremo a extremo con varias OTs reales.
+- [ ] Pendientes vivos: roles `preimpresion` (Marc/Gemma), `bultos_por_palet_default` de Gabri, plantillas de ruta con CTP/Desbroce.
+- **Bloque 6**: `prod_ot_producidas` + lifecycle de cierre.
