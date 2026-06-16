@@ -117,6 +117,7 @@ Software a medida para la planta de producción gráfica/impresión de la empres
 - Itinerario/pasos: `prod_ot_pasos` (con campo `datos_proceso JSONB` + índice GIN)
 - Ejecuciones: `prod_mesa_ejecuciones` + `prod_mesa_ejecuciones_pausas`
 - Externos vinculados: `prod_seguimiento_externos`
+- **Limitación actual (16 jun 2026):** modelo 1:1 — una OT, una referencia, un `tamano_hoja`, un `poses`. No modela formas de impresión ni formatos distintos por proceso. Ver Bloque 8.
 
 ### ✅ Hoja de Ruta Digital (módulo principal EN PROGRESO)
 Ver sección detallada abajo.
@@ -234,14 +235,21 @@ src/components/produccion/planificacion/
 | 3.5 | Tipo engomado parametrizado | ✅ Implementado (9 jun) |
 | 3.6 | Semáforo sobreproducción configurable | ✅ Implementado (9 jun) |
 | 3.7 | CTP + Desbroce + Manipulados+Retractilado | ✅ Implementado (9 jun) |
+| 3.8 | Pruebas campo CTP/externos/desbroce | ✅ Implementado (11 jun, merge main 16 jun) |
 | 4 | PDF acompañante desde HojaRutaOtDialog | ✅ Beta implementada (11 jun) |
 | 5 | Integración Etiquetas ↔ Hoja de Ruta | ⏳ Pendiente |
 | 6 | Producidas/Histórico + cierre OT | ⏳ Pendiente (PRÓXIMO GRANDE) |
 | 7 | Expedición/Albarán | ⏳ Pendiente (depende B6 + Odoo) |
+| 8 | Formatos de hoja + formas (OT madre/hijas) | 📋 En diseño (16 jun) — ver `MINERVA_BLOQUE8_FORMAS_Y_FORMATOS.md` |
 
 ---
 
 ## 🔜 Tareas pendientes inmediatas
+
+### Retomar aquí (16 jun 2026)
+- [ ] **Bloque 8.1**: encadenado formato de hoja (compra → guillotina → impresión → troquelado) — **primer paso de código recomendado**
+- [ ] Preguntas a planta (Abraham/Carlos/Jordi) — ver §11 de `MINERVA_BLOQUE8_FORMAS_Y_FORMATOS.md`
+- [ ] Diseño tablas `prod_ot_formas` + OT madre/hijas (sin OTs sueltas en listado)
 
 ### Alta prioridad (usuario)
 - [ ] Ampliar campos CTP tras reunión con Gemma
@@ -279,6 +287,8 @@ src/components/produccion/planificacion/
 8. **Desbroce en área engomado** (no área propia): físicamente está en zona de engomado, las engomadoras siempre desbrozán antes. Máquina ficticia `ENG-DESBROZ`.
 
 9. **PDF acompañante**: existe beta desde `HojaRutaOtDialog`. No sustituye la vista digital; sirve como hoja física de apoyo/presentación y debe mantenerse derivado de la misma fuente de datos.
+
+10. **Bloque 8 — OT madre + formas (16 jun 2026)**: Optimus modela sub-unidades con PRE+TIR; Minerva adoptará **OT contenedor visible + hijas en tabla** (panel Formas), no OTs sueltas en pipeline. Formato = cadena por proceso. Separación por referencia tras Desbroce. Itinerario por forma con override excepcional. Briefing: `MINERVA_BLOQUE8_FORMAS_Y_FORMATOS.md`.
 
 ---
 
@@ -351,5 +361,5 @@ Objetivos de la sesión:
 <pegar MINERVA_HUB_CONTEXTO_MAESTRO.md>
 
 --- BRIEF ESPECÍFICO (opcional) ---
-<pegar MINERVA_BLOQUE6_... o MINERVA_BLOQUE7_... si aplica>
+<pegar MINERVA_BLOQUE6_... o MINERVA_BLOQUE7_... o MINERVA_BLOQUE8_... si aplica>
 ```
