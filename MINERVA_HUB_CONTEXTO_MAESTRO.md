@@ -240,7 +240,7 @@ src/components/produccion/planificacion/
 | 5 | Integración Etiquetas ↔ Hoja de Ruta | ⏳ Pendiente |
 | 6 | Producidas/Histórico + cierre OT | ⏳ Pendiente (PRÓXIMO GRANDE) |
 | 7 | Expedición/Albarán | ⏳ Pendiente (depende B6 + Odoo) |
-| 8 | Formatos de hoja + formas (OT madre/hijas) | 📋 En diseño (16 jun) — ver `MINERVA_BLOQUE8_FORMAS_Y_FORMATOS.md` |
+| 8 | Formatos de hoja + formas + componentes (OT contenedor/hijas) | 📋 En diseño (17 jun) — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` |
 
 ---
 
@@ -248,8 +248,8 @@ src/components/produccion/planificacion/
 
 ### Retomar aquí (16 jun 2026)
 - [ ] **Bloque 8.1**: encadenado formato de hoja (compra → guillotina → impresión → troquelado) — **primer paso de código recomendado**
-- [ ] Preguntas a planta (Abraham/Carlos/Jordi) — ver §11 de `MINERVA_BLOQUE8_FORMAS_Y_FORMATOS.md`
-- [ ] Diseño tablas `prod_ot_formas` + OT madre/hijas (sin OTs sueltas en listado)
+- [ ] Preguntas a planta (Abraham/Carlos/Jordi) — ver §12 de `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`
+- [ ] Fase 8.0 migración `ot_tipo` / `ot_padre_numero` + Fase 8.1 agrupación UI (sin OTs sueltas en listado)
 
 ### Alta prioridad (usuario)
 - [ ] Ampliar campos CTP tras reunión con Gemma
@@ -288,7 +288,7 @@ src/components/produccion/planificacion/
 
 9. **PDF acompañante**: existe beta desde `HojaRutaOtDialog`. No sustituye la vista digital; sirve como hoja física de apoyo/presentación y debe mantenerse derivado de la misma fuente de datos.
 
-10. **Bloque 8 — OT madre + formas (16 jun 2026)**: Optimus modela sub-unidades con PRE+TIR; Minerva adoptará **OT contenedor visible + hijas en tabla** (panel Formas), no OTs sueltas en pipeline. Formato = cadena por proceso. Separación por referencia tras Desbroce. Itinerario por forma con override excepcional. Briefing: `MINERVA_BLOQUE8_FORMAS_Y_FORMATOS.md`.
+10. **Bloque 8 — OT contenedor + hijas (17 jun 2026)**: Optimus modela sub-unidades con PRE+TIR; Minerva adoptará **hijas como OTs reales en BD** agrupadas en UI (no listado plano). Formato = cadena por proceso. Convergencia variable según producto (no siempre desbroce). Itinerario por hija con override. Tipos: forma | componente | preimpresion | acabado. Briefing: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
 
 ---
 

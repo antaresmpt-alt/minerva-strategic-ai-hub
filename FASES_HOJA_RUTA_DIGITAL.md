@@ -560,11 +560,11 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 ⏳ **Bloque 5 PENDIENTE**: Integración Etiquetas ↔ Hoja de Ruta (flujo Hugo)
 ⏳ **Bloque 6 PENDIENTE**: Producidas/Histórico (`prod_ot_producidas`, snapshot híbrido) + lifecycle de cierre (pendiente_revision → producida) + recálculo maestro
 ⏳ **Bloque 7 PENDIENTE**: Expedición/Albarán (depende de Bloque 6 + decisión Odoo)
-📋 **Bloque 8 EN DISEÑO** (16 jun 2026): Formatos de hoja (cadena compra→guillotina→impresión→troquel) + formas de impresión (OT madre / hijas en tabla, sin OTs sueltas en listado). Ver `MINERVA_BLOQUE8_FORMAS_Y_FORMATOS.md`.
+📋 **Bloque 8 EN DISEÑO** (17 jun 2026): Formatos de hoja + formas + componentes (OT contenedor/hijas agrupadas en UI). Fuente de verdad: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
 
 ---
 
-**Última actualización**: 16 de junio de 2026 - diseño Bloque 8 (formatos + formas OT madre/hijas)
+**Última actualización**: 17 de junio de 2026 - Bloque 8 fusionado (formatos + formas + componentes)
 
 ---
 
@@ -783,7 +783,7 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 
 ## 📌 Punto de continuación (próxima sesión)
 
-**👉 Retomar aquí (16 jun 2026):** `MINERVA_BLOQUE8_FORMAS_Y_FORMATOS.md` — Fase 8.1 encadenado de formato, o cerrar diseño formas tras reunión con planta.
+**👉 Retomar aquí (17 jun 2026):** `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` — Fase FORMATO (encadenado tamaño hoja), luego Fase 8.0–8.1 (migración + agrupación UI). Responder §12 con planta antes de 8.2.
 
 ---
 
@@ -826,32 +826,31 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 
 ### 🔜 Próxima sesión
 - [x] Mergear `feature/fase0.6-hoja-ruta-virtual` a `main` (16 jun 2026).
-- [ ] **Bloque 8.1**: encadenado de formato de hoja (compra → guillotina → impresión → troquelado).
+- [ ] **Bloque 8**: Fase FORMATO (encadenado hoja) → 8.0 migración → 8.1 agrupación UI — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`
 - [ ] Ampliar campos CTP tras reunión con Gemma.
 - [ ] Marcar `soporte_impresion` en líneas de material desde maestro/despacho (hoy heurística).
 - [ ] Probar flujo completo extremo a extremo con varias OTs reales.
 - [ ] Pendientes vivos: roles `preimpresion` (Marc/Gemma), `bultos_por_palet_default` de Gabri, plantillas de ruta con CTP/Desbroce.
-- [ ] **Bloque 8.2+**: diseño formas OT madre/hijas — ver `MINERVA_BLOQUE8_FORMAS_Y_FORMATOS.md` y preguntas a planta (Abraham/Carlos).
+- [ ] **Bloque 8.2+**: wizard despacho contenedor + hijas — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` §12 (preguntas planta)
 - **Bloque 6**: `prod_ot_producidas` + lifecycle de cierre.
 
 ---
 
-**Sesión 16 jun 2026** — Brainstorming Bloque 8 (formatos + formas) 📋
+**Sesión 16–17 jun 2026** — Bloque 8: diseño fusionado (formatos + formas + componentes) 📋
 
-### Contexto
-- El modelo actual asume 1 OT = 1 referencia = 1 `tamano_hoja` = 1 poses. En planta: formatos distintos por proceso y pedidos con varias referencias/formas de impresión.
-- Optimus usa árbol/sub-árbol (sub-unidades con PRE+TIR). En Minerva se descarta inundar listados con OTs sueltas.
-
-### Decisiones de diseño (dirección, sin código aún)
-- **Formato**: cadena por proceso (compra ≠ impresión ≠ troquel); primer paso de implementación = encadenado como las hojas.
-- **Formas**: metáfora del **barco** — OT madre visible + N hijas en **tabla interna** (panel Formas), no OTs flotando en pipeline.
-- **Punto de corte**: tras **Desbroce** → engomado/embalaje por **referencia/componente**.
-- **Itinerario por forma** con plantilla común en la madre y override excepcional (ej. forro con stamping, dorso sin).
-- JSON solo informativo de formas **insuficiente** si Abraham apunta horas prep/tir por forma.
+### Decisiones clave
+- **Formato:** cadena compra → guillotina → impresión → troquel (primer código).
+- **Pedidos complejos:** OT contenedor + hijas reales en BD; **agrupación UI** (no OTs sueltas en listado).
+- **Casos Optimus A/B/C** documentados (blister, folder, penjador).
+- **Convergencia variable** según producto (no siempre desbroce).
+- **Itinerario por hija** con plantilla común + override (forro/dorso + stamping).
+- **Tipos de hija:** forma | componente | preimpresion | acabado.
+- JSON solo informativo y tabla `prod_ot_formas` pura **descartados** como enfoque principal.
 
 ### Documento
-- Briefing completo: `MINERVA_BLOQUE8_FORMAS_Y_FORMATOS.md`
+- Fuente de verdad: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`
 
-### 🔜 Retomar aquí
-1. Implementar **Fase 8.1** (formato encadenado), o
-2. Reunión planta → cerrar preguntas abiertas del briefing → diseño tablas `prod_ot_formas`.
+### 🔜 Retomar
+1. Fase **FORMATO** (encadenado).
+2. Fase **8.0** + **8.1** (migración + agrupación pool/pipeline).
+3. Responder **§12** con Jordi/Zaida/Abraham antes del wizard 8.2.

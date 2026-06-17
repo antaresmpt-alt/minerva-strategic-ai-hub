@@ -237,11 +237,11 @@ Sobre este encadenado se calculan **semáforos** comparando la proyección con e
 - **Bloque 7 — Expedición / Albarán**: depende del Bloque 6 y de la **decisión sobre Odoo** (¿Minerva
   emite albarán legal con numeración, o solo prepara/exporta y Odoo emite?). Modelo 1 OT → N albaranes
   (entregas parciales). Faltan datos logísticos no presentes en la hoja de ruta.
-- **Bloque 8 — Formatos de hoja + formas de impresión** (en diseño, 16 jun 2026): el modelo actual
-  1 OT = 1 referencia no cubre formatos distintos por proceso ni pedidos multi-referencia. Dirección:
-  **OT madre (barco) + hijas en tabla** (sin OTs sueltas en listado), itinerario por forma con override
-  excepcional, separación por referencia tras Desbroce. Primer paso de código: encadenado de formato.
-  Briefing: `MINERVA_BLOQUE8_FORMAS_Y_FORMATOS.md`.
+- **Bloque 8 — Formatos de hoja + formas + componentes** (fuente de verdad, 17 jun 2026): el modelo
+  1 OT = 1 referencia no cubre formatos por proceso ni pedidos complejos (casos Optimus A/B/C).
+  Dirección: **OT contenedor + hijas reales en BD**, agrupadas en UI (no listado plano), itinerario
+  por hija con override, convergencia variable según producto. Primer código: encadenado de formato.
+  Briefing: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
 - **Fases futuras**: inteligencia de repetición (auto-prefill desde histórico), dashboards de
   desviación previsto/real, integración Odoo (materiales consumidos, tiempos para costeo).
 

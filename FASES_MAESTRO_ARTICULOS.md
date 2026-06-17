@@ -46,7 +46,7 @@ Indicadores visuales para detectar fichas incompletas y priorizar el relleno.
 
 Cuando el usuario despacha una OT y rellena datos técnicos, puede guardarlos como predeterminados en el maestro con un click.
 
-**Nota Bloque 8 (16 jun):** el campo `tamano_hoja` en despacho es hoy **formato de compra**, no necesariamente formato de impresión. Futuro: `formato_compra_habitual` y `formato_impresion_habitual` en maestro + encadenado por proceso. Ver `MINERVA_BLOQUE8_FORMAS_Y_FORMATOS.md` §2.
+**Nota Bloque 8 (17 jun):** el campo `tamano_hoja` en despacho es hoy **formato de compra**, no necesariamente formato de impresión. Futuro: `formato_compra_habitual` y `formato_impresion_habitual` en maestro + encadenado por proceso. Ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` §6.
 
 **UX propuesta:**
 En el modal de despacho, después de seleccionar la Referencia Minerva, aparece un pequeño bloque colapsable:
