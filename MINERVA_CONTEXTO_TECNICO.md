@@ -2,7 +2,7 @@
 
 > Documento de contexto técnico generado automáticamente.
 > Proyecto: **minerva-strategic-ai-hub** · Next.js 16 + React 19 + Supabase.
-> Fecha de generación: 13 de junio de 2026.
+> Fecha de generación: 13 de junio de 2026 · **Última actualización: 17 junio 2026** (Fase FORMATO + fix Pool/Pipeline).
 
 ---
 
@@ -301,6 +301,10 @@ export type ProcesoConfigCampos = {
    * (lo que "viaja" al siguiente paso).
    */
   outputField?: string;
+  /** Campo de entrada de formato de pliego (encadenado por orden de itinerario). */
+  formatInputField?: string;
+  /** Campo de salida de formato de pliego (encadenado al siguiente paso). */
+  formatOutputField?: string;
   /** Unidad del campo de salida para mostrar en la UI. */
   outputUnit?: string;
   /**
@@ -1684,9 +1688,16 @@ This version has breaking changes — APIs, conventions, and file structure may 
 ### `src/lib/hoja-ruta/`
 | Archivo | Responsabilidad |
 |---------|-----------------|
-| `hoja-ruta-query.ts` | Loader `fetchHojaRutaOt(otNumero)`: monta la hoja completa juntando cabecera, despacho, itinerario + `datos_proceso`, ejecución, pausas (`prod_mesa_ejecuciones_pausas` + `sys_motivos_pausa`) y externos. |
+| `hoja-ruta-query.ts` | Loader `fetchHojaRutaOt(otNumero)`: monta la hoja completa juntando cabecera, despacho, itinerario + `datos_proceso`, ejecución, pausas (`prod_mesa_ejecuciones_pausas` + `sys_motivos_pausa`) y externos. Incluye `resolveEstadoOtLabel()` (estado derivado del itinerario, p. ej. "Itinerario completo"). |
 | `hoja-ruta-formatters.ts` | Helpers compartidos modal + PDF: `fmtDate`, `fmtCantidad`, `formatDensidades`, `buildCamposVista`, etiquetas de tipo de máquina, etc. |
-| `hoja-ruta-pdf.ts` | Exportador PDF (A4 vertical): cabecera, badges de ruta, tarjetas por proceso (altura dinámica + color por estado), detalle de pausas, gráfico previsto/real por proceso, footer. |
+| `hoja-ruta-pdf.ts` | Exportador PDF (A4 vertical): cabecera, badges de ruta, tarjetas por proceso (altura dinámica + color por estado), detalle de pausas, gráfico previsto/real por proceso, footer. Etiqueta despacho: **Formato compra** (`tamano_hoja`). |
+
+### `src/lib/` — encadenado formato + consultas Supabase (17 jun 2026)
+| Archivo | Responsabilidad |
+|---------|-----------------|
+| `hoja-ruta-formato-encadenado.ts` | Encadenado de formato de pliego por `prod_ot_pasos.orden`: `resolveFormatoSalidaProceso`, `aplicarPrefillFormatoEncadenado`, `buildFormatoAnteriorByOtPasoId`. Guillotina `tamano_inicial`/`tamano_final` → Impresión/externos `formato_hojas`. |
+| `supabase-query-chunks.ts` | Trocea filtros `.in(column, ids)` en lotes (~80–100) para evitar URLs PostgREST demasiado largas (fix 400 Pool/Pipeline). |
+| `supabase-error-message.ts` | Normaliza mensajes de error PostgREST para UI. |
 
 ### `src/components/produccion/hoja-ruta/`
 | Archivo | Responsabilidad |
@@ -1706,9 +1717,10 @@ This version has breaking changes — APIs, conventions, and file structure may 
 ### Captura / ejecución (motor que escribe `datos_proceso`)
 | Archivo | Responsabilidad |
 |---------|-----------------|
-| `src/lib/hoja-ruta-campos-config.ts` | Config-driven: definición de campos por proceso (ver sección 3). |
-| `src/types/planificacion-mesa.ts` | Tipos de la mesa/ejecución (ver sección 4). |
-| `src/components/produccion/planificacion/planificacion-ots-ejecucion-tab.tsx` | Tarjeta de ejecución: prefill, derivaciones (`computeDerivedDatosProceso`), semáforos, persistencia en todas las acciones. |
+| `src/lib/hoja-ruta-campos-config.ts` | Config-driven: definición de campos por proceso (ver sección 3). Incluye `formatInputField` / `formatOutputField` por proceso (Fase FORMATO). |
+| `src/types/planificacion-mesa.ts` | Tipos de la mesa/ejecución (ver sección 4). Campos `formatoAnterior` / `formatoAnteriorOrigenNombre` en `MesaEjecucion`. |
+| `src/components/produccion/planificacion/planificacion-ots-ejecucion-tab.tsx` | Tarjeta de ejecución: prefill cantidad + **formato encadenado**, derivaciones (`computeDerivedDatosProceso`), semáforos, banner "Formato pliego de entrada", persistencia en todas las acciones. |
+| `src/utils/supabase/client.ts` | Cliente browser Supabase **singleton** (evita contención de lock GoTrue al abrir Pool + Pipeline). |
 
 ### Páginas de Producción (`src/app/produccion/*/page.tsx`)
 `almacen` · `articulos` (Maestro) · `ejecucion` · `etiquetas-digital` · `externos` · `fichas` ·

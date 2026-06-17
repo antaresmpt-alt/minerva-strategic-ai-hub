@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 13 jun 2026 (incluye simplificación maestro troqueles etiquetas)
+> Última actualización: 17 jun 2026 (Fase FORMATO encadenado + fix Pool/Pipeline; Bloque 8 en curso)
 
 ---
 
@@ -240,16 +240,17 @@ src/components/produccion/planificacion/
 | 5 | Integración Etiquetas ↔ Hoja de Ruta | ⏳ Pendiente |
 | 6 | Producidas/Histórico + cierre OT | ⏳ Pendiente (PRÓXIMO GRANDE) |
 | 7 | Expedición/Albarán | ⏳ Pendiente (depende B6 + Odoo) |
-| 8 | Formatos de hoja + formas + componentes (OT contenedor/hijas) | 📋 En diseño (17 jun) — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` |
+| 8 | Formatos de hoja + formas + componentes (OT contenedor/hijas) | 🔄 En curso — **Fase FORMATO ✅** (17 jun); 8.0–8.4 pendiente — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` |
 
 ---
 
 ## 🔜 Tareas pendientes inmediatas
 
-### Retomar aquí (16 jun 2026)
-- [ ] **Bloque 8.1**: encadenado formato de hoja (compra → guillotina → impresión → troquelado) — **primer paso de código recomendado**
+### Retomar aquí (17 jun 2026, noche)
+- [x] **Fase FORMATO**: encadenado formato de hoja (compra → guillotina → impresión → externos) — commit `aadad81`, probado OT 98009
+- [ ] **Fase 8.0**: migración `ot_tipo` / `ot_padre_numero` + campos hija
+- [ ] **Fase 8.1**: agrupación UI Pool/Pipeline (contenedor + hijas expandibles)
 - [ ] Preguntas a planta (Abraham/Carlos/Jordi) — ver §12 de `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`
-- [ ] Fase 8.0 migración `ot_tipo` / `ot_padre_numero` + Fase 8.1 agrupación UI (sin OTs sueltas en listado)
 
 ### Alta prioridad (usuario)
 - [ ] Ampliar campos CTP tras reunión con Gemma
@@ -290,6 +291,8 @@ src/components/produccion/planificacion/
 
 10. **Bloque 8 — OT contenedor + hijas (17 jun 2026)**: Optimus modela sub-unidades con PRE+TIR; Minerva adoptará **hijas como OTs reales en BD** agrupadas en UI (no listado plano). Formato = cadena por proceso. Convergencia variable según producto (no siempre desbroce). Itinerario por hija con override. Tipos: forma | componente | preimpresion | acabado. Briefing: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
 
+11. **Encadenado formato de pliego (17 jun 2026, Fase FORMATO ✅)**: por **orden de itinerario** (`prod_ot_pasos.orden`), no por tipo de proceso global. `tamano_hoja` en despacho = **Formato compra** (solo referencia de compra). Guillotina: `tamano_inicial` ← anterior, `tamano_final` → siguiente. Impresión/externos hojas: `formato_hojas`. Troquelado: `tamano_corte` es el troquel (independiente); banner muestra pliego de entrada. Módulo: `hoja-ruta-formato-encadenado.ts`. Probado OT 98009 (commit `aadad81`).
+
 ---
 
 ## 📁 Estructura de carpetas relevante
@@ -303,13 +306,15 @@ src/
       planificacion/      ← ejecución en mesa, pipeline
   lib/
     hoja-ruta-campos-config.ts
+    hoja-ruta-formato-encadenado.ts   ← encadenado formato pliego (Bloque 8 Fase FORMATO)
+    supabase-query-chunks.ts          ← consultas .in() troceadas (Pool/Pipeline)
     planificacion-analytics-query.ts
     sys-parametros-sobreproduccion.ts
   types/
     planificacion-mesa.ts
 supabase/
   migrations/             ← historial de migraciones SQL
-scripts/                  ← utilidades
+scripts/                  ← utilidades (p. ej. clone-ot-test.mjs)
 repositorio/              ← documentación adicional
 ```
 

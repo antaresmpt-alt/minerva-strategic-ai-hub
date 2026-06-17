@@ -164,13 +164,18 @@ Compra 72×102 → Guillotina 51×72 → Impresión 51×72 → Troquel (corte) �
 
 Falta **encadenar** formato como las hojas (`salidaAnterior` ampliado a canal texto/dimensiones).
 
-### Fase FORMATO (primer código del Bloque 8)
+### Fase FORMATO (primer código del Bloque 8) ✅ **IMPLEMENTADO 17 jun 2026** (`aadad81`)
 
-1. UI: etiquetar `tamano_hoja` como **formato de compra**.
-2. Encadenado: guillotina `tamano_final` → impresión `formato_hojas_impresion` → troquel `tamano_corte`.
+1. ~~UI: etiquetar `tamano_hoja` como **formato de compra**.~~ ✅
+2. ~~Encadenado por **orden de itinerario**: guillotina `tamano_final` → impresión/externos `formato_hojas`; entrada guillotina `tamano_inicial`.~~ ✅  
+   - Troquelado: banner de pliego de entrada; `tamano_corte` sigue siendo el troquel (independiente).
 3. Maestro (futuro): `formato_compra_habitual` + `formato_impresion_habitual` en `prod_referencias`.
 
-**Sin dependencia** del modelo contenedor/hijas. Coste: medio-bajo.
+**Archivos clave:** `hoja-ruta-formato-encadenado.ts`, `hoja-ruta-campos-config.ts`, `planificacion-ots-ejecucion-tab.tsx`, `hoja-ruta-query.ts` (`resolveEstadoOtLabel`), `supabase-query-chunks.ts`.
+
+**Prueba:** OT 98009 (clon 35842) — flujo CTP → Guillotina → Impresión → Troquelado → Engomado; PDF hoja de ruta OK.
+
+**Sin dependencia** del modelo contenedor/hijas.
 
 ---
 
@@ -285,11 +290,11 @@ Responde pregunta §12.7: Caso A = **varias referencias** por forma; a veces mis
 
 ## 10. Roadmap de implementación
 
-### Fase FORMATO — Encadenado de tamaño de hoja
+### Fase FORMATO — Encadenado de tamaño de hoja ✅ **17 jun 2026**
 
-- Encadenado compra → guillotina → impresión → troquelado.
-- Etiquetas UI en despacho.
-- **Independiente** de hijas. **Hacer primero.**
+- ~~Encadenado compra → guillotina → impresión → troquelado.~~ Implementado (ver §6).
+- ~~Etiquetas UI en despacho ("Formato compra").~~
+- **Independiente** de hijas. **Hecho.**
 
 ### Fase 8.0 — Modelo de datos (sin UI)
 
@@ -421,6 +426,13 @@ Responder con Jordi / Zaida / Abraham / Carlos:
 - Roadmap 8.0–8.4 definido.
 - Límite ~8 formas en Optimus.
 
+### 17 jun 2026 (implementación Fase FORMATO)
+
+- Código en `main` commit `aadad81`.
+- Encadenado por `orden` del itinerario (soporta 2+ guillotinas en la misma OT).
+- Fix consultas masivas Pool/Pipeline (`.in()` troceado + singleton Supabase browser).
+- OT prueba 98009 validada en planta (PDF + ejecución).
+
 ### 17 jun 2026 (revisión fusionada)
 
 - UX: hijas en BD **sí**, en listado plano **no** (agrupación 8.1 obligatoria).
@@ -433,7 +445,7 @@ Responder con Jordi / Zaida / Abraham / Carlos:
 
 ## 16. Orden de trabajo recomendado
 
-1. **Fase FORMATO** — encadenado tamaño de hoja (código).
+1. ~~**Fase FORMATO** — encadenado tamaño de hoja (código).~~ ✅ 17 jun 2026
 2. **Fase 8.0** — migración SQL aditiva.
 3. **Responder §12** con planta.
 4. **Fase 8.1** — agrupación pool/pipeline (**antes** de usar hijas en producción).

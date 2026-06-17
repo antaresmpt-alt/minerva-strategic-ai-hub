@@ -560,11 +560,11 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 ⏳ **Bloque 5 PENDIENTE**: Integración Etiquetas ↔ Hoja de Ruta (flujo Hugo)
 ⏳ **Bloque 6 PENDIENTE**: Producidas/Histórico (`prod_ot_producidas`, snapshot híbrido) + lifecycle de cierre (pendiente_revision → producida) + recálculo maestro
 ⏳ **Bloque 7 PENDIENTE**: Expedición/Albarán (depende de Bloque 6 + decisión Odoo)
-📋 **Bloque 8 EN DISEÑO** (17 jun 2026): Formatos de hoja + formas + componentes (OT contenedor/hijas agrupadas en UI). Fuente de verdad: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
+🔄 **Bloque 8 EN CURSO** (17 jun 2026): **Fase FORMATO ✅** (encadenado tamaño pliego + etiqueta "Formato compra", commit `aadad81`, OT prueba 98009). Pendiente 8.0–8.4 (contenedor/hijas). Fuente de verdad: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
 
 ---
 
-**Última actualización**: 17 de junio de 2026 - Bloque 8 fusionado (formatos + formas + componentes)
+**Última actualización**: 17 de junio de 2026 — Fase FORMATO implementada; Bloque 8.0–8.4 pendiente
 
 ---
 
@@ -783,7 +783,29 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 
 ## 📌 Punto de continuación (próxima sesión)
 
-**👉 Retomar aquí (17 jun 2026):** `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` — Fase FORMATO (encadenado tamaño hoja), luego Fase 8.0–8.1 (migración + agrupación UI). Responder §12 con planta antes de 8.2.
+**👉 Retomar aquí (17 jun 2026, noche):** Fase **8.0** (migración `ot_tipo` / `ot_padre_numero`) + Fase **8.1** (agrupación pool/pipeline). Responder **§12** de `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` con planta antes del wizard 8.2.
+
+**Fase FORMATO** ✅ implementada y probada (commit `aadad81`). Ver sesión abajo.
+
+---
+
+**Sesión 17 jun 2026 (tarde/noche)** — Fase FORMATO implementada + fix Pool/Pipeline ✅
+
+### Hecho hoy
+- **Encadenado de formato de pliego** por orden de itinerario (`prod_ot_pasos.orden`), no solo por tipo de proceso:
+  - Módulo `src/lib/hoja-ruta-formato-encadenado.ts`
+  - Config `formatInputField` / `formatOutputField` en `hoja-ruta-campos-config.ts` (Guillotina, Impresión 1/2, externos hojas)
+  - Prefill + banner en `planificacion-ots-ejecucion-tab.tsx` (`formatoAnterior`, `formatoAnteriorOrigenNombre`)
+- **Etiqueta "Formato compra"** en despacho maestro, ejecución, diálogo hoja de ruta y PDF.
+- **Estado OT en hoja de ruta/PDF**: `resolveEstadoOtLabel()` — p. ej. "Itinerario completo" cuando todos los pasos están finalizados.
+- **Fix Pool + Pipeline (400 Bad Request)**: consultas `.in()` troceadas (`supabase-query-chunks.ts`); cliente Supabase singleton; mejor mensaje de error PostgREST.
+- **Prueba de campo OT 98009** (clon 35842): compra 72×102 → guillotina 72×51 → impresión 72×51 → troquelado → engomado (sin desbroce). PDF validado.
+- Script auxiliar: `scripts/clone-ot-test.mjs`.
+
+### 🔜 Próxima sesión
+- [ ] Fase **8.0** + **8.1** (migración + agrupación UI).
+- [ ] §12 planta antes de wizard 8.2.
+- Pendientes vivos: roles `preimpresion`, bultos/palet Gabri, CTP/Gemma, Bloque 6.
 
 ---
 
@@ -826,7 +848,7 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 
 ### 🔜 Próxima sesión
 - [x] Mergear `feature/fase0.6-hoja-ruta-virtual` a `main` (16 jun 2026).
-- [ ] **Bloque 8**: Fase FORMATO (encadenado hoja) → 8.0 migración → 8.1 agrupación UI — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`
+- [ ] **Bloque 8**: ~~Fase FORMATO~~ ✅ → 8.0 migración → 8.1 agrupación UI — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`
 - [ ] Ampliar campos CTP tras reunión con Gemma.
 - [ ] Marcar `soporte_impresion` en líneas de material desde maestro/despacho (hoy heurística).
 - [ ] Probar flujo completo extremo a extremo con varias OTs reales.
@@ -851,6 +873,6 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 - Fuente de verdad: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`
 
 ### 🔜 Retomar
-1. Fase **FORMATO** (encadenado).
+1. ~~Fase **FORMATO** (encadenado).~~ ✅ 17 jun 2026 (`aadad81`)
 2. Fase **8.0** + **8.1** (migración + agrupación pool/pipeline).
 3. Responder **§12** con Jordi/Zaida/Abraham antes del wizard 8.2.
