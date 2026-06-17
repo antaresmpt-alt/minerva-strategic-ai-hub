@@ -3,6 +3,8 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { fetchAllInChunks } from "@/lib/supabase-query-chunks";
+
 import { normalizeDbRole } from "@/lib/permissions";
 
 export type PlanificacionTipoMaquina =
@@ -164,14 +166,17 @@ export async function fetchProximoPasoDisponiblePorOt(
   ];
   if (nums.length === 0) return out;
 
-  const { data: ogs, error: ogErr } = await supabase
-    .from("prod_ots_general")
-    .select("id, num_pedido")
-    .in("num_pedido", nums);
-  if (ogErr) throw ogErr;
+  const ogRows = await fetchAllInChunks(nums, 100, async (chunk) => {
+    const { data, error } = await supabase
+      .from("prod_ots_general")
+      .select("id, num_pedido")
+      .in("num_pedido", chunk);
+    if (error) throw error;
+    return data ?? [];
+  });
 
   const idByNum = new Map<string, string>();
-  for (const row of ogs ?? []) {
+  for (const row of ogRows) {
     const r = row as { id?: string; num_pedido?: string | null };
     const num = String(r.num_pedido ?? "").trim();
     const id = String(r.id ?? "").trim();
@@ -181,15 +186,18 @@ export async function fetchProximoPasoDisponiblePorOt(
   const otIds = [...new Set([...idByNum.values()])];
   if (otIds.length === 0) return out;
 
-  const { data: pasos, error: pErr } = await supabase
-    .from("prod_ot_pasos")
-    .select(
-      "ot_id, orden, estado, prod_procesos_cat(nombre, seccion_slug, tipo_planificacion)",
-    )
-    .in("ot_id", otIds)
-    .eq("estado", "disponible")
-    .order("orden", { ascending: true });
-  if (pErr) throw pErr;
+  const pasoRows = await fetchAllInChunks(otIds, 80, async (chunk) => {
+    const { data, error } = await supabase
+      .from("prod_ot_pasos")
+      .select(
+        "ot_id, orden, estado, prod_procesos_cat(nombre, seccion_slug, tipo_planificacion)",
+      )
+      .in("ot_id", chunk)
+      .eq("estado", "disponible")
+      .order("orden", { ascending: true });
+    if (error) throw error;
+    return data ?? [];
+  });
 
   type PasoRow = {
     ot_id?: string;
@@ -201,7 +209,7 @@ export async function fetchProximoPasoDisponiblePorOt(
   };
 
   const seenOtId = new Set<string>();
-  for (const raw of (pasos ?? []) as PasoRow[]) {
+  for (const raw of pasoRows as PasoRow[]) {
     const otId = String(raw.ot_id ?? "").trim();
     if (!otId || seenOtId.has(otId)) continue;
     seenOtId.add(otId);

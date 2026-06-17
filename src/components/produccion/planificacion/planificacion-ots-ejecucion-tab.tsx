@@ -46,6 +46,11 @@ import {
 } from "@/lib/hoja-ruta-campos-config";
 import type { DatosProcesoGenerico } from "@/lib/hoja-ruta-campos-config";
 import {
+  aplicarPrefillFormatoEncadenado,
+  buildFormatoAnteriorByOtPasoId,
+  type PasoItinerarioFormato,
+} from "@/lib/hoja-ruta-formato-encadenado";
+import {
   margenSobreproduccionPorProceso,
   type SobreproduccionMargenesParametros,
 } from "@/lib/sys-parametros-sobreproduccion";
@@ -502,6 +507,7 @@ function mapRow(
   r: EjecucionRow,
   pausesByExecutionId: Map<string, MesaEjecucionPausa[]>,
   salidaAnteriorByPasoKey: Map<string, SalidaAnteriorInfo>,
+  formatoAnteriorByOtPasoId: Map<string, { formato: string; origenNombre: string }>,
 ): MesaEjecucion {
   const pauses = pausesByExecutionId.get(r.id) ?? [];
   const openPause = pauses.find((p) => p.resumedAt == null) ?? null;
@@ -510,6 +516,8 @@ function mapRow(
   const otId = String(pasoJoin?.ot_id ?? "").trim();
   const salidaKey = salidaAnteriorKey(otId, pid);
   const salidaAnterior = salidaKey ? salidaAnteriorByPasoKey.get(salidaKey) ?? null : null;
+  const otPasoId = String(r.ot_paso_id ?? "").trim();
+  const formatoAnteriorInfo = otPasoId ? formatoAnteriorByOtPasoId.get(otPasoId) ?? null : null;
   return {
     id: r.id,
     mesaTrabajoId: r.mesa_trabajo_id,
@@ -519,6 +527,8 @@ function mapRow(
     procesoAnteriorId: salidaAnterior?.procesoAnteriorId ?? null,
     salidaProcesoAnterior: salidaAnterior?.salida ?? null,
     salidaProcesoAnteriorNombre: salidaAnterior?.nombre ?? null,
+    formatoAnterior: formatoAnteriorInfo?.formato ?? null,
+    formatoAnteriorOrigenNombre: formatoAnteriorInfo?.origenNombre ?? null,
     ot: r.ot_numero,
     maquinaId: r.maquina_id,
     maquinaNombre: r.prod_maquinas?.nombre ?? "—",
@@ -842,6 +852,7 @@ export function PlanificacionOtsEjecucionTab({
 
       // Cargar salidas del paso anterior para el encadenado (Bloque 2.5)
       const salidaAnteriorByPasoKey = new Map<string, SalidaAnteriorInfo>();
+      const formatoAnteriorByOtPasoId = new Map<string, { formato: string; origenNombre: string }>();
       const otIds = [
         ...new Set(
           execRows
@@ -850,6 +861,59 @@ export function PlanificacionOtsEjecucionTab({
         ),
       ];
       if (otIds.length > 0) {
+        const { data: pasosItinerarioData, error: pasosItinerarioErr } = await supabase
+          .from(TABLE_OT_PASOS)
+          .select("id, ot_id, proceso_id, estado, datos_proceso, orden")
+          .in("ot_id", otIds)
+          .order("ot_id")
+          .order("orden", { ascending: true });
+        if (pasosItinerarioErr) throw pasosItinerarioErr;
+
+        const pasosItinerarioPorOtId = new Map<string, PasoItinerarioFormato[]>();
+        for (const p of (pasosItinerarioData ?? []) as Array<{
+          id: string;
+          ot_id: string;
+          proceso_id: number | null;
+          datos_proceso: Record<string, unknown> | null;
+          orden: number | null;
+        }>) {
+          const otId = String(p.ot_id ?? "").trim();
+          if (!otId) continue;
+          const list = pasosItinerarioPorOtId.get(otId) ?? [];
+          list.push({
+            id: String(p.id),
+            otId,
+            procesoId: p.proceso_id,
+            orden: typeof p.orden === "number" ? p.orden : 0,
+            datosProceso: p.datos_proceso,
+          });
+          pasosItinerarioPorOtId.set(otId, list);
+        }
+
+        const formatoPasoRequests = execRows
+          .map((execRow) => {
+            const otPasoId = String(execRow.ot_paso_id ?? "").trim();
+            const otId = String(execRow.prod_ot_pasos?.ot_id ?? "").trim();
+            if (!otPasoId || !otId) return null;
+            const despacho = despachoMap[execRow.ot_numero.trim()];
+            return {
+              otPasoId,
+              otId,
+              formatoCompra: despacho?.tamanoHoja ?? null,
+            };
+          })
+          .filter((item): item is { otPasoId: string; otId: string; formatoCompra: string | null } => item != null);
+
+        for (const [otPasoId, info] of buildFormatoAnteriorByOtPasoId(
+          pasosItinerarioPorOtId,
+          formatoPasoRequests,
+        )) {
+          formatoAnteriorByOtPasoId.set(otPasoId, {
+            formato: info.formato,
+            origenNombre: info.origenNombre,
+          });
+        }
+
         // Para cada ejecución activa, buscamos el último paso completado de la misma OT
         // cuyo proceso_id sea compatible como entrada (inputFromProcessIds del proceso actual)
         const { data: pasosData, error: pasosErr } = await supabase
@@ -905,7 +969,7 @@ export function PlanificacionOtsEjecucionTab({
         Object.fromEntries(Array.from(pauseMap.entries()).map(([k, v]) => [k, v] as const)),
       );
       setDespachoByOt(despachoMap);
-      setRows(execRows.map((r) => mapRow(r, pauseMap, salidaAnteriorByPasoKey)));
+      setRows(execRows.map((r) => mapRow(r, pauseMap, salidaAnteriorByPasoKey, formatoAnteriorByOtPasoId)));
       setMotivosPausa(motivos);
       setCajasEmbalaje(cajas);
       setTipoEngomadoOptions(tiposEngomado);
@@ -1421,11 +1485,14 @@ function ExecutionCard({
 
   const [datosProcesoLocal, setDatosProcesoLocal] = useState<DatosProcesoGenerico>(() => {
     const existing = (row.datosProcesoJson as DatosProcesoGenerico) ?? {};
-    if (Object.keys(existing).length > 0) {
-      return seedRealValuesFromPrevistos(row.procesoId, existing);
-    }
-    if (!despacho || !row.procesoId) return {};
     const pid = row.procesoId;
+    if (Object.keys(existing).length > 0) {
+      const seeded = seedRealValuesFromPrevistos(pid, existing);
+      return pid != null
+        ? aplicarPrefillFormatoEncadenado(pid, seeded, row.formatoAnterior)
+        : seeded;
+    }
+    if (!despacho || !pid) return {};
     const base: DatosProcesoGenerico = {};
     if (pid === 1 || pid === 2) {
       const materialImpresion = pickMaterialImpresion(despacho);
@@ -1436,7 +1503,6 @@ function ExecutionCard({
         base.hojas_impresas = despacho.hojasNetas;
         base.hojas_merma = 0;
       }
-      if (despacho.tamanoHoja) base.formato_hojas = despacho.tamanoHoja;
       if (despacho.tintas) base.tintas_cara = despacho.tintas;
       if (despacho.acabadoPral) base.acabado_principal = despacho.acabadoPral;
       if (despacho.horasEntrada != null) base.horas_entrada_previsto = despacho.horasEntrada;
@@ -1477,7 +1543,10 @@ function ExecutionCard({
         base.estuches_desbrozados = Math.max(0, Math.floor(hojas * poses));
       }
     }
-    return seedRealValuesFromPrevistos(pid, base);
+    return seedRealValuesFromPrevistos(
+      pid,
+      aplicarPrefillFormatoEncadenado(pid, base, row.formatoAnterior),
+    );
   });
 
   const hasCamposConfig = useMemo(
@@ -1586,13 +1655,29 @@ function ExecutionCard({
           {despacho.titulo ? <span className="max-w-[200px] truncate" title={despacho.titulo}><b>Trabajo:</b> {despacho.titulo}</span> : null}
           {despacho.fechaEntrega ? <span><b>Entrega:</b> {format(new Date(despacho.fechaEntrega), "dd/MM/yy", { locale: es })}</span> : null}
           {despacho.material ? <span><b>Mat:</b> {despacho.material} {despacho.gramaje ? `${despacho.gramaje}g` : ""}</span> : null}
-          {despacho.tamanoHoja ? <span><b>Formato:</b> {despacho.tamanoHoja}</span> : null}
+          {despacho.tamanoHoja ? <span><b>Formato compra:</b> {despacho.tamanoHoja}</span> : null}
           {despacho.hojasBrutas != null ? <span><b>H.brutas:</b> {despacho.hojasBrutas.toLocaleString("es-ES")}</span> : null}
           {despacho.hojasNetas != null ? <span><b>H.netas:</b> {despacho.hojasNetas.toLocaleString("es-ES")}</span> : null}
           {despacho.tintas ? <span><b>Tintas:</b> {despacho.tintas}</span> : null}
           {despacho.acabadoPral ? <span><b>Acabado:</b> {despacho.acabadoPral}</span> : null}
           {despacho.troquel ? <span><b>Troquel:</b> {despacho.troquel}</span> : null}
           {despacho.poses != null ? <span><b>Poses:</b> {despacho.poses}</span> : null}
+        </div>
+      ) : null}
+
+      {row.formatoAnterior ? (
+        <div className="mt-2 rounded border border-sky-200 bg-sky-50/80 px-2 py-1.5 text-[10px] text-sky-900">
+          <span className="font-medium">Formato pliego de entrada</span>
+          {" · "}
+          <span>{row.formatoAnteriorOrigenNombre ?? "Origen"}</span>
+          {" → "}
+          <span className="font-semibold">{row.formatoAnterior}</span>
+          {row.procesoId === 10 ? (
+            <span className="text-sky-700">
+              {" "}
+              · El tamaño de corte del troquel es independiente del pliego.
+            </span>
+          ) : null}
         </div>
       ) : null}
 

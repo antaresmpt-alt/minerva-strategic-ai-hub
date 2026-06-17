@@ -143,6 +143,8 @@ function mapExecution(
     procesoAnteriorId: null,
     salidaProcesoAnterior: null,
     salidaProcesoAnteriorNombre: null,
+    formatoAnterior: null,
+    formatoAnteriorOrigenNombre: null,
     ot: row.ot_numero,
     cliente: mesa?.cliente_snapshot?.trim() || null,
     maquinaId: row.maquina_id,

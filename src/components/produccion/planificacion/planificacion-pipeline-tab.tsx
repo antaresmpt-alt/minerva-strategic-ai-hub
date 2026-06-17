@@ -27,6 +27,7 @@ import {
   fetchPipelineRows,
   type FetchPipelineFilters,
 } from "@/lib/pipeline/pipeline-query";
+import { getSupabaseErrorMessage } from "@/lib/supabase-error-message";
 import {
   exportPipelinePdf,
   type PipelinePdfMode,
@@ -215,8 +216,9 @@ export function PlanificacionPipelineTab() {
       });
       setRows(data);
     } catch (e) {
-      console.error(e);
-      toast.error(e instanceof Error ? e.message : "No se pudo cargar el pipeline.");
+      const message = getSupabaseErrorMessage(e, "No se pudo cargar el pipeline.");
+      console.error("[Pipeline] loadData error", { error: e, message });
+      toast.error(message);
       setRows([]);
     } finally {
       setLoading(false);

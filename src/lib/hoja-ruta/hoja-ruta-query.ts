@@ -212,6 +212,20 @@ function dateIso(v: string | null | undefined): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+/** Estado mostrado en cabecera: prioriza el avance real del itinerario sobre Optimus/maestro. */
+export function resolveEstadoOtLabel(
+  estadoDescMaestro: string | null,
+  pasos: Pick<HojaRutaPaso, "estado">[],
+): string | null {
+  if (pasos.length === 0) return estadoDescMaestro;
+  const estados = pasos.map((p) => String(p.estado ?? "").trim().toLowerCase());
+  if (estados.every((e) => e === "finalizado")) return "Itinerario completo";
+  if (estados.some((e) => e === "en_marcha" || e === "pausado")) return "En producción";
+  if (estados.some((e) => e === "finalizado")) return "Entre fases";
+  if (estados.some((e) => e === "disponible")) return "Pendiente de inicio";
+  return estadoDescMaestro;
+}
+
 /** Carga la hoja de ruta completa de una OT por su número de pedido. */
 export async function fetchHojaRutaOt(
   supabase: SupabaseClient,
@@ -415,7 +429,7 @@ export async function fetchHojaRutaOt(
     trabajo: str(otRow?.titulo),
     cantidad: num(otRow?.cantidad),
     fechaEntrega: dateIso(str(otRow?.fecha_entrega)),
-    estadoOt: str(otRow?.estado_desc),
+    estadoOt: resolveEstadoOtLabel(str(otRow?.estado_desc), pasos),
     despacho,
     pasos,
   };

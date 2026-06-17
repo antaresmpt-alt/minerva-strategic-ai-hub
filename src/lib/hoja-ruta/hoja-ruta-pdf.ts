@@ -124,7 +124,7 @@ function drawHeader(doc: jsPDF, data: HojaRutaData): number {
     let infoY = y + 15;
     const items: string[] = [];
     if (d.material) items.push(`Material: ${d.material}${d.gramaje ? ` ${d.gramaje}g` : ""}`);
-    if (d.tamanoHoja) items.push(`Formato: ${d.tamanoHoja}`);
+    if (d.tamanoHoja) items.push(`Formato compra: ${d.tamanoHoja}`);
     if (d.tintas) items.push(`Tintas: ${d.tintas}`);
     if (d.troquel) items.push(`Troquel: ${d.troquel}${d.poses ? ` (${d.poses})` : ""}`);
     if (d.acabadoPral) items.push(`Acabado: ${d.acabadoPral}`);

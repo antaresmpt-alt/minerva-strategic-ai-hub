@@ -1869,11 +1869,12 @@ ${otsContextJson}
             </div>
             <div className="grid gap-1">
               <Label htmlFor="despacho-tamano" className="text-xs">
-                Formato / Tamaño papel
+                Formato compra
               </Label>
               <Input
                 id="despacho-tamano"
                 className="h-8 text-xs"
+                placeholder="ej: 72×102 cm"
                 value={despachoForm.tamano_hoja}
                 onChange={(e) =>
                   setDespachoForm((f) => ({
@@ -1882,6 +1883,9 @@ ${otsContextJson}
                   }))
                 }
               />
+              <p className="text-[10px] leading-tight text-slate-400">
+                Pliego pedido al proveedor; en producción el formato se encadena paso a paso.
+              </p>
             </div>
             <div className="grid gap-1">
               <Label htmlFor="despacho-material" className="text-xs">

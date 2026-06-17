@@ -68,6 +68,8 @@ import {
   type ProdOtPasoVista,
 } from "@/lib/prod-ot-itinerario-client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { getSupabaseErrorMessage } from "@/lib/supabase-error-message";
+import { fetchAllInChunks } from "@/lib/supabase-query-chunks";
 import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
 
 const TABLE_DESPACHADAS = "produccion_ot_despachadas";
@@ -236,26 +238,7 @@ function readErrorFromJsonBody(body: unknown): string | null {
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message.trim()) return error.message;
-  if (typeof error === "string" && error.trim()) return error.trim();
-  if (error && typeof error === "object") {
-    const candidate = error as {
-      message?: unknown;
-      error?: unknown;
-      details?: unknown;
-      hint?: unknown;
-      code?: unknown;
-    };
-    const message =
-      (typeof candidate.message === "string" && candidate.message.trim()) ||
-      (typeof candidate.error === "string" && candidate.error.trim()) ||
-      (typeof candidate.details === "string" && candidate.details.trim()) ||
-      (typeof candidate.hint === "string" && candidate.hint.trim()) ||
-      (typeof candidate.code === "string" && candidate.code.trim()) ||
-      "";
-    if (message) return message;
-  }
-  return fallback;
+  return getSupabaseErrorMessage(error, fallback);
 }
 
 function normalizeCauchoFileList(raw: unknown): string[] {
@@ -616,25 +599,26 @@ export function PlanificacionPoolOtsTab() {
       let pasoEarlyMap = new Map<string, ProximoPasoInfo>();
       const otsConPlanEnMesa = new Set<string>();
       try {
-        const [pasoMapResolved, mesaPlannedRes] = await Promise.all([
+        const [pasoMapResolved, mesaPlannedRows] = await Promise.all([
           fetchProximoPasoDisponiblePorOt(supabase, ots).catch((e) => {
             console.warn("[Pool OTs] itinerario paso (precarga)", e);
             return new Map<string, ProximoPasoInfo>();
           }),
-          supabase
-            .from(TABLE_MESA)
-            .select("ot_numero")
-            .in("ot_numero", ots)
-            .in(
-              "estado_mesa",
-              [...MESA_ESTADOS_PLANIFICADA] as unknown as string[],
-            ),
+          fetchAllInChunks(ots, 100, async (chunk) => {
+            const { data, error } = await supabase
+              .from(TABLE_MESA)
+              .select("ot_numero")
+              .in("ot_numero", chunk)
+              .in(
+                "estado_mesa",
+                [...MESA_ESTADOS_PLANIFICADA] as unknown as string[],
+              );
+            if (error) throw error;
+            return (data ?? []) as Array<{ ot_numero?: string | null }>;
+          }),
         ]);
         pasoEarlyMap = pasoMapResolved;
-        if (mesaPlannedRes.error) throw mesaPlannedRes.error;
-        for (const row of (mesaPlannedRes.data ?? []) as Array<{
-          ot_numero?: string | null;
-        }>) {
+        for (const row of mesaPlannedRows) {
           const o = String(row.ot_numero ?? "").trim();
           if (o) otsConPlanEnMesa.add(o);
         }
@@ -706,29 +690,35 @@ export function PlanificacionPoolOtsTab() {
         return blk.tipos.has(pasoTipo);
       }
 
-      const { data: otsData, error: otsErr } = await supabase
-        .from(TABLE_OTS_GENERAL)
-        .select("num_pedido, cliente, titulo, fecha_entrega")
-        .in("num_pedido", ots);
-      if (otsErr) throw otsErr;
+      const otsData = await fetchAllInChunks(ots, 100, async (chunk) => {
+        const { data, error } = await supabase
+          .from(TABLE_OTS_GENERAL)
+          .select("num_pedido, cliente, titulo, fecha_entrega")
+          .in("num_pedido", chunk);
+        if (error) throw error;
+        return (data ?? []) as OtRow[];
+      });
       const otByNum = new Map<string, OtRow>();
-      for (const o of (otsData ?? []) as OtRow[]) {
+      for (const o of otsData) {
         const ot = String(o.num_pedido ?? "").trim();
         if (ot) otByNum.set(ot, o);
       }
 
-      const { data: compraData, error: compraErr } = await supabase
-        .from(TABLE_COMPRA)
-        .select("id, ot_numero, num_compra, proveedor_id, estado")
-        .in("ot_numero", ots);
-      if (compraErr) throw compraErr;
+      const compraData = await fetchAllInChunks(ots, 100, async (chunk) => {
+        const { data, error } = await supabase
+          .from(TABLE_COMPRA)
+          .select("id, ot_numero, num_compra, proveedor_id, estado")
+          .in("ot_numero", chunk);
+        if (error) throw error;
+        return (data ?? []) as CompraRow[];
+      });
       const compraByOt = new Map<string, string[]>();
       const compraNumByOt = new Map<string, string>();
       const compraEstadoByOt = new Map<string, string>();
       const compraProveedorIdsByOt = new Map<string, Set<string>>();
       const proveedorIds = new Set<string>();
       const compraIds: string[] = [];
-      for (const c of (compraData ?? []) as CompraRow[]) {
+      for (const c of compraData) {
         const ot = String(c.ot_numero ?? "").trim();
         if (!ot) continue;
         const arr = compraByOt.get(ot) ?? [];
@@ -772,12 +762,15 @@ export function PlanificacionPoolOtsTab() {
 
       const recepByCompra = new Map<string, number>();
       if (compraIds.length > 0) {
-        const { data: recData, error: recErr } = await supabase
-          .from(TABLE_RECEPCION)
-          .select("compra_id, hojas_recibidas")
-          .in("compra_id", compraIds);
-        if (recErr) throw recErr;
-        for (const r of (recData ?? []) as RecepRow[]) {
+        const recData = await fetchAllInChunks(compraIds, 100, async (chunk) => {
+          const { data, error } = await supabase
+            .from(TABLE_RECEPCION)
+            .select("compra_id, hojas_recibidas")
+            .in("compra_id", chunk);
+          if (error) throw error;
+          return (data ?? []) as RecepRow[];
+        });
+        for (const r of recData) {
           const cid = String(r.compra_id ?? "").trim();
           if (!cid) continue;
           recepByCompra.set(cid, (recepByCompra.get(cid) ?? 0) + parseNum(r.hojas_recibidas));
@@ -814,14 +807,17 @@ export function PlanificacionPoolOtsTab() {
         }
       }
 
-      const { data: poolData, error: poolErr } = await supabase
-        .from(TABLE_POOL)
-        .select("id, ot_numero, estado_pool, troquel_status, acabado_pral_snapshot")
-        .in("ot_numero", ots)
-        .in("estado_pool", [...POOL_ESTADOS_INCLUIDOS]);
-      if (poolErr) throw poolErr;
+      const poolData = await fetchAllInChunks(ots, 100, async (chunk) => {
+        const { data, error } = await supabase
+          .from(TABLE_POOL)
+          .select("id, ot_numero, estado_pool, troquel_status, acabado_pral_snapshot")
+          .in("ot_numero", chunk)
+          .in("estado_pool", [...POOL_ESTADOS_INCLUIDOS]);
+        if (error) throw error;
+        return (data ?? []) as PoolPersisted[];
+      });
       const poolByOt = new Map<string, PoolPersisted>();
-      for (const p of (poolData ?? []) as PoolPersisted[]) {
+      for (const p of poolData) {
         const ot = String(p.ot_numero ?? "").trim();
         if (ot && !poolByOt.has(ot)) poolByOt.set(ot, p);
       }

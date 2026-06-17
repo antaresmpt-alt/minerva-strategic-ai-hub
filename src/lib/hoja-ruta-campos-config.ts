@@ -69,6 +69,16 @@ export type ProcesoConfigCampos = {
    * con datos finalizados.
    */
   inputFromProcessIds?: number[];
+  /**
+   * Campo de `datos_proceso` con el formato de pliego de salida hacia el
+   * siguiente paso del itinerario.
+   */
+  formatOutputField?: string;
+  /**
+   * Campo donde se registra el formato de entrada en este paso (p. ej. guillotina:
+   * `tamano_inicial`). Si no se indica, se usa `formatOutputField`.
+   */
+  formatInputField?: string;
 };
 
 // ============================================================================
@@ -81,6 +91,7 @@ const GUILLOTINA_CAMPOS: CampoDefinicion[] = [
     tipo: 'dimension',
     placeholder: 'ej: 700 x 1000',
     suffix: 'mm',
+    hint: 'Encadenado del paso anterior o formato compra',
   },
   {
     id: 'hojas_iniciales',
@@ -100,6 +111,8 @@ const GUILLOTINA_CAMPOS: CampoDefinicion[] = [
     tipo: 'dimension',
     placeholder: 'ej: 350 x 500',
     suffix: 'mm',
+    emphasis: 'real',
+    hint: 'Formato de salida — viaja al siguiente proceso',
   },
   {
     id: 'hojas_finales',
@@ -135,6 +148,7 @@ const IMPRESION_OFFSET_CAMPOS: CampoDefinicion[] = [
     tipo: 'text',
     placeholder: 'ej: 70×100 cm',
     width: 'half',
+    hint: 'Encadenado del paso anterior o formato compra',
   },
   {
     id: 'caucho',
@@ -273,6 +287,7 @@ const IMPRESION_DIGITAL_PLANA_CAMPOS: CampoDefinicion[] = [
     tipo: 'text',
     placeholder: 'ej: A3, 50×70 cm',
     width: 'half',
+    hint: 'Encadenado del paso anterior o formato compra',
   },
   {
     id: 'acabado_clear',
@@ -627,6 +642,14 @@ const EXTERNO_CAMPOS_COMUNES: CampoDefinicion[] = [
 // ============================================================================
 const EXTERNO_HOJAS_CAMPOS: CampoDefinicion[] = [
   ...EXTERNO_CAMPOS_COMUNES,
+  {
+    id: 'formato_hojas',
+    label: 'Formato pliego',
+    tipo: 'text',
+    placeholder: 'ej: 70×100 cm',
+    width: 'half',
+    hint: 'Encadenado del paso anterior o formato compra',
+  },
   {
     id: 'numero_hojas',
     label: 'Nº hojas',
@@ -997,12 +1020,14 @@ export const PROCESO_CAMPOS_CONFIG: Record<number, ProcesoConfigCampos> = {
     campos: IMPRESION_OFFSET_CAMPOS,
     outputField: 'hojas_impresas',
     outputUnit: 'hojas',
+    formatOutputField: 'formato_hojas',
   },
   2: {
     procesoNombre: 'Impresión Digital (Plano)',
     campos: IMPRESION_DIGITAL_PLANA_CAMPOS,
     outputField: 'hojas_impresas',
     outputUnit: 'hojas',
+    formatOutputField: 'formato_hojas',
   },
   10: {
     procesoNombre: 'Troquelado',
@@ -1035,6 +1060,8 @@ export const PROCESO_CAMPOS_CONFIG: Record<number, ProcesoConfigCampos> = {
     campos: GUILLOTINA_CAMPOS,
     outputField: 'hojas_finales',
     outputUnit: 'hojas',
+    formatInputField: 'tamano_inicial',
+    formatOutputField: 'tamano_final',
   },
   [PROCESO_DESBROCE_ID]: {
     procesoNombre: 'Desbroce',
@@ -1048,13 +1075,13 @@ export const PROCESO_CAMPOS_CONFIG: Record<number, ProcesoConfigCampos> = {
 export const PROCESOS_ETIQUETA_DIGITAL_IDS = new Set([18, 19, 20]);
 
 export const PROCESO_EXTERNO_CAMPOS_CONFIG: Record<number, ProcesoConfigCampos> = {
-  3: { procesoNombre: 'Plastificado (Ext)', campos: EXTERNO_HOJAS_CAMPOS },
-  4: { procesoNombre: 'Stamping (Ext)', campos: EXTERNO_HOJAS_CAMPOS },
-  5: { procesoNombre: 'UVI Serigrafía (Ext)', campos: EXTERNO_HOJAS_CAMPOS },
-  6: { procesoNombre: 'Serigrafía Digital (MGI/Scodix)', campos: EXTERNO_HOJAS_CAMPOS },
+  3: { procesoNombre: 'Plastificado (Ext)', campos: EXTERNO_HOJAS_CAMPOS, formatOutputField: 'formato_hojas' },
+  4: { procesoNombre: 'Stamping (Ext)', campos: EXTERNO_HOJAS_CAMPOS, formatOutputField: 'formato_hojas' },
+  5: { procesoNombre: 'UVI Serigrafía (Ext)', campos: EXTERNO_HOJAS_CAMPOS, formatOutputField: 'formato_hojas' },
+  6: { procesoNombre: 'Serigrafía Digital (MGI/Scodix)', campos: EXTERNO_HOJAS_CAMPOS, formatOutputField: 'formato_hojas' },
   7: { procesoNombre: 'Contracolado Microcanal (Ext)', campos: EXTERNO_CONTRACOLADO_CAMPOS },
-  8: { procesoNombre: 'Relieve (Interno)', campos: EXTERNO_HOJAS_CAMPOS },
-  9: { procesoNombre: 'Relieve (Ext)', campos: EXTERNO_HOJAS_CAMPOS },
+  8: { procesoNombre: 'Relieve (Interno)', campos: EXTERNO_HOJAS_CAMPOS, formatOutputField: 'formato_hojas' },
+  9: { procesoNombre: 'Relieve (Ext)', campos: EXTERNO_HOJAS_CAMPOS, formatOutputField: 'formato_hojas' },
   11: { procesoNombre: 'Poner Ventana PVC (Ext)', campos: EXTERNO_VENTANA_CAMPOS },
   13: { procesoNombre: 'Forrado de Cajas (Ext)', campos: EXTERNO_FORRADO_CAMPOS },
   14: { procesoNombre: 'Encuadernación/Plegado (Ext)', campos: EXTERNO_GENERICO_CAMPOS },

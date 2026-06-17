@@ -15,6 +15,7 @@ import {
   type PipelineRowView,
   type PipelineStepView,
 } from "@/lib/pipeline/pipeline-data";
+import { fetchAllInChunks } from "@/lib/supabase-query-chunks";
 
 const TABLE_OTS = "prod_ots_general";
 const TABLE_DESPACHADAS = "produccion_ot_despachadas";
@@ -235,12 +236,15 @@ export async function fetchPipelineRows(
   const otNumeros = [...new Set(despRows.map((r) => str(r.ot_numero)).filter(Boolean))] as string[];
   if (otNumeros.length === 0) return [];
 
-  const { data: otData, error: otErr } = await supabase
-    .from(TABLE_OTS)
-    .select("id, num_pedido, cliente, titulo, cantidad, prioridad, fecha_entrega, estado_desc")
-    .in("num_pedido", otNumeros);
-  if (otErr) throw otErr;
-  const ots = (otData ?? []) as OtRow[];
+  const otRows = await fetchAllInChunks(otNumeros, 100, async (chunk) => {
+    const { data, error } = await supabase
+      .from(TABLE_OTS)
+      .select("id, num_pedido, cliente, titulo, cantidad, prioridad, fecha_entrega, estado_desc")
+      .in("num_pedido", chunk);
+    if (error) throw error;
+    return (data ?? []) as OtRow[];
+  });
+  const ots = otRows;
 
   const otByNum = new Map<string, OtRow>();
   const otIds: string[] = [];
@@ -263,15 +267,18 @@ export async function fetchPipelineRows(
   const pasosByOtId = new Map<string, PasoRow[]>();
   const allPasoIds: string[] = [];
   if (uniqueOtIds.length > 0) {
-    const { data: pasosData, error: pasosErr } = await supabase
-      .from(TABLE_PASOS)
-      .select(
-        "id, ot_id, orden, estado, proceso_id, maquina_id, proveedor_nombre, notas_instrucciones, fecha_disponible, fecha_inicio, fecha_fin, prod_procesos_cat(nombre, seccion_slug, es_externo), prod_maquinas(nombre, tipo_maquina)",
-      )
-      .in("ot_id", uniqueOtIds)
-      .order("orden", { ascending: true });
-    if (pasosErr) throw pasosErr;
-    for (const paso of (pasosData ?? []) as PasoRow[]) {
+    const pasosData = await fetchAllInChunks(uniqueOtIds, 80, async (chunk) => {
+      const { data, error } = await supabase
+        .from(TABLE_PASOS)
+        .select(
+          "id, ot_id, orden, estado, proceso_id, maquina_id, proveedor_nombre, notas_instrucciones, fecha_disponible, fecha_inicio, fecha_fin, prod_procesos_cat(nombre, seccion_slug, es_externo), prod_maquinas(nombre, tipo_maquina)",
+        )
+        .in("ot_id", chunk)
+        .order("orden", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as PasoRow[];
+    });
+    for (const paso of pasosData) {
       const otId = str(paso.ot_id);
       const pasoId = str(paso.id);
       if (!otId || !pasoId) continue;
@@ -285,16 +292,19 @@ export async function fetchPipelineRows(
   const uniquePasoIds = [...new Set(allPasoIds)];
   const ejecByPaso = new Map<string, EjecRow>();
   if (uniquePasoIds.length > 0) {
-    const { data: ejecData, error: ejecErr } = await supabase
-      .from(TABLE_EJECUCIONES)
-      .select(
-        "id, ot_paso_id, estado_ejecucion, inicio_real_at, fin_real_at, horas_reales, num_hojas_producidas, cantidad_unidades, horas_reales_troquelado, horas_reales_engomado, maquinista, incidencia, accion_correctiva, observaciones, updated_at",
-      )
-      .in("ot_paso_id", uniquePasoIds)
-      .order("updated_at", { ascending: false });
-    if (ejecErr) throw ejecErr;
+    const ejecData = await fetchAllInChunks(uniquePasoIds, 80, async (chunk) => {
+      const { data, error } = await supabase
+        .from(TABLE_EJECUCIONES)
+        .select(
+          "id, ot_paso_id, estado_ejecucion, inicio_real_at, fin_real_at, horas_reales, num_hojas_producidas, cantidad_unidades, horas_reales_troquelado, horas_reales_engomado, maquinista, incidencia, accion_correctiva, observaciones, updated_at",
+        )
+        .in("ot_paso_id", chunk)
+        .order("updated_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as EjecRow[];
+    });
 
-    for (const row of (ejecData ?? []) as EjecRow[]) {
+    for (const row of ejecData) {
       const pasoId = str(row.ot_paso_id);
       if (!pasoId) continue;
       const prev = ejecByPaso.get(pasoId);
@@ -310,15 +320,18 @@ export async function fetchPipelineRows(
 
   const extByPaso = new Map<string, ExtRow>();
   if (uniquePasoIds.length > 0) {
-    const { data: extData, error: extErr } = await supabase
-      .from(TABLE_EXTERNOS)
-      .select(
-        "id, ot_paso_id, estado, proveedor_id, fecha_envio, fecha_prevista, observaciones, updated_at, prod_proveedores(nombre)",
-      )
-      .in("ot_paso_id", uniquePasoIds)
-      .order("updated_at", { ascending: false });
-    if (extErr) throw extErr;
-    for (const row of (extData ?? []) as ExtRow[]) {
+    const extData = await fetchAllInChunks(uniquePasoIds, 80, async (chunk) => {
+      const { data, error } = await supabase
+        .from(TABLE_EXTERNOS)
+        .select(
+          "id, ot_paso_id, estado, proveedor_id, fecha_envio, fecha_prevista, observaciones, updated_at, prod_proveedores(nombre)",
+        )
+        .in("ot_paso_id", chunk)
+        .order("updated_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as ExtRow[];
+    });
+    for (const row of extData) {
       const pasoId = str(row.ot_paso_id);
       if (!pasoId) continue;
       const prev = extByPaso.get(pasoId);
@@ -335,11 +348,15 @@ export async function fetchPipelineRows(
   }
 
   const poolByOt = new Map<string, PoolRow>();
-  const { data: poolData } = await supabase
-    .from(TABLE_POOL)
-    .select("ot_numero, estado_pool")
-    .in("ot_numero", otNumeros);
-  for (const row of (poolData ?? []) as PoolRow[]) {
+  const poolRows = await fetchAllInChunks(otNumeros, 100, async (chunk) => {
+    const { data, error } = await supabase
+      .from(TABLE_POOL)
+      .select("ot_numero, estado_pool")
+      .in("ot_numero", chunk);
+    if (error) throw error;
+    return (data ?? []) as PoolRow[];
+  });
+  for (const row of poolRows) {
     const ot = str(row.ot_numero);
     if (ot && !poolByOt.has(ot)) poolByOt.set(ot, row);
   }

@@ -157,7 +157,7 @@ export function HojaRutaOtDialog({
                     ) : null}
                     {data.despacho.tamanoHoja ? (
                       <span>
-                        <span className="font-medium">Formato:</span> {data.despacho.tamanoHoja}
+                        <span className="font-medium">Formato compra:</span> {data.despacho.tamanoHoja}
                       </span>
                     ) : null}
                     {data.despacho.tintas ? (

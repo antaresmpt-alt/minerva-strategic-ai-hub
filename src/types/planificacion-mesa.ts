@@ -146,6 +146,10 @@ export interface MesaEjecucion {
   salidaProcesoAnterior: number | null;
   /** Nombre del proceso anterior para mostrarlo en la UI. */
   salidaProcesoAnteriorNombre: string | null;
+  /** Formato de pliego que entra en este paso (cadena por itinerario). */
+  formatoAnterior: string | null;
+  /** Origen del formato anterior: nombre del paso o "Formato compra". */
+  formatoAnteriorOrigenNombre: string | null;
   ot: string;
   maquinaId: string;
   maquinaNombre: string;
