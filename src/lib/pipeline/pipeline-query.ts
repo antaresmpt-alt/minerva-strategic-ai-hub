@@ -15,6 +15,16 @@ import {
   type PipelineRowView,
   type PipelineStepView,
 } from "@/lib/pipeline/pipeline-data";
+import {
+  computeContenedorProgress,
+  fetchHijasByPadreNumeros,
+  fetchOtMetaByNumPedidos,
+  fetchPoolEstadoByOtNumeros,
+  matchesPlanificacionOtTipoFiltro,
+  normalizeOtTipo,
+  type OtContenedorMeta,
+  type PlanificacionOtTipoFiltroUi,
+} from "@/lib/planificacion-contenedor-query";
 import { fetchAllInChunks } from "@/lib/supabase-query-chunks";
 
 const TABLE_OTS = "prod_ots_general";
@@ -38,6 +48,10 @@ type FetchPipelineFilters = {
   externo?: boolean;
   estadoPasoActual?: PipelinePasoEstado | "all";
   limit?: number;
+  /** Si se indica, construye filas solo para estas OTs (p. ej. hijas expandidas). */
+  otNumeros?: string[];
+  /** Filtro Bloque 8.1 — default agrupado (sin hijas sueltas). */
+  otTipoFiltro?: PlanificacionOtTipoFiltroUi;
 };
 
 type OtRow = {
@@ -222,21 +236,86 @@ export async function fetchPipelineRows(
 ): Promise<PipelineRowView[]> {
   const limit = Math.max(1, Math.min(2000, Math.trunc(filters.limit ?? 500)));
   const search = String(filters.search ?? "").trim().toLowerCase();
+  const explicitOtNumeros = (filters.otNumeros ?? [])
+    .map((n) => str(n))
+    .filter(Boolean) as string[];
 
-  const { data: despData, error: despErr } = await supabase
-    .from(TABLE_DESPACHADAS)
-    .select(
-      "ot_numero, despachado_at, material, gramaje, tamano_hoja, num_hojas_brutas, horas_entrada, horas_tiraje, tintas, troquel, poses, acabado_pral, horas_estimadas_troquelado, horas_estimadas_engomado",
-    )
-    .order("despachado_at", { ascending: false })
-    .limit(limit);
-  if (despErr) throw despErr;
+  let otNumeros: string[];
+  let despRows: DespRow[];
 
-  const despRows = (despData ?? []) as DespRow[];
-  const otNumeros = [...new Set(despRows.map((r) => str(r.ot_numero)).filter(Boolean))] as string[];
+  if (explicitOtNumeros.length > 0) {
+    otNumeros = [...new Set(explicitOtNumeros)];
+    const despData = await fetchAllInChunks(otNumeros, 100, async (chunk) => {
+      const { data, error } = await supabase
+        .from(TABLE_DESPACHADAS)
+        .select(
+          "ot_numero, despachado_at, material, gramaje, tamano_hoja, num_hojas_brutas, horas_entrada, horas_tiraje, tintas, troquel, poses, acabado_pral, horas_estimadas_troquelado, horas_estimadas_engomado",
+        )
+        .in("ot_numero", chunk);
+      if (error) throw error;
+      return (data ?? []) as DespRow[];
+    });
+    despRows = despData;
+  } else {
+    const { data: despData, error: despErr } = await supabase
+      .from(TABLE_DESPACHADAS)
+      .select(
+        "ot_numero, despachado_at, material, gramaje, tamano_hoja, num_hojas_brutas, horas_entrada, horas_tiraje, tintas, troquel, poses, acabado_pral, horas_estimadas_troquelado, horas_estimadas_engomado",
+      )
+      .order("despachado_at", { ascending: false })
+      .limit(limit);
+    if (despErr) throw despErr;
+    despRows = (despData ?? []) as DespRow[];
+    otNumeros = [...new Set(despRows.map((r) => str(r.ot_numero)).filter(Boolean))] as string[];
+  }
+
   if (otNumeros.length === 0) return [];
 
-  const otRows = await fetchAllInChunks(otNumeros, 100, async (chunk) => {
+  const otMetaByNum = await fetchOtMetaByNumPedidos(supabase, otNumeros);
+  const includeHijas = explicitOtNumeros.length > 0;
+  const otTipoFiltro = filters.otTipoFiltro ?? "agrupado";
+  const visibleOtNumeros = includeHijas
+    ? otNumeros
+    : otNumeros.filter((ot) => {
+        const meta = otMetaByNum.get(ot);
+        const otTipo = meta?.otTipo ?? normalizeOtTipo(null);
+        return matchesPlanificacionOtTipoFiltro(otTipo, otTipoFiltro);
+      });
+
+  if (visibleOtNumeros.length === 0) return [];
+
+  const contenedorNumeros = visibleOtNumeros.filter(
+    (ot) => otMetaByNum.get(ot)?.otTipo === "contenedor",
+  );
+  const hijasByPadre =
+    contenedorNumeros.length > 0 && !includeHijas
+      ? await fetchHijasByPadreNumeros(supabase, contenedorNumeros)
+      : new Map<string, OtContenedorMeta[]>();
+
+  const hijaNumerosForProgress = [...hijasByPadre.values()].flatMap((list) =>
+    list.map((h) => h.numPedido),
+  );
+  const poolEstadoByOt =
+    hijaNumerosForProgress.length > 0
+      ? await fetchPoolEstadoByOtNumeros(supabase, hijaNumerosForProgress)
+      : new Map<string, string | null>();
+
+  const contenedorProgressByPadre = new Map<
+    string,
+    ReturnType<typeof computeContenedorProgress>
+  >();
+  for (const padre of contenedorNumeros) {
+    const hijas = hijasByPadre.get(padre) ?? [];
+    contenedorProgressByPadre.set(
+      padre,
+      computeContenedorProgress(
+        hijas.map((h) => h.numPedido),
+        poolEstadoByOt,
+      ),
+    );
+  }
+
+  const otRows = await fetchAllInChunks(visibleOtNumeros, 100, async (chunk) => {
     const { data, error } = await supabase
       .from(TABLE_OTS)
       .select("id, num_pedido, cliente, titulo, cantidad, prioridad, fecha_entrega, estado_desc")
@@ -348,7 +427,7 @@ export async function fetchPipelineRows(
   }
 
   const poolByOt = new Map<string, PoolRow>();
-  const poolRows = await fetchAllInChunks(otNumeros, 100, async (chunk) => {
+  const poolRows = await fetchAllInChunks(visibleOtNumeros, 100, async (chunk) => {
     const { data, error } = await supabase
       .from(TABLE_POOL)
       .select("ot_numero, estado_pool")
@@ -362,7 +441,9 @@ export async function fetchPipelineRows(
   }
 
   const out: PipelineRowView[] = [];
-  for (const otNumero of otNumeros) {
+  for (const otNumero of visibleOtNumeros) {
+    const meta = otMetaByNum.get(otNumero);
+    const otTipo = meta?.otTipo ?? normalizeOtTipo(null);
     const ot = otByNum.get(otNumero);
     const desp = despByOt.get(otNumero) ?? null;
     const otId = str(ot?.id) ?? null;
@@ -504,6 +585,16 @@ export async function fetchPipelineRows(
       fechaCompromiso: normalizeDateIso(ot?.fecha_entrega ?? null),
       estadoOt: str(ot?.estado_desc),
       despachadoAt: normalizeDateIso(desp?.despachado_at ?? null),
+      otTipo,
+      otPadreNumero: meta?.otPadreNumero ?? null,
+      tipoHija: meta?.tipoHija ?? null,
+      formaDescripcion: meta?.formaDescripcion ?? null,
+      hijasCount:
+        otTipo === "contenedor" ? (contenedorProgressByPadre.get(otNumero)?.total ?? 0) : undefined,
+      hijasCompletadasPct:
+        otTipo === "contenedor"
+          ? (contenedorProgressByPadre.get(otNumero)?.pct ?? null)
+          : undefined,
       pasoActual,
       siguientePaso,
       pasos,

@@ -3,6 +3,7 @@
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CircleAlert,
@@ -23,6 +24,11 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  fetchHijasByPadreNumeros,
+  formatHijaDisplayLabel,
+  type PlanificacionOtTipoFiltroUi,
+} from "@/lib/planificacion-contenedor-query";
 import {
   fetchPipelineRows,
   type FetchPipelineFilters,
@@ -74,6 +80,9 @@ function cumplimientoBadge(badges: string[]): "ok" | "warning" | "low" | null {
   return null;
 }
 
+type PipelineRow = Awaited<ReturnType<typeof fetchPipelineRows>>[number];
+type PipelineDisplayRow = PipelineRow & { isHijaRow?: boolean; padreOt?: string };
+
 export function PlanificacionPipelineTab() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const router = useRouter();
@@ -81,8 +90,12 @@ export function PlanificacionPipelineTab() {
   const searchParams = useSearchParams();
   const searchParamsString = searchParams.toString();
   const didInitFromUrl = useRef(false);
-  const [rows, setRows] = useState<Awaited<ReturnType<typeof fetchPipelineRows>>>([]);
+  const [rows, setRows] = useState<PipelineRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [otTipoFilter, setOtTipoFilter] = useState<PlanificacionOtTipoFiltroUi>("agrupado");
+  const [expandedContenedores, setExpandedContenedores] = useState<Record<string, boolean>>({});
+  const [hijaRowsByPadre, setHijaRowsByPadre] = useState<Record<string, PipelineDisplayRow[]>>({});
+  const [loadingHijasPadre, setLoadingHijasPadre] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [onlyIncidencias, setOnlyIncidencias] = useState(false);
@@ -98,7 +111,7 @@ export function PlanificacionPipelineTab() {
   const [exportOpen, setExportOpen] = useState(false);
   const [exportMode, setExportMode] = useState<PipelinePdfMode>("listado");
   const [detailOpen, setDetailOpen] = useState(false);
-  const [detailOt, setDetailOt] = useState<Awaited<ReturnType<typeof fetchPipelineRows>>[number] | null>(null);
+  const [detailOt, setDetailOt] = useState<PipelineRow | null>(null);
   const [selectedOtNumero, setSelectedOtNumero] = useState<string | null>(null);
 
   useEffect(() => {
@@ -212,9 +225,12 @@ export function PlanificacionPipelineTab() {
         externo:
           externoFilter === "all" ? undefined : externoFilter === "yes",
         estadoPasoActual,
+        otTipoFiltro: otTipoFilter,
         limit: 700,
       });
       setRows(data);
+      setHijaRowsByPadre({});
+      setExpandedContenedores({});
     } catch (e) {
       const message = getSupabaseErrorMessage(e, "No se pudo cargar el pipeline.");
       console.error("[Pipeline] loadData error", { error: e, message });
@@ -223,7 +239,7 @@ export function PlanificacionPipelineTab() {
     } finally {
       setLoading(false);
     }
-  }, [estadoPasoActual, externoFilter, onlyIncidencias, search, supabase]);
+  }, [estadoPasoActual, externoFilter, onlyIncidencias, otTipoFilter, search, supabase]);
 
   useEffect(() => {
     void loadData();
@@ -238,6 +254,65 @@ export function PlanificacionPipelineTab() {
       return true;
     });
   }, [quickBloqueado, quickExternoActivo, quickRiesgo, quickSinItinerario, rows]);
+
+  const loadHijasForContenedor = useCallback(
+    async (padreOt: string) => {
+      if (hijaRowsByPadre[padreOt]?.length) return;
+      setLoadingHijasPadre(padreOt);
+      try {
+        const hijasMap = await fetchHijasByPadreNumeros(supabase, [padreOt]);
+        const nums = (hijasMap.get(padreOt) ?? []).map((h) => h.numPedido);
+        if (nums.length === 0) {
+          setHijaRowsByPadre((prev) => ({ ...prev, [padreOt]: [] }));
+          return;
+        }
+        const hijaRows = await fetchPipelineRows(supabase, { otNumeros: nums });
+        setHijaRowsByPadre((prev) => ({
+          ...prev,
+          [padreOt]: hijaRows.map((r) => ({
+            ...r,
+            isHijaRow: true,
+            padreOt,
+            trabajo: formatHijaDisplayLabel({
+              ot: r.otNumero,
+              tipoHija: r.tipoHija,
+              formaDescripcion: r.formaDescripcion,
+              trabajo: r.trabajo,
+            }),
+          })),
+        }));
+      } catch (e) {
+        console.error("[Pipeline] loadHijasForContenedor", e);
+        toast.error(getSupabaseErrorMessage(e, "No se pudieron cargar las hijas."));
+      } finally {
+        setLoadingHijasPadre(null);
+      }
+    },
+    [hijaRowsByPadre, supabase],
+  );
+
+  const toggleContenedorExpanded = useCallback(
+    (padreOt: string) => {
+      const next = !expandedContenedores[padreOt];
+      setExpandedContenedores((prev) => ({ ...prev, [padreOt]: next }));
+      if (next) void loadHijasForContenedor(padreOt);
+    },
+    [expandedContenedores, loadHijasForContenedor],
+  );
+
+  const displayRows = useMemo((): PipelineDisplayRow[] => {
+    if (otTipoFilter !== "agrupado") {
+      return visibleRows;
+    }
+    const out: PipelineDisplayRow[] = [];
+    for (const r of visibleRows) {
+      out.push(r);
+      if (r.otTipo === "contenedor" && expandedContenedores[r.otNumero]) {
+        out.push(...(hijaRowsByPadre[r.otNumero] ?? []));
+      }
+    }
+    return out;
+  }, [visibleRows, otTipoFilter, expandedContenedores, hijaRowsByPadre]);
 
   const kpis = useMemo(() => {
     const total = visibleRows.length;
@@ -291,7 +366,7 @@ export function PlanificacionPipelineTab() {
   }, [visibleRows]);
 
   const openDetail = useCallback(
-    (row: Awaited<ReturnType<typeof fetchPipelineRows>>[number]) => {
+    (row: PipelineRow) => {
       setDetailOt(row);
       setSelectedOtNumero(row.otNumero);
       setDetailOpen(true);
@@ -378,6 +453,19 @@ export function PlanificacionPipelineTab() {
               <option value="en_marcha">En marcha</option>
               <option value="pausado">Pausado</option>
               <option value="finalizado">Finalizado</option>
+            </select>
+            <select
+              className="h-9 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700"
+              value={otTipoFilter}
+              onChange={(e) =>
+                setOtTipoFilter(e.target.value as PlanificacionOtTipoFiltroUi)
+              }
+              aria-label="Filtrar por tipo de OT"
+            >
+              <option value="agrupado">OT: agrupado</option>
+              <option value="solo_simples">OT: solo simples</option>
+              <option value="solo_contenedores">OT: solo contenedores</option>
+              <option value="todas_planas">OT: todas (plano)</option>
             </select>
             <select
               className="h-9 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700"
@@ -577,10 +665,16 @@ export function PlanificacionPipelineTab() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {visibleRows.map((row) => (
+                  {displayRows.map((row) => (
                     <TableRow
-                      key={row.otNumero}
-                      className={compactMode ? "h-8 cursor-pointer" : "cursor-pointer"}
+                      key={row.isHijaRow ? `hija-${row.padreOt}-${row.otNumero}` : row.otNumero}
+                      className={
+                        row.isHijaRow
+                          ? "h-8 cursor-pointer bg-slate-50/90"
+                          : compactMode
+                            ? "h-8 cursor-pointer"
+                            : "cursor-pointer"
+                      }
                       onClick={() => openDetail(row)}
                       role="button"
                       tabIndex={0}
@@ -592,8 +686,41 @@ export function PlanificacionPipelineTab() {
                       }}
                     >
                       <TableCell className={compactMode ? "py-1 font-mono text-[11px] font-semibold text-[#002147]" : "font-mono text-xs font-semibold text-[#002147]"}>
-                        <span className="inline-flex items-center gap-1">
-                          {row.otNumero}
+                        <span className={`inline-flex items-center gap-1 ${row.isHijaRow ? "pl-4" : ""}`}>
+                          {row.otTipo === "contenedor" && otTipoFilter === "agrupado" ? (
+                            <button
+                              type="button"
+                              className="rounded p-0.5 text-slate-600 hover:bg-slate-100"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleContenedorExpanded(row.otNumero);
+                              }}
+                              aria-label={
+                                expandedContenedores[row.otNumero]
+                                  ? `Contraer hijas de ${row.otNumero}`
+                                  : `Expandir hijas de ${row.otNumero}`
+                              }
+                            >
+                              {loadingHijasPadre === row.otNumero ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              ) : expandedContenedores[row.otNumero] ? (
+                                <ChevronDown className="size-3.5" />
+                              ) : (
+                                <ChevronRight className="size-3.5" />
+                              )}
+                            </button>
+                          ) : null}
+                          <span>
+                            {row.isHijaRow ? `↳ ${row.otNumero}` : row.otNumero}
+                          </span>
+                          {row.otTipo === "contenedor" ? (
+                            <span className="rounded bg-indigo-100 px-1 py-0.5 text-[9px] font-medium text-indigo-800">
+                              {row.hijasCount ?? 0}h
+                              {row.hijasCompletadasPct != null
+                                ? ` · ${row.hijasCompletadasPct}%`
+                                : ""}
+                            </span>
+                          ) : null}
                           {cumplimientoBadge(row.badges) === "ok" ? (
                             <CheckCircle2 className="size-3 text-emerald-600" />
                           ) : null}

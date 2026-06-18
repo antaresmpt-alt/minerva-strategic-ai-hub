@@ -1696,7 +1696,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | Archivo | Responsabilidad |
 |---------|-----------------|
 | `hoja-ruta-formato-encadenado.ts` | Encadenado de formato de pliego por `prod_ot_pasos.orden`: `resolveFormatoSalidaProceso`, `aplicarPrefillFormatoEncadenado`, `buildFormatoAnteriorByOtPasoId`. Guillotina `tamano_inicial`/`tamano_final` → Impresión/externos `formato_hojas`. |
-| `supabase-query-chunks.ts` | Trocea filtros `.in(column, ids)` en lotes (~80–100) para evitar URLs PostgREST demasiado largas (fix 400 Pool/Pipeline). |
+| `planificacion-contenedor-query.ts` | Bloque 8.1: meta `ot_tipo`, hijas por padre, progreso contenedor, filtros UI. |
 | `supabase-error-message.ts` | Normaliza mensajes de error PostgREST para UI. |
 
 ### `src/components/produccion/hoja-ruta/`

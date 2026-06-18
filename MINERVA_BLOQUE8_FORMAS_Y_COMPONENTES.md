@@ -306,12 +306,13 @@ Responde pregunta §12.7: Caso A = **varias referencias** por forma; a veces mis
 - Todas las OTs existentes → `simple`.
 - Estimación: ~30 min.
 
-### Fase 8.1 — Vista agrupada (BLOQUEANTE para UX)
+### Fase 8.1 — Vista agrupada (BLOQUEANTE para UX) ✅ **IMPLEMENTADO 17 jun 2026**
 
-- Pool y Pipeline: contenedor con hijas expandibles.
-- Estado global: % hijas completadas.
-- Filtros: solo contenedores | solo simples | ver todas (con agrupación).
-- **Sin esta fase no se despliegan hijas en producción.**
+- Pool y Pipeline: contenedor con hijas expandibles (lazy load).
+- Estado global: % hijas con pool `cerrada`.
+- Filtros: agrupado (default) | solo simples | solo contenedores | todas planas.
+- Módulo: `src/lib/planificacion-contenedor-query.ts`.
+- **Sin esta fase no se despliegan hijas en producción** — UI lista; falta 8.2 para crear hijas.
 
 ### Fase 8.2 — Despacho contenedor + wizard de hijas
 
@@ -446,10 +447,10 @@ Responder con Jordi / Zaida / Abraham / Carlos:
 ## 16. Orden de trabajo recomendado
 
 1. ~~**Fase FORMATO** — encadenado tamaño de hoja (código).~~ ✅ 17 jun 2026
-2. **Fase 8.0** — migración SQL aditiva.
-3. **Responder §12** con planta.
-4. **Fase 8.1** — agrupación pool/pipeline (**antes** de usar hijas en producción).
-5. **Fase 8.2** — wizard despacho contenedor.
+2. ~~**Fase 8.0** — migración SQL aditiva.~~ ✅
+3. ~~**Fase 8.1** — agrupación UI pool/pipeline.~~ ✅ 17 jun 2026
+4. **Responder §12** con planta.
+5. **Fase 8.2** — wizard despacho contenedor + hijas.
 6. **Fase 8.3** — ejecución (mayormente gratis).
 7. **Fase 8.4** — cierre contenedor + Bloque 6.
 

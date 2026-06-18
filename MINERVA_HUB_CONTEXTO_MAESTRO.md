@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 18 jun 2026 (Bloque 9 §3b albaranes; plantillas Desbroce; Bloque 8.1 pendiente)
+> Última actualización: 17 jun 2026 (Fase 8.1 Pool/Pipeline agrupado; usuarios CTP; campos CTP cerrados)
 
 ---
 
@@ -242,22 +242,21 @@ src/components/produccion/planificacion/
 | 5 | Integración Etiquetas ↔ Hoja de Ruta | ⏳ Pendiente |
 | 6 | Producidas/Histórico + cierre OT | ⏳ Pendiente (PRÓXIMO GRANDE) |
 | 7 | Expedición/Albarán | ⏳ Pendiente (depende B6 + Odoo) |
-| 8 | Formatos de hoja + formas + componentes (OT contenedor/hijas) | 🔄 En curso — **Fase FORMATO ✅** + **8.0 ✅**; 8.1–8.4 pendiente — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` |
+| 8 | Formatos de hoja + formas + componentes (OT contenedor/hijas) | 🔄 En curso — **FORMATO ✅** + **8.0 ✅** + **8.1 ✅**; 8.2–8.4 pendiente — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` |
 | 9 | Material, cartelas de palet y stock libre | 📋 Diseño — **Fase A** 9.0–9.4 (core) · **Fase B** 9.5+ (muelle/foto) — ver `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` |
 
 ---
 
 ## 🔜 Tareas pendientes inmediatas
 
-### Retomar aquí (17 jun 2026, noche)
-- [x] **Fase FORMATO**: encadenado formato de hoja (compra → guillotina → impresión → externos) — commit `aadad81`, probado OT 98009
+### Retomar aquí (17 jun 2026)
+- [x] **Fase FORMATO**: encadenado formato de hoja — commit `aadad81`, probado OT 98009
 - [x] **Fase 8.0**: migración `ot_tipo` / `ot_padre_numero` + campos hija (`aedb353`)
-- [ ] **Fase 8.1**: agrupación UI Pool/Pipeline (contenedor + hijas expandibles)
-- [ ] Preguntas a planta (Abraham/Carlos/Jordi) — ver §12 de `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`
-
-### Alta prioridad (usuario)
-- [ ] Ampliar campos CTP tras reunión con Gemma
-- [ ] Crear usuarios Marc y Gemma con rol **`ctp`** en `profiles` (permisos producción ya preparados — migración `20260618143100`)
+- [x] **Fase 8.1**: agrupación UI Pool/Pipeline (contenedor + hijas expandibles, filtro tipo OT)
+- [x] **Usuarios CTP**: `ctp@minervaglobal.es` (Gemma), `ctp2@minervaglobal.es` (Marc) — rol `ctp`
+- [x] **Campos CTP**: cerrados de momento (checkboxes actuales suficientes)
+- [ ] **Fase 8.2**: wizard despacho contenedor + hijas (responder §12 planta antes)
+- [ ] Preguntas a planta — ver §12 de `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`
 - [x] **`bultos_por_palet_default`** de Gabri en `prod_cajas_embalaje` (cargado en prod 9 jun; seed en repo `20260618143200`)
 - [x] **Plantillas de ruta**: Desbroce entre Troquelado y Engomado en 5 plantillas offset (`20260618143000`)
 - [ ] Probar flujo completo: CTP → Guillotina → Impresión → Troquelado → Desbroce → Engomado

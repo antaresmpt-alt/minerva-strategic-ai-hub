@@ -1,4 +1,5 @@
 import type { PlanificacionTipoMaquina } from "@/lib/planificacion-ambito";
+import type { ProdOtTipo, ProdOtTipoHija } from "@/types/prod-ots";
 
 export type PipelineBadge =
   | "sin_itinerario"
@@ -30,6 +31,15 @@ export type OTRowBase = {
   fechaCompromiso: string | null;
   estadoOt: string | null;
   despachadoAt: string | null;
+  /** Bloque 8: simple | contenedor | hija */
+  otTipo?: ProdOtTipo;
+  otPadreNumero?: string | null;
+  tipoHija?: ProdOtTipoHija | null;
+  formaDescripcion?: string | null;
+  /** Contenedor: nº hijas en BD */
+  hijasCount?: number;
+  /** Contenedor: % hijas con pool cerrada */
+  hijasCompletadasPct?: number | null;
 };
 
 export type PipelineStepView = {

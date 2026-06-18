@@ -784,11 +784,18 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 
 ## 📌 Punto de continuación (próxima sesión)
 
-**👉 Retomar aquí (18 jun 2026):** Fase **8.1** (agrupación pool/pipeline). Responder **§12** de `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` con planta antes del wizard 8.2.
+**👉 Retomar aquí:** Fase **8.2** (wizard despacho contenedor). Responder **§12** con planta.
 
-**Fase FORMATO** ✅ · **Fase 8.0** ✅
+**Fase FORMATO** ✅ · **Fase 8.0** ✅ · **Fase 8.1** ✅
 
-**Sesión 18 jun 2026** — Higiene pendientes vivos ✅
+**Sesión 17 jun 2026 (noche, cont.)** — Usuarios CTP + Fase 8.1 ✅
+
+### Hecho
+- Usuarios provisionales: `ctp@minervaglobal.es` (Gemma), `ctp2@minervaglobal.es` (Marc), rol `ctp`. Script: `scripts/create-ctp-users.mjs`.
+- Campos CTP: dados por cerrados (checkboxes actuales).
+- **8.1**: `planificacion-contenedor-query.ts`; Pool v2 + Pipeline con filtro tipo OT, contenedor expandible, % hijas.
+
+---
 
 ### Hecho
 - Docs: bultos Gabri ✅, estado Bloque 8.1 como siguiente, rol `ctp` aclarado (no `preimpresion`).

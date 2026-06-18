@@ -3,6 +3,8 @@
 import {
   ArrowUpDown,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Circle,
   Droplet,
   Edit3,
@@ -67,13 +69,24 @@ import {
   replaceProdOtItinerarioSlots,
   type ProdOtPasoVista,
 } from "@/lib/prod-ot-itinerario-client";
+import {
+  computeContenedorProgress,
+  fetchHijasByPadreNumeros,
+  fetchOtMetaByNumPedidos,
+  fetchPoolEstadoByOtNumeros,
+  formatHijaDisplayLabel,
+  matchesPlanificacionOtTipoFiltro,
+  normalizeOtTipo,
+  type OtContenedorMeta,
+  type PlanificacionOtTipoFiltroUi,
+} from "@/lib/planificacion-contenedor-query";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { getSupabaseErrorMessage } from "@/lib/supabase-error-message";
 import { fetchAllInChunks } from "@/lib/supabase-query-chunks";
 import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
+import type { ProdOtTipo, ProdOtTipoHija } from "@/types/prod-ots";
 
 const TABLE_DESPACHADAS = "produccion_ot_despachadas";
-const TABLE_OTS_GENERAL = "prod_ots_general";
 const TABLE_COMPRA = "prod_compra_material";
 const TABLE_PROVEEDORES = "prod_proveedores";
 const TABLE_RECEPCION = "prod_recepciones_material";
@@ -107,6 +120,7 @@ type PoolUiState = {
   sortDir: "asc" | "desc";
   compraEstadoFilter: string;
   areaTipoFilter: PoolAmbitoFiltroUi;
+  otTipoFilter: PlanificacionOtTipoFiltroUi;
 };
 
 type DespRow = {
@@ -122,13 +136,6 @@ type DespRow = {
   poses: number | null;
   acabado_pral: string | null;
   despachado_at: string | null;
-};
-
-type OtRow = {
-  num_pedido: string;
-  cliente: string | null;
-  titulo: string | null;
-  fecha_entrega: string | null;
 };
 
 type CompraRow = {
@@ -183,6 +190,15 @@ type PoolRow = {
   planificadaEnMesa: boolean;
   /** `estado_pool === en_transito`: fase anterior cerrada en mesa, itinerario sigue (p. ej. a troquel). */
   poolEnTransitoFase: boolean;
+  otTipo: ProdOtTipo;
+  otPadreNumero?: string | null;
+  tipoHija?: ProdOtTipoHija | null;
+  formaDescripcion?: string | null;
+  hijasCount?: number;
+  hijasCompletadasPct?: number | null;
+  /** Fila hija expandida bajo un contenedor */
+  isHijaRow?: boolean;
+  padreOt?: string;
 };
 
 type DraftRow = {
@@ -350,6 +366,10 @@ export function PlanificacionPoolOtsTab() {
   const saveInFlightRef = useRef(false);
   const [planificacionRole, setPlanificacionRole] = useState<string | null>(null);
   const [poolCountPreAmbito, setPoolCountPreAmbito] = useState(0);
+  const [otTipoFilter, setOtTipoFilter] = useState<PlanificacionOtTipoFiltroUi>("agrupado");
+  const [expandedContenedores, setExpandedContenedores] = useState<Record<string, boolean>>({});
+  const [hijaRowsByPadre, setHijaRowsByPadre] = useState<Record<string, PoolRow[]>>({});
+  const [loadingHijasPadre, setLoadingHijasPadre] = useState<string | null>(null);
 
   const uiStorageKey = `${POOL_UI_STATE_KEY}:${uiUserId ?? "anon"}`;
 
@@ -420,6 +440,15 @@ export function PlanificacionPoolOtsTab() {
         ) {
           setAreaTipoFilter(savedArea as PoolAmbitoFiltroUi);
         }
+        const savedOtTipo = parsed.otTipoFilter;
+        if (
+          savedOtTipo === "agrupado" ||
+          savedOtTipo === "solo_simples" ||
+          savedOtTipo === "solo_contenedores" ||
+          savedOtTipo === "todas_planas"
+        ) {
+          setOtTipoFilter(savedOtTipo);
+        }
       }
     } catch {
       // fallback silencioso
@@ -436,6 +465,7 @@ export function PlanificacionPoolOtsTab() {
       sortDir,
       compraEstadoFilter,
       areaTipoFilter,
+      otTipoFilter,
     };
     const t = window.setTimeout(() => {
       try {
@@ -445,7 +475,7 @@ export function PlanificacionPoolOtsTab() {
       }
     }, 180);
     return () => window.clearTimeout(t);
-  }, [search, sortBy, sortDir, compraEstadoFilter, areaTipoFilter, uiHydrated, uiStorageKey]);
+  }, [search, sortBy, sortDir, compraEstadoFilter, areaTipoFilter, otTipoFilter, uiHydrated, uiStorageKey]);
 
   useEffect(() => {
     if (!poolEditDialogOpen || !editingOt) return;
@@ -570,6 +600,7 @@ export function PlanificacionPoolOtsTab() {
             enColaMesa: false,
             planificadaEnMesa: false,
             poolEnTransitoFase: false,
+            otTipo: "simple",
           });
           continue;
         }
@@ -690,18 +721,34 @@ export function PlanificacionPoolOtsTab() {
         return blk.tipos.has(pasoTipo);
       }
 
-      const otsData = await fetchAllInChunks(ots, 100, async (chunk) => {
-        const { data, error } = await supabase
-          .from(TABLE_OTS_GENERAL)
-          .select("num_pedido, cliente, titulo, fecha_entrega")
-          .in("num_pedido", chunk);
-        if (error) throw error;
-        return (data ?? []) as OtRow[];
-      });
-      const otByNum = new Map<string, OtRow>();
-      for (const o of otsData) {
-        const ot = String(o.num_pedido ?? "").trim();
-        if (ot) otByNum.set(ot, o);
+      const otMetaByNum = await fetchOtMetaByNumPedidos(supabase, ots);
+      const contenedorNumeros = ots.filter(
+        (ot) => otMetaByNum.get(ot)?.otTipo === "contenedor",
+      );
+      const hijasByPadre =
+        contenedorNumeros.length > 0
+          ? await fetchHijasByPadreNumeros(supabase, contenedorNumeros)
+          : new Map<string, OtContenedorMeta[]>();
+      const hijaNumerosForProgress = [...hijasByPadre.values()].flatMap((list) =>
+        list.map((h) => h.numPedido),
+      );
+      const poolEstadoHijas =
+        hijaNumerosForProgress.length > 0
+          ? await fetchPoolEstadoByOtNumeros(supabase, hijaNumerosForProgress)
+          : new Map<string, string | null>();
+      const contenedorProgressByPadre = new Map<
+        string,
+        ReturnType<typeof computeContenedorProgress>
+      >();
+      for (const padre of contenedorNumeros) {
+        const hijas = hijasByPadre.get(padre) ?? [];
+        contenedorProgressByPadre.set(
+          padre,
+          computeContenedorProgress(
+            hijas.map((h) => h.numPedido),
+            poolEstadoHijas,
+          ),
+        );
       }
 
       const compraData = await fetchAllInChunks(ots, 100, async (chunk) => {
@@ -825,10 +872,20 @@ export function PlanificacionPoolOtsTab() {
       const out: PoolRow[] = [];
       for (const [ot, row] of byOt.entries()) {
         if (otBlockedFromPoolByMesa(ot)) continue;
-        const meta = otByNum.get(ot);
+        const meta = otMetaByNum.get(ot);
+        const otTipo = meta?.otTipo ?? normalizeOtTipo(null);
+        row.otTipo = otTipo;
+        row.otPadreNumero = meta?.otPadreNumero ?? null;
+        row.tipoHija = meta?.tipoHija ?? null;
+        row.formaDescripcion = meta?.formaDescripcion ?? null;
+        if (otTipo === "contenedor") {
+          const prog = contenedorProgressByPadre.get(ot);
+          row.hijasCount = prog?.total ?? 0;
+          row.hijasCompletadasPct = prog?.pct ?? null;
+        }
         row.cliente = String(meta?.cliente ?? "").trim() || "—";
         row.trabajo = String(meta?.titulo ?? "").trim() || "—";
-        row.fechaEntrega = meta?.fecha_entrega ?? null;
+        row.fechaEntrega = meta?.fechaEntrega ?? null;
         row.numCompra = compraNumByOt.get(ot) ?? null;
         row.compraEstado = compraEstadoByOt.get(ot) ?? "Sin compra";
         const provIdsSet = compraProveedorIdsByOt.get(ot);
@@ -930,9 +987,20 @@ export function PlanificacionPoolOtsTab() {
     const q = search.trim().toLowerCase();
     const filterNorm = normalizeCompraEstado(compraEstadoFilter);
     return rows.filter((r) => {
+      if (r.isHijaRow) return false;
+      if (!matchesPlanificacionOtTipoFiltro(r.otTipo, otTipoFilter)) return false;
       const matchesSearch =
         !q ||
-        [r.ot, r.cliente, r.trabajo, r.material, r.troquelLabel, r.acabadoPral, r.compraEstado]
+        [
+          r.ot,
+          r.cliente,
+          r.trabajo,
+          r.material,
+          r.troquelLabel,
+          r.acabadoPral,
+          r.compraEstado,
+          r.formaDescripcion ?? "",
+        ]
           .map((x) => String(x ?? "").toLowerCase())
           .some((s) => s.includes(q));
       if (!matchesSearch) return false;
@@ -944,7 +1012,7 @@ export function PlanificacionPoolOtsTab() {
       }
       return true;
     });
-  }, [rows, search, compraEstadoFilter, areaTipoFilter]);
+  }, [rows, search, compraEstadoFilter, areaTipoFilter, otTipoFilter]);
 
   const selectableRows = useMemo(
     () => filteredRows.filter((r) => r.hasCompraGenerada),
@@ -976,6 +1044,123 @@ export function PlanificacionPoolOtsTab() {
     });
     return arr;
   }, [filteredRows, sortBy, sortDir]);
+
+  const loadHijasForContenedor = useCallback(
+    async (padreOt: string) => {
+      if (hijaRowsByPadre[padreOt]?.length) return;
+      setLoadingHijasPadre(padreOt);
+      try {
+        const fromRows = rows.filter(
+          (r) => r.otTipo === "hija" && r.otPadreNumero === padreOt,
+        );
+        if (fromRows.length > 0) {
+          setHijaRowsByPadre((prev) => ({
+            ...prev,
+            [padreOt]: fromRows.map((r) => ({
+              ...r,
+              isHijaRow: true,
+              padreOt,
+              trabajo: formatHijaDisplayLabel({
+                ot: r.ot,
+                tipoHija: r.tipoHija,
+                formaDescripcion: r.formaDescripcion,
+                trabajo: r.trabajo,
+              }),
+            })),
+          }));
+          return;
+        }
+        const hijasMap = await fetchHijasByPadreNumeros(supabase, [padreOt]);
+        const hijas = hijasMap.get(padreOt) ?? [];
+        if (hijas.length === 0) {
+          setHijaRowsByPadre((prev) => ({ ...prev, [padreOt]: [] }));
+          return;
+        }
+        const nums = hijas.map((h) => h.numPedido);
+        const pasoMap = await fetchProximoPasoDisponiblePorOt(supabase, nums).catch(
+          () => new Map<string, ProximoPasoInfo>(),
+        );
+        const built: PoolRow[] = hijas.map((h) => {
+          const paso = pasoMap.get(h.numPedido);
+          return {
+            ot: h.numPedido,
+            cliente: String(h.cliente ?? "").trim() || "—",
+            trabajo: formatHijaDisplayLabel({
+              ot: h.numPedido,
+              tipoHija: h.tipoHija,
+              formaDescripcion: h.formaDescripcion,
+              trabajo: h.titulo,
+            }),
+            material: "—",
+            tintas: "—",
+            acabadoPral: "",
+            fechaEntrega: h.fechaEntrega ?? null,
+            hojasObjetivo: 0,
+            hojasRecibidasTotal: 0,
+            numCompra: null,
+            compraEstado: "Sin compra",
+            compraProveedor: null,
+            compraProveedorExtraCount: 0,
+            hasCompraGenerada: false,
+            materialStatus: "rojo",
+            troquelLabel: "",
+            troquelId: null,
+            cauchoAcrilico: null,
+            troquelStatus: "sin_informar",
+            troquelModo: "sin_informar",
+            poses: null,
+            horasEntrada: 0,
+            horasTiraje: 0,
+            horasTroquelado: 0,
+            horasEngomado: 0,
+            horasTotal: 0,
+            proximoPasoNombre: paso?.nombre ?? null,
+            proximoPasoSlug: paso?.seccionSlug ?? null,
+            planificacionTipoPaso: paso?.tipoMaquina ?? null,
+            enColaMesa: false,
+            planificadaEnMesa: false,
+            poolEnTransitoFase: false,
+            otTipo: "hija",
+            otPadreNumero: padreOt,
+            tipoHija: h.tipoHija,
+            formaDescripcion: h.formaDescripcion,
+            isHijaRow: true,
+            padreOt,
+          };
+        });
+        setHijaRowsByPadre((prev) => ({ ...prev, [padreOt]: built }));
+      } catch (e) {
+        console.error("[Pool OTs] loadHijasForContenedor", e);
+        toast.error(getErrorMessage(e, "No se pudieron cargar las hijas del contenedor."));
+      } finally {
+        setLoadingHijasPadre(null);
+      }
+    },
+    [hijaRowsByPadre, rows, supabase],
+  );
+
+  const toggleContenedorExpanded = useCallback(
+    (padreOt: string) => {
+      const next = !expandedContenedores[padreOt];
+      setExpandedContenedores((prev) => ({ ...prev, [padreOt]: next }));
+      if (next) void loadHijasForContenedor(padreOt);
+    },
+    [expandedContenedores, loadHijasForContenedor],
+  );
+
+  const displayRows = useMemo(() => {
+    if (otTipoFilter !== "agrupado") {
+      return sortedRows;
+    }
+    const out: PoolRow[] = [];
+    for (const r of sortedRows) {
+      out.push(r);
+      if (r.otTipo === "contenedor" && expandedContenedores[r.ot]) {
+        out.push(...(hijaRowsByPadre[r.ot] ?? []));
+      }
+    }
+    return out;
+  }, [sortedRows, otTipoFilter, expandedContenedores, hijaRowsByPadre]);
 
   const resetPoolEditItinerario = useCallback(() => {
     setPoolEditOtGeneralId(null);
@@ -1476,6 +1661,20 @@ export function PlanificacionPoolOtsTab() {
               <option value="Sin compra">Sin compra</option>
             </select>
             <select
+              className="h-9 min-w-[10rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700"
+              value={otTipoFilter}
+              onChange={(e) =>
+                setOtTipoFilter(e.target.value as PlanificacionOtTipoFiltroUi)
+              }
+              aria-label="Filtrar por tipo de OT"
+              title="Agrupado oculta hijas sueltas; expande contenedores para ver hijas."
+            >
+              <option value="agrupado">OT: agrupado</option>
+              <option value="solo_simples">OT: solo simples</option>
+              <option value="solo_contenedores">OT: solo contenedores</option>
+              <option value="todas_planas">OT: todas (plano)</option>
+            </select>
+            <select
               className="h-9 min-w-[11rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700"
               value={areaTipoFilter}
               onChange={(e) =>
@@ -1521,7 +1720,7 @@ export function PlanificacionPoolOtsTab() {
             <Loader2 className="size-4 animate-spin" aria-hidden />
             Cargando pool de OT&apos;s...
           </div>
-        ) : sortedRows.length === 0 ? (
+        ) : displayRows.length === 0 ? (
           <div className="rounded-lg border border-slate-200/90 bg-slate-50/80 px-3 py-6 text-sm text-slate-600">
             {tipoFiltroPlanificacion &&
             poolCountPreAmbito > 0 &&
@@ -1613,30 +1812,34 @@ export function PlanificacionPoolOtsTab() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedRows.map((r) => (
+                {displayRows.map((r) => (
                   <TableRow
-                    key={r.ot}
+                    key={r.isHijaRow ? `hija-${r.padreOt}-${r.ot}` : r.ot}
                     className={
-                      savedRowOt === r.ot
-                        ? "bg-emerald-50/80 ring-1 ring-emerald-200 transition-colors duration-700"
-                        : undefined
+                      r.isHijaRow
+                        ? "bg-slate-50/90"
+                        : savedRowOt === r.ot
+                          ? "bg-emerald-50/80 ring-1 ring-emerald-200 transition-colors duration-700"
+                          : undefined
                     }
                   >
                     <TableCell>
-                      <input
-                        type="checkbox"
-                        checked={!!selected[r.ot]}
-                        onChange={(e) =>
-                          setSelected((prev) => ({ ...prev, [r.ot]: e.target.checked }))
-                        }
-                        disabled={!r.hasCompraGenerada}
-                        aria-label={`Seleccionar OT ${r.ot}`}
-                        title={
-                          r.hasCompraGenerada
-                            ? `Seleccionar OT ${r.ot}`
-                            : `OT ${r.ot} bloqueada: requiere compra generada`
-                        }
-                      />
+                      {!r.isHijaRow ? (
+                        <input
+                          type="checkbox"
+                          checked={!!selected[r.ot]}
+                          onChange={(e) =>
+                            setSelected((prev) => ({ ...prev, [r.ot]: e.target.checked }))
+                          }
+                          disabled={!r.hasCompraGenerada}
+                          aria-label={`Seleccionar OT ${r.ot}`}
+                          title={
+                            r.hasCompraGenerada
+                              ? `Seleccionar OT ${r.ot}`
+                              : `OT ${r.ot} bloqueada: requiere compra generada`
+                          }
+                        />
+                      ) : null}
                     </TableCell>
                     <TableCell>
                       <span
@@ -1648,15 +1851,56 @@ export function PlanificacionPoolOtsTab() {
                       </span>
                     </TableCell>
                     <TableCell>
-                      <p className="font-mono text-sm font-semibold text-[#002147]">{r.ot}</p>
-                      {r.poolEnTransitoFase ? (
-                        <p
-                          className="mt-0.5 text-[10px] font-medium text-amber-800"
-                          title="Fase anterior finalizada en mesa; el itinerario sigue (p. ej. pendiente de troquel u otra sección)."
-                        >
-                          Entre fases
-                        </p>
-                      ) : null}
+                      <div className={`flex items-start gap-1 ${r.isHijaRow ? "pl-5" : ""}`}>
+                        {r.otTipo === "contenedor" && otTipoFilter === "agrupado" ? (
+                          <button
+                            type="button"
+                            className="mt-0.5 rounded p-0.5 text-slate-600 hover:bg-slate-100"
+                            onClick={() => toggleContenedorExpanded(r.ot)}
+                            aria-label={
+                              expandedContenedores[r.ot]
+                                ? `Contraer hijas de ${r.ot}`
+                                : `Expandir hijas de ${r.ot}`
+                            }
+                          >
+                            {loadingHijasPadre === r.ot ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : expandedContenedores[r.ot] ? (
+                              <ChevronDown className="size-3.5" />
+                            ) : (
+                              <ChevronRight className="size-3.5" />
+                            )}
+                          </button>
+                        ) : null}
+                        <div>
+                          <p className="font-mono text-sm font-semibold text-[#002147]">
+                            {r.isHijaRow ? `↳ ${r.ot}` : r.ot}
+                          </p>
+                          {r.otTipo === "contenedor" ? (
+                            <p className="mt-0.5 text-[10px] font-medium text-indigo-800">
+                              Contenedor
+                              {typeof r.hijasCount === "number" && r.hijasCount > 0
+                                ? ` · ${r.hijasCount} hija${r.hijasCount === 1 ? "" : "s"}`
+                                : ""}
+                              {r.hijasCompletadasPct != null
+                                ? ` · ${r.hijasCompletadasPct}% listo`
+                                : ""}
+                            </p>
+                          ) : r.isHijaRow ? (
+                            <p className="mt-0.5 text-[10px] font-medium text-slate-600">
+                              {r.tipoHija ?? "hija"}
+                            </p>
+                          ) : null}
+                          {r.poolEnTransitoFase ? (
+                            <p
+                              className="mt-0.5 text-[10px] font-medium text-amber-800"
+                              title="Fase anterior finalizada en mesa; el itinerario sigue (p. ej. pendiente de troquel u otra sección)."
+                            >
+                              Entre fases
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <p className="max-w-[12rem] truncate text-xs text-slate-700" title={r.cliente}>
@@ -1847,16 +2091,18 @@ export function PlanificacionPoolOtsTab() {
                         >
                           <MapIcon className="size-4" />
                         </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 text-slate-600 hover:text-[#002147]"
-                          onClick={() => startEdit(r)}
-                          title="Editar despacho e itinerario"
-                        >
-                          <Edit3 className="size-4" />
-                        </Button>
+                        {!r.isHijaRow ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 text-slate-600 hover:text-[#002147]"
+                            onClick={() => startEdit(r)}
+                            title="Editar despacho e itinerario"
+                          >
+                            <Edit3 className="size-4" />
+                          </Button>
+                        ) : null}
                       </div>
                     </TableCell>
                   </TableRow>
