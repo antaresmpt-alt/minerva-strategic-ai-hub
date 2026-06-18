@@ -560,12 +560,12 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 ⏳ **Bloque 5 PENDIENTE**: Integración Etiquetas ↔ Hoja de Ruta (flujo Hugo)
 ⏳ **Bloque 6 PENDIENTE**: Producidas/Histórico (`prod_ot_producidas`, snapshot híbrido) + lifecycle de cierre (pendiente_revision → producida) + recálculo maestro
 ⏳ **Bloque 7 PENDIENTE**: Expedición/Albarán (depende de Bloque 6 + decisión Odoo)
-🔄 **Bloque 8 EN CURSO** (17–18 jun 2026): **Fase FORMATO ✅** + **8.0 ✅** (migración contenedor/hija). Pendiente 8.1–8.4. Fuente de verdad: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
+🔄 **Bloque 8 EN CURSO** (17–18 jun 2026): **Fase FORMATO ✅** + **8.0 ✅** + **8.1 ✅** + **8.1.1 ✅**. Pendiente 8.2–8.4. Fuente de verdad: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
 📋 **Bloque 9 DISEÑO** (18 jun): cartelas/stock — **Fase A** 9.0–9.4 primero; **Fase B** 9.5+ (muelle/foto/IA) después. `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`.
 
 ---
 
-**Última actualización**: 18 de junio de 2026 — briefing Bloque 9; Bloque 8.1–8.4 pendiente
+**Última actualización**: 18 de junio de 2026 (noche) — Bloque 8.1.1 fixes + OT 98010 probada; demo en `GUIA_MAÑANA.md`
 
 ---
 
@@ -784,9 +784,19 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 
 ## 📌 Punto de continuación (próxima sesión)
 
-**👉 Retomar aquí:** Fase **8.2** (wizard despacho contenedor). Responder **§12** con planta.
+**👉 Retomar aquí:** Demo planta (Albert/Jordi) con OT **98010** → luego Fase **8.2** (wizard despacho contenedor). Responder **§12** con planta.
 
-**Fase FORMATO** ✅ · **Fase 8.0** ✅ · **Fase 8.1** ✅
+**Fase FORMATO** ✅ · **Fase 8.0** ✅ · **Fase 8.1** ✅ · **Fase 8.1.1** ✅
+
+**Sesión 18 jun 2026 (noche)** — Prueba OT 98010 + fixes 8.1.1 ✅
+
+### Hecho
+- Rama `feature/bloque8.1-pool-mesa-ejecucion-fixes` (commit `2d9d3ab`).
+- Pool mesa diaria + secuenciación: filtro lateral por `planificacionTipoPaso` (sin leak `null`).
+- Material barco en pool contenedor; progreso por **pasos totales** hijas; merma impresión + prefill troquel.
+- Script `scripts/setup-contenedor-test-98010.mjs`; numeración hijas `{padre}-{nn}` documentada.
+- Prueba manual: 01 avanzada hasta desbroce; 02 CTP confirmada; 03 pendiente pool CTP.
+- Guía demo: `GUIA_MAÑANA.md`.
 
 **Sesión 17 jun 2026 (noche, cont.)** — Usuarios CTP + Fase 8.1 ✅
 

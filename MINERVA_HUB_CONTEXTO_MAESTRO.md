@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 17 jun 2026 (Fase 8.1 Pool/Pipeline agrupado; usuarios CTP; campos CTP cerrados)
+> Última actualización: 18 jun 2026 noche (8.1.1 fixes pool mesa/material/merma; OT 98010 probada; rama `feature/bloque8.1-pool-mesa-ejecucion-fixes`)
 
 ---
 
@@ -242,24 +242,27 @@ src/components/produccion/planificacion/
 | 5 | Integración Etiquetas ↔ Hoja de Ruta | ⏳ Pendiente |
 | 6 | Producidas/Histórico + cierre OT | ⏳ Pendiente (PRÓXIMO GRANDE) |
 | 7 | Expedición/Albarán | ⏳ Pendiente (depende B6 + Odoo) |
-| 8 | Formatos de hoja + formas + componentes (OT contenedor/hijas) | 🔄 En curso — **FORMATO ✅** + **8.0 ✅** + **8.1 ✅**; 8.2–8.4 pendiente — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` |
+| 8 | Formatos de hoja + formas + componentes (OT contenedor/hijas) | 🔄 En curso — **FORMATO ✅** + **8.0 ✅** + **8.1 ✅** + **8.1.1 ✅**; 8.2–8.4 pendiente — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` |
 | 9 | Material, cartelas de palet y stock libre | 📋 Diseño — **Fase A** 9.0–9.4 (core) · **Fase B** 9.5+ (muelle/foto) — ver `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` |
 
 ---
 
 ## 🔜 Tareas pendientes inmediatas
 
-### Retomar aquí (17 jun 2026)
+### Retomar aquí (18 jun 2026 noche)
 - [x] **Fase FORMATO**: encadenado formato de hoja — commit `aadad81`, probado OT 98009
 - [x] **Fase 8.0**: migración `ot_tipo` / `ot_padre_numero` + campos hija (`aedb353`)
 - [x] **Fase 8.1**: agrupación UI Pool/Pipeline (contenedor + hijas expandibles, filtro tipo OT)
+- [x] **Fase 8.1.1**: pool mesa lateral, material barco, merma impresión, prefill troquel, % pasos — rama `feature/bloque8.1-pool-mesa-ejecucion-fixes`
+- [x] **OT prueba 98010**: 01 avanzada; 02 CTP confirmada; 03 pendiente pool — script `setup-contenedor-test-98010.mjs`
 - [x] **Usuarios CTP**: `ctp@minervaglobal.es` (Gemma), `ctp2@minervaglobal.es` (Marc) — rol `ctp`
 - [x] **Campos CTP**: cerrados de momento (checkboxes actuales suficientes)
+- [ ] **Demo planta** (Albert/Jordi): guía en `GUIA_MAÑANA.md`
 - [ ] **Fase 8.2**: wizard despacho contenedor + hijas (responder §12 planta antes)
 - [ ] Preguntas a planta — ver §12 de `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`
 - [x] **`bultos_por_palet_default`** de Gabri en `prod_cajas_embalaje` (cargado en prod 9 jun; seed en repo `20260618143200`)
 - [x] **Plantillas de ruta**: Desbroce entre Troquelado y Engomado en 5 plantillas offset (`20260618143000`)
-- [ ] Probar flujo completo: CTP → Guillotina → Impresión → Troquelado → Desbroce → Engomado
+- [x] Probar flujo contenedor parcial: 98010-01 CTP → Impresión → Troquel → Desbroce disponible
 
 ### Prioridad media (desarrollo)
 - [ ] Pulir Digital (Bloque 3.1 pendiente)
@@ -300,7 +303,7 @@ src/components/produccion/planificacion/
 
 13. **Higiene operativa (18 jun 2026)**: `bultos_por_palet_default` de Gabri versionado en migración seed (`20260618143200`). Plantillas offset: **Desbroce** insertado entre Troquelado y Engomado en 5 rutas (`20260618143000`). Rol usuario CTP = **`ctp`** (no `preimpresion`); permisos `produccion` + `produccion_ejecucion` en BD y `permissions.ts`. Marc/Gemma: usuarios aún no creados en Supabase.
 
----
+14. **Bloque 8.1.1 — contenedor en campo (18 jun 2026)**: compra conjunta en padre; hijas heredan material en pool. Progreso barco = **pasos finalizados / pasos totales** (todas las hijas). Pool lateral mesa filtra por `planificacionTipoPaso` del itinerario (sin OTs con paso distinto ni `null`). Merma impresión: `brutas − merma = netas`. Troquel: prefill desde salida impresión. OT demo: **98010** (3 hijas). Rama: `feature/bloque8.1-pool-mesa-ejecucion-fixes`.
 
 ## 📁 Estructura de carpetas relevante
 

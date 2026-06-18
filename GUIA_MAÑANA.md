@@ -1,154 +1,99 @@
-# GUIA_MAÑANA
+# Guía demo — Bloque 8.1 (OT contenedor 98010)
 
-## Estado Actual - Fase 0
+> **Fecha:** demo con Albert / Jordi (jun 2026)  
+> **Rama desplegada:** `feature/bloque8.1-pool-mesa-ejecucion-fixes`  
+> **Briefing completo:** `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` §8.1 / §8.1.1
 
-Rama de trabajo: `feature/fase0-hoja-ruta-digital`.
+---
 
-Hoy se han dejado los cimientos de la Hoja de Ruta Digital y de la inteligencia de repeticiones:
+## Mensaje clave (30 segundos)
 
-- Nueva tabla `prod_referencias` para Referencias Minerva (`M-00001`, `M-00002`, etc.).
-- Nuevo campo `referencia_cliente` para relacionar la referencia Minerva con el código del artículo del cliente (`EU858`, `EU1079`, etc.).
-- Nuevos campos blandos en `produccion_ot_despachadas`: `referencia_id`, `ot_anterior_numero`, `ot_anterior_id`.
-- Nueva tabla base `prod_despacho_materiales_lineas` para futuros materiales flexibles.
-- Nuevo componente `ReferenciaMinervaPicker` para buscar/crear referencias.
-- Integración de Referencia Minerva y OT anterior en despacho, despacho express y edición de despachos.
-- Cabecera informativa en el modal de despacho: cliente, trabajo, pedido cliente, cantidad y fecha entrega OT.
-- Clonado no destructivo de datos técnicos desde referencia u OT anterior.
-- Clonado de itinerario si la OT origen tiene ruta informada.
-- Referencias de prueba:
-  - `M-00001` -> `EU858` -> `EST BBP PROBIOMIX 10 CAP`
-  - `M-00002` -> `EU1079` -> `ESTUCE AQUILEA LIBIPLUS 60 CAPS`
-- OT ficticias:
-  - `98001` clonada desde `35267`, actualmente no despachada para pruebas.
-  - `98002` clonada desde `35464`, actualmente no despachada para pruebas.
+Minerva modela pedidos complejos como un **barco** (OT padre) con **hijas reales** en BD (`98010-01`, `-02`, `-03`). En listados solo ves el contenedor; al expandir, las hijas. Cada hija planifica y ejecuta su ruta como una OT normal, pero **compra el material una vez** en el padre.
 
-Validación hecha:
+---
 
-- `npx tsc --noEmit` OK.
-- Lints OK en archivos tocados.
+## OT de demo: 98010
 
-## Checklist Para Arrancar Mañana
+| OT | Forma | Estado esperado al abrir |
+|----|-------|--------------------------|
+| **98010** | Padre (barco) | Compra + recepción hechas; no va a mesa |
+| **98010-01** | AU260 | CTP + Impresión + Troquel **terminados**; Desbroce disponible |
+| **98010-02** | AU235 | CTP **confirmada** en mesa diaria |
+| **98010-03** | AU490 | Pendiente en **pool lateral CTP** (aún no arrastrada) |
 
-1. Revisar estado de la rama:
+**No re-ejecutar** `scripts/setup-contenedor-test-98010.mjs` — borraría itinerarios/ejecuciones ya hechas.
 
-```powershell
-git status
-git diff
-```
+---
 
-2. Probar flujo básico:
+## Recorrido sugerido (~5 min)
 
-- Abrir OT `98001`.
-- Seleccionar/buscar `M-00001` o `EU858`.
-- Comprobar que hereda datos técnicos desde `35267`.
-- Si se usa `OT anterior = 35267`, comprobar también el clonado.
-- Guardar despacho si el resultado es correcto.
+### 1. Pool OTs (vista agrupada)
 
-3. Probar segunda referencia:
+- Buscar **98010** → contenedor expandible con 3 hijas.
+- Badge progreso: **% pasos** (todas las hijas), no solo hijas cerradas.
+- Marcar hijas y enviar a mesa: material **vía barco** del padre (semáforo verde heredado).
 
-- Abrir OT `98002`.
-- Seleccionar/buscar `M-00002` o `EU1079`.
-- Comprobar datos heredados desde `35464`.
+### 2. Pipeline
 
-4. Nota sobre itinerarios:
+- Contenedor **98010** con hijas a distinto avance.
+- **01**: pasos avanzados; siguiente paso Desbroce.
+- **02 / 03**: aún en fase CTP.
 
-- `35267` y `35464` no tenían pasos reales en `prod_ot_pasos` cuando se revisó.
-- Si una OT origen tiene ruta informada, el clonado ya debería copiarla.
-- Si se quiere demo visual con ruta, elegir una OT origen con itinerario real o informar una ruta en esas OT antiguas.
+### 3. Mesa diaria — Todas las áreas
 
-5. Si todo está OK, hacer commit de Fase 0 y push para preview Vercel.
+- **SpeedMaster:** pool lateral **vacío** (correcto: hijas siguen en CTP, no offset).
+- **CTP MNRV:** pool lateral muestra **98010-03** si aún no está en mesa; **02** no sale (ya confirmada en tarde).
+- Columna CTP: 01 terminada (mañana), 02 confirmada (tarde).
 
-## Fase 1 - Modal Visual de Hoja de Ruta
+### 4. Hoja de ruta — 98010-01
 
-Objetivo: construir una vista clara y usable de la Hoja de Ruta Digital, encima de lo que ya existe: maestro OT, despacho, itinerario, planificación y ejecución.
+- CTP, Impresión, Troquel finalizados con datos reales.
+- Encadenado de formatos / hojas visible.
 
-Propuesta inicial del modal:
+### 5. Preguntas para planta (§12 Bloque 8)
 
-- Cabecera OT:
-  - OT
-  - Cliente
-  - Trabajo
-  - Pedido cliente
-  - Cantidad
-  - Fecha entrega
-  - Referencia Minerva
-  - Referencia cliente
+Tener a mano `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` §12:
+- ¿Quién define hijas al despachar?
+- ¿Compra siempre conjunta en el barco?
+- ¿CTP compartido o por hija?
 
-- Bloque Datos Tecnicos:
-  - Tintas
-  - Material
-  - Gramaje
-  - Tamano hoja
-  - Troquel
-  - Poses
-  - Acabado principal
-  - Notas
+---
 
-- Bloque Materiales Flexibles:
-  - Lineas variables: tipo, descripcion, cantidad, unidad, notas.
-  - Usar tabla `prod_despacho_materiales_lineas`.
+## Qué NO enseñar / aclarar si preguntan
 
-- Radar / Timeline de Procesos:
-  - Itinerario desde `prod_ot_pasos`.
-  - Estado por proceso.
-  - Previsto vs real cuando exista.
-  - Incidencias si existen.
+| Tema | Respuesta corta |
+|------|-----------------|
+| ¿Por qué 03 en pool si 02 ya está en CTP? | Cada hija es independiente; no hay cola secuencial entre hijas (futuro opcional). |
+| ¿Wizard crear hijas? | Fase **8.2** pendiente; 98010 se creó con script de prueba. |
+| Merma impresión en 01 | Ejecución anterior a fix; nuevas OTs usan `brutas − merma = netas`. |
 
-- Historico / Repeticiones:
-  - Mostrar OTs anteriores con la misma Referencia Minerva.
-  - Mostrar ultima OT usada para clonar.
-  - Futuro: medias ponderadas de horas reales.
+---
 
-## Editor de Materiales Flexibles
-
-La estructura de BD ya existe: `prod_despacho_materiales_lineas`.
-
-Pasos propuestos:
-
-1. Crear componente `DespachoMaterialesLineasEditor`.
-2. Campos por linea:
-   - `tipo`
-   - `descripcion`
-   - `cantidad`
-   - `unidad`
-   - `notas`
-3. Cargar lineas por `ot_numero` al abrir modal.
-4. Permitir anadir, editar y borrar lineas.
-5. Guardar lineas al guardar despacho.
-6. Heredar lineas cuando se clone desde OT anterior o Referencia Minerva.
-
-## Decisiones Pendientes
-
-- Multiples referencias en una misma OT:
-  - Futuro: tabla `prod_ot_referencias`.
-  - Campos probables: `ot_numero`, `referencia_id`, `cantidad`, `orden`.
-
-- Reglas de calidad para Referencias Minerva:
-  - Mantener formato `M-00001` con 5 digitos.
-  - Futuro posible: check constraint regex `^M-[0-9]{5}$`.
-
-- Unicidad de referencia cliente:
-  - Evaluar mas adelante si conviene UNIQUE por `(cliente, referencia_cliente)`.
-  - De momento no bloquear porque puede haber datos historicos sucios o ambiguos.
-
-- Parsing automatico de titulos tipo `EU858 - descripcion`:
-  - Ya se usa para sugerir valores al crear referencia.
-  - Futuro: sugerir enlace automatico si ya existe esa referencia cliente.
-
-- Supabase staging:
-  - Ahora solo hay una BD real.
-  - A medio plazo conviene crear un proyecto Supabase de test/staging.
-
-## Comandos Utiles
+## Checklist antes de la reunión
 
 ```powershell
-git status
-git diff
-git log --oneline -10
+git pull
 npx tsc --noEmit
 ```
 
-## Recordatorio
+- [ ] Login con usuario producción (no CTP-only si quieres ver todas las áreas).
+- [ ] Fecha mesa diaria = día con planificación de 98010.
+- [ ] Vercel preview en rama `feature/bloque8.1-pool-mesa-ejecucion-fixes` (o merge a main si ya está).
 
-No olvidar que la Fase 0 es aditiva: tablas nuevas y columnas nullable. No deberia afectar a etiquetas, externos ni compras.
+---
 
+## Después de la demo
+
+- [ ] Anotar respuestas §12 con Jordi/Zaida/Abraham.
+- [ ] Fase **8.2**: wizard despacho contenedor + creación batch de hijas.
+- [ ] Opcional: desbroce + engomado de 98010-01 para cerrar arco completo.
+
+---
+
+## Comandos útiles
+
+```powershell
+git status
+git log --oneline -5
+npx tsc --noEmit
+```
