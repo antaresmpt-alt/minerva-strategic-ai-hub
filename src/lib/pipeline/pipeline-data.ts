@@ -38,8 +38,12 @@ export type OTRowBase = {
   formaDescripcion?: string | null;
   /** Contenedor: nº hijas en BD */
   hijasCount?: number;
-  /** Contenedor: % hijas con pool cerrada */
+  /** Contenedor: % pasos finalizados (todas las hijas) */
   hijasCompletadasPct?: number | null;
+  /** Contenedor: % hijas con pool cerrada */
+  hijasCerradasPct?: number | null;
+  /** Contenedor: texto badge (hijas · % · pasos) */
+  contenedorProgressLabel?: string | null;
 };
 
 export type PipelineStepView = {

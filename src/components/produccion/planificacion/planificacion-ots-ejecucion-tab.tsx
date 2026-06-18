@@ -361,7 +361,7 @@ function pickMaterialImpresion(despacho: DespachoInfo | null): string | null {
 
 /**
  * Deriva campos para reducir picado en planta:
- * - Impresión: buenas ↔ merma desde netas/brutas.
+ * - Impresión: buenas ↔ merma desde brutas (papel a máquina).
  * - Troquelado: troqueladas ↔ merma desde hojas a troquelar.
  * - Engomado: cantidad total = estuches engomados y palets por embalaje.
  */
@@ -373,7 +373,7 @@ function computeDerivedDatosProceso(
   if (!procesoId) return datos;
 
   if (PROCESOS_IMPRESION.has(procesoId)) {
-    const base = toFiniteNum(datos.hojas_netas) ?? toFiniteNum(datos.hojas_brutas);
+    const base = toFiniteNum(datos.hojas_brutas) ?? toFiniteNum(datos.hojas_netas);
     if (base == null) return datos;
 
     if (changedFieldId === "hojas_merma") {
@@ -1498,9 +1498,18 @@ function ExecutionCard({
       const materialImpresion = pickMaterialImpresion(despacho);
       if (materialImpresion) base.material_impresion = materialImpresion;
       if (despacho.hojasBrutas != null) base.hojas_brutas = despacho.hojasBrutas;
-      if (despacho.hojasNetas != null) {
-        base.hojas_netas = despacho.hojasNetas;
-        base.hojas_impresas = despacho.hojasNetas;
+      if (despacho.hojasNetas != null) base.hojas_netas = despacho.hojasNetas;
+      const brutas = despacho.hojasBrutas;
+      const netas = despacho.hojasNetas;
+      if (brutas != null && netas != null) {
+        const mermaPlan = Math.max(0, Math.trunc(brutas) - Math.trunc(netas));
+        base.hojas_merma = mermaPlan;
+        base.hojas_impresas = Math.max(0, Math.trunc(brutas) - mermaPlan);
+      } else if (netas != null) {
+        base.hojas_impresas = netas;
+        base.hojas_merma = 0;
+      } else if (brutas != null) {
+        base.hojas_impresas = brutas;
         base.hojas_merma = 0;
       }
       if (despacho.tintas) base.tintas_cara = despacho.tintas;
@@ -1515,9 +1524,15 @@ function ExecutionCard({
       if (despacho.pinza != null) base.pinza = despacho.pinza;
       if (despacho.expulsor) base.expulsor = despacho.expulsor;
       if (despacho.cauchoAcrilico) base.codigo_caucho = despacho.cauchoAcrilico;
-      if (despacho.hojasBrutas != null) {
-        base.hojas_troquelar = despacho.hojasBrutas;
-        base.hojas_troqueladas = despacho.hojasBrutas;
+      const hojasEntrada =
+        row.salidaProcesoAnterior != null && Number.isFinite(row.salidaProcesoAnterior)
+          ? Math.max(0, Math.trunc(row.salidaProcesoAnterior))
+          : despacho.hojasBrutas != null
+            ? Math.max(0, Math.trunc(despacho.hojasBrutas))
+            : null;
+      if (hojasEntrada != null && hojasEntrada > 0) {
+        base.hojas_troquelar = hojasEntrada;
+        base.hojas_troqueladas = hojasEntrada;
         base.hojas_merma = 0;
       }
       if (despacho.horasTroquelado != null) {

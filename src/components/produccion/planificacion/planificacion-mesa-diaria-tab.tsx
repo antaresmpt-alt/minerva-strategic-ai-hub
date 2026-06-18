@@ -131,6 +131,31 @@ function parseNum(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function tiposMaquinaPlanificacionFromScope(
+  maquinas: Array<{ tipo_maquina: string }>,
+): Set<PlanificacionTipoMaquina> {
+  const out = new Set<PlanificacionTipoMaquina>();
+  for (const m of maquinas) {
+    const t = String(m.tipo_maquina ?? "").trim();
+    if ((PLANIFICACION_TIPOS_MAQUINA as readonly string[]).includes(t)) {
+      out.add(t as PlanificacionTipoMaquina);
+    }
+  }
+  return out;
+}
+
+function filterPoolOtByTiposVisibles(
+  poolOut: PoolOT[],
+  allowedTipos: Set<PlanificacionTipoMaquina>,
+): PoolOT[] {
+  if (allowedTipos.size === 0) return [];
+  return poolOut.filter(
+    (p) =>
+      p.planificacionTipoPaso != null &&
+      allowedTipos.has(p.planificacionTipoPaso as PlanificacionTipoMaquina),
+  );
+}
+
 /** Misma regla que la mesa semanal: horas live desde despachadas según ámbito efectivo. */
 function horasPlanificadasFromDespRow(
   d: Record<string, unknown>,
@@ -762,8 +787,9 @@ export function PlanificacionMesaDiariaTab() {
   const loadPool = useCallback(
     async (
       roleForFilter: string | null,
-      visibleMaquinaIds: string[],
+      scopeMaquinas: Array<{ id: string; tipo_maquina: string }>,
     ): Promise<PoolOT[]> => {
+      const visibleMaquinaIds = scopeMaquinas.map((m) => m.id);
       const tipoEfectivo = planificacionTipoFiltroEfectivo(
         getPlanificacionTipoMaquinaFilter(roleForFilter),
         null,
@@ -1004,12 +1030,10 @@ export function PlanificacionMesaDiariaTab() {
           planificacionTipoPaso: p.planificacionTipoPaso ?? null,
         }));
       }
-      if (tipoEfectivo) {
-        poolOut = poolOut.filter(
-          (p) => p.planificacionTipoPaso === tipoEfectivo || p.planificacionTipoPaso == null,
-        );
-      }
-      return poolOut;
+      const allowedTipos = tipoEfectivo
+        ? new Set<PlanificacionTipoMaquina>([tipoEfectivo])
+        : tiposMaquinaPlanificacionFromScope(scopeMaquinas);
+      return filterPoolOtByTiposVisibles(poolOut, allowedTipos);
     },
     [supabase],
   );
@@ -1050,7 +1074,7 @@ export function PlanificacionMesaDiariaTab() {
       const maquinaIds = sortedMaqs.map((m) => m.id);
 
       const [poolList, mesaList, capList] = await Promise.all([
-        loadPool(roleRead, maquinaIds),
+        loadPool(roleRead, sortedMaqs),
         loadMesa(dayKey, maquinaIds, roleRead),
         loadCapacidades(dayKey, maquinaIds),
       ]);
@@ -1082,6 +1106,19 @@ export function PlanificacionMesaDiariaTab() {
     () => visibleMaquinas.map((m) => m.id),
     [visibleMaquinas],
   );
+
+  /** Pool lateral: solo OTs cuyo próximo paso coincide con algún tipo de máquina visible. */
+  const poolForSidebar = useMemo(() => {
+    const roleTipo = planificacionTipoFiltroEfectivo(
+      getPlanificacionTipoMaquinaFilter(planificacionRole),
+      null,
+    );
+    const allowedTipos = roleTipo
+      ? new Set<PlanificacionTipoMaquina>([roleTipo])
+      : tiposMaquinaPlanificacionFromScope(visibleMaquinas);
+    return filterPoolOtByTiposVisibles(pool, allowedTipos);
+  }, [pool, visibleMaquinas, planificacionRole]);
+
   /**
    * Cuántas máquinas visibles hay por `tipo_maquina`. Si una máquina es la
    * única de su tipo en el día (caso típico: 1 sola offset), la columna se
@@ -1115,9 +1152,9 @@ export function PlanificacionMesaDiariaTab() {
   /** Map de pool por OT para inserciones desde el sidebar. */
   const poolByOt = useMemo(() => {
     const m = new Map<string, PoolOT>();
-    for (const p of pool) m.set(p.ot, p);
+    for (const p of poolForSidebar) m.set(p.ot, p);
     return m;
-  }, [pool]);
+  }, [poolForSidebar]);
 
   /** OT → título de trabajo, para la hoja operario (PDF #1). */
   const trabajoByOt = useMemo<Record<string, string>>(() => {
@@ -1129,7 +1166,10 @@ export function PlanificacionMesaDiariaTab() {
     return out;
   }, [pool]);
 
-  const poolOtsSet = useMemo(() => new Set(pool.map((p) => p.ot)), [pool]);
+  const poolOtsSet = useMemo(
+    () => new Set(poolForSidebar.map((p) => p.ot)),
+    [poolForSidebar],
+  );
 
   /** OTs ya colocadas en el día visible (para que el sidebar no las muestre). */
   const otsEnMesa = useMemo(() => {
@@ -2213,7 +2253,7 @@ export function PlanificacionMesaDiariaTab() {
               )}
             >
               <SidebarPool
-                pool={pool}
+                pool={poolForSidebar}
                 loading={loading}
                 search={poolSearch}
                 onSearchChange={setPoolSearch}

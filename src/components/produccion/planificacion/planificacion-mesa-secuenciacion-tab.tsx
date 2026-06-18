@@ -1181,9 +1181,7 @@ export function PlanificacionMesaSecuenciacionTab() {
       }));
     }
     if (tipoEfectivo) {
-      poolOut = poolOut.filter(
-        (p) => p.planificacionTipoPaso === tipoEfectivo || p.planificacionTipoPaso == null,
-      );
+      poolOut = poolOut.filter((p) => p.planificacionTipoPaso === tipoEfectivo);
     }
     return poolOut;
   },

@@ -195,7 +195,7 @@ const IMPRESION_OFFSET_CAMPOS: CampoDefinicion[] = [
     min: 0,
     width: 'half',
     emphasis: 'real',
-    hint: 'Se calcula desde netas − merma; ajústalo si difiere.',
+    hint: 'Se calcula desde brutas − merma; ajústalo si difiere.',
   },
   // — Tintas + acabado en una línea (tres tercios) —
   {
@@ -252,6 +252,7 @@ const IMPRESION_OFFSET_CAMPOS: CampoDefinicion[] = [
       { value: 'BLANCO', label: 'Blanco' },
       { value: 'PANTONE', label: 'Pantone (especificar nº)' },
     ],
+    hint: 'Guía ISO 12647-2 offset estucado: C 1,30–1,50 · M 1,40–1,60 · Y 1,20–1,40 · K 1,60–1,80. Cartoncillo/folding: ~0,10 menos en cada color.',
   },
   {
     id: 'acabados_secundarios',
@@ -329,7 +330,7 @@ const IMPRESION_DIGITAL_PLANA_CAMPOS: CampoDefinicion[] = [
     min: 0,
     width: 'half',
     emphasis: 'real',
-    hint: 'Se calcula desde netas − merma; ajústalo si difiere.',
+    hint: 'Se calcula desde brutas − merma; ajústalo si difiere.',
   },
   {
     id: 'tintas_cara',

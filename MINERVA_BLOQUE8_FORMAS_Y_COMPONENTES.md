@@ -306,6 +306,23 @@ Responde pregunta §12.7: Caso A = **varias referencias** por forma; a veces mis
 - Todas las OTs existentes → `simple`.
 - Estimación: ~30 min.
 
+#### Numeración oficial de hijas
+
+**Convención:** `{num_padre}-{nn}` donde `nn` son **siempre 2 dígitos** (`01`, `02`, … `12`).
+
+| Rol | Ejemplo |
+|-----|---------|
+| Contenedor (padre) | `98010` |
+| Hija 1 | `98010-01` |
+| Hija 2 | `98010-02` |
+| Hija 3 | `98010-03` |
+
+- `num_pedido` de la hija = `98010-01` (identificador completo en BD y despacho).
+- `ot_padre_numero` = `98010` (solo el padre, sin sufijo).
+- `forma_descripcion` = etiqueta legible (ej. `AU260 — Expositor Milical Ananás`).
+- El wizard 8.2 generará estos números automáticamente; no manual para N hijas.
+- OT de prueba Bloque 8.1: script `scripts/setup-contenedor-test-98010.mjs`.
+
 ### Fase 8.1 — Vista agrupada (BLOQUEANTE para UX) ✅ **IMPLEMENTADO 17 jun 2026**
 
 - Pool y Pipeline: contenedor con hijas expandibles (lazy load).

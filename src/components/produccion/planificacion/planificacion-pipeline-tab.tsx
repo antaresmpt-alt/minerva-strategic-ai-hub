@@ -714,11 +714,21 @@ export function PlanificacionPipelineTab() {
                             {row.isHijaRow ? `↳ ${row.otNumero}` : row.otNumero}
                           </span>
                           {row.otTipo === "contenedor" ? (
-                            <span className="rounded bg-indigo-100 px-1 py-0.5 text-[9px] font-medium text-indigo-800">
-                              {row.hijasCount ?? 0}h
-                              {row.hijasCompletadasPct != null
-                                ? ` · ${row.hijasCompletadasPct}%`
-                                : ""}
+                            <span
+                              className="rounded bg-indigo-100 px-1 py-0.5 text-[9px] font-medium text-indigo-800"
+                              title={
+                                row.contenedorProgressLabel ??
+                                (row.hijasCompletadasPct != null
+                                  ? `${row.hijasCount ?? 0} hijas · ${row.hijasCompletadasPct}% pasos`
+                                  : `${row.hijasCount ?? 0} hijas`)
+                              }
+                            >
+                              {row.contenedorProgressLabel ??
+                                `${row.hijasCount ?? 0} hijas${
+                                  row.hijasCompletadasPct != null
+                                    ? ` · ${row.hijasCompletadasPct}%`
+                                    : ""
+                                }`}
                             </span>
                           ) : null}
                           {cumplimientoBadge(row.badges) === "ok" ? (

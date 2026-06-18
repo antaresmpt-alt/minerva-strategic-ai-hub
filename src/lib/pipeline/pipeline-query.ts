@@ -16,10 +16,11 @@ import {
   type PipelineStepView,
 } from "@/lib/pipeline/pipeline-data";
 import {
-  computeContenedorProgress,
+  fetchContenedorProgressByPadre,
   fetchHijasByPadreNumeros,
   fetchOtMetaByNumPedidos,
-  fetchPoolEstadoByOtNumeros,
+  formatContenedorProgressBadge,
+  type ContenedorProgress,
   matchesPlanificacionOtTipoFiltro,
   normalizeOtTipo,
   type OtContenedorMeta,
@@ -295,25 +296,10 @@ export async function fetchPipelineRows(
   const hijaNumerosForProgress = [...hijasByPadre.values()].flatMap((list) =>
     list.map((h) => h.numPedido),
   );
-  const poolEstadoByOt =
-    hijaNumerosForProgress.length > 0
-      ? await fetchPoolEstadoByOtNumeros(supabase, hijaNumerosForProgress)
-      : new Map<string, string | null>();
-
-  const contenedorProgressByPadre = new Map<
-    string,
-    ReturnType<typeof computeContenedorProgress>
-  >();
-  for (const padre of contenedorNumeros) {
-    const hijas = hijasByPadre.get(padre) ?? [];
-    contenedorProgressByPadre.set(
-      padre,
-      computeContenedorProgress(
-        hijas.map((h) => h.numPedido),
-        poolEstadoByOt,
-      ),
-    );
-  }
+  const contenedorProgressByPadre: Map<string, ContenedorProgress> =
+    contenedorNumeros.length > 0 && hijaNumerosForProgress.length > 0
+      ? await fetchContenedorProgressByPadre(supabase, hijasByPadre)
+      : new Map();
 
   const otRows = await fetchAllInChunks(visibleOtNumeros, 100, async (chunk) => {
     const { data, error } = await supabase
@@ -594,6 +580,14 @@ export async function fetchPipelineRows(
       hijasCompletadasPct:
         otTipo === "contenedor"
           ? (contenedorProgressByPadre.get(otNumero)?.pct ?? null)
+          : undefined,
+      hijasCerradasPct:
+        otTipo === "contenedor"
+          ? (contenedorProgressByPadre.get(otNumero)?.hijasCerradasPct ?? null)
+          : undefined,
+      contenedorProgressLabel:
+        otTipo === "contenedor"
+          ? formatContenedorProgressBadge(contenedorProgressByPadre.get(otNumero)) || null
           : undefined,
       pasoActual,
       siguientePaso,

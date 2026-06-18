@@ -70,13 +70,17 @@ import {
   type ProdOtPasoVista,
 } from "@/lib/prod-ot-itinerario-client";
 import {
-  computeContenedorProgress,
+  fetchContenedorProgressByPadre,
   fetchHijasByPadreNumeros,
   fetchOtMetaByNumPedidos,
-  fetchPoolEstadoByOtNumeros,
+  formatContenedorProgressBadge,
   formatHijaDisplayLabel,
+  isPoolRowSelectableForMesa,
   matchesPlanificacionOtTipoFiltro,
   normalizeOtTipo,
+  poolMaterialBarcoPadreFromRow,
+  resolvePoolMaterialHijaViaBarco,
+  type ContenedorProgress,
   type OtContenedorMeta,
   type PlanificacionOtTipoFiltroUi,
 } from "@/lib/planificacion-contenedor-query";
@@ -196,9 +200,12 @@ type PoolRow = {
   formaDescripcion?: string | null;
   hijasCount?: number;
   hijasCompletadasPct?: number | null;
+  hijasCerradasPct?: number | null;
+  contenedorProgressLabel?: string | null;
   /** Fila hija expandida bajo un contenedor */
   isHijaRow?: boolean;
   padreOt?: string;
+  materialViaBarcoLabel?: string | null;
 };
 
 type DraftRow = {
@@ -313,6 +320,33 @@ function statusPill(
       {label}
     </span>
   );
+}
+
+function enrichHijaRowWithBarcoMaterial(hija: PoolRow, padre: PoolRow | undefined): PoolRow {
+  if (!padre || hija.otTipo !== "hija") return hija;
+  const materialHija =
+    String(hija.material ?? "").trim() && hija.material !== "—" ? hija.material : null;
+  const resolved = resolvePoolMaterialHijaViaBarco(poolMaterialBarcoPadreFromRow(padre), {
+    materialHija,
+    hojasObjetivoHija: hija.hojasObjetivo,
+  });
+  return {
+    ...hija,
+    hasCompraGenerada: resolved.hasCompraGenerada,
+    materialStatus: resolved.materialStatus,
+    hojasRecibidasTotal: resolved.hojasRecibidasTotal,
+    hojasObjetivo: resolved.hojasObjetivo,
+    numCompra: resolved.numCompra,
+    compraEstado: resolved.compraEstado,
+    compraProveedor: resolved.compraProveedor,
+    materialViaBarcoLabel: resolved.materialViaBarcoLabel,
+    isHijaRow: true,
+    padreOt: hija.padreOt ?? hija.otPadreNumero ?? padre.ot,
+  };
+}
+
+function poolRowSelectableForMesa(r: PoolRow): boolean {
+  return isPoolRowSelectableForMesa({ otTipo: r.otTipo, hasCompraGenerada: r.hasCompraGenerada });
 }
 
 export function PlanificacionPoolOtsTab() {
@@ -732,24 +766,10 @@ export function PlanificacionPoolOtsTab() {
       const hijaNumerosForProgress = [...hijasByPadre.values()].flatMap((list) =>
         list.map((h) => h.numPedido),
       );
-      const poolEstadoHijas =
-        hijaNumerosForProgress.length > 0
-          ? await fetchPoolEstadoByOtNumeros(supabase, hijaNumerosForProgress)
-          : new Map<string, string | null>();
-      const contenedorProgressByPadre = new Map<
-        string,
-        ReturnType<typeof computeContenedorProgress>
-      >();
-      for (const padre of contenedorNumeros) {
-        const hijas = hijasByPadre.get(padre) ?? [];
-        contenedorProgressByPadre.set(
-          padre,
-          computeContenedorProgress(
-            hijas.map((h) => h.numPedido),
-            poolEstadoHijas,
-          ),
-        );
-      }
+      const contenedorProgressByPadre: Map<string, ContenedorProgress> =
+        contenedorNumeros.length > 0 && hijaNumerosForProgress.length > 0
+          ? await fetchContenedorProgressByPadre(supabase, hijasByPadre)
+          : new Map();
 
       const compraData = await fetchAllInChunks(ots, 100, async (chunk) => {
         const { data, error } = await supabase
@@ -882,6 +902,8 @@ export function PlanificacionPoolOtsTab() {
           const prog = contenedorProgressByPadre.get(ot);
           row.hijasCount = prog?.total ?? 0;
           row.hijasCompletadasPct = prog?.pct ?? null;
+          row.hijasCerradasPct = prog?.hijasCerradasPct ?? null;
+          row.contenedorProgressLabel = formatContenedorProgressBadge(prog) || null;
         }
         row.cliente = String(meta?.cliente ?? "").trim() || "—";
         row.trabajo = String(meta?.titulo ?? "").trim() || "—";
@@ -956,6 +978,14 @@ export function PlanificacionPoolOtsTab() {
         };
       });
 
+      const rowByOt = new Map(enrichedRows.map((r) => [r.ot, r]));
+      enrichedRows = enrichedRows.map((r) => {
+        if (r.otTipo !== "hija" || !r.otPadreNumero) return r;
+        const padre = rowByOt.get(r.otPadreNumero);
+        if (!padre || padre.otTipo !== "contenedor") return r;
+        return enrichHijaRowWithBarcoMaterial(r, padre);
+      });
+
       setPoolCountPreAmbito(enrichedRows.length);
       const tipoFiltro = getPlanificacionTipoMaquinaFilter(roleRead);
       if (tipoFiltro) {
@@ -1014,13 +1044,31 @@ export function PlanificacionPoolOtsTab() {
     });
   }, [rows, search, compraEstadoFilter, areaTipoFilter, otTipoFilter]);
 
-  const selectableRows = useMemo(
-    () => filteredRows.filter((r) => r.hasCompraGenerada),
-    [filteredRows],
-  );
+  const selectableRows = useMemo(() => {
+    const out = filteredRows.filter((r) => poolRowSelectableForMesa(r));
+    if (otTipoFilter !== "agrupado") return out;
+    for (const r of filteredRows) {
+      if (r.otTipo !== "contenedor" || !expandedContenedores[r.ot]) continue;
+      for (const h of hijaRowsByPadre[r.ot] ?? []) {
+        const enriched = enrichHijaRowWithBarcoMaterial(h, r);
+        if (poolRowSelectableForMesa(enriched)) out.push(enriched);
+      }
+    }
+    return out;
+  }, [filteredRows, otTipoFilter, expandedContenedores, hijaRowsByPadre]);
   const allChecked =
     selectableRows.length > 0 && selectableRows.every((r) => selected[r.ot]);
-  const selectedRows = rows.filter((r) => selected[r.ot]);
+  const selectedRows = useMemo(() => {
+    const byOt = new Map<string, PoolRow>();
+    for (const r of rows) byOt.set(r.ot, r);
+    for (const hijas of Object.values(hijaRowsByPadre)) {
+      for (const h of hijas) {
+        const padre = h.padreOt ? byOt.get(h.padreOt) : undefined;
+        byOt.set(h.ot, enrichHijaRowWithBarcoMaterial(h, padre));
+      }
+    }
+    return [...byOt.values()].filter((r) => selected[r.ot]);
+  }, [rows, hijaRowsByPadre, selected]);
 
   const tipoFiltroPlanificacion = useMemo(
     () => getPlanificacionTipoMaquinaFilter(planificacionRole),
@@ -1050,23 +1098,29 @@ export function PlanificacionPoolOtsTab() {
       if (hijaRowsByPadre[padreOt]?.length) return;
       setLoadingHijasPadre(padreOt);
       try {
+        const padreRow = rows.find((r) => r.ot === padreOt && r.otTipo === "contenedor");
         const fromRows = rows.filter(
           (r) => r.otTipo === "hija" && r.otPadreNumero === padreOt,
         );
         if (fromRows.length > 0) {
           setHijaRowsByPadre((prev) => ({
             ...prev,
-            [padreOt]: fromRows.map((r) => ({
-              ...r,
-              isHijaRow: true,
-              padreOt,
-              trabajo: formatHijaDisplayLabel({
-                ot: r.ot,
-                tipoHija: r.tipoHija,
-                formaDescripcion: r.formaDescripcion,
-                trabajo: r.trabajo,
-              }),
-            })),
+            [padreOt]: fromRows.map((r) =>
+              enrichHijaRowWithBarcoMaterial(
+                {
+                  ...r,
+                  isHijaRow: true,
+                  padreOt,
+                  trabajo: formatHijaDisplayLabel({
+                    ot: r.ot,
+                    tipoHija: r.tipoHija,
+                    formaDescripcion: r.formaDescripcion,
+                    trabajo: r.trabajo,
+                  }),
+                },
+                padreRow,
+              ),
+            ),
           }));
           return;
         }
@@ -1077,56 +1131,81 @@ export function PlanificacionPoolOtsTab() {
           return;
         }
         const nums = hijas.map((h) => h.numPedido);
-        const pasoMap = await fetchProximoPasoDisponiblePorOt(supabase, nums).catch(
-          () => new Map<string, ProximoPasoInfo>(),
-        );
+        const [pasoMap, despHijasRes] = await Promise.all([
+          fetchProximoPasoDisponiblePorOt(supabase, nums).catch(
+            () => new Map<string, ProximoPasoInfo>(),
+          ),
+          supabase
+            .from(TABLE_DESPACHADAS)
+            .select(
+              "ot_numero, material, tintas, acabado_pral, num_hojas_brutas, horas_entrada, horas_tiraje, horas_estimadas_troquelado, horas_estimadas_engomado, troquel, poses",
+            )
+            .in("ot_numero", nums),
+        ]);
+        if (despHijasRes.error) throw despHijasRes.error;
+        const despByOt = new Map<string, DespRow>();
+        for (const d of (despHijasRes.data ?? []) as DespRow[]) {
+          const ot = String(d.ot_numero ?? "").trim();
+          if (ot) despByOt.set(ot, d);
+        }
         const built: PoolRow[] = hijas.map((h) => {
           const paso = pasoMap.get(h.numPedido);
-          return {
-            ot: h.numPedido,
-            cliente: String(h.cliente ?? "").trim() || "—",
-            trabajo: formatHijaDisplayLabel({
+          const desp = despByOt.get(h.numPedido);
+          const hojasObjetivo = Math.max(0, Math.trunc(parseNum(desp?.num_hojas_brutas)));
+          const horasEntrada = parseNum(desp?.horas_entrada);
+          const horasTiraje = parseNum(desp?.horas_tiraje);
+          const horasTroquelado = parseNum(desp?.horas_estimadas_troquelado);
+          const horasEngomado = parseNum(desp?.horas_estimadas_engomado);
+          const troquel = String(desp?.troquel ?? "").trim();
+          return enrichHijaRowWithBarcoMaterial(
+            {
               ot: h.numPedido,
+              cliente: String(h.cliente ?? "").trim() || "—",
+              trabajo: formatHijaDisplayLabel({
+                ot: h.numPedido,
+                tipoHija: h.tipoHija,
+                formaDescripcion: h.formaDescripcion,
+                trabajo: h.titulo,
+              }),
+              material: String(desp?.material ?? "").trim() || "—",
+              tintas: String(desp?.tintas ?? "").trim() || "—",
+              acabadoPral: String(desp?.acabado_pral ?? "").trim(),
+              fechaEntrega: h.fechaEntrega ?? null,
+              hojasObjetivo,
+              hojasRecibidasTotal: 0,
+              numCompra: null,
+              compraEstado: "Sin compra",
+              compraProveedor: null,
+              compraProveedorExtraCount: 0,
+              hasCompraGenerada: false,
+              materialStatus: "rojo",
+              troquelLabel: troquel,
+              troquelId: null,
+              cauchoAcrilico: null,
+              troquelStatus: troquel ? "falta" : "sin_informar",
+              troquelModo: troquel ? "informado" : "sin_informar",
+              poses: parseNum(desp?.poses) > 0 ? Math.trunc(parseNum(desp?.poses)) : null,
+              horasEntrada,
+              horasTiraje,
+              horasTroquelado,
+              horasEngomado,
+              horasTotal: horasEntrada + horasTiraje + horasTroquelado + horasEngomado,
+              proximoPasoNombre: paso?.nombre ?? null,
+              proximoPasoSlug: paso?.seccionSlug ?? null,
+              planificacionTipoPaso: paso?.tipoMaquina ?? null,
+              enColaMesa: false,
+              planificadaEnMesa: false,
+              poolEnTransitoFase: false,
+              otTipo: "hija",
+              otPadreNumero: padreOt,
               tipoHija: h.tipoHija,
               formaDescripcion: h.formaDescripcion,
-              trabajo: h.titulo,
-            }),
-            material: "—",
-            tintas: "—",
-            acabadoPral: "",
-            fechaEntrega: h.fechaEntrega ?? null,
-            hojasObjetivo: 0,
-            hojasRecibidasTotal: 0,
-            numCompra: null,
-            compraEstado: "Sin compra",
-            compraProveedor: null,
-            compraProveedorExtraCount: 0,
-            hasCompraGenerada: false,
-            materialStatus: "rojo",
-            troquelLabel: "",
-            troquelId: null,
-            cauchoAcrilico: null,
-            troquelStatus: "sin_informar",
-            troquelModo: "sin_informar",
-            poses: null,
-            horasEntrada: 0,
-            horasTiraje: 0,
-            horasTroquelado: 0,
-            horasEngomado: 0,
-            horasTotal: 0,
-            proximoPasoNombre: paso?.nombre ?? null,
-            proximoPasoSlug: paso?.seccionSlug ?? null,
-            planificacionTipoPaso: paso?.tipoMaquina ?? null,
-            enColaMesa: false,
-            planificadaEnMesa: false,
-            poolEnTransitoFase: false,
-            otTipo: "hija",
-            otPadreNumero: padreOt,
-            tipoHija: h.tipoHija,
-            formaDescripcion: h.formaDescripcion,
-            isHijaRow: true,
-            padreOt,
-          };
+              isHijaRow: true,
+              padreOt,
+              materialViaBarcoLabel: null,
+            },
+            padreRow,
+          );
         });
         setHijaRowsByPadre((prev) => ({ ...prev, [padreOt]: built }));
       } catch (e) {
@@ -1156,7 +1235,9 @@ export function PlanificacionPoolOtsTab() {
     for (const r of sortedRows) {
       out.push(r);
       if (r.otTipo === "contenedor" && expandedContenedores[r.ot]) {
-        out.push(...(hijaRowsByPadre[r.ot] ?? []));
+        out.push(
+          ...(hijaRowsByPadre[r.ot] ?? []).map((h) => enrichHijaRowWithBarcoMaterial(h, r)),
+        );
       }
     }
     return out;
@@ -1518,6 +1599,13 @@ export function PlanificacionPoolOtsTab() {
     }
     setSaving(true);
     try {
+      const contenedores = selectedRows.filter((r) => r.otTipo === "contenedor").map((r) => r.ot);
+      if (contenedores.length > 0) {
+        toast.error(
+          `El contenedor no se envía a mesa (sin itinerario ejecutable): ${contenedores.join(", ")}.`,
+        );
+        return;
+      }
       const sinCompra = selectedRows.filter((r) => !r.hasCompraGenerada).map((r) => r.ot);
       if (sinCompra.length > 0) {
         toast.error(
@@ -1750,9 +1838,9 @@ export function PlanificacionPoolOtsTab() {
                       type="checkbox"
                       checked={allChecked}
                       onChange={(e) => {
-                        const next: Record<string, boolean> = {};
-                        for (const r of filteredRows) {
-                          next[r.ot] = r.hasCompraGenerada ? e.target.checked : false;
+                        const next: Record<string, boolean> = { ...selected };
+                        for (const r of selectableRows) {
+                          next[r.ot] = e.target.checked;
                         }
                         setSelected(next);
                       }}
@@ -1824,20 +1912,21 @@ export function PlanificacionPoolOtsTab() {
                     }
                   >
                     <TableCell>
-                      {!r.isHijaRow ? (
+                      {poolRowSelectableForMesa(r) ? (
                         <input
                           type="checkbox"
                           checked={!!selected[r.ot]}
                           onChange={(e) =>
                             setSelected((prev) => ({ ...prev, [r.ot]: e.target.checked }))
                           }
-                          disabled={!r.hasCompraGenerada}
                           aria-label={`Seleccionar OT ${r.ot}`}
-                          title={
-                            r.hasCompraGenerada
-                              ? `Seleccionar OT ${r.ot}`
-                              : `OT ${r.ot} bloqueada: requiere compra generada`
-                          }
+                          title={`Seleccionar OT ${r.ot}`}
+                        />
+                      ) : r.otTipo === "contenedor" ? (
+                        <span
+                          className="inline-block size-4"
+                          title="Contenedor: no se envía a mesa (planificar hijas)"
+                          aria-hidden
                         />
                       ) : null}
                     </TableCell>
@@ -1877,14 +1966,16 @@ export function PlanificacionPoolOtsTab() {
                             {r.isHijaRow ? `↳ ${r.ot}` : r.ot}
                           </p>
                           {r.otTipo === "contenedor" ? (
-                            <p className="mt-0.5 text-[10px] font-medium text-indigo-800">
+                            <p
+                              className="mt-0.5 text-[10px] font-medium text-indigo-800"
+                              title={r.contenedorProgressLabel ?? undefined}
+                            >
                               Contenedor
-                              {typeof r.hijasCount === "number" && r.hijasCount > 0
-                                ? ` · ${r.hijasCount} hija${r.hijasCount === 1 ? "" : "s"}`
-                                : ""}
-                              {r.hijasCompletadasPct != null
-                                ? ` · ${r.hijasCompletadasPct}% listo`
-                                : ""}
+                              {r.contenedorProgressLabel
+                                ? ` · ${r.contenedorProgressLabel}`
+                                : typeof r.hijasCount === "number" && r.hijasCount > 0
+                                  ? ` · ${r.hijasCount} hija${r.hijasCount === 1 ? "" : "s"}`
+                                  : ""}
                             </p>
                           ) : r.isHijaRow ? (
                             <p className="mt-0.5 text-[10px] font-medium text-slate-600">
@@ -2002,6 +2093,11 @@ export function PlanificacionPoolOtsTab() {
                           : r.materialStatus === "amarillo"
                             ? statusPill("amarillo", "Material parcial")
                             : statusPill("rojo", "Material crítico")}
+                        {r.materialViaBarcoLabel ? (
+                          <p className="text-[11px] font-medium text-emerald-800">
+                            {r.materialViaBarcoLabel}
+                          </p>
+                        ) : null}
                         <p className="text-[11px] text-slate-600">
                           {r.hojasRecibidasTotal}/{r.hojasObjetivo} hojas
                         </p>
@@ -2012,11 +2108,11 @@ export function PlanificacionPoolOtsTab() {
                               ? ` (+${r.compraProveedorExtraCount})`
                               : ""}
                           </p>
-                        ) : (
+                        ) : !r.materialViaBarcoLabel ? (
                           <p className="text-[11px] font-medium text-red-600">
                             Sin compra generada (no se puede enviar a mesa)
                           </p>
-                        )}
+                        ) : null}
                         <p className="text-[11px] text-slate-500">
                           Estado compra: {r.compraEstado}
                         </p>
