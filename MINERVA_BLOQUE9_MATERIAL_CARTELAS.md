@@ -142,6 +142,15 @@ Minerva debe capturar estos datos al recepcionar para la trazabilidad FSC:
 
 Esto enlaza con el campo `fsc` del maestro de artículos y del despacho de OTs.
 
+### Tabla resumen — 4 albaranes de referencia (18 jun 2026)
+
+| Nº albarán | Proveedor | Material | Cant. | Destino Emma | ID Stock |
+|------------|-----------|----------|-------|--------------|----------|
+| AV26-04186 | Papers Tordera | OFFSET 70×100 100gr | 35 K | OT **36033** | 10.297 (6027) |
+| AV26-04179 | Papers Tordera | OFFSET 102×72 200gr | 29,38 K | **STOCK** | 10.299 (6029) |
+| AV26-04187 | Papers Tordera | OFFSET 70×100 300gr | 52,50 K | **Stock** | 10.298 (6028) |
+| B26-2525 | CARPAPSA | ALLYKING PEFC 60×102 295gr | 550 K (2×1500 h) | OT **36023** | 10.295–96 (6095–96) |
+
 ---
 
 ## 4. Los dos tipos de cartela
@@ -182,29 +191,31 @@ sobrará (depende de la merma real).
 
 ## 6. Modelo de datos propuesto (MVP)
 
-### Tabla `prod_recepciones_material`
-Representa una recepción (un albarán de proveedor).
+### ⚠️ `prod_recepciones_material` ya existe — extender, no duplicar
 
-| Campo | Tipo | Notas |
-|-------|------|-------|
-| `id` | UUID | PK |
-| `albaran_proveedor` | text | Ej: G6-3305 |
-| `proveedor_id` | FK | Proveedor |
-| `proveedor_nombre` | text | Snapshot |
-| `fecha_recepcion` | timestamp | |
-| `oc_numero` | text | OC relacionada (9xxxxx) |
-| `notas` | text | |
-| `created_by` | UUID | Emma/Ramón |
-| `created_at` | timestamp | |
+Minerva **ya tiene** recepción en muelle + fotos (operativo hoy):
 
-### Tabla `prod_stock_palets` (las cartelas)
+| Pieza | Dónde | Qué hace |
+|-------|--------|----------|
+| UI muelle | `src/components/produccion/muelle/muelle-recepcion-page.tsx` | Marca compra recibida, albarán, hojas, palets, **foto cámara** |
+| Tabla | `prod_recepciones_material` | Una fila por evento de recepción (`compra_id` → `prod_compra_material`) |
+| Fotos | `prod_recepciones_fotos` + bucket `recepciones-fotos` | Imágenes del albarán en muelle |
+| Consulta admin | `compras-material-page.tsx` | Modal «Fotos de recepción (muelle)» |
+
+**Decisión Bloque 9:** el **núcleo nuevo** es `prod_stock_palets` (cartelas) + `prod_stock_movimientos`.
+La tabla `prod_recepciones_material` se **reutiliza y amplía** (FK desde cartela, campos FSC/kilos si faltan) — no crear una segunda tabla homónima.
+
+**Gap actual:** el muelle va por **compra/OC**; no cubre aún STOCK sin OT ni albarán multi-línea (§3b). Eso entra en fases 9.0–9.4 (administración) y mejoras 9.5+ (puente muelle → Emma).
+
+### Tabla nueva `prod_stock_palets` (las cartelas) — **corazón del Bloque 9**
 Cada fila = un palet físico con su cartela.
 
 | Campo | Tipo | Notas |
 |-------|------|-------|
 | `id` | UUID | PK |
-| `id_stock` | integer | Número de cartela (autoincremental, grande y visible) |
-| `recepcion_id` | FK | Recepción a la que pertenece |
+| `id_stock` | integer | Número de cartela (autoincremental desde **10.300+**) |
+| `recepcion_id` | FK nullable | → `prod_recepciones_material` (si viene del muelle/compra) |
+| `compra_id` | FK nullable | → `prod_compra_material` (atajo si no hay recepción muelle aún) |
 | `codigo_articulo` | text | Código material (PHFOAL235072001020) |
 | `descripcion_material` | text | Snapshot legible |
 | `material_nombre` | text | Ej: "Folding" / "Zenith" / "Allyking" |
@@ -325,6 +336,7 @@ Al cerrar una OT (Bloque 6 — `pendiente_revision` → `producida`):
 | **Bloque 6** (Histórico/Producidas) | Al cerrar OT → detectar sobrante → generar cartela stock libre |
 | **Bloque 7** (Expedición) | Trazabilidad: qué material entró → qué producto salió |
 | **Bloque 8** (OT contenedor/hijas) | Las hijas pueden compartir material del contenedor o tener el suyo |
+| **Muelle (existente)** | Foto + recepción física hoy; en Fase B (9.5+) alimenta cartelado Emma |
 | **FSC** | El material recibido tiene lote de proveedor → trazabilidad FSC completa |
 | **Maestro de artículos** | `codigo_articulo` de la cartela puede enlazarse al maestro de referencias |
 
@@ -358,18 +370,44 @@ Al cerrar una OT (Bloque 6 — `pendiente_revision` → `producida`):
   haya tablet y flujo probado
 - No replicar exactamente el modelo de Optimus (que tiene complejidades heredadas)
 - No bloquear la producción si el stock no cuadra — avisos, no bloqueos
+- **No priorizar OCR / lectura automática de albaranes** (Make u otro) — primero cartelas y stock real; la foto del muelle ya existe como apoyo visual
 
 ---
 
-## 11. Orden de trabajo recomendado
+## 11. Roadmap — dos fases
 
-1. 📋 Audio/notas de Emma — entender su flujo real exacto
-2. 📋 Responder las **8 preguntas pendientes** de §9 (5 ya respondidas con albaranes 18 jun)
-3. 📋 Fase 9.0 — migración SQL: `prod_recepciones_material` + `prod_stock_palets`
-4. 📋 Fase 9.1 — UI recepción + generación de cartelas imprimibles
-5. 📋 Fase 9.2 — Consulta de stock disponible
-6. 📋 Fase 9.3 — Integración con Bloque 6 (sobrantes al cerrar OT)
-7. 📋 Fase 9.4 — Consumos y movimientos (cuando planta esté lista)
+### Fase A — Core (ahora): cartelas y stock real
+
+Objetivo: sustituir Optimus/papel en lo esencial — **qué hay en cada palet y para qué OT va**.
+
+| Fase | Entregable |
+|------|------------|
+| **9.0** | SQL: `prod_stock_palets` + `prod_stock_movimientos`; ampliar `prod_recepciones_material` si hace falta (kilos, FSC); secuencia `id_stock` desde 10.300 |
+| **9.1** | UI **Almacén → Recepciones** (Emma): albarán + líneas + OT/STOCK + toggle hojas/kilos → cartelas imprimibles |
+| **9.2** | UI **Almacén → Stock**: consulta palets libres/reservados, asignar libre a OT |
+| **9.3** | Sobrantes al cerrar OT (liga Bloque 6) |
+| **9.4** | Consumos/movimientos en planta (cuando planta esté lista; empezar Opción C) |
+
+**Prerrequisitos ligeros:** audio/notas Emma; ir respondiendo §9 pendientes en paralelo.
+
+### Fase B — Mejoras (después del core)
+
+No bloquean 9.0–9.4. Se encadenan cuando el flujo administrativo de cartelas funcione en planta.
+
+| Fase | Entregable |
+|------|------------|
+| **9.5** | **Puente muelle → administración**: bandeja «Recepciones en muelle pendientes de cartelar» (foto + datos del muelle ya guardados) |
+| **9.6** | Recepción **STOCK sin OC** y albarán **multi-línea** (varias OTs / líneas en un mismo envío) |
+| **9.7** | **Sugerencia desde foto** (Gemini Vision u OCR asistido): prefill proveedor, nº albarán, líneas, kilos — **siempre confirmación humana** (patrón import externos Optimus) |
+| **9.8** | Adjuntar/reenlazar fotos muelle en flujo de cartelado; menos papel físico circulando |
+
+```text
+[Fase A — primero]
+  Emma: albarán → líneas → cartelas → stock consultable
+
+[Fase B — luego]
+  Muelle (foto) ──► Emma completa y cartela ──► (opcional) IA sugiere campos
+```
 
 ---
 
@@ -392,13 +430,25 @@ El nuevo modelo es **por palet/cartela** (`prod_stock_palets`).
 | 18 jun 2026 | Primer briefing (Claude + cartelas CARPAPSA G6-3305). Modelo MVP, UX, roadmap 9.0–9.4. |
 | 18 jun 2026 | Registrado en repo; enlazado desde contexto maestro y roadmap global. |
 | 18 jun 2026 | **§3b** — insights albaranes CARPAPSA B26-2525 + Papers Tordera: stock al recepcionar, kilos→hojas, ID Stock ~10.299, FSC/PEFC, OT manual. Campos ampliados en modelo (`cantidad_kilos`, `es_fsc`, `es_pefc`, `fsc_certificado_proveedor`). §9 parcialmente respondida. |
+| 18 jun 2026 | **Roadmap dos fases**: A (9.0–9.4 cartelas/stock core) + B (9.5+ muelle/foto/IA). `prod_recepciones_material` ya existe — extender, no duplicar. Tabla 4 albaranes referencia. |
 
 ### Implementación (rellenar al avanzar)
 
+**Fase A — core**
+
 | Fase | Estado | Notas |
 |------|--------|-------|
-| 9.0 — SQL recepciones + palets + movimientos | ⏳ | Incluir campos FSC y `cantidad_kilos` |
-| 9.1 — UI recepción + cartelas imprimibles | ⏳ | Toggle hojas/kilos + calculadora |
+| 9.0 — SQL `prod_stock_palets` + movimientos | ⏳ | Reutilizar `prod_recepciones_material`; `id_stock` ≥ 10.300 |
+| 9.1 — UI recepción + cartelas imprimibles | ⏳ | Emma; toggle hojas/kilos |
 | 9.2 — Consulta stock disponible | ⏳ | |
 | 9.3 — Sobrantes al cerrar OT (Bloque 6) | ⏳ | |
-| 9.4 — Consumos y movimientos en planta | ⏳ | |
+| 9.4 — Consumos y movimientos en planta | ⏳ | Opción C primero |
+
+**Fase B — mejoras (después)**
+
+| Fase | Estado | Notas |
+|------|--------|-------|
+| 9.5 — Puente muelle → cartelar | ⏳ | Bandeja + fotos existentes |
+| 9.6 — STOCK sin OC + multi-línea | ⏳ | |
+| 9.7 — Sugerencia desde foto (IA) | ⏳ | Confirmación humana obligatoria |
+| 9.8 — Fotos/adjuntos en flujo cartelas | ⏳ | |

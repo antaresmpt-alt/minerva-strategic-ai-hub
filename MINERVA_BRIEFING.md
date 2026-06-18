@@ -242,10 +242,9 @@ Sobre este encadenado se calculan **semáforos** comparando la proyección con e
   Dirección: **OT contenedor + hijas reales en BD**, agrupadas en UI (no listado plano), itinerario
   por hija con override, convergencia variable según producto. Primer código: encadenado de formato.
   Briefing: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
-- **Bloque 9 — Material, cartelas y stock** (briefing 18 jun, **§3b albaranes reales**): recepción por
-  albarán, cartelas por palet (ID Stock desde 10.300+), stock libre **habitual** al recepcionar, conversión
-  kilos→hojas, FSC/PEFC del proveedor, OT manual si el albarán no la trae. Sobrantes al cerrar OT (Bloque 6).
-  Sustituye MRP legacy. Briefing: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`.
+- **Bloque 9 — Material, cartelas y stock** (18 jun): **Fase A** 9.0–9.4 (cartelas, stock real, recepción Emma) primero;
+  **Fase B** 9.5+ después (puente muelle+fotos, IA desde albarán). `prod_recepciones_material` ya existe en muelle.
+  Briefing: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`.
 - **Fases futuras**: inteligencia de repetición (auto-prefill desde histórico), dashboards de
   desviación previsto/real, integración Odoo (materiales consumidos, tiempos para costeo).
 

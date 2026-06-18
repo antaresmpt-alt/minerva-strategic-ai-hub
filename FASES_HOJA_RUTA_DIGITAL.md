@@ -561,7 +561,7 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 ⏳ **Bloque 6 PENDIENTE**: Producidas/Histórico (`prod_ot_producidas`, snapshot híbrido) + lifecycle de cierre (pendiente_revision → producida) + recálculo maestro
 ⏳ **Bloque 7 PENDIENTE**: Expedición/Albarán (depende de Bloque 6 + decisión Odoo)
 🔄 **Bloque 8 EN CURSO** (17–18 jun 2026): **Fase FORMATO ✅** + **8.0 ✅** (migración contenedor/hija). Pendiente 8.1–8.4. Fuente de verdad: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
-📋 **Bloque 9 DISEÑO** (18 jun 2026): material, cartelas, stock. **§3b** con albaranes CARPAPSA + Papers Tordera (kilos→hojas, stock al recepcionar, FSC). Fuente: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`.
+📋 **Bloque 9 DISEÑO** (18 jun): cartelas/stock — **Fase A** 9.0–9.4 primero; **Fase B** 9.5+ (muelle/foto/IA) después. `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`.
 
 ---
 
