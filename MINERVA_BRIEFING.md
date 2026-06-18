@@ -242,10 +242,10 @@ Sobre este encadenado se calculan **semáforos** comparando la proyección con e
   Dirección: **OT contenedor + hijas reales en BD**, agrupadas en UI (no listado plano), itinerario
   por hija con override, convergencia variable según producto. Primer código: encadenado de formato.
   Briefing: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
-- **Bloque 9 — Material, cartelas y stock** (briefing 18 jun 2026): recepción por albarán proveedor,
-  cartelas por palet (ID Stock), stock reservado por OT vs stock libre, sobrantes al cerrar OT (liga
-  Bloque 6), trazabilidad FSC. Sustituye conceptualmente el MRP legacy. Briefing:
-  `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`.
+- **Bloque 9 — Material, cartelas y stock** (briefing 18 jun, **§3b albaranes reales**): recepción por
+  albarán, cartelas por palet (ID Stock desde 10.300+), stock libre **habitual** al recepcionar, conversión
+  kilos→hojas, FSC/PEFC del proveedor, OT manual si el albarán no la trae. Sobrantes al cerrar OT (Bloque 6).
+  Sustituye MRP legacy. Briefing: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`.
 - **Fases futuras**: inteligencia de repetición (auto-prefill desde histórico), dashboards de
   desviación previsto/real, integración Odoo (materiales consumidos, tiempos para costeo).
 
@@ -270,8 +270,9 @@ Estas son las cuestiones jugosas donde un brainstorming con Claude aporta más v
 7. **Modelo multi-referencia por OT** (hoy 1 OT ≈ 1 referencia; futuro `prod_ot_referencias`).
 8. **Ficha técnica automática**: ¿en qué proceso se genera, qué incluye (densidades, ISO...), dónde se
    archiva e imprime?
-9. **Trazabilidad de material**: "cartelas" de recepción en palets (proveedor + nº albarán + ID Stock).
-   Briefing de diseño: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` (liga FSC, sobrantes Bloque 6, presupuesto).
+9. **Trazabilidad de material**: cartelas por palet (ID Stock, proveedor, albarán). Albaranes reales
+   confirman stock libre al recepcionar, conversión kilos→hojas y certificados FSC/PEFC en entrada.
+   Briefing: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §3b.
 
 ---
 

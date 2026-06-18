@@ -405,7 +405,7 @@ Responder con Jordi / Zaida / Abraham / Carlos:
 | **Maestro** (Fase 2) | Auto-enriquecimiento al despachar; independiente. Formato compra/impresión pendiente. |
 | **Bloque 6** | Snapshot del contenedor + hijas; cierre cuando todas las hijas cierran. |
 | **Bloque 7** | Expedición/albarán por referencia/componente, no por forma. |
-| **Cartelas / stock** | Bloque 9 — recepción, cartelas por palet, stock libre; ver `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`. |
+| **Cartelas / stock** | Bloque 9 — §3b: stock al recepcionar, kilos→hojas, ID Stock 10.300+; ver `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`. |
 
 ---
 

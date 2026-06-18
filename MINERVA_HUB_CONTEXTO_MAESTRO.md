@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 18 jun 2026 (plantillas Desbroce, seed cajas, rol CTP; Bloque 8.1 pendiente)
+> Última actualización: 18 jun 2026 (Bloque 9 §3b albaranes; plantillas Desbroce; Bloque 8.1 pendiente)
 
 ---
 
@@ -243,7 +243,7 @@ src/components/produccion/planificacion/
 | 6 | Producidas/Histórico + cierre OT | ⏳ Pendiente (PRÓXIMO GRANDE) |
 | 7 | Expedición/Albarán | ⏳ Pendiente (depende B6 + Odoo) |
 | 8 | Formatos de hoja + formas + componentes (OT contenedor/hijas) | 🔄 En curso — **Fase FORMATO ✅** + **8.0 ✅**; 8.1–8.4 pendiente — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` |
-| 9 | Material, cartelas de palet y stock libre | 📋 Diseño — briefing 18 jun — ver `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` |
+| 9 | Material, cartelas de palet y stock libre | 📋 Diseño — **§3b albaranes reales** (18 jun) — ver `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` |
 
 ---
 
@@ -297,7 +297,7 @@ src/components/produccion/planificacion/
 
 11. **Encadenado formato de pliego (17 jun 2026, Fase FORMATO ✅)**: por **orden de itinerario** (`prod_ot_pasos.orden`), no por tipo de proceso global. `tamano_hoja` en despacho = **Formato compra** (solo referencia de compra). Guillotina: `tamano_inicial` ← anterior, `tamano_final` → siguiente. Impresión/externos hojas: `formato_hojas`. Troquelado: `tamano_corte` es el troquel (independiente); banner muestra pliego de entrada. Módulo: `hoja-ruta-formato-encadenado.ts`. Probado OT 98009 (commit `aadad81`).
 
-12. **Bloque 9 — Cartelas y stock (18 jun 2026, diseño)**: replicar flujo Optimus (OC → albarán proveedor → cartelas por palet → ID Stock único). Dos tipos: cartela OT (`reservado`) y stock libre (`disponible`). Sobrante recomendado al **cerrar OT** (opción A), no al recepcionar. MVP consumo: trazabilidad documental (Opción C) → evolucionar a B. Tablas propuestas: `prod_recepciones_material`, `prod_stock_palets`, `prod_stock_movimientos`. Sustituye conceptualmente el MRP legacy (`almacen_materiales`). Briefing: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`.
+12. **Bloque 9 — Cartelas y stock (18 jun 2026, diseño)**: flujo Optimus (OC → albarán → cartelas por palet). Stock libre **al recepcionar es habitual** (Papers Tordera). Conversión **kilos → hojas** en recepción. ID Stock arrancar desde **10.300+** (máx. Optimus ~10.299). OT destino **siempre manual** si el proveedor no la indica. FSC/PEFC del albarán en cartela. Sobrante al cerrar OT (opción A). MVP consumo: Opción C. Briefing: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §3b.
 
 13. **Higiene operativa (18 jun 2026)**: `bultos_por_palet_default` de Gabri versionado en migración seed (`20260618143200`). Plantillas offset: **Desbroce** insertado entre Troquelado y Engomado en 5 rutas (`20260618143000`). Rol usuario CTP = **`ctp`** (no `preimpresion`); permisos `produccion` + `produccion_ejecucion` en BD y `permissions.ts`. Marc/Gemma: usuarios aún no creados en Supabase.
 

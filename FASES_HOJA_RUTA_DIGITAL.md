@@ -561,7 +561,7 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 ⏳ **Bloque 6 PENDIENTE**: Producidas/Histórico (`prod_ot_producidas`, snapshot híbrido) + lifecycle de cierre (pendiente_revision → producida) + recálculo maestro
 ⏳ **Bloque 7 PENDIENTE**: Expedición/Albarán (depende de Bloque 6 + decisión Odoo)
 🔄 **Bloque 8 EN CURSO** (17–18 jun 2026): **Fase FORMATO ✅** + **8.0 ✅** (migración contenedor/hija). Pendiente 8.1–8.4. Fuente de verdad: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
-📋 **Bloque 9 DISEÑO** (18 jun 2026): material, cartelas de palet, stock libre y trazabilidad. Fuente de verdad: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`.
+📋 **Bloque 9 DISEÑO** (18 jun 2026): material, cartelas, stock. **§3b** con albaranes CARPAPSA + Papers Tordera (kilos→hojas, stock al recepcionar, FSC). Fuente: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`.
 
 ---
 
@@ -796,6 +796,7 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 - Migración **`20260618143200`**: seed `bultos_por_palet_default` (10 cajas).
 - Migración **`20260618143100`** + `permissions.ts`: rol **`ctp`** con acceso a `produccion` y `produccion_ejecucion`.
 - Marc/Gemma: **sin usuario** aún en Supabase (solo cuentas de prueba por departamento).
+- **Bloque 9 §3b**: insights albaranes CARPAPSA + Papers Tordera documentados en `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` (stock al recepcionar, kilos→hojas, ID 10.300+, FSC).
 
 ---
 

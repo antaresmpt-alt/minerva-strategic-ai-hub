@@ -350,7 +350,7 @@ Recomendacion: empezar por Nivel 0/1, diseñando el modelo para llegar a Nivel 2
 El usuario ya ha planteado:
 
 - `fsc` y `fsc_fecha_validacion` en Maestro de Articulos.
-- cartelas de recepcion de material en palets (diseño: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`).
+- cartelas de recepcion de material en palets (diseño §3b: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` — kilos→hojas, FSC albarán proveedor).
 - ligar material usado con proveedor y numero de albaran de entrada.
 - futuro boton \"Recalcular presupuesto\" en Hoja de Ruta/PDF.
 

@@ -1,14 +1,15 @@
 # MINERVA — Briefing Bloque 9: Gestión de Material y Cartelas
 
-> Documento de diseño y toma de decisiones (fuente de verdad del Bloque 9).
+> Documento de diseño y toma de decisiones (**fuente de verdad del Bloque 9**).
 > Tema: recepción de material, cartelas de palet, stock libre y trazabilidad.
-> Complementa `MINERVA_HUB_CONTEXTO_MAESTRO.md`, `FASES_HOJA_RUTA_DIGITAL.md` y los briefings de Bloques 6 y 7.
+> Complementa `MINERVA_HUB_CONTEXTO_MAESTRO.md`, `FASES_HOJA_RUTA_DIGITAL.md` y briefings Bloques 6 y 7.
 >
-> **Estado:** 📋 Diseño / brainstorming — **sin implementación** (18 jun 2026).
-> **Origen:** análisis del flujo real de Optimus + cartelas físicas CARPAPSA (15 jun 2026) + iteración Claude (18 jun).
-> **PENDIENTE:** audio/notas de Emma (administrativa) cuando esté disponible.
+> **Estado:** 📋 Diseño / brainstorming — **sin implementación**.
+> **Origen:** Optimus + cartelas CARPAPSA (15 jun 2026).
+> **Actualizado:** 18 jun 2026 — albaranes reales CARPAPSA (B26-2525) y Papers Tordera (AV26-04186/179/187); §3b.
+> **PENDIENTE:** audio/notas de Emma (administrativa).
 
-**Relacionado:** cierre OT y sobrantes → Bloque 6 · expedición/trazabilidad → Bloque 7 · material compartido contenedor/hijas → Bloque 8 · FSC → maestro artículos.
+**Relacionado:** sobrantes → Bloque 6 · expedición → Bloque 7 · material contenedor/hijas → Bloque 8 · FSC → maestro artículos.
 
 ---
 
@@ -70,6 +71,76 @@ Basado en cartelas reales del 15-jun-2026 (CARPAPSA, albarán G6-3305):
 **Observación clave**: un mismo albarán proveedor (G6-3305) puede generar
 cartelas para distintas OTs. En este caso las 3 cartelas eran todas para OT 36016,
 pero el albarán del proveedor mencionaba también OTs 35990 y 35949.
+
+---
+
+## 3b. Insights de albaranes reales (18 jun 2026)
+
+Albaranes analizados hoy: CARPAPSA (B26-2525) + Papers Tordera (AV26-04186, AV26-04179, AV26-04187).
+
+### Insight 1 — Material que llega directamente a STOCK (sin OT asignada)
+Confirmado con albaranes de Papers Tordera del 18 jun:
+- OFFSET BLANC 102×72 200gr → **STOCK** → cartela 10.299
+- OFFSET BLANC 70×100 300gr → **STOCK** → cartela 10.298
+
+El stock libre al recepcionar NO es excepcional — es un caso habitual.
+Emma anota "STOCK" en el albarán cuando no hay OT asignada.
+Minerva debe soportarlo desde el primer día, no como caso especial.
+
+### Insight 2 — Dos IDs distintos en Optimus
+En Optimus coexisten dos contadores:
+- **ID Stock** (cartela): 10295, 10296, 10297... → identifica el palet físico
+- **ID Entrada**: 6027, 6028, 6029, 6095, 6096... → identifica la entrada de almacén
+
+Un albarán de proveedor = 1 entrada (o varias si se divide). Cada palet = 1 ID Stock.
+En Minerva se puede simplificar a un solo ID por palet, referenciando la recepción.
+
+**ID Stock más alto conocido hoy: ~10.299** → arrancar Minerva desde 10.300 o superior.
+
+### Insight 3 — Proveedores dan cantidad en KILOS, no en hojas
+Papers Tordera entrega en kilos (35 kg, 29,38 kg, 52,50 kg).
+Emma tiene que convertir manualmente. **Minerva puede automatizar esto:**
+
+```
+hojas = (kilos × 1.000) / (gramaje × formato_m2)
+```
+
+Ejemplos reales:
+- OFFSET 70×100 100gr, 35 kg → formato_m2 = 0,70 × 1,00 = 0,70 → **500 hojas**
+- OFFSET 102×72 200gr, 29,38 kg → formato_m2 = 1,02 × 0,72 = 0,734 → **200 hojas aprox.**
+- OFFSET 70×100 300gr, 52,50 kg → formato_m2 = 0,70 → **250 hojas**
+
+El formulario de recepción debe tener:
+- Campo cantidad: en hojas O en kilos (toggle)
+- Si kilos: calculadora automática con gramaje + formato → hojas resultantes
+- Confirmación antes de guardar
+
+### Insight 4 — El proveedor no siempre indica la OT en su albarán
+- CARPAPSA: sí indica el pedido/OT en el albarán
+- Papers Tordera: NO indica OT — Emma la anota a mano con rotulador/bolígrafo
+
+Minerva debe permitir añadir la OT manualmente al recepcionar, no depender de
+que el proveedor la informe.
+
+### Insight 5 — Un albarán puede generar cartelas para distintas OTs
+CARPAPSA B26-2525: 2 palets → 2 cartelas (10295, 10296), ambas para OT 36023.
+Pero en otros albaranes (como G6-3305 de junio anterior) venían materiales
+para 3 OTs distintas en el mismo envío.
+
+La UI de recepción debe permitir:
+1. Cabecera de recepción: proveedor + nº albarán
+2. N líneas de material, cada una con su OT destino (o "Stock libre")
+3. Cada línea genera sus cartelas según nº de palets
+
+### Insight 6 — FSC/PEFC en el albarán del proveedor
+CARPAPSA indica claramente: "ALLYKING 100% PEFC" con certificado FSC C116784.
+El albarán lleva el número de registro de productor y certificación.
+Minerva debe capturar estos datos al recepcionar para la trazabilidad FSC:
+- `fsc_certificado_proveedor` (ej: FSC C116784)
+- `pefc_certificado_proveedor`
+- `es_fsc` / `es_pefc` (boolean)
+
+Esto enlaza con el campo `fsc` del maestro de artículos y del despacho de OTs.
 
 ---
 
@@ -140,11 +211,15 @@ Cada fila = un palet físico con su cartela.
 | `gramaje` | integer | gr/m2 |
 | `formato` | text | Ej: "72×102 cm" |
 | `marca` | text | Ej: "ALLYKING" / "ZENITH" |
-| `cantidad_inicial` | integer | Hojas al recepcionar |
+| `cantidad_kilos` | numeric | Kilos recibidos según albarán proveedor (si aplica) |
+| `cantidad_inicial` | integer | Hojas al recepcionar (calculado o introducido) |
 | `cantidad_actual` | integer | Hojas restantes (se descuenta al consumir) |
 | `ot_destino_numero` | text | OT asignada (null si stock libre) |
 | `estado` | enum | `reservado` / `disponible` / `consumido` / `parcial` |
 | `ref_lote` | text | Ej: "36016 - TEIKIT" |
+| `es_fsc` | boolean | Material certificado FSC |
+| `es_pefc` | boolean | Material certificado PEFC |
+| `fsc_certificado_proveedor` | text | Nº certificado FSC del proveedor (ej: FSC C116784) |
 | `notas` | text | |
 | `created_at` | timestamp | |
 | `updated_at` | timestamp | |
@@ -175,11 +250,17 @@ Módulo: `Almacén → Recepciones`
 1. Nueva recepción: proveedor + nº albarán + fecha
 2. Añadir líneas de material:
    - Material (buscador por código/descripción)
-   - OT destino (opcional — puede dejarse como stock libre)
-   - Total hojas recibidas
-3. Minerva calcula automáticamente cuántos palets según hojas/palet estándar
-   (configurable por material) y genera N cartelas
+   - OT destino (opcional — puede dejarse como "Stock libre")
+   - Cantidad: toggle **hojas / kilos**
+     - Si kilos: calculadora automática (kilos × 1000) / (gramaje × formato_m2) → hojas
+     - Confirmación antes de guardar
+   - Nº de palets (Minerva divide la cantidad entre palets)
+   - FSC/PEFC: checkbox + nº certificado proveedor si aplica
+3. Minerva genera N cartelas (1 por palet) con ID Stock secuencial
 4. Imprimir cartelas → Juan las pega en los palets
+
+**Nota**: el proveedor no siempre indica la OT en su albarán (Papers Tordera no lo hace).
+Emma la añade manualmente. El campo OT destino es siempre editable.
 
 ### 7.2 Cartela imprimible
 
@@ -251,20 +332,22 @@ Al cerrar una OT (Bloque 6 — `pendiente_revision` → `producida`):
 
 ## 9. Preguntas abiertas (responder con Emma / Ramón / Juan)
 
-1. ¿Emma siempre sabe a qué OT va el material al recepcionar, o a veces llega
-   material "genérico" sin OT asignada?
-2. ¿Cuántos palets llegan habitualmente en un albarán? ¿5? ¿20? ¿más?
-3. ¿Juan necesita ver las cartelas en una tablet/móvil en almacén, o solo papel?
-4. ¿El sobrante hoy lo apunta alguien o simplemente queda en almacén sin registrar?
-5. ¿Hay material que se compra para stock (sin OT asignada desde el principio)?
-6. ¿Cuándo el maquinista necesita más material del previsto, quién se lo trae
-   y quién decide qué palet usar?
-7. ¿Importa registrar el lote del proveedor para FSC? ¿Con qué detalle?
-8. ¿Hay material que llega cortado (ya no es 72×102 sino 51×72) o siempre
-   llega en el formato de compra?
-9. ¿Un palet puede usarse para varias OTs distintas (material compartido)?
-10. ¿Cuál es el ID Stock más alto actual en Optimus? (Para saber desde dónde
-    arrancar la numeración en Minerva)
+**Respondidas con albaranes del 18 jun:**
+- ✅ ¿Hay material que se compra para stock sin OT? → **SÍ**, Papers Tordera lo confirma
+- ✅ ¿ID Stock más alto actual? → **~10.299** (arrancar Minerva desde 10.300+)
+- ✅ ¿Los proveedores siempre indican la OT? → **NO** (Papers Tordera no; CARPAPSA sí)
+- ✅ ¿Cantidad en kilos o hojas? → **Depende del proveedor** (Papers Tordera en kilos)
+- ✅ ¿FSC/PEFC en albarán proveedor? → **SÍ**, CARPAPSA indica certificado
+
+**Pendientes:**
+1. ¿Cuántos palets llegan habitualmente en un albarán? ¿5? ¿20? ¿más?
+2. ¿Juan necesita ver las cartelas en tablet/móvil en almacén, o solo papel?
+3. ¿El sobrante hoy lo apunta alguien o simplemente queda en almacén sin registrar?
+4. ¿Cuándo el maquinista necesita más material del previsto, quién decide qué palet usar?
+5. ¿Hay material que llega ya cortado (51×72) o siempre en formato de compra?
+6. ¿Un palet puede usarse para varias OTs distintas (material compartido)?
+7. ¿Emma trabaja desde su PC o necesita acceso desde tablet/móvil?
+8. ¿Cuántos albaranes de proveedor recibe Emma de media por día/semana?
 
 ---
 
@@ -281,7 +364,7 @@ Al cerrar una OT (Bloque 6 — `pendiente_revision` → `producida`):
 ## 11. Orden de trabajo recomendado
 
 1. 📋 Audio/notas de Emma — entender su flujo real exacto
-2. 📋 Responder las 10 preguntas abiertas (§9)
+2. 📋 Responder las **8 preguntas pendientes** de §9 (5 ya respondidas con albaranes 18 jun)
 3. 📋 Fase 9.0 — migración SQL: `prod_recepciones_material` + `prod_stock_palets`
 4. 📋 Fase 9.1 — UI recepción + generación de cartelas imprimibles
 5. 📋 Fase 9.2 — Consulta de stock disponible
@@ -295,14 +378,10 @@ Al cerrar una OT (Bloque 6 — `pendiente_revision` → `producida`):
 Hay un primer intento de **Almacén MRP** en la app (`src/components/produccion/almacen/almacen-mrp-page.tsx`)
 sobre `almacen_materiales` + vista `almacen_control_inteligente` (stock agregado por material, no por palet).
 
-**No se usa en producción** porque el stock se descuadra rápidamente si no se alimenta diariamente.
+**No se usa en producción** porque el stock se descuadra si no se alimenta a diario.
 
-**Decisión pendiente:** Bloque 9 debe **reemplazar** o **sustituir el modelo** del MRP actual — no convivir
-sin definir fuente de verdad. El nuevo modelo es **por palet/cartela** (`prod_stock_palets`), no solo
-cantidad global por código de artículo.
-
-**Coexistencia temporal posible:** mantener MRP como vista agregada derivada de cartelas (suma de
-`cantidad_actual` por `codigo_articulo`) cuando exista el dato; hasta entonces el MRP legacy queda congelado.
+**Decisión pendiente:** Bloque 9 debe **reemplazar** el modelo MRP legacy — no convivir sin fuente de verdad.
+El nuevo modelo es **por palet/cartela** (`prod_stock_palets`).
 
 ---
 
@@ -310,15 +389,16 @@ cantidad global por código de artículo.
 
 | Fecha | Cambio |
 |-------|--------|
-| 18 jun 2026 | Primer briefing (Claude + análisis Optimus/cartelas CARPAPSA). Modelo MVP, UX, preguntas planta, roadmap 9.0–9.4. |
+| 18 jun 2026 | Primer briefing (Claude + cartelas CARPAPSA G6-3305). Modelo MVP, UX, roadmap 9.0–9.4. |
 | 18 jun 2026 | Registrado en repo; enlazado desde contexto maestro y roadmap global. |
+| 18 jun 2026 | **§3b** — insights albaranes CARPAPSA B26-2525 + Papers Tordera: stock al recepcionar, kilos→hojas, ID Stock ~10.299, FSC/PEFC, OT manual. Campos ampliados en modelo (`cantidad_kilos`, `es_fsc`, `es_pefc`, `fsc_certificado_proveedor`). §9 parcialmente respondida. |
 
 ### Implementación (rellenar al avanzar)
 
 | Fase | Estado | Notas |
 |------|--------|-------|
-| 9.0 — SQL `prod_recepciones_material` + `prod_stock_palets` + movimientos | ⏳ | |
-| 9.1 — UI recepción + cartelas imprimibles | ⏳ | |
+| 9.0 — SQL recepciones + palets + movimientos | ⏳ | Incluir campos FSC y `cantidad_kilos` |
+| 9.1 — UI recepción + cartelas imprimibles | ⏳ | Toggle hojas/kilos + calculadora |
 | 9.2 — Consulta stock disponible | ⏳ | |
 | 9.3 — Sobrantes al cerrar OT (Bloque 6) | ⏳ | |
 | 9.4 — Consumos y movimientos en planta | ⏳ | |
