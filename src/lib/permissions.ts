@@ -62,6 +62,7 @@ const PLANIFICACION_OTS_TAB_ROLES = new Set([
   "digital",
   "troquelado",
   "engomado",
+  "ctp",
 ]);
 
 /**
@@ -138,6 +139,15 @@ export function canAccessHubModule(
     return module === "produccion_ejecucion";
   }
 
+  /** CTP / preimpresión: planificación + ejecución (área preimpresion). */
+  if (r === "ctp") {
+    return (
+      module === "chat" ||
+      module === "produccion" ||
+      module === "produccion_ejecucion"
+    );
+  }
+
   if (r === "almacen") {
     return module === "chat" || module === "muelle";
   }
@@ -151,7 +161,7 @@ export function canAccessHubModule(
     );
   }
 
-  if (r === "ctp" || r === "administracion") {
+  if (r === "administracion") {
     return module === "chat";
   }
 

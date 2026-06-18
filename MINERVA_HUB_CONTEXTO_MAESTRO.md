@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 18 jun 2026 (briefing Bloque 9 cartelas/stock; Bloque 8 en curso)
+> Última actualización: 18 jun 2026 (plantillas Desbroce, seed cajas, rol CTP; Bloque 8.1 pendiente)
 
 ---
 
@@ -89,7 +89,7 @@ Software a medida para la planta de producción gráfica/impresión de la empres
 | Ramón | Hermano de Manel, gestión de externos y compras |
 | Hugo | Encargado de etiquetas |
 | Carlos | Responsable de producción |
-| Marc / Gemma | Preimpresión (rol `preimpresion` pendiente asignar) |
+| Marc / Gemma | Preimpresión — rol **`ctp`** en `profiles` (usuarios aún no creados en Supabase, jun 2026) |
 | Gabri | Referente para datos de cajas de embalaje |
 
 ---
@@ -257,8 +257,9 @@ src/components/produccion/planificacion/
 
 ### Alta prioridad (usuario)
 - [ ] Ampliar campos CTP tras reunión con Gemma
-- [ ] Crear roles `preimpresion` en profiles para Marc y Gemma
-- [ ] Meter `bultos_por_palet_default` reales de Gabri en `prod_cajas_embalaje`
+- [ ] Crear usuarios Marc y Gemma con rol **`ctp`** en `profiles` (permisos producción ya preparados — migración `20260618143100`)
+- [x] **`bultos_por_palet_default`** de Gabri en `prod_cajas_embalaje` (cargado en prod 9 jun; seed en repo `20260618143200`)
+- [x] **Plantillas de ruta**: Desbroce entre Troquelado y Engomado en 5 plantillas offset (`20260618143000`)
 - [ ] Probar flujo completo: CTP → Guillotina → Impresión → Troquelado → Desbroce → Engomado
 
 ### Prioridad media (desarrollo)
@@ -297,6 +298,8 @@ src/components/produccion/planificacion/
 11. **Encadenado formato de pliego (17 jun 2026, Fase FORMATO ✅)**: por **orden de itinerario** (`prod_ot_pasos.orden`), no por tipo de proceso global. `tamano_hoja` en despacho = **Formato compra** (solo referencia de compra). Guillotina: `tamano_inicial` ← anterior, `tamano_final` → siguiente. Impresión/externos hojas: `formato_hojas`. Troquelado: `tamano_corte` es el troquel (independiente); banner muestra pliego de entrada. Módulo: `hoja-ruta-formato-encadenado.ts`. Probado OT 98009 (commit `aadad81`).
 
 12. **Bloque 9 — Cartelas y stock (18 jun 2026, diseño)**: replicar flujo Optimus (OC → albarán proveedor → cartelas por palet → ID Stock único). Dos tipos: cartela OT (`reservado`) y stock libre (`disponible`). Sobrante recomendado al **cerrar OT** (opción A), no al recepcionar. MVP consumo: trazabilidad documental (Opción C) → evolucionar a B. Tablas propuestas: `prod_recepciones_material`, `prod_stock_palets`, `prod_stock_movimientos`. Sustituye conceptualmente el MRP legacy (`almacen_materiales`). Briefing: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`.
+
+13. **Higiene operativa (18 jun 2026)**: `bultos_por_palet_default` de Gabri versionado en migración seed (`20260618143200`). Plantillas offset: **Desbroce** insertado entre Troquelado y Engomado en 5 rutas (`20260618143000`). Rol usuario CTP = **`ctp`** (no `preimpresion`); permisos `produccion` + `produccion_ejecucion` en BD y `permissions.ts`. Marc/Gemma: usuarios aún no creados en Supabase.
 
 ---
 

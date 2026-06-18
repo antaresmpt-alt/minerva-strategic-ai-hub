@@ -335,14 +335,14 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 **Hecho:**
 - **Mini-maestro de cajas de embalaje** `prod_cajas_embalaje` (tabla nueva + RLS lectura `authenticated`, escrituras vía API admin):
   - Campos: `codigo` (MN2L…), `descripcion` (incl. medidas), `bultos_por_palet_default` (orientativo de Gabri), `con_logo`, `activo`, `orden`, `notas`.
-  - Sembradas 11 cajas del listado Optimus (MN1L, BP1N, CR2L, BP2L, BP2N, MN2L, MN2N, MN3L, MN3N, BP3N, RULOL) con `bultos_por_palet_default` vacío (pendiente meter los valores de Gabri).
+  - Sembradas **10 cajas** en prod (9 jun 2026) con `bultos_por_palet_default` de Gabri (MN1L 30 … BP3N 9). RULOL no está en catálogo. Seed versionado: migración `20260618143200`.
   - Mantenimiento en **Ajustes → Recursos de Producción → Cajas embalaje** (`RecursosCajasEmbalajePanel` + `/api/admin/prod-cajas-embalaje`).
 - **Engomado** ahora usa `codigo_caja_embalaje` como **select dinámico** (lee `prod_cajas_embalaje`). Al elegir caja se propone `bultos_por_palet` por defecto (editable, porque no siempre es fijo).
 - **Cálculo de picos** (`computeEngomadoReparto`): `bultos_completos = floor(estuches / estuches_por_bulto)`, `pico = resto`, `bultos_totales = completos + (pico>0?1:0)`. Nuevos campos en config + tipo.
 - **Reparto en palets con tolerancia**: `PALET_TOLERANCIA_BULTOS = 1` → no abre palet nuevo si el sobrante es ≤ tolerancia (se apila encima). Constante ajustable.
 
 **Pendiente del usuario:**
-- [ ] Meter los `bultos_por_palet_default` reales de Gabri en cada caja (vía la pantalla de mantenimiento).
+- [x] ~~Meter los `bultos_por_palet_default` reales de Gabri~~ ✅ (prod 9 jun + seed repo 18 jun).
 - [ ] Rellenar `estuches_por_bulto` en el Maestro / OT del artículo de ejemplo.
 - [ ] Confirmar si la tolerancia (1 bulto) es la correcta o subirla a 2-3.
 
@@ -549,7 +549,7 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 ✅ **Motivos de pausa por proceso** (6 jun 2026): `sys_motivos_pausa.tipos_maquina` (NULL = universal) + filtrado por tipo de máquina en ejecución
 ✅ **Bloque 3 COMPLETADO** (6-13 jun 2026): Hoja de Ruta Virtual (`HojaRutaOtDialog`) + loader `fetchHojaRutaOt`, enganchado en Pipeline, OTs Despachadas, Planificación y tarjeta de Ejecución. Pendiente solo como mejora posterior: comparativa previsto/real más visual.
 ✅ **Bloque 3.1 COMPLETADO** (7-8 jun 2026): Pulido captura Impresión + **Troquelado + Engomado** (layout `width`, previsto/real, derivaciones, resaltar resultado real). Robustez de captura: campos persisten en iniciar/pausar/reanudar/guardar/finalizar. **Pendiente**: Digital a fondo y Guillotina.
-✅ **Bloque 3.2 IMPLEMENTADO** (9 jun 2026): tabla `prod_cajas_embalaje` + RLS + mantenimiento; Engomado con select de caja, prefill bultos/palet, cálculo de picos (`bultos_completos`/`pico`/`bultos_totales`) y reparto en palets con tolerancia (`PALET_TOLERANCIA_BULTOS=1`). Pendiente: meter valores reales de Gabri.
+✅ **Bloque 3.2 IMPLEMENTADO** (9 jun 2026): tabla `prod_cajas_embalaje` + RLS + mantenimiento; Engomado con select de caja, prefill bultos/palet, cálculo de picos (`bultos_completos`/`pico`/`bultos_totales`) y reparto en palets con tolerancia (`PALET_TOLERANCIA_BULTOS=1`). Valores Gabri en prod + seed `20260618143200`.
 ✅ **Bloque 3.3 IMPLEMENTADO** (9 jun 2026): Maestro de Artículos — campos `fsc` (Sí/No) y `fsc_fecha_validacion` (BD + formulario).
 ✅ **Bloque 3.5 IMPLEMENTADO** (9 jun 2026): Tipo de engomado parametrizado + Homogeneidad pantalla "Despachadas".
 ✅ **Bloque 3.6 IMPLEMENTADO** (9 jun 2026): Semáforo sobreproducción (🟠) configurable por proceso en Settings + proyección en Impresión.
@@ -615,7 +615,7 @@ El usuario necesitaba tres nuevos procesos en la Hoja de Ruta Digital:
 ### Decisiones de diseño
 - **Desbroce** → área `engomado` (máquina ficticia `ENG-DESBROZ`): físicamente está en la zona de engomado; las engomadoras siempre desbrozán antes. Patrón idéntico a Guillotina.
 - **Manipulados** → área `engomado` (máquina ficticia `ENG-MANIP`): también zona de engomado.
-- **CTP** → nueva área `preimpresion` (máquina `CTP-MNRV`): Marc y Gemma tienen rol `preimpresion`; Carlos tendrá rol `produccion` (ve todo).
+- **CTP** → nueva área `preimpresion` (máquina `CTP-MNRV`): Marc y Gemma usarán rol **`ctp`** en `profiles` (permisos producción preparados 18 jun); Carlos tiene rol `produccion` (ve todo).
 
 ### Hecho
 #### Base de datos (migración `20260609180000_procesos_ctp_desbroce_preimpresion.sql`)
@@ -668,8 +668,8 @@ CTP (16) está al inicio pero sin salida encadenada (solo captura).
 
 ### Pendiente
 - [ ] Ampliar campos CTP tras reunión con Gemma (10 jun 2026).
-- [ ] Crear roles `preimpresion` en `profiles` para Marc y Gemma.
-- [ ] Añadir procesos CTP, Desbroce y Manipulados a las plantillas de ruta habituales en Settings.
+- [ ] Crear usuarios Marc y Gemma con rol **`ctp`** (aún no existen en Supabase; permisos listos en `role_permissions` + `permissions.ts`).
+- [x] ~~Añadir Desbroce a plantillas Troq→Eng~~ ✅ (5 plantillas, migración `20260618143000`, 18 jun). CTP ya estaba en plantillas offset.
 - [ ] Probar flujo completo con una OT real: CTP → Guillotina → Impresión → Troquelado → Desbroce → Engomado.
 
 ---
@@ -763,7 +763,7 @@ CTP (16) está al inicio pero sin salida encadenada (solo captura).
 Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, lista+libre) → Tarjeta Engomado (prerelleno, editable). El histórico de la referencia tiene prioridad sobre el habitual.
 
 ### Pendiente
-- Meter `bultos_por_palet` reales de Gabri en las cajas.
+- [x] ~~Meter `bultos_por_palet` reales de Gabri~~ ✅ (seed `20260618143200`).
 - Pulir Digital a fondo y Guillotina (resto Bloque 3.1).
 
 ---
@@ -784,9 +784,18 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 
 ## 📌 Punto de continuación (próxima sesión)
 
-**👉 Retomar aquí (17 jun 2026, noche):** Fase **8.0** (migración `ot_tipo` / `ot_padre_numero`) + Fase **8.1** (agrupación pool/pipeline). Responder **§12** de `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` con planta antes del wizard 8.2.
+**👉 Retomar aquí (18 jun 2026):** Fase **8.1** (agrupación pool/pipeline). Responder **§12** de `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` con planta antes del wizard 8.2.
 
-**Fase FORMATO** ✅ implementada y probada (commit `aadad81`). Ver sesión abajo.
+**Fase FORMATO** ✅ · **Fase 8.0** ✅
+
+**Sesión 18 jun 2026** — Higiene pendientes vivos ✅
+
+### Hecho
+- Docs: bultos Gabri ✅, estado Bloque 8.1 como siguiente, rol `ctp` aclarado (no `preimpresion`).
+- Migración **`20260618143000`**: Desbroce en 5 plantillas offset (Troq → Desbroce → Eng).
+- Migración **`20260618143200`**: seed `bultos_por_palet_default` (10 cajas).
+- Migración **`20260618143100`** + `permissions.ts`: rol **`ctp`** con acceso a `produccion` y `produccion_ejecucion`.
+- Marc/Gemma: **sin usuario** aún en Supabase (solo cuentas de prueba por departamento).
 
 ---
 
@@ -804,9 +813,10 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 - Script auxiliar: `scripts/clone-ot-test.mjs`.
 
 ### 🔜 Próxima sesión
-- [ ] Fase **8.0** + **8.1** (migración + agrupación UI).
+- [ ] Fase **8.1** (agrupación UI pool/pipeline).
 - [ ] §12 planta antes de wizard 8.2.
-- Pendientes vivos: roles `preimpresion`, bultos/palet Gabri, CTP/Gemma, Bloque 6.
+- [ ] Usuarios Marc/Gemma (rol `ctp`).
+- Pendientes vivos: campos CTP/Gemma, Bloque 6.
 
 ---
 
@@ -823,8 +833,9 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 
 **Prioridad alta (pendiente del usuario)**
 - [ ] **Ampliar campos CTP** tras reunión con Gemma (10 jun). Añadir checkboxes adicionales al `CTP_PREIMPRESION_CAMPOS` en `hoja-ruta-campos-config.ts`.
-- [ ] **Crear roles `preimpresion`** en `profiles` para Marc y Gemma (desde panel Admin → Usuarios).
-- [ ] **Meter `bultos_por_palet_default`** reales de Gabri en cada caja (`prod_cajas_embalaje`) via Settings → Recursos → Cajas embalaje.
+- [ ] **Usuarios Marc/Gemma** con rol **`ctp`** (Admin → Usuarios; aún no existen en Supabase).
+- [x] ~~**`bultos_por_palet_default`** de Gabri~~ ✅ (seed `20260618143200`).
+- [x] ~~**Plantillas Desbroce** (Troq→Eng, 5 rutas)~~ ✅ (`20260618143000`).
 - [ ] **Probar flujo completo** con una OT real: CTP → (Guillotina) → Impresión → Troquelado → Desbroce → Engomado → Manipulados.
 
 **Prioridad media**
@@ -849,11 +860,11 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 
 ### 🔜 Próxima sesión
 - [x] Mergear `feature/fase0.6-hoja-ruta-virtual` a `main` (16 jun 2026).
-- [ ] **Bloque 8**: ~~Fase FORMATO~~ ✅ → 8.0 migración → 8.1 agrupación UI — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`
+- [ ] **Bloque 8**: ~~Fase FORMATO~~ ✅ · ~~8.0~~ ✅ → **8.1** agrupación UI — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`
 - [ ] Ampliar campos CTP tras reunión con Gemma.
 - [ ] Marcar `soporte_impresion` en líneas de material desde maestro/despacho (hoy heurística).
 - [ ] Probar flujo completo extremo a extremo con varias OTs reales.
-- [ ] Pendientes vivos: roles `preimpresion` (Marc/Gemma), `bultos_por_palet_default` de Gabri, plantillas de ruta con CTP/Desbroce.
+- [ ] Pendientes vivos: usuarios CTP (Marc/Gemma), campos CTP/Gemma, plantillas Manipulados si aplica.
 - [ ] **Bloque 8.2+**: wizard despacho contenedor + hijas — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` §12 (preguntas planta)
 - **Bloque 6**: `prod_ot_producidas` + lifecycle de cierre.
 
