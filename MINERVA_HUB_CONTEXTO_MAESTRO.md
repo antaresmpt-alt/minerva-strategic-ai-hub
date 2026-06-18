@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 17 jun 2026 (Fase FORMATO encadenado + fix Pool/Pipeline; Bloque 8 en curso)
+> Última actualización: 18 jun 2026 (briefing Bloque 9 cartelas/stock; Bloque 8 en curso)
 
 ---
 
@@ -12,6 +12,8 @@
 2. Añadir solo el brief de la fase activa si aplica:
    - `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md`
    - `MINERVA_BLOQUE7_ODOO_ALBARANES.md`
+   - `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`
+   - `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`
 3. Añadir `MINERVA_CONTEXTO_TECNICO.md` solo si la IA necesita detalles técnicos del repo.
 4. Al cerrar una fase, actualizar este maestro + `FASES_HOJA_RUTA_DIGITAL.md`.
 
@@ -240,7 +242,8 @@ src/components/produccion/planificacion/
 | 5 | Integración Etiquetas ↔ Hoja de Ruta | ⏳ Pendiente |
 | 6 | Producidas/Histórico + cierre OT | ⏳ Pendiente (PRÓXIMO GRANDE) |
 | 7 | Expedición/Albarán | ⏳ Pendiente (depende B6 + Odoo) |
-| 8 | Formatos de hoja + formas + componentes (OT contenedor/hijas) | 🔄 En curso — **Fase FORMATO ✅** (17 jun); 8.0–8.4 pendiente — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` |
+| 8 | Formatos de hoja + formas + componentes (OT contenedor/hijas) | 🔄 En curso — **Fase FORMATO ✅** + **8.0 ✅**; 8.1–8.4 pendiente — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` |
+| 9 | Material, cartelas de palet y stock libre | 📋 Diseño — briefing 18 jun — ver `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` |
 
 ---
 
@@ -248,7 +251,7 @@ src/components/produccion/planificacion/
 
 ### Retomar aquí (17 jun 2026, noche)
 - [x] **Fase FORMATO**: encadenado formato de hoja (compra → guillotina → impresión → externos) — commit `aadad81`, probado OT 98009
-- [ ] **Fase 8.0**: migración `ot_tipo` / `ot_padre_numero` + campos hija
+- [x] **Fase 8.0**: migración `ot_tipo` / `ot_padre_numero` + campos hija (`aedb353`)
 - [ ] **Fase 8.1**: agrupación UI Pool/Pipeline (contenedor + hijas expandibles)
 - [ ] Preguntas a planta (Abraham/Carlos/Jordi) — ver §12 de `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`
 
@@ -292,6 +295,8 @@ src/components/produccion/planificacion/
 10. **Bloque 8 — OT contenedor + hijas (17 jun 2026)**: Optimus modela sub-unidades con PRE+TIR; Minerva adoptará **hijas como OTs reales en BD** agrupadas en UI (no listado plano). Formato = cadena por proceso. Convergencia variable según producto (no siempre desbroce). Itinerario por hija con override. Tipos: forma | componente | preimpresion | acabado. Briefing: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
 
 11. **Encadenado formato de pliego (17 jun 2026, Fase FORMATO ✅)**: por **orden de itinerario** (`prod_ot_pasos.orden`), no por tipo de proceso global. `tamano_hoja` en despacho = **Formato compra** (solo referencia de compra). Guillotina: `tamano_inicial` ← anterior, `tamano_final` → siguiente. Impresión/externos hojas: `formato_hojas`. Troquelado: `tamano_corte` es el troquel (independiente); banner muestra pliego de entrada. Módulo: `hoja-ruta-formato-encadenado.ts`. Probado OT 98009 (commit `aadad81`).
+
+12. **Bloque 9 — Cartelas y stock (18 jun 2026, diseño)**: replicar flujo Optimus (OC → albarán proveedor → cartelas por palet → ID Stock único). Dos tipos: cartela OT (`reservado`) y stock libre (`disponible`). Sobrante recomendado al **cerrar OT** (opción A), no al recepcionar. MVP consumo: trazabilidad documental (Opción C) → evolucionar a B. Tablas propuestas: `prod_recepciones_material`, `prod_stock_palets`, `prod_stock_movimientos`. Sustituye conceptualmente el MRP legacy (`almacen_materiales`). Briefing: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`.
 
 ---
 
@@ -366,5 +371,5 @@ Objetivos de la sesión:
 <pegar MINERVA_HUB_CONTEXTO_MAESTRO.md>
 
 --- BRIEF ESPECÍFICO (opcional) ---
-<pegar MINERVA_BLOQUE6_... o MINERVA_BLOQUE7_... o MINERVA_BLOQUE8_... si aplica>
+<pegar MINERVA_BLOQUE6_... o MINERVA_BLOQUE7_... o MINERVA_BLOQUE8_... o MINERVA_BLOQUE9_... si aplica>
 ```

@@ -560,11 +560,12 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 ⏳ **Bloque 5 PENDIENTE**: Integración Etiquetas ↔ Hoja de Ruta (flujo Hugo)
 ⏳ **Bloque 6 PENDIENTE**: Producidas/Histórico (`prod_ot_producidas`, snapshot híbrido) + lifecycle de cierre (pendiente_revision → producida) + recálculo maestro
 ⏳ **Bloque 7 PENDIENTE**: Expedición/Albarán (depende de Bloque 6 + decisión Odoo)
-🔄 **Bloque 8 EN CURSO** (17 jun 2026): **Fase FORMATO ✅** (encadenado tamaño pliego + etiqueta "Formato compra", commit `aadad81`, OT prueba 98009). Pendiente 8.0–8.4 (contenedor/hijas). Fuente de verdad: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
+🔄 **Bloque 8 EN CURSO** (17–18 jun 2026): **Fase FORMATO ✅** + **8.0 ✅** (migración contenedor/hija). Pendiente 8.1–8.4. Fuente de verdad: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
+📋 **Bloque 9 DISEÑO** (18 jun 2026): material, cartelas de palet, stock libre y trazabilidad. Fuente de verdad: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`.
 
 ---
 
-**Última actualización**: 17 de junio de 2026 — Fase FORMATO implementada; Bloque 8.0–8.4 pendiente
+**Última actualización**: 18 de junio de 2026 — briefing Bloque 9; Bloque 8.1–8.4 pendiente
 
 ---
 
