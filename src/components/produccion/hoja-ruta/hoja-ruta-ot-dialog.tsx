@@ -41,6 +41,10 @@ import {
   fmtCantidad,
   tipoMaquinaLabel,
 } from "@/lib/hoja-ruta/hoja-ruta-formatters";
+import {
+  computeHorasResumenOt,
+  formatHorasResumenLine,
+} from "@/lib/hoja-ruta/hoja-ruta-horas";
 import { exportHojaRutaContenedorPdf, exportHojaRutaPdf } from "@/lib/hoja-ruta/hoja-ruta-pdf";
 
 function machineLabel(paso: HojaRutaPaso): string {
@@ -53,6 +57,11 @@ function machineLabel(paso: HojaRutaPaso): string {
 }
 
 function HojaRutaHeader({ data }: { data: HojaRutaData }) {
+  const horasLine = useMemo(
+    () => formatHorasResumenLine(computeHorasResumenOt(data.pasos)),
+    [data.pasos],
+  );
+
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
       <div className="text-sm font-semibold text-slate-800">
@@ -68,6 +77,11 @@ function HojaRutaHeader({ data }: { data: HojaRutaData }) {
         <div>
           <span className="font-medium">Estado OT:</span> {data.estadoOt ?? "—"}
         </div>
+        {horasLine ? (
+          <div className="sm:col-span-2 lg:col-span-3">
+            <span className="font-medium">Horas OT:</span> {horasLine}
+          </div>
+        ) : null}
       </div>
       {data.despacho ? (
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-200 pt-2 text-xs text-slate-600">

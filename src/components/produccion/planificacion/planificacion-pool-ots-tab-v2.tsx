@@ -76,6 +76,8 @@ import {
   formatContenedorProgressBadge,
   formatHijaDisplayLabel,
   isPoolRowSelectableForMesa,
+  buildHijasPlanificacionTipoByPadre,
+  matchesPlanificacionAreaTipoFilter,
   matchesPlanificacionOtTipoFiltro,
   normalizeOtTipo,
   poolMaterialBarcoPadreFromRow,
@@ -320,6 +322,32 @@ function statusPill(
       {label}
     </span>
   );
+}
+
+function poolRowMatchesSearch(r: PoolRow, q: string): boolean {
+  if (!q) return true;
+  return [
+    r.ot,
+    r.cliente,
+    r.trabajo,
+    r.material,
+    r.troquelLabel,
+    r.acabadoPral,
+    r.compraEstado,
+    r.formaDescripcion ?? "",
+  ]
+    .map((x) => String(x ?? "").toLowerCase())
+    .some((s) => s.includes(q));
+}
+
+function resolvePoolHijasForPadre(
+  padreOt: string,
+  allRows: PoolRow[],
+  hijaRowsByPadre: Record<string, PoolRow[]>,
+): PoolRow[] {
+  const lazy = hijaRowsByPadre[padreOt];
+  if (lazy?.length) return lazy;
+  return allRows.filter((r) => r.otTipo === "hija" && r.otPadreNumero === padreOt);
 }
 
 function enrichHijaRowWithBarcoMaterial(hija: PoolRow, padre: PoolRow | undefined): PoolRow {
@@ -989,7 +1017,23 @@ export function PlanificacionPoolOtsTab() {
       setPoolCountPreAmbito(enrichedRows.length);
       const tipoFiltro = getPlanificacionTipoMaquinaFilter(roleRead);
       if (tipoFiltro) {
-        enrichedRows = enrichedRows.filter((r) => r.planificacionTipoPaso === tipoFiltro);
+        const hijasTiposByPadre = buildHijasPlanificacionTipoByPadre(
+          enrichedRows,
+          (r) => r.otTipo,
+          (r) => r.otPadreNumero,
+          (r) => r.planificacionTipoPaso,
+        );
+        enrichedRows = enrichedRows.filter((r) =>
+          matchesPlanificacionAreaTipoFilter(
+            {
+              ot: r.ot,
+              otTipo: r.otTipo,
+              planificacionTipoPaso: r.planificacionTipoPaso,
+            },
+            tipoFiltro,
+            hijasTiposByPadre,
+          ),
+        );
       }
 
       setRows(enrichedRows);
@@ -1013,49 +1057,82 @@ export function PlanificacionPoolOtsTab() {
     void loadRows();
   }, [loadRows]);
 
+  const hijasTiposByPadre = useMemo(
+    () =>
+      buildHijasPlanificacionTipoByPadre(
+        rows,
+        (r) => r.otTipo,
+        (r) => r.otPadreNumero,
+        (r) => r.planificacionTipoPaso,
+      ),
+    [rows],
+  );
+
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     const filterNorm = normalizeCompraEstado(compraEstadoFilter);
     return rows.filter((r) => {
       if (r.isHijaRow) return false;
       if (!matchesPlanificacionOtTipoFiltro(r.otTipo, otTipoFilter)) return false;
-      const matchesSearch =
-        !q ||
-        [
-          r.ot,
-          r.cliente,
-          r.trabajo,
-          r.material,
-          r.troquelLabel,
-          r.acabadoPral,
-          r.compraEstado,
-          r.formaDescripcion ?? "",
-        ]
-          .map((x) => String(x ?? "").toLowerCase())
-          .some((s) => s.includes(q));
+      let matchesSearch = poolRowMatchesSearch(r, q);
+      if (!matchesSearch && r.otTipo === "contenedor" && q) {
+        matchesSearch = rows.some(
+          (h) =>
+            h.otTipo === "hija" &&
+            h.otPadreNumero === r.ot &&
+            poolRowMatchesSearch(h, q),
+        );
+      }
       if (!matchesSearch) return false;
       if (filterNorm !== "all" && normalizeCompraEstado(r.compraEstado) !== filterNorm) {
         return false;
       }
-      if (areaTipoFilter !== "all" && r.planificacionTipoPaso !== areaTipoFilter) {
+      if (
+        !matchesPlanificacionAreaTipoFilter(
+          {
+            ot: r.ot,
+            otTipo: r.otTipo,
+            planificacionTipoPaso: r.planificacionTipoPaso,
+          },
+          areaTipoFilter,
+          hijasTiposByPadre,
+        )
+      ) {
         return false;
       }
       return true;
     });
-  }, [rows, search, compraEstadoFilter, areaTipoFilter, otTipoFilter]);
+  }, [rows, search, compraEstadoFilter, areaTipoFilter, otTipoFilter, hijasTiposByPadre]);
 
   const selectableRows = useMemo(() => {
     const out = filteredRows.filter((r) => poolRowSelectableForMesa(r));
     if (otTipoFilter !== "agrupado") return out;
+    const areaFilterActive = areaTipoFilter !== "all";
     for (const r of filteredRows) {
-      if (r.otTipo !== "contenedor" || !expandedContenedores[r.ot]) continue;
-      for (const h of hijaRowsByPadre[r.ot] ?? []) {
-        const enriched = enrichHijaRowWithBarcoMaterial(h, r);
+      if (r.otTipo !== "contenedor") continue;
+      const rawHijas = resolvePoolHijasForPadre(r.ot, rows, hijaRowsByPadre);
+      const hijasToShow = areaFilterActive
+        ? rawHijas.filter((h) => h.planificacionTipoPaso === areaTipoFilter)
+        : rawHijas;
+      const showHijas = areaFilterActive || expandedContenedores[r.ot];
+      if (!showHijas) continue;
+      for (const h of hijasToShow) {
+        const enriched = enrichHijaRowWithBarcoMaterial(
+          { ...h, isHijaRow: true, padreOt: r.ot },
+          r,
+        );
         if (poolRowSelectableForMesa(enriched)) out.push(enriched);
       }
     }
     return out;
-  }, [filteredRows, otTipoFilter, expandedContenedores, hijaRowsByPadre]);
+  }, [
+    filteredRows,
+    otTipoFilter,
+    expandedContenedores,
+    hijaRowsByPadre,
+    rows,
+    areaTipoFilter,
+  ]);
   const allChecked =
     selectableRows.length > 0 && selectableRows.every((r) => selected[r.ot]);
   const selectedRows = useMemo(() => {
@@ -1232,16 +1309,37 @@ export function PlanificacionPoolOtsTab() {
       return sortedRows;
     }
     const out: PoolRow[] = [];
+    const areaFilterActive = areaTipoFilter !== "all";
     for (const r of sortedRows) {
       out.push(r);
-      if (r.otTipo === "contenedor" && expandedContenedores[r.ot]) {
-        out.push(
-          ...(hijaRowsByPadre[r.ot] ?? []).map((h) => enrichHijaRowWithBarcoMaterial(h, r)),
-        );
-      }
+      if (r.otTipo !== "contenedor") continue;
+      const rawHijas = resolvePoolHijasForPadre(r.ot, rows, hijaRowsByPadre);
+      const hijasToShow = areaFilterActive
+        ? rawHijas.filter((h) => h.planificacionTipoPaso === areaTipoFilter)
+        : rawHijas;
+      const showHijas = areaFilterActive || expandedContenedores[r.ot];
+      if (!showHijas || hijasToShow.length === 0) continue;
+      out.push(
+        ...hijasToShow.map((h) =>
+          enrichHijaRowWithBarcoMaterial(
+            {
+              ...h,
+              isHijaRow: true,
+              padreOt: r.ot,
+              trabajo: formatHijaDisplayLabel({
+                ot: h.ot,
+                tipoHija: h.tipoHija,
+                formaDescripcion: h.formaDescripcion,
+                trabajo: h.trabajo,
+              }),
+            },
+            r,
+          ),
+        ),
+      );
     }
     return out;
-  }, [sortedRows, otTipoFilter, expandedContenedores, hijaRowsByPadre]);
+  }, [sortedRows, otTipoFilter, expandedContenedores, hijaRowsByPadre, rows, areaTipoFilter]);
 
   const resetPoolEditItinerario = useCallback(() => {
     setPoolEditOtGeneralId(null);

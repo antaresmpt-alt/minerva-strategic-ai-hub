@@ -14,6 +14,10 @@ import {
   fmtCantidad,
   tipoMaquinaLabel,
 } from "@/lib/hoja-ruta/hoja-ruta-formatters";
+import {
+  computeHorasResumenOt,
+  formatHorasResumenLine,
+} from "@/lib/hoja-ruta/hoja-ruta-horas";
 import { formatHijaDisplayLabel } from "@/lib/planificacion-contenedor-query";
 
 const NAVY: [number, number, number] = [0, 33, 71];
@@ -87,10 +91,12 @@ const ESTADO_FILL: Record<string, [number, number, number]> = {
 function drawHeaderDataBox(doc: jsPDF, data: HojaRutaData, startY: number): number {
   let y = startY;
   const usable = pageW(doc) - MARGIN.left - MARGIN.right;
+  const horasLine = formatHorasResumenLine(computeHorasResumenOt(data.pasos));
+  const boxH = horasLine ? 25 : 20;
 
   doc.setDrawColor(203, 213, 225);
   doc.setFillColor(...LIGHT_BG);
-  doc.roundedRect(MARGIN.left, y, usable, 20, 1.5, 1.5, "FD");
+  doc.roundedRect(MARGIN.left, y, usable, boxH, 1.5, 1.5, "FD");
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.setTextColor(...NAVY);
@@ -119,7 +125,14 @@ function drawHeaderDataBox(doc: jsPDF, data: HojaRutaData, startY: number): numb
     doc.text(items.join("  |  "), MARGIN.left + 3, infoY);
   }
 
-  y += 22;
+  if (horasLine) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(...NAVY);
+    doc.text(`Horas OT: ${horasLine}`, MARGIN.left + 3, y + (data.despacho ? 20 : 15));
+  }
+
+  y += boxH + 2;
   doc.setTextColor(0, 0, 0);
   return y;
 }
@@ -615,13 +628,41 @@ function drawHijaResumenBadges(
   return y + 6;
 }
 
-function drawContenedorSummary(doc: jsPDF, data: HojaRutaContenedorData): number {
+function drawContenedorSummary(
+  doc: jsPDF,
+  data: HojaRutaContenedorData,
+  hijasFull: HojaRutaData[] = [],
+): number {
   let y = drawHeader(doc, data.padre, {
     bannerTitle: "HOJA DE RUTA · BARCO (CONTENEDOR)",
     bannerOtLabel: `OT ${data.padre.otNumero}`,
   });
   const usable = pageW(doc) - MARGIN.left - MARGIN.right;
   const maxY = pageH(doc) - MARGIN.bottom - 10;
+  const hijaFullByNum = new Map(hijasFull.map((h) => [h.otNumero, h]));
+
+  let barcoPrevisto = 0;
+  let barcoReal = 0;
+  let hasPrev = false;
+  let hasReal = false;
+  for (const h of hijasFull) {
+    const resumen = computeHorasResumenOt(h.pasos);
+    if (resumen.previsto != null) {
+      barcoPrevisto += resumen.previsto;
+      hasPrev = true;
+    }
+    if (resumen.real != null) {
+      barcoReal += resumen.real;
+      hasReal = true;
+    }
+  }
+  const barcoHorasLine = formatHorasResumenLine({
+    previsto: hasPrev ? barcoPrevisto : null,
+    real: hasReal ? barcoReal : null,
+    desviacion: hasPrev && hasReal ? barcoReal - barcoPrevisto : null,
+    pasosConPrevisto: 0,
+    pasosConReal: 0,
+  });
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
@@ -629,9 +670,10 @@ function drawContenedorSummary(doc: jsPDF, data: HojaRutaContenedorData): number
   doc.text("RESUMEN AGREGADO DE HIJAS", MARGIN.left, y + 3);
   y += 6;
 
+  const progressBoxH = data.progress.pasosTotal > 0 ? 18 : 14;
   doc.setDrawColor(199, 210, 254);
   doc.setFillColor(238, 242, 255);
-  doc.roundedRect(MARGIN.left, y, usable, 14, 1.5, 1.5, "FD");
+  doc.roundedRect(MARGIN.left, y, usable, progressBoxH, 1.5, 1.5, "FD");
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
   doc.setTextColor(67, 56, 202);
@@ -653,9 +695,16 @@ function drawContenedorSummary(doc: jsPDF, data: HojaRutaContenedorData): number
       barX,
       barY + 5.5,
     );
+  }
+  y += progressBoxH + 2;
+
+  if (barcoHorasLine) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(...NAVY);
+    doc.text(`Horas totales (hijas): ${barcoHorasLine}`, MARGIN.left, y + 2);
     y += 6;
   }
-  y += 14;
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
@@ -674,7 +723,11 @@ function drawContenedorSummary(doc: jsPDF, data: HojaRutaContenedorData): number
       : hija.pasosTotal > 0 && hija.pasosCompletados === hija.pasosTotal
         ? "Itinerario completo"
         : "Sin paso activo";
-    const cardH = hija.pasos.length > 0 ? 22 : 14;
+    const hijaFull = hijaFullByNum.get(hija.otNumero);
+    const horasHijaLine = hijaFull
+      ? formatHorasResumenLine(computeHorasResumenOt(hijaFull.pasos))
+      : null;
+    const cardH = hija.pasos.length > 0 ? (horasHijaLine ? 26 : 22) : horasHijaLine ? 18 : 14;
 
     if (y + cardH > maxY) {
       doc.addPage();
@@ -700,9 +753,16 @@ function drawContenedorSummary(doc: jsPDF, data: HojaRutaContenedorData): number
       y + 9.5,
     );
     doc.text(`Paso actual: ${pasoTxt}`, MARGIN.left + 3, y + 13);
+    if (horasHijaLine) {
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(...NAVY);
+      doc.text(`Horas: ${horasHijaLine}`, MARGIN.left + 3, y + 17);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(...SLATE);
+    }
 
     if (hija.pasos.length > 0) {
-      y = drawHijaResumenBadges(doc, hija.pasos, y + 15);
+      y = drawHijaResumenBadges(doc, hija.pasos, y + (horasHijaLine ? 19 : 15));
     } else {
       y += cardH + 2;
     }
@@ -773,7 +833,7 @@ export function exportHojaRutaContenedorPdf(
   hijasFull: HojaRutaData[],
 ): void {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-  drawContenedorSummary(doc, contenedor);
+  drawContenedorSummary(doc, contenedor, hijasFull);
 
   const byNumero = new Map(hijasFull.map((h) => [h.otNumero, h]));
   const ordered = contenedor.hijas

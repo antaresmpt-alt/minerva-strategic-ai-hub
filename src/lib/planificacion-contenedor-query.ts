@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { normalizeCompraEstado } from "@/lib/compras-material-estados";
+import type { PlanificacionTipoMaquina } from "@/lib/planificacion-ambito";
 import { fetchAllInChunks } from "@/lib/supabase-query-chunks";
 import {
   PROD_OT_TIPOS,
@@ -467,6 +468,47 @@ export function isPoolRowSelectableForMesa(row: {
 }): boolean {
   if (row.otTipo === "contenedor") return false;
   return row.hasCompraGenerada;
+}
+
+/** Tipos de próximo paso de las hijas, indexados por OT padre (barco). */
+export function buildHijasPlanificacionTipoByPadre<T>(
+  rows: T[],
+  getOtTipo: (row: T) => ProdOtTipo,
+  getOtPadreNumero: (row: T) => string | null | undefined,
+  getPlanificacionTipoPaso: (row: T) => PlanificacionTipoMaquina | null | undefined,
+): Map<string, Set<PlanificacionTipoMaquina>> {
+  const map = new Map<string, Set<PlanificacionTipoMaquina>>();
+  for (const row of rows) {
+    if (getOtTipo(row) !== "hija") continue;
+    const padre = String(getOtPadreNumero(row) ?? "").trim();
+    if (!padre) continue;
+    const tipo = getPlanificacionTipoPaso(row);
+    if (!tipo) continue;
+    const set = map.get(padre) ?? new Set<PlanificacionTipoMaquina>();
+    set.add(tipo);
+    map.set(padre, set);
+  }
+  return map;
+}
+
+/**
+ * Filtro «Próximo paso»: en barcos el padre no tiene itinerario propio;
+ * coincide si alguna hija tiene ese tipo de paso.
+ */
+export function matchesPlanificacionAreaTipoFilter(
+  row: {
+    ot: string;
+    otTipo: ProdOtTipo;
+    planificacionTipoPaso: PlanificacionTipoMaquina | null | undefined;
+  },
+  filter: PlanificacionTipoMaquina | "all",
+  hijasTiposByPadre: Map<string, Set<PlanificacionTipoMaquina>>,
+): boolean {
+  if (filter === "all") return true;
+  if (row.otTipo === "contenedor") {
+    return hijasTiposByPadre.get(row.ot)?.has(filter) ?? false;
+  }
+  return row.planificacionTipoPaso === filter;
 }
 
 export function matchesPlanificacionOtTipoFiltro(
