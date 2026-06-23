@@ -6,8 +6,8 @@
 >
 > **Estado:** 📋 Diseño / brainstorming — **sin implementación**.
 > **Origen:** Optimus + cartelas CARPAPSA (15 jun 2026).
-> **Actualizado:** 23 jun 2026 — limpieza §7, sobrante = cartela que muta, movimientos desde almacén (3 flujos), ID Stock 10.310, modelo alineado.
-> **PENDIENTE:** Dispositivo Juan (tablet/móvil). Rol de Emma tras autonomía de Juan.
+> **Actualizado:** 23 jun 2026 — limpieza §7, sobrante = cartela que muta, movimientos desde almacén (3 flujos), ID Stock 10.310, extensibilidad §13 (tipo_stock/unidad, Gabri/PT, consumibles) + §13b recuento "día 0".
+> **PENDIENTE:** Dispositivo Juan (tablet/móvil). Rol de Emma tras autonomía de Juan. Recuento físico "día 0" (§13b).
 
 **Relacionado:** sobrantes → Bloque 6 · expedición → Bloque 7 · material contenedor/hijas → Bloque 8 · FSC → maestro artículos.
 
@@ -413,6 +413,8 @@ Cada fila = 1 cartela (asignación de cantidad a una OT). N cartelas pueden comp
 |-------|------|-------|
 | `id` | UUID | PK |
 | `id_stock` | integer | Número de cartela (autoincremental desde **10.310**) |
+| `tipo_stock` | enum | `materia_prima` (MVP) · `semielaborado` · `producto_terminado` · `consumible`. Permite extender el mismo motor a futuras capas sin rehacer SQL (ver §14). MVP solo usa `materia_prima`. |
+| `unidad` | enum | `hojas` (MVP) · `uds` · `kg` · `m` … Unidad de `cantidad_inicial`/`cantidad_actual`. MVP solo usa `hojas`. |
 | `recepcion_id` | FK nullable | → `prod_recepciones_material` (si viene del muelle/compra) |
 | `compra_id` | FK nullable | → `prod_compra_material` (atajo si no hay recepción muelle aún) |
 | `codigo_articulo` | text | Código material (PHFOAL235072001020) |
@@ -805,9 +807,90 @@ sobre `almacen_materiales` + vista `almacen_control_inteligente` (stock agregado
 **Decisión pendiente:** Bloque 9 debe **reemplazar** el modelo MRP legacy — no convivir sin fuente de verdad.
 El nuevo modelo es **por palet/cartela** (`prod_stock_palets`).
 
+**Por qué el MRP legacy falló y este no:** el MRP guardaba un **número agregado por material** que alguien tenía que mantener a mano → se descuadraba en cuanto se dejaba un día. En el modelo cartela, el agregado es **derivado** (suma de `cantidad_actual` de las cartelas + movimientos), no un dato que se mantiene. El "stock de Zenith 295" deja de ser un campo y pasa a ser una **vista calculada**. Por eso construir cartelas primero **no** es hacer la casa por el tejado: es poner los cimientos. La vista agregada por material (con mínimos/reposición) se monta **encima** como evolución (ver §14).
+
 ---
 
-## 13. Historial del documento
+## 13. Extensibilidad del modelo de stock (capas futuras)
+
+> Añadido 23 jun 2026. El patrón **cartela** no es solo "stock de papel": es el **motor de stock** de Minerva. Misma arquitectura (registro identificado + `cantidad_inicial`/`cantidad_actual` + `estado` + `ot_origen` + movimientos), distintos `tipo_stock` y `unidad`.
+
+### Las 3 capas de stock de la planta
+
+| Capa | Qué es | Ejemplo | `tipo_stock` | Cuándo |
+|------|--------|---------|--------------|--------|
+| **Materia prima** | Papel/cartón en palets, se consume en máquina | Zenith 295gr, cartela 10.310 | `materia_prima` | **Bloque 9 (ahora)** |
+| **Semielaborado (WIP)** | Ya pasó un proceso, no es entrega | Hojas impresas, estuches desbrozados, cajas sin engomar | `semielaborado` | Fase futura |
+| **Producto terminado (PT)** | Listo para expedir | 1.500 cajas Simón UC10 sobrantes de OT X | `producto_terminado` | Fase futura (caso Gabri) |
+
+A esto se suma una capa transversal: **consumibles** (tintas, barnices, colas, cauchos) → `consumible`, stock por material **sin palet ni OT**, con mínimos. Modelo más simple que la cartela.
+
+### El caso Gabri (producto terminado) — documentado para el futuro
+
+Hoy Gabri (engomado + logística + entregas) controla el PT **a ojo**: cuando entra una OT de, p. ej., caja Simón UC10, va físicamente a su zona a ver qué hay y decide si fabrica completo, parcial o solo entrega. No hay número fiable.
+
+Esto enlaza con dos cosas que Minerva ya tiene/tendrá:
+- **Sobreproducción permitida (3–5%)**: el sobrante de cajas debería caer en stock PT trazable a la OT origen.
+- **Bloque 6 (cierre OT)** + **Bloque 7 (expedición)**: al cerrar una OT con exceso, generar entrada a stock PT; al expedir, descontar.
+
+Flujo objetivo (fase futura, mismo motor):
+```
+OT 35834 fabrica → sobran 1.500 uds Simón UC10
+  → stock PT (tipo_stock=producto_terminado, unidad=uds, ot_origen=35834)
+Cliente repite pedido
+  → Gabri consulta stock PT → usa 800 del sobrante
+  → solo fabrica el resto (o solo expedición)
+```
+
+### Orden de fases (consolidado)
+
+1. **Bloque 9 — Materia prima (ahora)**: muelle → cartelas → movimientos → consulta.
+2. **Vista agregada + mínimos**: roll-up sobre cartelas; reemplaza MRP legacy (§12).
+3. **Semielaborado (WIP)**: cuando la ejecución registre salidas reales por proceso.
+4. **Producto terminado (Gabri)**: liga Bloque 6 + 7; sobrante al cerrar OT → stock PT.
+5. **Consumibles (tintas, barnices, cauchos)**: stock por material, más simple.
+
+**Regla de oro:** no mezclar PT/consumibles en el sprint de cartelas de papel — diluye el foco. Pero el modelo (`tipo_stock`, `unidad`) ya queda preparado en 9.0 para no rehacer SQL.
+
+---
+
+## 13b. Prerrequisito de arranque — recuento físico "día 0"
+
+> Decisión operativa 23 jun 2026. **Crítica** para que Minerva arranque con datos reales.
+
+Cuando Minerva sustituya a Optimus en cartelas, necesita una **foto inicial** del stock físico (saldo de apertura). Sin ella, el sistema arranca vacío y tarda semanas en reflejar la realidad.
+
+**El orden es: recuento primero (con Optimus/papel), import después (cuando 9.1 esté listo).** No hay que tener Minerva montado el día del recuento.
+
+```
+Recuento físico (sábado, Optimus + papel + Excel)
+  ↓  Excel con el inventario de palets
+[Desarrollo Minerva en paralelo: 9.0 / 9.1]
+  ↓  cuando 9.1 esté rodado
+Import del Excel → cartelas iniciales en prod_stock_palets
+  ↓
+Juan trabaja en Minerva; a partir de aquí solo movimientos
+```
+
+**Columnas mínimas del Excel** (para que el import sea trivial, sin transformar formato Optimus):
+
+| Columna | Ejemplo | Notas |
+|---------|---------|-------|
+| `id_stock` | 10.301 | Vacío si palet nuevo sin número Optimus |
+| material / descripción | Zenith 295gr 65×92 | |
+| gramaje | 295 | |
+| formato | 65×92 | Formato real del palet (puede ser a corte) |
+| proveedor | CARPAPSA | |
+| cantidad_actual | 1.500 | Hojas reales hoy en el palet |
+| ot_destino | 35834 | Vacío si stock libre |
+| estado | reservado / disponible | |
+| es_fsc | sí / no | |
+
+**Tarea puntual asociada:** Juan/Ramón hacen el inventario; Emma (o el responsable) lo importa como cartelas iniciales con `estado` según corresponda. Es trabajo único pero **bloqueante del valor real** de 9.x.
+
+---
+
+## 14. Historial del documento
 
 | Fecha | Cambio |
 |-------|--------|
@@ -822,6 +905,7 @@ El nuevo modelo es **por palet/cartela** (`prod_stock_palets`).
 | 22 jun 2026 | **§6 revisado** — modelo OC→OT confirmado (1:N, no N:M). Cartela ≠ palet físico: N cartelas pueden compartir palet (`palet_fisico_ref`). Campos nuevos: `palet_fisico_ref`, `ref_lote_proveedor`, `cantidad_peso_unidad`. |
 | 22 jun 2026 | **§7 revisado** — Juan como usuario principal. §7.0: análisis Muelle existente (no tocar). §7.1: flujo Juan-céntrico. §7.2: pantalla "Cartelas pendientes" agrupada por albarán. §7.3: pantalla asignación palets→OTs. Roadmap 9.1 actualizado. |
 | 23 jun 2026 | **Limpieza §7** — eliminadas secciones duplicadas; §7.6 movimientos desde almacén (3 flujos); §7.7 consumo; §7.8 sobrantes. Sobrante = cartela que muta (§5, §7.8). ID Stock unificado **10.310**. `pefc_certificado_proveedor`, `ot_origen`/`ot_destino` en movimientos. Modo rápido/avanzado §7.3. Déficit en Stock (MVP); `material_status` diferido a post-9.4. |
+| 23 jun 2026 | **§13 Extensibilidad** — patrón cartela como motor de stock; capas materia prima / semielaborado / producto terminado (Gabri) / consumibles. Campos `tipo_stock` + `unidad` en `prod_stock_palets` (MVP: `materia_prima` + `hojas`). Por qué el MRP legacy falló (agregado manual) y este no (derivado). **§13b** recuento físico "día 0" como prerrequisito: recuento con Optimus → Excel con columnas acordadas → import a cartelas cuando 9.1 esté listo. |
 
 ### Implementación (rellenar al avanzar)
 
