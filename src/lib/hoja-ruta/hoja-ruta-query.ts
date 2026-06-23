@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { compareOtNumerosEs } from "@/lib/ots-contenedor-display";
 import {
   inferPlanificacionTipoFromProceso,
+  parsePlanificacionTipoMaquina,
   type PlanificacionTipoMaquina,
 } from "@/lib/planificacion-ambito";
 import {
@@ -400,12 +401,8 @@ export async function fetchHojaRutaOt(
       const procesoNombre = str(cat?.nombre);
       const rawTipo = str(maq?.tipo_maquina);
       const tipoMaquina: PlanificacionTipoMaquina | null =
-        rawTipo === "impresion" ||
-        rawTipo === "digital" ||
-        rawTipo === "troquelado" ||
-        rawTipo === "engomado"
-          ? (rawTipo as PlanificacionTipoMaquina)
-          : inferPlanificacionTipoFromProceso(seccionSlug, procesoNombre);
+        parsePlanificacionTipoMaquina(rawTipo) ??
+        inferPlanificacionTipoFromProceso(seccionSlug, procesoNombre);
 
       const ejec = pasoId ? ejecByPaso.get(pasoId) : undefined;
       const ext = pasoId ? extByPaso.get(pasoId) : undefined;

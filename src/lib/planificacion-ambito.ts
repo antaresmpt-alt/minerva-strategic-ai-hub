@@ -12,26 +12,42 @@ export type PlanificacionTipoMaquina =
   | "digital"
   | "troquelado"
   | "engomado"
-  | "preimpresion";
+  | "preimpresion"
+  | "guillotina"
+  | "desbroce";
 
 export type PlanificacionDraftScope = PlanificacionTipoMaquina | "todas";
 
 export const PLANIFICACION_TIPOS_MAQUINA: PlanificacionTipoMaquina[] = [
   "preimpresion",
+  "guillotina",
   "impresion",
   "digital",
   "troquelado",
+  "desbroce",
   "engomado",
 ];
 
 /** Orden UI cuando el usuario ve todas las áreas: evita que la primera máquina sea siempre offset. */
 const PLANIFICACION_TIPO_UI_ORDER: Record<PlanificacionTipoMaquina, number> = {
   preimpresion: 0,
-  digital: 1,
-  troquelado: 2,
-  engomado: 3,
-  impresion: 4,
+  guillotina: 1,
+  digital: 2,
+  troquelado: 3,
+  desbroce: 4,
+  engomado: 5,
+  impresion: 6,
 };
+
+export function parsePlanificacionTipoMaquina(
+  raw: string | null | undefined,
+): PlanificacionTipoMaquina | null {
+  const t = String(raw ?? "").trim();
+  if ((PLANIFICACION_TIPOS_MAQUINA as readonly string[]).includes(t)) {
+    return t as PlanificacionTipoMaquina;
+  }
+  return null;
+}
 
 export type MaquinaPlanificacionSortRow = {
   tipo_maquina: string;
@@ -59,9 +75,11 @@ export function sortMaquinasPlanificacionUiOrder<T extends MaquinaPlanificacionS
 
 const DRAFT_SCOPES: PlanificacionDraftScope[] = [
   "preimpresion",
+  "guillotina",
   "impresion",
   "digital",
   "troquelado",
+  "desbroce",
   "engomado",
   "todas",
 ];
@@ -124,9 +142,10 @@ export function inferPlanificacionTipoFromProceso(
   if (!slug && !nom) return null;
   const s = `${slug} ${nom}`;
   if (s.includes("preimpres") || s.includes("ctp")) return "preimpresion";
+  if (s.includes("guillot")) return "guillotina";
+  if (s.includes("desbroc")) return "desbroce";
   if (s.includes("digital")) return "digital";
-  if (s.includes("engom") || s.includes("desbroz") || s.includes("manipul")) return "engomado";
-  if (s.includes("desbroc")) return "engomado";
+  if (s.includes("engom") || s.includes("manipul")) return "engomado";
   if (s.includes("troquel")) return "troquelado";
   if (slug.includes("offset") || s.includes("offset")) return "impresion";
   if (s.includes("impres") && !s.includes("digital")) return "impresion";
@@ -138,9 +157,11 @@ export function etiquetaAmbitoPlanificacion(
 ): string {
   if (!tipo) return "Todas las áreas";
   if (tipo === "preimpresion") return "CTP / Preimpresión";
+  if (tipo === "guillotina") return "Guillotina";
   if (tipo === "impresion") return "Impresión offset";
   if (tipo === "digital") return "Impresión digital";
   if (tipo === "troquelado") return "Troquelado";
+  if (tipo === "desbroce") return "Desbroce";
   return "Engomado";
 }
 
@@ -233,12 +254,8 @@ export async function fetchProximoPasoDisponiblePorOt(
         ? String(cat.tipo_planificacion).trim().toLowerCase()
         : null;
     const tipoMaquina =
-      tipoFromDb === "impresion" ||
-      tipoFromDb === "digital" ||
-      tipoFromDb === "troquelado" ||
-      tipoFromDb === "engomado"
-        ? (tipoFromDb as PlanificacionTipoMaquina)
-        : inferPlanificacionTipoFromProceso(slug, nombre);
+      parsePlanificacionTipoMaquina(tipoFromDb) ??
+      inferPlanificacionTipoFromProceso(slug, nombre);
     out.set(num, {
       nombre,
       seccionSlug: slug,

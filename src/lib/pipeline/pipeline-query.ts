@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
   inferPlanificacionTipoFromProceso,
+  parsePlanificacionTipoMaquina,
   type PlanificacionTipoMaquina,
 } from "@/lib/planificacion-ambito";
 import {
@@ -443,18 +444,9 @@ export async function fetchPipelineRows(
       const ext = pasoId ? extByPaso.get(pasoId) : undefined;
       const seccionSlug = str(cat?.seccion_slug);
       const procesoNombre = str(cat?.nombre);
-      const tipoMaquina = (() => {
-        const raw = str(maq?.tipo_maquina);
-        if (
-          raw === "impresion" ||
-          raw === "digital" ||
-          raw === "troquelado" ||
-          raw === "engomado"
-        ) {
-          return raw as PlanificacionTipoMaquina;
-        }
-        return inferPlanificacionTipoFromProceso(seccionSlug, procesoNombre);
-      })();
+      const tipoMaquina =
+        parsePlanificacionTipoMaquina(str(maq?.tipo_maquina)) ??
+        inferPlanificacionTipoFromProceso(seccionSlug, procesoNombre);
 
       const step: PipelineStepView = {
         pasoId,

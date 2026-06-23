@@ -382,6 +382,23 @@ Rama: `feature/bloque8.1-pool-mesa-ejecucion-fixes` (commit `2d9d3ab`).
 - **8.6** Semáforo/proyección por componente.
 - **8.7** Vista hoja de ruta / PDF del contenedor agregado. ✅ **23 jun 2026:** modal barco (progreso + hijas + drill-down) + PDF `hoja-ruta-barco-{OT}.pdf` (resumen + anexos por hija).
 
+#### 8.7.1 — Smoke test OT 35990 + refinamientos planificación ✅ **23 jun 2026 (tarde)**
+
+| Área | Cambio |
+|------|--------|
+| **Cerrar proceso** | Diálogo con tiempo mesa (reloj, no editable) + horas declaradas ajustables + sync a `prod_mesa_ejecuciones`. Sustituye "Finalizar" directo en todos los procesos. |
+| **Horas totales HR** | Modal y PDF de hoja de ruta muestran previsto / real / desviación sumando campos reales por paso (`hoja-ruta-horas.ts`). |
+| **Pool filtro barco** | Filtro "Próximo paso" considera tipos de paso de las hijas al filtrar contenedores (`matchesPlanificacionAreaTipoFilter`). |
+| **Pool hijas cerradas** | Al expandir barco se listan **todas** las hijas (incl. `estado_pool = cerrada`); visual verde + "Itinerario completo", sin checkbox. |
+| **Filtro próximo paso** | Nuevos tipos **Guillotina** y **Desbroce** en dropdown (migración `20260623210000`). Externo pendiente revisión aparte. |
+| **Impresión proyección** | Badge y prefill usan salida de Guillotina (`hojas_finales`) vía `inputFromProcessIds: [17]`; fallback a despacho si no hay corte previo. |
+| **Manipulados** | Campos **Etiquetar** + uds./paquete etiqueta (paralelo a Retractilar); cálculo automático de paquetes. |
+| **Merma troquel → siguiente** | Semáforo en paso posterior (ej. Manipulados) con aviso amarillo/rojo si proyección < pedido ±5%. |
+
+**Pendiente explícito:** encadenado y prefill de **procesos externos** (formato hojas recibidas, hojas recibidas automáticas, badge informativo).
+
+**OT de prueba:** `35990` — flujo CTP → Guillotina → Impresión → Plastificado ext. → Troquel → Manipulados (sin desbroce/engomado en itinerario).
+
 ---
 
 ## 11. Impacto en módulos existentes
@@ -392,8 +409,8 @@ Rama: `feature/bloque8.1-pool-mesa-ejecucion-fixes` (commit `2d9d3ab`).
 | Pool / Pipeline | **Agrupación visual** (8.1). Queries filtran `ot_tipo != hija` por defecto. Material barco + % pasos (8.1.1). |
 | **Maestro OTs / OTs despachadas** | **Agrupación visual** (8.1.2). Mismo patrón barco + expandir hijas. |
 | Despacho | Wizard hijas para `contenedor` (8.2). Form `simple` sin cambios. Compra conjunta en padre (validado 98010). **Hoy:** hijas al despachar; **futuro:** presupuesto Bloque 10. |
-| Mesa / ejecución | Por hija: **sin cambio de motor** (8.3). Pool lateral filtrado por tipo de paso (8.1.1). Merma impresión + prefill troquel corregidos. |
-| Hoja de ruta | Por hija: sin cambio. **Vista agregada contenedor (8.7):** modal + PDF barco con anexos por hija. |
+| Mesa / ejecución | Por hija: **sin cambio de motor** (8.3). Pool lateral filtrado por tipo de paso (8.1.1). Merma impresión + prefill troquel corregidos. **Cerrar proceso** con horas reloj + declaradas (8.7.1). |
+| Hoja de ruta | Por hija: sin cambio. **Vista agregada contenedor (8.7):** modal + PDF barco con anexos por hija. **Horas totales** prev/real/desv. en cabecera (8.7.1). |
 | Semáforo | Sin cambio en hijas simples; **futuro** ajuste por componente (8.6). |
 | CTP | Definir hija `preimpresion` o regla compartida (pendiente §12). |
 | Histórico (Bloque 6) | Cierre y snapshot del contenedor (8.4). |
@@ -497,6 +514,14 @@ Responder con Jordi / Zaida / Abraham / Carlos:
 - Agrupación contenedor en **Maestro OTs** y **OTs despachadas** (módulo `ots-contenedor-display.ts`).
 - Documentado **Bloque 10 Presupuestos** (versión real, puente 8.2 al despachar).
 - Reunión Albert/Jordi: jueves — `MINERVA_REUNION_HOJA_RUTA_JUEVES.md`.
+
+### 23 jun 2026 tarde (smoke test 35990 + cerrar proceso + filtros)
+
+- **Cerrar proceso:** `cerrar-proceso-dialog.tsx` + `planificacion-ejecucion-horas.ts` (tiempo mesa → horas declaradas).
+- **HR horas totales:** `hoja-ruta-horas.ts` en modal y PDF.
+- **Pool:** filtro Guillotina/Desbroce; hijas cerradas visibles al expandir barco.
+- **Impresión:** encadenado desde Guillotina en badge y datos proceso.
+- **Manipulados:** etiquetar + paquetes. Externos: revisión pendiente.
 
 ---
 

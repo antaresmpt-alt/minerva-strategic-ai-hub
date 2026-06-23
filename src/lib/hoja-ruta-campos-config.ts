@@ -845,7 +845,7 @@ const MANIPULADOS_INTERNOS_CAMPOS: CampoDefinicion[] = [
   },
   {
     id: 'unidades_por_paquete',
-    label: 'Uds. por paquete',
+    label: 'Uds. por paquete (retractilar)',
     tipo: 'number',
     min: 1,
     width: 'third',
@@ -855,11 +855,39 @@ const MANIPULADOS_INTERNOS_CAMPOS: CampoDefinicion[] = [
   },
   {
     id: 'num_paquetes',
-    label: 'Nº paquetes',
+    label: 'Nº paquetes (retractilar)',
     tipo: 'number',
     min: 0,
     width: 'third',
     conditionalOn: 'retractilar',
+    conditionalValue: true,
+    hint: 'Calculado: unidades ÷ uds. por paquete.',
+  },
+  // — Etiquetado (aparece solo si etiquetar = true) —
+  {
+    id: 'etiquetar',
+    label: 'Etiquetar',
+    tipo: 'boolean',
+    width: 'half',
+    hint: 'Activa los campos de etiquetado.',
+  },
+  {
+    id: 'unidades_por_paquete_etiqueta',
+    label: 'Uds. por paquete (etiquetar)',
+    tipo: 'number',
+    min: 1,
+    width: 'third',
+    conditionalOn: 'etiquetar',
+    conditionalValue: true,
+    hint: 'Ej: 6 uds. por paquete etiquetado.',
+  },
+  {
+    id: 'num_paquetes_etiqueta',
+    label: 'Nº paquetes (etiquetar)',
+    tipo: 'number',
+    min: 0,
+    width: 'third',
+    conditionalOn: 'etiquetar',
     conditionalValue: true,
     hint: 'Calculado: unidades ÷ uds. por paquete.',
   },
@@ -1022,6 +1050,7 @@ export const PROCESO_CAMPOS_CONFIG: Record<number, ProcesoConfigCampos> = {
     outputField: 'hojas_impresas',
     outputUnit: 'hojas',
     formatOutputField: 'formato_hojas',
+    inputFromProcessIds: [17],
   },
   2: {
     procesoNombre: 'Impresión Digital (Plano)',
@@ -1029,6 +1058,7 @@ export const PROCESO_CAMPOS_CONFIG: Record<number, ProcesoConfigCampos> = {
     outputField: 'hojas_impresas',
     outputUnit: 'hojas',
     formatOutputField: 'formato_hojas',
+    inputFromProcessIds: [17],
   },
   10: {
     procesoNombre: 'Troquelado',
@@ -1192,6 +1222,9 @@ export type DatosProcesoManipuladosInternos = {
   retractilar?: boolean;
   unidades_por_paquete?: number;
   num_paquetes?: number;
+  etiquetar?: boolean;
+  unidades_por_paquete_etiqueta?: number;
+  num_paquetes_etiqueta?: number;
   notas?: string;
 };
 

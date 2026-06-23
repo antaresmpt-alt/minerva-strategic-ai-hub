@@ -157,6 +157,12 @@ function tipoBadgeClasses(tipo: PlanificacionTipoMaquina): string {
       return "border-indigo-200 bg-indigo-50 text-indigo-800";
     case "engomado":
       return "border-emerald-200 bg-emerald-50 text-emerald-800";
+    case "preimpresion":
+      return "border-amber-200 bg-amber-50 text-amber-900";
+    case "guillotina":
+      return "border-rose-200 bg-rose-50 text-rose-900";
+    case "desbroce":
+      return "border-teal-200 bg-teal-50 text-teal-900";
     default:
       return "border-slate-200 bg-slate-50 text-slate-700";
   }
@@ -172,6 +178,12 @@ function tipoLabelShort(tipo: PlanificacionTipoMaquina): string {
       return "Troquel";
     case "engomado":
       return "Engom.";
+    case "preimpresion":
+      return "CTP";
+    case "guillotina":
+      return "Guill.";
+    case "desbroce":
+      return "Desbr.";
     default:
       return "";
   }

@@ -95,6 +95,21 @@ npx tsc --noEmit
 
 ---
 
+## Smoke test OT 35990 (23 jun tarde)
+
+OT simple validada de punta a punta. Ver `FASES_HOJA_RUTA_DIGITAL.md` §Bloque 3.9 y `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` §8.7.1.
+
+| Paso | Notas |
+|------|-------|
+| CTP / Guillotina / Impresión / Troquel / Manipulados | **Cerrar proceso** OK (horas reloj + ajuste manual). |
+| Impresión | Badge usa hojas de guillotina, no compradas. |
+| Troquel → Manipulados | Merma 25 → semáforo amarillo 475/500. |
+| Externos | **Pendiente** — formato y hojas recibidas sin ligar bien. |
+
+Filtro Pool "Próximo paso" ahora incluye **Guillotina** y **Desbroce** (Externo pendiente).
+
+---
+
 ## Comandos útiles
 
 ```powershell

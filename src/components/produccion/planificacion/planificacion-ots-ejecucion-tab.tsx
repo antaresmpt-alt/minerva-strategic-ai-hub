@@ -452,6 +452,21 @@ function computeDerivedDatosProceso(
     }
   }
 
+  if (procesoId === 15) {
+    const next: DatosProcesoGenerico = { ...datos };
+    const unidades = toFiniteNum(next.unidades);
+    const udsRetractilar = toFiniteNum(next.unidades_por_paquete);
+    const udsEtiqueta = toFiniteNum(next.unidades_por_paquete_etiqueta);
+
+    if (unidades != null && udsRetractilar != null && udsRetractilar > 0) {
+      next.num_paquetes = Math.ceil(unidades / udsRetractilar);
+    }
+    if (unidades != null && udsEtiqueta != null && udsEtiqueta > 0) {
+      next.num_paquetes_etiqueta = Math.ceil(unidades / udsEtiqueta);
+    }
+    return next;
+  }
+
   return datos;
 }
 
@@ -1503,20 +1518,31 @@ function ExecutionCard({
     if (pid === 1 || pid === 2) {
       const materialImpresion = pickMaterialImpresion(despacho);
       if (materialImpresion) base.material_impresion = materialImpresion;
-      if (despacho.hojasBrutas != null) base.hojas_brutas = despacho.hojasBrutas;
-      if (despacho.hojasNetas != null) base.hojas_netas = despacho.hojasNetas;
-      const brutas = despacho.hojasBrutas;
-      const netas = despacho.hojasNetas;
-      if (brutas != null && netas != null) {
-        const mermaPlan = Math.max(0, Math.trunc(brutas) - Math.trunc(netas));
-        base.hojas_merma = mermaPlan;
-        base.hojas_impresas = Math.max(0, Math.trunc(brutas) - mermaPlan);
-      } else if (netas != null) {
-        base.hojas_impresas = netas;
+      const hojasDesdeAnterior =
+        row.salidaProcesoAnterior != null && Number.isFinite(row.salidaProcesoAnterior)
+          ? Math.max(0, Math.trunc(row.salidaProcesoAnterior))
+          : null;
+      if (hojasDesdeAnterior != null && hojasDesdeAnterior > 0) {
+        base.hojas_brutas = hojasDesdeAnterior;
+        base.hojas_netas = hojasDesdeAnterior;
         base.hojas_merma = 0;
-      } else if (brutas != null) {
-        base.hojas_impresas = brutas;
-        base.hojas_merma = 0;
+        base.hojas_impresas = hojasDesdeAnterior;
+      } else {
+        if (despacho.hojasBrutas != null) base.hojas_brutas = despacho.hojasBrutas;
+        if (despacho.hojasNetas != null) base.hojas_netas = despacho.hojasNetas;
+        const brutas = despacho.hojasBrutas;
+        const netas = despacho.hojasNetas;
+        if (brutas != null && netas != null) {
+          const mermaPlan = Math.max(0, Math.trunc(brutas) - Math.trunc(netas));
+          base.hojas_merma = mermaPlan;
+          base.hojas_impresas = Math.max(0, Math.trunc(brutas) - mermaPlan);
+        } else if (netas != null) {
+          base.hojas_impresas = netas;
+          base.hojas_merma = 0;
+        } else if (brutas != null) {
+          base.hojas_impresas = brutas;
+          base.hojas_merma = 0;
+        }
       }
       if (despacho.tintas) base.tintas_cara = despacho.tintas;
       if (despacho.acabadoPral) base.acabado_principal = despacho.acabadoPral;
@@ -1562,6 +1588,13 @@ function ExecutionCard({
       const poses = toFiniteNum(base.poses);
       if (hojas != null && poses != null && poses > 0) {
         base.estuches_desbrozados = Math.max(0, Math.floor(hojas * poses));
+      }
+    }
+    if (pid === 15) {
+      if (row.salidaProcesoAnterior != null) {
+        base.unidades = Math.max(0, Math.trunc(row.salidaProcesoAnterior));
+      } else if (despacho.cantidad != null) {
+        base.unidades = despacho.cantidad;
       }
     }
     return seedRealValuesFromPrevistos(
@@ -1764,7 +1797,7 @@ function ExecutionCard({
           despacho?.poses ??
           null;
         const salidaRaw = isImpresion
-          ? despacho?.hojasNetas ?? null
+          ? (row.salidaProcesoAnterior ?? despacho?.hojasNetas ?? null)
           : row.salidaProcesoAnterior;
         if (salidaRaw == null) return null;
 
@@ -1772,12 +1805,17 @@ function ExecutionCard({
         let proyeccionLabel = "";
         let semaforoTitulo = "";
         if (isImpresion) {
-          semaforoTitulo = "Proyección desde despacho · hojas netas a imprimir";
-          proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} hojas netas → sin datos de poses aún`;
+          semaforoTitulo =
+            row.salidaProcesoAnterior != null && row.salidaProcesoAnteriorNombre
+              ? `Entrada desde proceso anterior · ${row.salidaProcesoAnteriorNombre}`
+              : "Proyección desde despacho · hojas netas a imprimir";
+          const hojasLabel =
+            row.salidaProcesoAnterior != null ? "hojas a imprimir" : "hojas netas";
+          proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} ${hojasLabel} → sin datos de poses aún`;
           if (poses != null && poses > 0) {
             const est = Math.floor(salidaRaw * poses);
             proyeccion = est;
-            proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} hojas netas × ${poses} poses = ${est.toLocaleString("es-ES")} estuches est.`;
+            proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} ${hojasLabel} × ${poses} poses = ${est.toLocaleString("es-ES")} estuches est.`;
           }
         } else if (procesoId === 10) {
           semaforoTitulo = `Entrada desde proceso anterior · ${row.salidaProcesoAnteriorNombre}`;
@@ -1811,6 +1849,17 @@ function ExecutionCard({
               proyeccion = est;
               proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} hojas × ${poses} poses = ${est.toLocaleString("es-ES")} estuches est.`;
             }
+          }
+        } else if (procesoId === 15) {
+          semaforoTitulo = `Entrada desde proceso anterior · ${row.salidaProcesoAnteriorNombre}`;
+          const anteriorOutputUnit =
+            PROCESO_CAMPOS_CONFIG[row.procesoAnteriorId ?? 0]?.outputUnit ?? "uds";
+          if (anteriorOutputUnit === "estuches" || anteriorOutputUnit === "hojas") {
+            proyeccion = Math.floor(salidaRaw);
+            proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} ${anteriorOutputUnit} de entrada`;
+          } else {
+            proyeccion = salidaRaw;
+            proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} ${outputUnit}`;
           }
         } else {
           semaforoTitulo = `Entrada desde proceso anterior · ${row.salidaProcesoAnteriorNombre}`;

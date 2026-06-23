@@ -906,3 +906,32 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 1. ~~Fase **FORMATO** (encadenado).~~ ✅ 17 jun 2026 (`aadad81`)
 2. Fase **8.0** + **8.1** (migración + agrupación pool/pipeline).
 3. Responder **§12** con Jordi/Zaida/Abraham antes del wizard 8.2.
+
+---
+
+## 🧪 Bloque 3.9: Smoke test OT 35990 + Cerrar proceso + filtros ✅ **23 jun 2026 (tarde)**
+
+> Rama: `main`. OT simple de referencia para flujo completo sin barco.
+
+### Hecho
+
+| Tema | Detalle |
+|------|---------|
+| **Cerrar proceso** | Botón sustituye "Finalizar": muestra tiempo mesa (auditoría), precarga horas declaradas, permite ajuste fino (ej. 8h reales vs 3 min de prueba). Módulos: `cerrar-proceso-dialog.tsx`, `planificacion-ejecucion-horas.ts`. |
+| **Horas totales HR** | `hoja-ruta-horas.ts` — suma previsto/real/desviación por OT en modal y PDF. |
+| **Pool filtro barco** | Contenedores visibles si alguna hija coincide con filtro "Próximo paso". |
+| **Pool hijas cerradas** | Todas las hijas al expandir; cerradas en verde sin checkbox. |
+| **Filtro próximo paso** | Tipos **Guillotina** y **Desbroce** (`planificacion-ambito.ts` + migración `20260623210000`). |
+| **Impresión** | `inputFromProcessIds: [17]` — badge y prefill desde salida guillotina (`hojas_finales`), no hojas compradas. |
+| **Manipulados** | Checkbox **Etiquetar** + uds./paquete etiqueta; cálculo `num_paquetes` / `num_paquetes_etiqueta`. |
+| **Merma troquel** | Semáforo en paso posterior (475 vs 500 → amarillo AJUSTADO ±5%). |
+
+### Pendiente
+
+- [ ] **Externos:** formato hojas en badge, prefill hojas recibidas, encadenado despacho → recepción (dejado para otra sesión).
+- [ ] Afinar campos de horas en PDF HR (algunos procesos aún no mapean todos los campos reales).
+- [ ] Filtro **Externo** en pool (requiere tipo `externo` en catálogo).
+
+### OT de prueba 35990
+
+Itinerario validado: CTP → Guillotina → Impresión offset → Plastificado (ext.) → Troquel → Manipulados. Pipeline cerrado con 6 pasos verdes. PDF `hoja-ruta-35990.pdf` generado.
