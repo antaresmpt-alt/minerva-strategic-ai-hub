@@ -145,14 +145,7 @@ Minerva debe capturar estos datos al recepcionar para la trazabilidad FSC:
 
 Esto enlaza con el campo `fsc` del maestro de artículos y del despacho de OTs.
 
-### Tabla resumen — 4 albaranes de referencia (18 jun 2026)
-
-| Nº albarán | Proveedor | Material | Cant. | Destino Emma | ID Stock |
-|------------|-----------|----------|-------|--------------|----------|
-| AV26-04186 | Papers Tordera | OFFSET 70×100 100gr | 35 K | OT **36033** | 10.297 (6027) |
-| AV26-04179 | Papers Tordera | OFFSET 102×72 200gr | 29,38 K | **STOCK** | 10.299 (6029) |
-| AV26-04187 | Papers Tordera | OFFSET 70×100 300gr | 52,50 K | **Stock** | 10.298 (6028) |
-| B26-2525 | CARPAPSA | ALLYKING PEFC 60×102 295gr | 550 K (2×1500 h) | OT **36023** | 10.295–96 (6095–96) |
+> **Tabla de referencia → ver §3d** (tabla completa de 7 albaranes). La tabla corta de 4 que había aquí quedó obsoleta tras ampliarla en §3d.
 
 ---
 
@@ -736,10 +729,22 @@ Al cerrar una OT (Bloque 6 — `pendiente_revision` → `producida`):
 - ✅ ¿Entrega desde stock libre? → Juan autónomo, aviso sin bloqueo (§7.6)
 - ✅ ¿Reasignación reserva OT-A → OT-B? → `traspaso` + `autorizado_por` obligatorio + déficit en Stock (MVP; `material_status` en fase posterior)
 
+**Respondidas en sesión 23 jun (dispositivo Juan + rol Emma):**
+- ✅ ¿**Dispositivo de Juan**? → **Tablet/móvil** primero (muelle + cartelas + impresión, mobile-first). PC más adelante, cuando coja confianza, para gestionar más cosas. La UI mobile-first ya prevista es correcta para esta fase.
+- ✅ ¿**Rol de Emma**? → **No desaparece.** Hoy es crucial supliendo a Ramón en cartelas (él no da abasto). Objetivo: liberar a los tres — Juan asume recepción + cartelado básico, Emma vuelve a lo suyo, Ramón recupera tiempo. Emma y Juan crean cartelas **en paralelo sin pisarse** (cada cartela tiene `id_stock` único + `created_by`).
+- ✅ ¿**Quién autoriza traspasos**? → Lo **ejecuta Juan** (autónomo) con campo `autorizado_por` obligatorio; **no** es pantalla exclusiva de Ramón. Ver §7.6. Detalle de permisos en `MINERVA_ROLES_Y_NAVEGACION.md`.
+
+**Permisos resultantes (resumen — detalle en `MINERVA_ROLES_Y_NAVEGACION.md`):**
+
+```
+Juan  (almacen) → Muelle + Cartelas (crear/imprimir) + Stock (consulta + entrega libre + traspaso con autorizado_por)
+Emma           → lo de Juan + correcciones + casos complejos + supervisión
+Ramón          → todo + autoriza traspasos de reserva
+Admin/Gerencia → todo
+```
+
 **Pendientes (prioritarias):**
-1. ¿**Qué dispositivo** tendrá Juan? ¿Tablet fija en almacén o móvil que lleva encima? Condiciona el tamaño de UI.
-2. ¿**Qué rol tendrá Emma** cuando Juan sea autónomo? ¿Supervisión, correcciones, casos complejos? Afecta permisos del sistema.
-3. ¿**Cuántos albaranes** recibe Minerva de media por día/semana? (Volumen para decidir si la bandeja de pendientes necesita paginación.)
+1. ¿**Cuántos albaranes** recibe Minerva de media por día/semana? (Volumen para decidir si la bandeja de pendientes necesita paginación.)
 
 **Pendientes (pueden esperar):**
 4. ¿Cómo crea Ramón/Gemma las OCs hoy? ¿Directamente en Optimus desde el email de Jordi, o hay otro paso intermedio?
