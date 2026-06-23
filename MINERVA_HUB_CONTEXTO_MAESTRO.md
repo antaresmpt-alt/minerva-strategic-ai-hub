@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 18 jun 2026 noche (8.1.1 fixes pool mesa/material/merma; OT 98010 probada; rama `feature/bloque8.1-pool-mesa-ejecucion-fixes`)
+> Última actualización: 23 jun 2026 (Bloque 9 cartelas: Juan, movimientos almacén, ID 10.310)
 
 ---
 
@@ -299,7 +299,7 @@ src/components/produccion/planificacion/
 
 11. **Encadenado formato de pliego (17 jun 2026, Fase FORMATO ✅)**: por **orden de itinerario** (`prod_ot_pasos.orden`), no por tipo de proceso global. `tamano_hoja` en despacho = **Formato compra** (solo referencia de compra). Guillotina: `tamano_inicial` ← anterior, `tamano_final` → siguiente. Impresión/externos hojas: `formato_hojas`. Troquelado: `tamano_corte` es el troquel (independiente); banner muestra pliego de entrada. Módulo: `hoja-ruta-formato-encadenado.ts`. Probado OT 98009 (commit `aadad81`).
 
-12. **Bloque 9 — Cartelas y stock (18 jun 2026, diseño)**: **Fase A primero** (9.0–9.4): cartelas `prod_stock_palets`, recepción Emma, stock consultable. **Fase B después** (9.5+): puente muelle+fotos, STOCK sin OC, IA desde foto. `prod_recepciones_material` **ya existe** (muelle); no duplicar. Stock libre al recepcionar habitual; kilos→hojas; ID Stock desde 10.300+. Briefing: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`.
+12. **Bloque 9 — Cartelas y stock (23 jun 2026, diseño)**: **Fase A** (9.0–9.4): `prod_stock_palets` + movimientos; **Juan** usuario principal (muelle + cartelas + entregas desde almacén). Cartela ≠ palet físico; sobrante = cartela que muta. ID Stock desde **10.310**. Déficit en vista Stock (MVP); `material_status` post-9.4. **Fase B** (9.5+): puente muelle/foto, IA. Briefing: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`.
 
 13. **Higiene operativa (18 jun 2026)**: `bultos_por_palet_default` de Gabri versionado en migración seed (`20260618143200`). Plantillas offset: **Desbroce** insertado entre Troquelado y Engomado en 5 rutas (`20260618143000`). Rol usuario CTP = **`ctp`** (no `preimpresion`); permisos `produccion` + `produccion_ejecucion` en BD y `permissions.ts`. Marc/Gemma: usuarios aún no creados en Supabase.
 
