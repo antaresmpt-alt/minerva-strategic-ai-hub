@@ -380,7 +380,7 @@ Rama: `feature/bloque8.1-pool-mesa-ejecucion-fixes` (commit `2d9d3ab`).
 
 - **8.5** Engomado y embalaje por referencia/componente tras convergencia.
 - **8.6** Semáforo/proyección por componente.
-- **8.7** Vista hoja de ruta / PDF del contenedor agregado. ✅ **Light (23 jun 2026):** modal barco con progreso + hijas + drill-down a HR hija; PDF agregado pendiente.
+- **8.7** Vista hoja de ruta / PDF del contenedor agregado. ✅ **23 jun 2026:** modal barco (progreso + hijas + drill-down) + PDF `hoja-ruta-barco-{OT}.pdf` (resumen + anexos por hija).
 
 ---
 
@@ -393,7 +393,7 @@ Rama: `feature/bloque8.1-pool-mesa-ejecucion-fixes` (commit `2d9d3ab`).
 | **Maestro OTs / OTs despachadas** | **Agrupación visual** (8.1.2). Mismo patrón barco + expandir hijas. |
 | Despacho | Wizard hijas para `contenedor` (8.2). Form `simple` sin cambios. Compra conjunta en padre (validado 98010). **Hoy:** hijas al despachar; **futuro:** presupuesto Bloque 10. |
 | Mesa / ejecución | Por hija: **sin cambio de motor** (8.3). Pool lateral filtrado por tipo de paso (8.1.1). Merma impresión + prefill troquel corregidos. |
-| Hoja de ruta | Por hija: sin cambio. **Vista agregada contenedor (8.7 light):** progreso + hijas en modal padre. |
+| Hoja de ruta | Por hija: sin cambio. **Vista agregada contenedor (8.7):** modal + PDF barco con anexos por hija. |
 | Semáforo | Sin cambio en hijas simples; **futuro** ajuste por componente (8.6). |
 | CTP | Definir hija `preimpresion` o regla compartida (pendiente §12). |
 | Histórico (Bloque 6) | Cierre y snapshot del contenedor (8.4). |

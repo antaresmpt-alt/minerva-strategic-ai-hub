@@ -1,7 +1,9 @@
 import { jsPDF } from "jspdf";
 
 import type {
+  HojaRutaContenedorData,
   HojaRutaData,
+  HojaRutaHijaResumen,
   HojaRutaPaso,
   HojaRutaPausa,
 } from "@/lib/hoja-ruta/hoja-ruta-query";
@@ -12,6 +14,7 @@ import {
   fmtCantidad,
   tipoMaquinaLabel,
 } from "@/lib/hoja-ruta/hoja-ruta-formatters";
+import { formatHijaDisplayLabel } from "@/lib/planificacion-contenedor-query";
 
 const NAVY: [number, number, number] = [0, 33, 71];
 const SLATE: [number, number, number] = [71, 85, 105];
@@ -81,25 +84,10 @@ const ESTADO_FILL: Record<string, [number, number, number]> = {
   finalizado: [236, 253, 245],
 };
 
-function drawHeader(doc: jsPDF, data: HojaRutaData): number {
-  let y = MARGIN.top;
-  const w = pageW(doc);
-  const usable = w - MARGIN.left - MARGIN.right;
+function drawHeaderDataBox(doc: jsPDF, data: HojaRutaData, startY: number): number {
+  let y = startY;
+  const usable = pageW(doc) - MARGIN.left - MARGIN.right;
 
-  // Banda NAVY
-  doc.setFillColor(...NAVY);
-  doc.rect(0, y, w, 14, "F");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
-  doc.setTextColor(255, 255, 255);
-  doc.text("HOJA DE RUTA · PRODUCCIÓN", MARGIN.left, y + 5);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.text(`OT ${data.otNumero}`, MARGIN.left, y + 10);
-  doc.text(`Generado: ${fmtNowEs()}`, w - MARGIN.right, y + 10, { align: "right" });
-  y += 16;
-
-  // Cabecera de datos
   doc.setDrawColor(203, 213, 225);
   doc.setFillColor(...LIGHT_BG);
   doc.roundedRect(MARGIN.left, y, usable, 20, 1.5, 1.5, "FD");
@@ -121,7 +109,7 @@ function drawHeader(doc: jsPDF, data: HojaRutaData): number {
   if (data.despacho) {
     doc.setFontSize(7);
     const d = data.despacho;
-    let infoY = y + 15;
+    const infoY = y + 15;
     const items: string[] = [];
     if (d.material) items.push(`Material: ${d.material}${d.gramaje ? ` ${d.gramaje}g` : ""}`);
     if (d.tamanoHoja) items.push(`Formato compra: ${d.tamanoHoja}`);
@@ -134,6 +122,31 @@ function drawHeader(doc: jsPDF, data: HojaRutaData): number {
   y += 22;
   doc.setTextColor(0, 0, 0);
   return y;
+}
+
+function drawHeader(
+  doc: jsPDF,
+  data: HojaRutaData,
+  options?: { bannerTitle?: string; bannerOtLabel?: string },
+): number {
+  let y = MARGIN.top;
+  const w = pageW(doc);
+  const bannerTitle = options?.bannerTitle ?? "HOJA DE RUTA · PRODUCCIÓN";
+  const bannerOt = options?.bannerOtLabel ?? `OT ${data.otNumero}`;
+
+  doc.setFillColor(...NAVY);
+  doc.rect(0, y, w, 14, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor(255, 255, 255);
+  doc.text(bannerTitle, MARGIN.left, y + 5);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.text(bannerOt, MARGIN.left, y + 10);
+  doc.text(`Generado: ${fmtNowEs()}`, w - MARGIN.right, y + 10, { align: "right" });
+  y += 16;
+
+  return drawHeaderDataBox(doc, data, y);
 }
 
 function drawRutaBadges(doc: jsPDF, pasos: HojaRutaPaso[], startY: number): number {
@@ -574,15 +587,145 @@ function drawFooter(doc: jsPDF): void {
   }
 }
 
-export function exportHojaRutaPdf(data: HojaRutaData): void {
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-  let y = drawHeader(doc, data);
+function drawHijaResumenBadges(
+  doc: jsPDF,
+  pasos: HojaRutaHijaResumen["pasos"],
+  startY: number,
+): number {
+  let y = startY;
+  let x = MARGIN.left + 3;
+  const maxX = pageW(doc) - MARGIN.right - 3;
+  for (const p of pasos) {
+    const label = p.procesoNombre ?? `Paso ${p.orden}`;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6);
+    const w = doc.getTextWidth(label) + 5;
+    if (x + w > maxX && x > MARGIN.left + 3) {
+      x = MARGIN.left + 3;
+      y += 5;
+    }
+    const color = ESTADO_COLOR[p.estado] ?? ESTADO_COLOR.pendiente;
+    doc.setDrawColor(...color);
+    doc.setFillColor(...color);
+    doc.roundedRect(x, y, w, 4.5, 0.8, 0.8, "FD");
+    doc.setTextColor(0, 0, 0);
+    doc.text(label, x + 2.5, y + 3.2);
+    x += w + 1.5;
+  }
+  return y + 6;
+}
+
+function drawContenedorSummary(doc: jsPDF, data: HojaRutaContenedorData): number {
+  let y = drawHeader(doc, data.padre, {
+    bannerTitle: "HOJA DE RUTA · BARCO (CONTENEDOR)",
+    bannerOtLabel: `OT ${data.padre.otNumero}`,
+  });
+  const usable = pageW(doc) - MARGIN.left - MARGIN.right;
+  const maxY = pageH(doc) - MARGIN.bottom - 10;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(...NAVY);
+  doc.text("RESUMEN AGREGADO DE HIJAS", MARGIN.left, y + 3);
+  y += 6;
+
+  doc.setDrawColor(199, 210, 254);
+  doc.setFillColor(238, 242, 255);
+  doc.roundedRect(MARGIN.left, y, usable, 14, 1.5, 1.5, "FD");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(67, 56, 202);
+  doc.text(data.progressLabel || `${data.progress.total} hijas`, MARGIN.left + 3, y + 5);
+  if (data.progress.pasosTotal > 0) {
+    const pct = data.progress.pct ?? 0;
+    const barX = MARGIN.left + 3;
+    const barY = y + 8;
+    const barW = usable - 6;
+    doc.setFillColor(224, 231, 255);
+    doc.roundedRect(barX, barY, barW, 3, 1, 1, "F");
+    doc.setFillColor(79, 70, 229);
+    doc.roundedRect(barX, barY, (barW * pct) / 100, 3, 1, 1, "F");
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(...SLATE);
+    doc.text(
+      `${data.progress.pasosCompletados} de ${data.progress.pasosTotal} pasos finalizados`,
+      barX,
+      barY + 5.5,
+    );
+    y += 6;
+  }
+  y += 14;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(...NAVY);
+  doc.text(`HIJAS (${data.hijas.length})`, MARGIN.left, y + 3);
+  y += 6;
+
+  for (const hija of data.hijas) {
+    const label = formatHijaDisplayLabel({
+      ot: hija.otNumero,
+      formaDescripcion: hija.formaDescripcion,
+      trabajo: hija.trabajo,
+    });
+    const pasoTxt = hija.pasoActual
+      ? `${hija.pasoActual.orden} · ${hija.pasoActual.procesoNombre ?? "—"} (${hija.pasoActual.estado})`
+      : hija.pasosTotal > 0 && hija.pasosCompletados === hija.pasosTotal
+        ? "Itinerario completo"
+        : "Sin paso activo";
+    const cardH = hija.pasos.length > 0 ? 22 : 14;
+
+    if (y + cardH > maxY) {
+      doc.addPage();
+      y = MARGIN.top;
+    }
+
+    doc.setDrawColor(203, 213, 225);
+    doc.setFillColor(255, 255, 255);
+    doc.roundedRect(MARGIN.left, y, usable, cardH, 1.5, 1.5, "FD");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(...NAVY);
+    doc.text(hija.otNumero, MARGIN.left + 3, y + 5);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(...SLATE);
+    doc.text(label, MARGIN.left + 28, y + 5);
+    doc.text(
+      `Pasos: ${hija.pasosCompletados}/${hija.pasosTotal}${
+        hija.cantidad != null ? ` · Cant.: ${fmtCantidad(hija.cantidad)}` : ""
+      }`,
+      MARGIN.left + 3,
+      y + 9.5,
+    );
+    doc.text(`Paso actual: ${pasoTxt}`, MARGIN.left + 3, y + 13);
+
+    if (hija.pasos.length > 0) {
+      y = drawHijaResumenBadges(doc, hija.pasos, y + 15);
+    } else {
+      y += cardH + 2;
+    }
+    y += 2;
+  }
+
+  return y;
+}
+
+function renderHojaRutaOtBody(
+  doc: jsPDF,
+  data: HojaRutaData,
+  options?: { startY?: number; skipBanner?: boolean },
+): void {
+  let y =
+    options?.skipBanner && options.startY != null
+      ? drawHeaderDataBox(doc, data, options.startY)
+      : drawHeader(doc, data);
   y = drawRutaBadges(doc, data.pasos, y);
   y += 3;
 
   const maxY = pageH(doc) - MARGIN.bottom - 10;
 
-  // Tarjetas de procesos
   for (const paso of data.pasos) {
     y = drawProcesoCard(doc, paso, y, maxY);
   }
@@ -590,10 +733,61 @@ export function exportHojaRutaPdf(data: HojaRutaData): void {
   y += 5;
   y = drawPausasSection(doc, data.pasos, y, maxY);
   y += 5;
-  y = drawPvistoRealChart(doc, data.pasos, y, maxY);
+  drawPvistoRealChart(doc, data.pasos, y, maxY);
+}
 
+function drawAnnexBanner(
+  doc: jsPDF,
+  barcoNumero: string,
+  hijaNumero: string,
+  index: number,
+  total: number,
+): number {
+  let y = MARGIN.top;
+  const w = pageW(doc);
+  doc.setFillColor(67, 56, 202);
+  doc.rect(0, y, w, 8, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(255, 255, 255);
+  doc.text(
+    `ANEXO ${index}/${total} · Barco ${barcoNumero} · OT ${hijaNumero}`,
+    MARGIN.left,
+    y + 5.5,
+  );
+  return y + 10;
+}
+
+export function exportHojaRutaPdf(data: HojaRutaData): void {
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  renderHojaRutaOtBody(doc, data);
   drawFooter(doc);
 
   const tag = data.otNumero.replace(/[^\w\-]/g, "_");
   doc.save(`hoja-ruta-${tag}.pdf`);
+}
+
+/** PDF agregado: resumen del barco + anexo completo por cada hija. */
+export function exportHojaRutaContenedorPdf(
+  contenedor: HojaRutaContenedorData,
+  hijasFull: HojaRutaData[],
+): void {
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  drawContenedorSummary(doc, contenedor);
+
+  const byNumero = new Map(hijasFull.map((h) => [h.otNumero, h]));
+  const ordered = contenedor.hijas
+    .map((h) => byNumero.get(h.otNumero))
+    .filter((h): h is HojaRutaData => h != null);
+
+  const total = ordered.length;
+  ordered.forEach((hija, idx) => {
+    doc.addPage();
+    const startY = drawAnnexBanner(doc, contenedor.padre.otNumero, hija.otNumero, idx + 1, total);
+    renderHojaRutaOtBody(doc, hija, { startY, skipBanner: true });
+  });
+
+  drawFooter(doc);
+  const tag = contenedor.padre.otNumero.replace(/[^\w\-]/g, "_");
+  doc.save(`hoja-ruta-barco-${tag}.pdf`);
 }

@@ -41,7 +41,7 @@ import {
   fmtCantidad,
   tipoMaquinaLabel,
 } from "@/lib/hoja-ruta/hoja-ruta-formatters";
-import { exportHojaRutaPdf } from "@/lib/hoja-ruta/hoja-ruta-pdf";
+import { exportHojaRutaContenedorPdf, exportHojaRutaPdf } from "@/lib/hoja-ruta/hoja-ruta-pdf";
 
 function machineLabel(paso: HojaRutaPaso): string {
   const nombre = String(paso.maquinaNombre ?? "").trim();
@@ -321,10 +321,28 @@ export function HojaRutaOtDialog({
   const [hijaData, setHijaData] = useState<HojaRutaData | null>(null);
   const [loading, setLoading] = useState(false);
   const [hijaLoading, setHijaLoading] = useState(false);
+  const [pdfExporting, setPdfExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const padreNumero =
     loadResult?.kind === "contenedor" ? loadResult.padre.otNumero : (otNumero ?? "");
+
+  const goBackToBarco = useCallback(() => {
+    setDrillHijaOt(null);
+    setHijaData(null);
+    setError(null);
+  }, []);
+
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      if (!next && drillHijaOt) {
+        goBackToBarco();
+        return;
+      }
+      onOpenChange(next);
+    },
+    [drillHijaOt, goBackToBarco, onOpenChange],
+  );
 
   const load = useCallback(async () => {
     if (!otNumero) return;
@@ -373,10 +391,42 @@ export function HojaRutaOtDialog({
   }, [open, otNumero, load]);
 
   const isContenedorView = loadResult?.kind === "contenedor" && !drillHijaOt;
-  const pdfData = drillHijaOt && hijaData ? hijaData : loadResult?.kind === "ot" ? loadResult.data : null;
+  const canExportPdf =
+    (drillHijaOt && hijaData) ||
+    loadResult?.kind === "ot" ||
+    (loadResult?.kind === "contenedor" && loadResult.hijas.length > 0);
+
+  const handlePdfExport = useCallback(async () => {
+    if (drillHijaOt && hijaData) {
+      exportHojaRutaPdf(hijaData);
+      return;
+    }
+    if (loadResult?.kind === "ot") {
+      exportHojaRutaPdf(loadResult.data);
+      return;
+    }
+    if (loadResult?.kind !== "contenedor" || loadResult.hijas.length === 0) return;
+
+    setPdfExporting(true);
+    setError(null);
+    try {
+      const hijasFull = await Promise.all(
+        loadResult.hijas.map((h) => fetchHojaRutaOt(supabase, h.otNumero)),
+      );
+      exportHojaRutaContenedorPdf(
+        loadResult,
+        hijasFull.filter((h): h is HojaRutaData => h != null),
+      );
+    } catch (e) {
+      console.error("[Hoja de ruta] export PDF barco", e);
+      setError(e instanceof Error ? e.message : "No se pudo generar el PDF del barco.");
+    } finally {
+      setPdfExporting(false);
+    }
+  }, [drillHijaOt, hijaData, loadResult, supabase]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="flex max-h-[min(94vh,880px)] max-w-[min(96vw,960px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
         <DialogHeader className="shrink-0 border-b border-slate-100 px-4 py-3 sm:px-5">
           {drillHijaOt && padreNumero ? (
@@ -384,11 +434,7 @@ export function HojaRutaOtDialog({
               <button
                 type="button"
                 className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 font-mono hover:bg-slate-100 hover:text-[#002147]"
-                onClick={() => {
-                  setDrillHijaOt(null);
-                  setHijaData(null);
-                  setError(null);
-                }}
+                onClick={goBackToBarco}
               >
                 <ChevronLeft className="size-3.5" />
                 {padreNumero}
@@ -477,25 +523,30 @@ export function HojaRutaOtDialog({
               type="button"
               variant="outline"
               size="sm"
-              disabled={loading || hijaLoading || !pdfData}
-              onClick={() => pdfData && exportHojaRutaPdf(pdfData)}
+              disabled={loading || hijaLoading || pdfExporting || !canExportPdf}
+              onClick={() => void handlePdfExport()}
               title={
                 isContenedorView
-                  ? "PDF disponible al abrir la hoja de una hija"
+                  ? "PDF del barco: resumen + anexo por hija"
                   : "Descargar PDF de la hoja de ruta"
               }
             >
-              <Download className="mr-2 size-4" />
-              PDF
+              <Download
+                className={`mr-2 size-4 ${pdfExporting ? "animate-pulse" : ""}`}
+              />
+              {pdfExporting ? "Generando…" : "PDF"}
             </Button>
           </div>
           <Button
             type="button"
             size="sm"
             className="bg-[#002147] text-white hover:bg-[#001a38]"
-            onClick={() => onOpenChange(false)}
+            onClick={() => {
+              if (drillHijaOt) goBackToBarco();
+              else onOpenChange(false);
+            }}
           >
-            Cerrar
+            {drillHijaOt ? "Volver al barco" : "Cerrar"}
           </Button>
         </DialogFooter>
       </DialogContent>
