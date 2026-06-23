@@ -1,9 +1,19 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { compareOtNumerosEs } from "@/lib/ots-contenedor-display";
 import {
   inferPlanificacionTipoFromProceso,
   type PlanificacionTipoMaquina,
 } from "@/lib/planificacion-ambito";
+import {
+  fetchContenedorProgressByPadre,
+  fetchHijasByPadreNumeros,
+  formatContenedorProgressBadge,
+  normalizeOtTipo,
+  type ContenedorProgress,
+} from "@/lib/planificacion-contenedor-query";
+import { fetchAllInChunks } from "@/lib/supabase-query-chunks";
+import { getPasoActual, normalizePasoEstado, type PipelineStepView } from "@/lib/pipeline/pipeline-data";
 
 /**
  * Loader de la **Hoja de Ruta Virtual** de una OT.
@@ -112,6 +122,36 @@ export type HojaRutaData = {
   despacho: HojaRutaDespacho | null;
   pasos: HojaRutaPaso[];
 };
+
+export type HojaRutaPasoResumen = {
+  pasoId: string;
+  orden: number;
+  estado: string;
+  procesoNombre: string | null;
+};
+
+export type HojaRutaHijaResumen = {
+  otNumero: string;
+  formaDescripcion: string | null;
+  trabajo: string | null;
+  cantidad: number | null;
+  pasoActual: HojaRutaPasoResumen | null;
+  pasos: HojaRutaPasoResumen[];
+  pasosCompletados: number;
+  pasosTotal: number;
+};
+
+export type HojaRutaContenedorData = {
+  kind: "contenedor";
+  padre: HojaRutaData;
+  progress: ContenedorProgress;
+  progressLabel: string;
+  hijas: HojaRutaHijaResumen[];
+};
+
+export type HojaRutaOtLoadResult =
+  | { kind: "ot"; data: HojaRutaData }
+  | HojaRutaContenedorData;
 
 type PasoRow = {
   id: string;
@@ -433,4 +473,191 @@ export async function fetchHojaRutaOt(
     despacho,
     pasos,
   };
+}
+
+type HijaPasoRow = {
+  id: string;
+  ot_id: string | null;
+  orden: number | null;
+  estado: string | null;
+  prod_procesos_cat: { nombre: string | null } | { nombre: string | null }[] | null;
+};
+
+function toPasoResumen(row: HijaPasoRow): HojaRutaPasoResumen {
+  const cat = pickJoin(row.prod_procesos_cat);
+  return {
+    pasoId: str(row.id) ?? "",
+    orden: Math.max(0, Math.trunc(num(row.orden) ?? 0)),
+    estado: str(row.estado) ?? "pendiente",
+    procesoNombre: str(cat?.nombre),
+  };
+}
+
+function toPipelineStepResumen(p: HojaRutaPasoResumen): PipelineStepView {
+  return {
+    pasoId: p.pasoId,
+    orden: p.orden,
+    estadoPaso: normalizePasoEstado(p.estado),
+    procesoId: null,
+    procesoNombre: p.procesoNombre,
+    seccionSlug: null,
+    esExterno: false,
+    maquinaId: null,
+    maquinaNombre: null,
+    tipoMaquina: null,
+    fechaDisponible: null,
+    fechaInicio: null,
+    fechaFin: null,
+    resumenCorto: null,
+    ejecucion: null,
+    externo: null,
+  };
+}
+
+function resolvePasoActualFromResumen(
+  pasos: HojaRutaPasoResumen[],
+): HojaRutaPasoResumen | null {
+  const actual = getPasoActual(pasos.map(toPipelineStepResumen));
+  if (!actual) return null;
+  return pasos.find((p) => p.pasoId === actual.pasoId) ?? null;
+}
+
+/** Vista agregada del barco: cabecera comercial + progreso + resumen por hija. */
+export async function fetchHojaRutaContenedor(
+  supabase: SupabaseClient,
+  otNumero: string,
+): Promise<HojaRutaContenedorData | null> {
+  const padre = await fetchHojaRutaOt(supabase, otNumero);
+  if (!padre) return null;
+
+  const hijasMap = await fetchHijasByPadreNumeros(supabase, [otNumero]);
+  const hijasMeta = [...(hijasMap.get(otNumero) ?? [])].sort((a, b) =>
+    compareOtNumerosEs(a.numPedido, b.numPedido),
+  );
+
+  const progressMap = await fetchContenedorProgressByPadre(supabase, hijasMap);
+  const progress = progressMap.get(otNumero) ?? {
+    total: hijasMeta.length,
+    completadas: 0,
+    pct: null,
+    pasosCompletados: 0,
+    pasosTotal: 0,
+    hijasCerradasPct: null,
+  };
+  const progressLabel = formatContenedorProgressBadge(progress);
+
+  if (hijasMeta.length === 0) {
+    return {
+      kind: "contenedor",
+      padre,
+      progress,
+      progressLabel,
+      hijas: [],
+    };
+  }
+
+  const hijaNumeros = hijasMeta.map((h) => h.numPedido);
+  const otRows = await fetchAllInChunks(hijaNumeros, 100, async (chunk) => {
+    const { data, error } = await supabase
+      .from(TABLE_OTS)
+      .select("id, num_pedido, titulo, cantidad")
+      .in("num_pedido", chunk);
+    if (error) throw error;
+    return (data ?? []) as Array<{
+      id?: string | null;
+      num_pedido?: string | null;
+      titulo?: string | null;
+      cantidad?: number | null;
+    }>;
+  });
+
+  const otIdByNum = new Map<string, string>();
+  const cantidadByNum = new Map<string, number | null>();
+  const tituloByNum = new Map<string, string | null>();
+  for (const row of otRows) {
+    const pedidoNum = str(row.num_pedido);
+    const id = str(row.id);
+    if (!pedidoNum || !id) continue;
+    otIdByNum.set(pedidoNum, id);
+    cantidadByNum.set(pedidoNum, num(row.cantidad));
+    tituloByNum.set(pedidoNum, str(row.titulo));
+  }
+
+  const otIds = [...otIdByNum.values()];
+  const pasosByOtId = new Map<string, HojaRutaPasoResumen[]>();
+  if (otIds.length > 0) {
+    const pasoRows = await fetchAllInChunks(otIds, 80, async (chunk) => {
+      const { data, error } = await supabase
+        .from(TABLE_PASOS)
+        .select("id, ot_id, orden, estado, prod_procesos_cat(nombre)")
+        .in("ot_id", chunk)
+        .order("orden", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as HijaPasoRow[];
+    });
+    for (const row of pasoRows) {
+      const otId = str(row.ot_id);
+      if (!otId) continue;
+      const list = pasosByOtId.get(otId) ?? [];
+      list.push(toPasoResumen(row));
+      pasosByOtId.set(otId, list);
+    }
+  }
+
+  const hijas: HojaRutaHijaResumen[] = hijasMeta.map((meta) => {
+    const otId = otIdByNum.get(meta.numPedido);
+    const pasos = otId ? (pasosByOtId.get(otId) ?? []) : [];
+    const pasosCompletados = pasos.filter(
+      (p) => String(p.estado).trim().toLowerCase() === "finalizado",
+    ).length;
+    return {
+      otNumero: meta.numPedido,
+      formaDescripcion: meta.formaDescripcion,
+      trabajo: tituloByNum.get(meta.numPedido) ?? meta.titulo,
+      cantidad: cantidadByNum.get(meta.numPedido) ?? null,
+      pasoActual: resolvePasoActualFromResumen(pasos),
+      pasos,
+      pasosCompletados,
+      pasosTotal: pasos.length,
+    };
+  });
+
+  const estadoHijas = hijas.flatMap((h) => h.pasos);
+  return {
+    kind: "contenedor",
+    padre: {
+      ...padre,
+      estadoOt: resolveEstadoOtLabel(
+        padre.estadoOt,
+        estadoHijas.map((p) => ({ estado: p.estado })),
+      ),
+    },
+    progress,
+    progressLabel,
+    hijas,
+  };
+}
+
+/** Carga hoja de ruta simple o vista agregada si la OT es contenedor. */
+export async function fetchHojaRutaLoad(
+  supabase: SupabaseClient,
+  otNumero: string,
+): Promise<HojaRutaOtLoadResult | null> {
+  const ot = String(otNumero ?? "").trim();
+  if (!ot) return null;
+
+  const { data: otRow, error: otErr } = await supabase
+    .from(TABLE_OTS)
+    .select("ot_tipo")
+    .eq("num_pedido", ot)
+    .maybeSingle();
+  if (otErr) throw otErr;
+
+  if (normalizeOtTipo((otRow as { ot_tipo?: string | null } | null)?.ot_tipo) === "contenedor") {
+    return fetchHojaRutaContenedor(supabase, ot);
+  }
+
+  const data = await fetchHojaRutaOt(supabase, ot);
+  if (!data) return null;
+  return { kind: "ot", data };
 }
