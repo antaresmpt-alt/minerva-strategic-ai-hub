@@ -343,6 +343,13 @@ Rama: `feature/bloque8.1-pool-mesa-ejecucion-fixes` (commit `2d9d3ab`).
 | **Troquel prefill** | `hojas_troquelar` ← salida del proceso anterior (impresión); fallback despacho brutas. |
 | **Script prueba** | `scripts/setup-contenedor-test-98010.mjs` — padre `98010` + hijas `-01/-02/-03`. **No re-ejecutar** si ya hay itinerarios/ejecuciones reales (purga compras/pool, no toca `prod_ot_pasos`). |
 
+#### 8.1.2 — Agrupación Maestro OTs y OTs despachadas ✅ **23 jun 2026**
+
+- Mismo patrón que Pool/Pipeline: contenedor colapsado, hijas al expandir.
+- Filtro UI: agrupado (default) | solo simples | solo contenedores | todas planas.
+- Módulos: `src/lib/ots-contenedor-display.ts`, `ot-contenedor-ot-numero-cell.tsx`.
+- Maestro OTs: query paginada excluye `ot_tipo = hija` en vistas no planas.
+
 **Estado prueba manual 98010 (18 jun noche):**
 - Padre: compra conjunta + recepción muelle OK.
 - `98010-01`: CTP → Impresión → Troquel → Desbroce disponible en Pipeline.
@@ -383,7 +390,8 @@ Rama: `feature/bloque8.1-pool-mesa-ejecucion-fixes` (commit `2d9d3ab`).
 |--------|---------|
 | `prod_ots_general` | +4 campos nullable (8.0). Migración aditiva. |
 | Pool / Pipeline | **Agrupación visual** (8.1). Queries filtran `ot_tipo != hija` por defecto. Material barco + % pasos (8.1.1). |
-| Despacho | Wizard hijas para `contenedor` (8.2). Form `simple` sin cambios. Compra conjunta en padre (validado 98010). |
+| **Maestro OTs / OTs despachadas** | **Agrupación visual** (8.1.2). Mismo patrón barco + expandir hijas. |
+| Despacho | Wizard hijas para `contenedor` (8.2). Form `simple` sin cambios. Compra conjunta en padre (validado 98010). **Hoy:** hijas al despachar; **futuro:** presupuesto Bloque 10. |
 | Mesa / ejecución | Por hija: **sin cambio de motor** (8.3). Pool lateral filtrado por tipo de paso (8.1.1). Merma impresión + prefill troquel corregidos. |
 | Hoja de ruta | Por hija: sin cambio. **Nuevo:** vista agregada contenedor (posterior). |
 | Semáforo | Sin cambio en hijas simples; **futuro** ajuste por componente (8.6). |
@@ -483,6 +491,12 @@ Responder con Jordi / Zaida / Abraham / Carlos:
 - Validado flujo barco: compra en padre → hijas heredan material → planificación/ejecución por hija independiente.
 - Pool lateral mesa diaria: misma regla genérica para todos los tipos (`preimpresion`, `impresion`, `troquelado`…); no secuencia entre hijas (03 visible aunque 02 ya en mesa = **comportamiento esperado**).
 - Demo planta (Albert/Jordi): historia recomendada con `98010-01` avanzada + Pipeline mostrando 02/03 en CTP.
+
+### 23 jun 2026 (8.1.2 maestro + despachadas + doc Bloque 10)
+
+- Agrupación contenedor en **Maestro OTs** y **OTs despachadas** (módulo `ots-contenedor-display.ts`).
+- Documentado **Bloque 10 Presupuestos** (versión real, puente 8.2 al despachar).
+- Reunión Albert/Jordi: jueves — `MINERVA_REUNION_HOJA_RUTA_JUEVES.md`.
 
 ---
 

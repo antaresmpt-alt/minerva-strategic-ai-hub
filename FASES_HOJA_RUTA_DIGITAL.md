@@ -784,9 +784,9 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 
 ## 📌 Punto de continuación (próxima sesión)
 
-**👉 Retomar aquí:** Demo planta (Albert/Jordi) con OT **98010** → luego Fase **8.2** (wizard despacho contenedor). Responder **§12** con planta.
+**👉 Retomar aquí:** Reunión **jueves** Albert/Jordi (OT 98010) → respuestas §12 → Fase **8.2** wizard despacho. Cartelas **9.0** SQL en curso. Unión hijas **8.5** post-reunión.
 
-**Fase FORMATO** ✅ · **Fase 8.0** ✅ · **Fase 8.1** ✅ · **Fase 8.1.1** ✅
+**Fase FORMATO** ✅ · **Fase 8.0** ✅ · **Fase 8.1** ✅ · **Fase 8.1.1** ✅ · **Fase 8.1.2** ✅ (maestro + despachadas)
 
 **Sesión 18 jun 2026 (noche)** — Prueba OT 98010 + fixes 8.1.1 ✅
 

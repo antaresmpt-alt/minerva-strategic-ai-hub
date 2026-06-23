@@ -24,8 +24,11 @@ import type { OtsComprasUmbralesParametros } from "@/lib/sys-parametros-ots-comp
 import type { OtsDespachadasTableRow } from "@/types/prod-ots-despachadas";
 import { cn } from "@/lib/utils";
 
-import { OtNumeroSemaforoBadge } from "@/components/produccion/ots/ot-numero-semaforo-badge";
+import { OtContenedorOtNumeroCell } from "@/components/produccion/ots/ot-contenedor-ot-numero-cell";
 import { formatDateDDMMYY } from "@/components/produccion/ots/master-ots-table-helpers";
+import type { WithOtContenedorDisplay } from "@/lib/ots-contenedor-display";
+import { isOtRowSelectableInGroupedList } from "@/lib/ots-contenedor-display";
+import type { PlanificacionOtTipoFiltroUi } from "@/lib/planificacion-contenedor-query";
 
 /** Datos «Tipo Excel» desde `prod_troqueles` (clave = `num_troquel` en minúsculas). */
 export type TroquelExcelTooltip = {
@@ -201,11 +204,15 @@ export type OtsDespachadasColumnsContext = {
   /** true = checkbox deshabilitado (OT con gestión de compra ya iniciada). */
   isSeleccionCompraDeshabilitada: (row: OtsDespachadasTableRow) => boolean;
   umbralesOtsCompras: OtsComprasUmbralesParametros;
+  otTipoFilter: PlanificacionOtTipoFiltroUi;
+  expandedContenedores: Record<string, boolean>;
+  loadingHijasPadre: string | null;
+  onToggleContenedorExpand: (padreOt: string) => void;
 };
 
 export function createOtsDespachadasColumns(
   ctx: OtsDespachadasColumnsContext
-): ColumnDef<OtsDespachadasTableRow>[] {
+): ColumnDef<WithOtContenedorDisplay<OtsDespachadasTableRow>>[] {
   return [
     {
       id: "select",
@@ -213,7 +220,9 @@ export function createOtsDespachadasColumns(
       enableSorting: false,
       header: () => null,
       cell: ({ row }) => {
-        const disabled = ctx.isSeleccionCompraDeshabilitada(row.original);
+        const disabled =
+          ctx.isSeleccionCompraDeshabilitada(row.original) ||
+          !isOtRowSelectableInGroupedList(row.original);
         return (
           <div
             className={cn(
@@ -244,15 +253,29 @@ export function createOtsDespachadasColumns(
           { numeric: true, sensitivity: "base" }
         ),
       header: ({ column }) => <OtsDespachadasSortHeader column={column} label="OT" />,
-      cell: ({ row }) => (
+      cell: ({ row }) => {
+        const r = row.original;
+        const ot = String(r.ot_numero ?? "").trim();
+        return (
         <div className="flex min-h-6 min-w-0 max-w-[9rem] items-center px-0.5 py-0">
-          <OtNumeroSemaforoBadge
-            otNumero={row.original.ot_numero}
-            fechaEntregaIso={row.original.fecha_entrega_prevista}
+          <OtContenedorOtNumeroCell
+            otNumero={ot}
+            fechaEntregaIso={r.fecha_entrega_prevista}
             umbrales={ctx.umbralesOtsCompras}
+            display={r}
+            otTipoFilter={ctx.otTipoFilter}
+            expanded={Boolean(ctx.expandedContenedores[ot])}
+            loadingExpand={ctx.loadingHijasPadre === ot}
+            onToggleExpand={
+              r.displayOtTipo === "contenedor" && ctx.otTipoFilter === "agrupado"
+                ? () => ctx.onToggleContenedorExpand(ot)
+                : undefined
+            }
+            titulo={r.titulo}
           />
         </div>
-      ),
+        );
+      },
     },
     {
       accessorKey: "cliente",

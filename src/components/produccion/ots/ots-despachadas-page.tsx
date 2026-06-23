@@ -64,8 +64,15 @@ import {
   type CompraDetalleVista,
 } from "@/components/produccion/ots/detalles-compra-dialog";
 import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
+import {
+  resolveRowOtTipo,
+  useOtContenedorGroupedDisplay,
+} from "@/lib/ots-contenedor-display";
+import type { OtContenedorMeta, PlanificacionOtTipoFiltroUi } from "@/lib/planificacion-contenedor-query";
+import type { ProdOtTipoHija } from "@/types/prod-ots";
 import type { OtsDespachadasTableRow } from "@/types/prod-ots-despachadas";
 import type { ProdReferenciaRow } from "@/types/prod-referencias";
+import { cn } from "@/lib/utils";
 
 const TABLE_DESPACHADAS = "produccion_ot_despachadas";
 const TABLE_MASTER = "prod_ots_general";
@@ -341,6 +348,9 @@ export function OtsDespachadasPage({
   const [filtroBusqueda, setFiltroBusqueda] = useState("");
   const [filtroEstadoMaterial, setFiltroEstadoMaterial] = useState("");
   const [ocultarEstadosCerrados, setOcultarEstadosCerrados] = useState(true);
+  const [otTipoFilter, setOtTipoFilter] = useState<PlanificacionOtTipoFiltroUi>(
+    "agrupado",
+  );
 
   const [compraOpen, setCompraOpen] = useState(false);
   const [compraOt, setCompraOt] = useState("");
@@ -423,31 +433,6 @@ export function OtsDespachadasPage({
     (row: OtsDespachadasTableRow) =>
       !estadoMaterialPermiteNuevaCompra(row.estado_material),
     []
-  );
-
-  const columnCtx = useMemo<OtsDespachadasColumnsContext>(
-    () => ({
-      onVerCompra: handleVerCompra,
-      onItinerario: handleEditarDespacho,
-      onEditarDespacho: handleEditarDespacho,
-      onVerHojaRuta: handleVerHojaRuta,
-      troquelExcelByCodigo,
-      isSeleccionCompraDeshabilitada,
-      umbralesOtsCompras,
-    }),
-    [
-      handleVerCompra,
-      handleEditarDespacho,
-      handleVerHojaRuta,
-      troquelExcelByCodigo,
-      isSeleccionCompraDeshabilitada,
-      umbralesOtsCompras,
-    ]
-  );
-
-  const columns = useMemo(
-    () => createOtsDespachadasColumns(columnCtx),
-    [columnCtx]
   );
 
   useEffect(() => {
@@ -559,6 +544,10 @@ export function OtsDespachadasPage({
           titulo: string | null;
           cantidad: number | null;
           fecha_entrega: string | null;
+          ot_tipo: string | null;
+          ot_padre_numero: string | null;
+          tipo_hija: string | null;
+          forma_descripcion: string | null;
         }
       >();
       const refIds = [
@@ -574,7 +563,9 @@ export function OtsDespachadasPage({
       if (nums.length > 0) {
         const { data: masterRows, error: mErr } = await supabase
           .from(TABLE_MASTER)
-          .select("num_pedido, cliente, titulo, cantidad, fecha_entrega")
+          .select(
+            "num_pedido, cliente, titulo, cantidad, fecha_entrega, ot_tipo, ot_padre_numero, tipo_hija, forma_descripcion",
+          )
           .in("num_pedido", nums);
         if (mErr) throw mErr;
         for (const r of masterRows ?? []) {
@@ -584,12 +575,20 @@ export function OtsDespachadasPage({
             titulo: string | null;
             cantidad: number | null;
             fecha_entrega: string | null;
+            ot_tipo: string | null;
+            ot_padre_numero: string | null;
+            tipo_hija: string | null;
+            forma_descripcion: string | null;
           };
           masterByOt.set(String(row.num_pedido ?? "").trim(), {
             cliente: row.cliente,
             titulo: row.titulo,
             cantidad: row.cantidad,
             fecha_entrega: row.fecha_entrega,
+            ot_tipo: row.ot_tipo,
+            ot_padre_numero: row.ot_padre_numero,
+            tipo_hija: row.tipo_hija,
+            forma_descripcion: row.forma_descripcion,
           });
         }
       }
@@ -662,6 +661,10 @@ export function OtsDespachadasPage({
           ot_anterior_numero: (d.ot_anterior_numero as string | null) ?? null,
           ot_anterior_id:
             typeof d.ot_anterior_id === "string" ? d.ot_anterior_id : null,
+          ot_tipo: m?.ot_tipo ?? null,
+          ot_padre_numero: m?.ot_padre_numero ?? null,
+          tipo_hija: m?.tipo_hija ?? null,
+          forma_descripcion: m?.forma_descripcion ?? null,
         };
       });
       let troquelMap = new Map<string, TroquelExcelTooltip>();
@@ -786,8 +789,75 @@ export function OtsDespachadasPage({
     });
   }, [filtroBusqueda, filtroEstadoMaterial, ocultarEstadosCerrados, rows]);
 
+  const getDespachoOtNumero = useCallback(
+    (r: OtsDespachadasTableRow) => String(r.ot_numero ?? "").trim(),
+    [],
+  );
+  const getDespachoOtTipo = useCallback(
+    (r: OtsDespachadasTableRow) => resolveRowOtTipo(r.ot_tipo, r.ot_padre_numero),
+    [],
+  );
+  const loadHijaRowsForDespachadas = useCallback(
+    async (_padreOt: string, hijasMeta: OtContenedorMeta[]) => {
+      const nums = new Set(hijasMeta.map((h) => h.numPedido));
+      return rows.filter((r) => nums.has(getDespachoOtNumero(r)));
+    },
+    [rows, getDespachoOtNumero],
+  );
+
+  const {
+    displayRows,
+    expandedContenedores,
+    loadingHijasPadre,
+    toggleContenedorExpand,
+  } = useOtContenedorGroupedDisplay({
+    supabase,
+    rows: rowsFiltradas,
+    otTipoFilter,
+    getOtNumero: getDespachoOtNumero,
+    getOtTipo: getDespachoOtTipo,
+    getOtPadreNumero: (r) => String(r.ot_padre_numero ?? "").trim() || null,
+    getFormaDescripcion: (r) => r.forma_descripcion ?? null,
+    getTipoHija: (r) => (r.tipo_hija as ProdOtTipoHija | null) ?? null,
+    getTitulo: (r) => r.titulo,
+    loadHijaRows: loadHijaRowsForDespachadas,
+  });
+
+  const columnCtx = useMemo<OtsDespachadasColumnsContext>(
+    () => ({
+      onVerCompra: handleVerCompra,
+      onItinerario: handleEditarDespacho,
+      onEditarDespacho: handleEditarDespacho,
+      onVerHojaRuta: handleVerHojaRuta,
+      troquelExcelByCodigo,
+      isSeleccionCompraDeshabilitada,
+      umbralesOtsCompras,
+      otTipoFilter,
+      expandedContenedores,
+      loadingHijasPadre,
+      onToggleContenedorExpand: toggleContenedorExpand,
+    }),
+    [
+      handleVerCompra,
+      handleEditarDespacho,
+      handleVerHojaRuta,
+      troquelExcelByCodigo,
+      isSeleccionCompraDeshabilitada,
+      umbralesOtsCompras,
+      otTipoFilter,
+      expandedContenedores,
+      loadingHijasPadre,
+      toggleContenedorExpand,
+    ],
+  );
+
+  const columns = useMemo(
+    () => createOtsDespachadasColumns(columnCtx),
+    [columnCtx],
+  );
+
   useEffect(() => {
-    const allowed = new Set(rowsFiltradas.map((r) => r.id));
+    const allowed = new Set(displayRows.map((r) => r.id));
     setRowSelection((prev) => {
       const next: RowSelectionState = {};
       for (const id of allowed) {
@@ -795,10 +865,10 @@ export function OtsDespachadasPage({
       }
       return next;
     });
-  }, [rowsFiltradas]);
+  }, [displayRows]);
 
   const table = useReactTable({
-    data: rowsFiltradas,
+    data: displayRows,
     columns,
     getRowId: (row) => row.id,
     state: { rowSelection, sorting },
@@ -813,11 +883,11 @@ export function OtsDespachadasPage({
     const keys = Object.keys(rowSelection).filter((k) => rowSelection[k]);
     const out: OtsDespachadasTableRow[] = [];
     for (const k of keys) {
-      const r = rowsFiltradas.find((x) => x.id === k);
+      const r = displayRows.find((x) => x.id === k);
       if (r) out.push(r);
     }
     return out;
-  }, [rowSelection, rowsFiltradas]);
+  }, [rowSelection, displayRows]);
 
   const ejecutarGenerarComprasLote = useCallback(
     async (rows: OtsDespachadasTableRow[]) => {
@@ -1651,7 +1721,7 @@ export function OtsDespachadasPage({
       </div>
 
       <div className="rounded-lg border border-slate-200/90 bg-slate-50/40 p-3 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-5">
           <div className="grid min-w-0 gap-1 md:col-span-2">
             <Label htmlFor="busq-ots-despachadas" className="text-xs font-medium">
               Buscar
@@ -1685,6 +1755,22 @@ export function OtsDespachadasPage({
             >
               Ocultar recibidas/canceladas
             </Toggle>
+          </div>
+          <div className="grid min-w-0 gap-1 md:col-span-1">
+            <NativeSelect
+              label="Vista OT"
+              value={otTipoFilter}
+              onChange={(e) =>
+                setOtTipoFilter(e.target.value as PlanificacionOtTipoFiltroUi)
+              }
+              options={[
+                { value: "agrupado", label: "Agrupado (barco)" },
+                { value: "solo_simples", label: "Solo simples" },
+                { value: "solo_contenedores", label: "Solo contenedores" },
+                { value: "todas_planas", label: "Todas planas" },
+              ]}
+              className="h-8 text-xs"
+            />
           </div>
         </div>
       </div>
@@ -1734,7 +1820,7 @@ export function OtsDespachadasPage({
                     No hay OTs despachadas registradas.
                   </TableCell>
                 </TableRow>
-              ) : rowsFiltradas.length === 0 ? (
+              ) : displayRows.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={columns.length}
@@ -1747,7 +1833,10 @@ export function OtsDespachadasPage({
                 table.getRowModel().rows.map((row) => (
                   <TableRow
                     key={row.id}
-                    className="hover:bg-slate-50/80"
+                    className={cn(
+                      "hover:bg-slate-50/80",
+                      row.original.isHijaRow && "bg-slate-50/60",
+                    )}
                     data-state={row.getIsSelected() ? "selected" : undefined}
                   >
                     {row.getVisibleCells().map((cell) => (

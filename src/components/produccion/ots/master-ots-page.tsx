@@ -35,6 +35,12 @@ import {
   type ReferenciaMinervaValue,
 } from "@/components/produccion/ots/referencia-minerva-picker";
 import { estadoDisplayForRow } from "@/components/produccion/ots/master-ots-table-helpers";
+import {
+  applyMasterOtsOtTipoServerFilter,
+  resolveRowOtTipo,
+  useOtContenedorGroupedDisplay,
+} from "@/lib/ots-contenedor-display";
+import type { OtContenedorMeta, PlanificacionOtTipoFiltroUi } from "@/lib/planificacion-contenedor-query";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -382,6 +388,9 @@ export function MasterOtsPage() {
   const [despachadoFilter, setDespachadoFilter] = useState<
     "todos" | "si" | "no"
   >("todos");
+  const [otTipoFilter, setOtTipoFilter] = useState<PlanificacionOtTipoFiltroUi>(
+    "agrupado",
+  );
   const [sorting, setSorting] =
     useState<SortingState>(MASTER_OTS_DEFAULT_SORTING);
 
@@ -464,7 +473,7 @@ export function MasterOtsPage() {
   useEffect(() => {
     setPage(0);
     setRowSelection({});
-  }, [debouncedSearch, estadoFilter, vendedorFilter, familiaFilter, despachadoFilter]);
+  }, [debouncedSearch, estadoFilter, vendedorFilter, familiaFilter, despachadoFilter, otTipoFilter]);
 
   useEffect(() => {
     if (!despachoOpen) setDespachoItinerarioSlots([]);
@@ -510,9 +519,10 @@ export function MasterOtsPage() {
       } else if (despachadoFilter === "no") {
         query = query.or("despachado.is.null,despachado.eq.false");
       }
+      query = applyMasterOtsOtTipoServerFilter(query, otTipoFilter);
       return query;
     },
-    [debouncedSearch, estadoFilter, vendedorFilter, familiaFilter, despachadoFilter]
+    [debouncedSearch, estadoFilter, vendedorFilter, familiaFilter, despachadoFilter, otTipoFilter]
   );
 
   const loadFilterOptions = useCallback(async () => {
@@ -717,14 +727,70 @@ export function MasterOtsPage() {
     setEditOpen(true);
   }, []);
 
+  const getMasterOtNumero = useCallback(
+    (r: ProdOtsGeneralRow) => String(r.num_pedido ?? "").trim(),
+    [],
+  );
+  const getMasterOtTipo = useCallback(
+    (r: ProdOtsGeneralRow) => resolveRowOtTipo(r.ot_tipo, r.ot_padre_numero),
+    [],
+  );
+  const loadHijaRowsForMaster = useCallback(
+    async (_padreOt: string, hijasMeta: OtContenedorMeta[]) => {
+      const nums = hijasMeta.map((h) => h.numPedido).filter(Boolean);
+      if (nums.length === 0) return [];
+      const { data, error } = await supabase
+        .from(TABLE)
+        .select("*")
+        .in("num_pedido", nums);
+      if (error) throw error;
+      const list = (data ?? []) as ProdOtsGeneralRow[];
+      const byNum = new Map(list.map((r) => [getMasterOtNumero(r), r]));
+      return nums
+        .map((n) => byNum.get(n))
+        .filter((r): r is ProdOtsGeneralRow => r != null);
+    },
+    [supabase, getMasterOtNumero],
+  );
+
+  const {
+    displayRows,
+    expandedContenedores,
+    loadingHijasPadre,
+    toggleContenedorExpand,
+  } = useOtContenedorGroupedDisplay({
+    supabase,
+    rows,
+    otTipoFilter,
+    getOtNumero: getMasterOtNumero,
+    getOtTipo: getMasterOtTipo,
+    getOtPadreNumero: (r) => String(r.ot_padre_numero ?? "").trim() || null,
+    getFormaDescripcion: (r) => r.forma_descripcion ?? null,
+    getTipoHija: (r) => r.tipo_hija ?? null,
+    getTitulo: (r) => r.titulo,
+    loadHijaRows: loadHijaRowsForMaster,
+  });
+
   const columns = useMemo(
     () =>
       createMasterOtsColumns({
         rowHasExterno,
         openEdit,
         umbralesOtsCompras,
+        otTipoFilter,
+        expandedContenedores,
+        loadingHijasPadre,
+        onToggleContenedorExpand: toggleContenedorExpand,
       }),
-    [rowHasExterno, openEdit, umbralesOtsCompras]
+    [
+      rowHasExterno,
+      openEdit,
+      umbralesOtsCompras,
+      otTipoFilter,
+      expandedContenedores,
+      loadingHijasPadre,
+      toggleContenedorExpand,
+    ]
   );
 
   const despachoSeleccion = useMemo(() => {
@@ -733,7 +799,7 @@ export function MasterOtsPage() {
       despachoSeleccionCacheRef.current = null;
       return null;
     }
-    const r = rows.find((x) => x.id === id);
+    const r = displayRows.find((x) => x.id === id);
     if (r) {
       const sel: DespachoSeleccion = {
         id: r.id,
@@ -743,17 +809,17 @@ export function MasterOtsPage() {
       return sel;
     }
     return despachoSeleccionCacheRef.current;
-  }, [rowSelection, rows]);
+  }, [rowSelection, displayRows]);
 
   /** No volver a despachar si ya existe fila en `produccion_ot_despachadas` o el maestro marca despachado. */
   const despachoYaProcesado = useMemo(() => {
     if (!despachoSeleccion) return false;
     const ot = despachoSeleccion.num_pedido.trim();
     if (!ot) return false;
-    const row = rows.find((x) => x.id === despachoSeleccion.id);
+    const row = displayRows.find((x) => x.id === despachoSeleccion.id);
     if (row?.despachado === true) return true;
     return despachoRegistradoOtSet.has(ot);
-  }, [despachoSeleccion, rows, despachoRegistradoOtSet]);
+  }, [despachoSeleccion, displayRows, despachoRegistradoOtSet]);
 
   const activeDespachoSeleccion = useMemo(
     () => (despachoExpressMode ? despachoExpressSeleccion : despachoSeleccion),
@@ -768,7 +834,7 @@ export function MasterOtsPage() {
   const activeDespachoMeta = useMemo<DespachoMeta>(() => {
     if (despachoExpressMode) return despachoExpressMeta;
     if (!despachoSeleccion) return emptyDespachoMeta();
-    const row = rows.find((r) => r.id === despachoSeleccion.id);
+    const row = displayRows.find((r) => r.id === despachoSeleccion.id);
     if (!row) return emptyDespachoMeta();
     return {
       cliente: String(row.cliente ?? "").trim(),
@@ -777,7 +843,7 @@ export function MasterOtsPage() {
       pedido_cliente: String(row.pedido_cliente ?? "").trim(),
       fecha_entrega: String(row.fecha_entrega ?? "").trim(),
     };
-  }, [despachoExpressMode, despachoExpressMeta, despachoSeleccion, rows]);
+  }, [despachoExpressMode, despachoExpressMeta, despachoSeleccion, displayRows]);
 
   const activeDespachoStatus = useMemo(() => {
     if (!activeDespachoSeleccion) return "none" as const;
@@ -1237,7 +1303,7 @@ export function MasterOtsPage() {
   };
 
   const table = useReactTable({
-    data: rows,
+    data: displayRows,
     columns,
     getRowId: (row) => row.id,
     state: {
@@ -2307,6 +2373,21 @@ ${otsContextJson}
             </SelectContent>
           </Select>
         </div>
+        <NativeSelect
+          id="filtro-ot-tipo"
+          label="Vista OT"
+          className="h-8 min-w-0 text-xs"
+          value={otTipoFilter}
+          onChange={(e) =>
+            setOtTipoFilter(e.target.value as PlanificacionOtTipoFiltroUi)
+          }
+          options={[
+            { value: "agrupado", label: "Agrupado (barco)" },
+            { value: "solo_simples", label: "Solo simples" },
+            { value: "solo_contenedores", label: "Solo contenedores" },
+            { value: "todas_planas", label: "Todas planas" },
+          ]}
+        />
       </div>
 
       <div className="overflow-hidden rounded-lg border border-slate-200/90 bg-white shadow-sm">
@@ -2342,7 +2423,7 @@ ${otsContextJson}
                     <Loader2 className="mx-auto size-6 animate-spin text-slate-400" />
                   </TableCell>
                 </TableRow>
-              ) : rows.length === 0 ? (
+              ) : displayRows.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={columns.length}
@@ -2355,7 +2436,10 @@ ${otsContextJson}
                 table.getRowModel().rows.map((row) => (
                   <TableRow
                     key={row.id}
-                    className="hover:bg-slate-50/80"
+                    className={cn(
+                      "hover:bg-slate-50/80",
+                      row.original.isHijaRow && "bg-slate-50/60",
+                    )}
                     data-state={row.getIsSelected() ? "selected" : undefined}
                   >
                     {row.getVisibleCells().map((cell) => (

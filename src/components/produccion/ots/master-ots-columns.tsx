@@ -10,9 +10,12 @@ import {
   Truck,
 } from "lucide-react";
 
-import { OtNumeroSemaforoBadge } from "@/components/produccion/ots/ot-numero-semaforo-badge";
+import { OtContenedorOtNumeroCell } from "@/components/produccion/ots/ot-contenedor-ot-numero-cell";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import type { WithOtContenedorDisplay } from "@/lib/ots-contenedor-display";
+import { isOtRowSelectableInGroupedList } from "@/lib/ots-contenedor-display";
+import type { PlanificacionOtTipoFiltroUi } from "@/lib/planificacion-contenedor-query";
 import type { OtsComprasUmbralesParametros } from "@/lib/sys-parametros-ots-compras";
 import type { ProdOtsGeneralRow } from "@/types/prod-ots";
 import { cn } from "@/lib/utils";
@@ -63,22 +66,30 @@ export type MasterOtsColumnsContext = {
   rowHasExterno: (r: ProdOtsGeneralRow) => boolean;
   openEdit: (r: ProdOtsGeneralRow) => void;
   umbralesOtsCompras: OtsComprasUmbralesParametros;
+  otTipoFilter: PlanificacionOtTipoFiltroUi;
+  expandedContenedores: Record<string, boolean>;
+  loadingHijasPadre: string | null;
+  onToggleContenedorExpand: (padreOt: string) => void;
 };
 
 export function createMasterOtsColumns(
   ctx: MasterOtsColumnsContext
-): ColumnDef<ProdOtsGeneralRow>[] {
+): ColumnDef<WithOtContenedorDisplay<ProdOtsGeneralRow>>[] {
   return [
     {
       id: "select",
       size: 32,
       enableSorting: false,
       header: () => null,
-      cell: ({ row, table }) => (
+      cell: ({ row, table }) => {
+        const selectable = isOtRowSelectableInGroupedList(row.original);
+        return (
         <div className="flex justify-center px-0.5 py-0.5">
           <Checkbox
             checked={row.getIsSelected()}
+            disabled={!selectable}
             onCheckedChange={(checked) => {
+              if (!selectable) return;
               if (checked) {
                 table.setRowSelection({ [row.id]: true });
               } else {
@@ -88,7 +99,8 @@ export function createMasterOtsColumns(
             aria-label={`Seleccionar OT ${row.original.num_pedido}`}
           />
         </div>
-      ),
+        );
+      },
     },
     {
       id: "ext",
@@ -131,15 +143,29 @@ export function createMasterOtsColumns(
           title="Ordenar por número de OT"
         />
       ),
-      cell: ({ row }) => (
+      cell: ({ row }) => {
+        const r = row.original;
+        const ot = String(r.num_pedido ?? "").trim();
+        return (
         <div className="flex min-h-6 min-w-0 items-center px-0.5 py-0">
-          <OtNumeroSemaforoBadge
-            otNumero={String(row.original.num_pedido ?? "").trim()}
-            fechaEntregaIso={row.original.fecha_entrega}
+          <OtContenedorOtNumeroCell
+            otNumero={ot}
+            fechaEntregaIso={r.fecha_entrega}
             umbrales={ctx.umbralesOtsCompras}
+            display={r}
+            otTipoFilter={ctx.otTipoFilter}
+            expanded={Boolean(ctx.expandedContenedores[ot])}
+            loadingExpand={ctx.loadingHijasPadre === ot}
+            onToggleExpand={
+              r.displayOtTipo === "contenedor" && ctx.otTipoFilter === "agrupado"
+                ? () => ctx.onToggleContenedorExpand(ot)
+                : undefined
+            }
+            titulo={r.titulo}
           />
         </div>
-      ),
+        );
+      },
       size: 96,
     },
     {

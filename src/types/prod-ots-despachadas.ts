@@ -40,4 +40,9 @@ export type OtsDespachadasTableRow = {
   ot_anterior_numero?: string | null;
   /** Enlace blando a `prod_ots_general.id` de la OT anterior, si existe. */
   ot_anterior_id?: string | null;
+  /** Bloque 8 — desde `prod_ots_general`. */
+  ot_tipo?: string | null;
+  ot_padre_numero?: string | null;
+  tipo_hija?: string | null;
+  forma_descripcion?: string | null;
 };

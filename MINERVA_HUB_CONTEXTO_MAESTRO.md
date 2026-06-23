@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 23 jun 2026 (Bloque 9 cartelas: Juan/Emma, día 0; nuevo `MINERVA_ROLES_Y_NAVEGACION.md`)
+> Última actualización: 23 jun 2026 (Bloque 8.1.2 agrupación maestro/despachadas; Bloque 10 presupuestos diseño; reunión jueves)
 
 ---
 
@@ -14,6 +14,7 @@
    - `MINERVA_BLOQUE7_ODOO_ALBARANES.md`
    - `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`
    - `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`
+   - `MINERVA_BLOQUE10_PRESUPUESTOS.md` (futuro)
 3. Añadir `MINERVA_CONTEXTO_TECNICO.md` solo si la IA necesita detalles técnicos del repo.
 4. Al cerrar una fase, actualizar este maestro + `FASES_HOJA_RUTA_DIGITAL.md`.
 
@@ -25,6 +26,8 @@
 | `MINERVA_CONTEXTO_TECNICO.md` | Detalle técnico: árbol, configs, tipos, migraciones, SQL y módulos clave. |
 | `MINERVA_BLOQUE*_*.md` | Brief específico de una fase activa o futura. |
 | `MINERVA_ROLES_Y_NAVEGACION.md` | Capa transversal: permisos (quién puede qué) + navegación (qué ve cada uno). Bloque futuro. |
+| `MINERVA_BLOQUE10_PRESUPUESTOS.md` | Bloque futuro: presupuestos, formas, versión real al copiar. |
+| `MINERVA_REUNION_HOJA_RUTA_JUEVES.md` | Guía reunión demo 98010 + preguntas §12. |
 | `MINERVA_BRIEFING.md` | Onboarding narrativo largo; útil, pero secundario frente a este maestro. |
 
 ---
@@ -307,6 +310,10 @@ src/components/produccion/planificacion/
 14. **Bloque 8.1.1 — contenedor en campo (18 jun 2026)**: compra conjunta en padre; hijas heredan material en pool. Progreso barco = **pasos finalizados / pasos totales** (todas las hijas). Pool lateral mesa filtra por `planificacionTipoPaso` del itinerario (sin OTs con paso distinto ni `null`). Merma impresión: `brutas − merma = netas`. Troquel: prefill desde salida impresión. OT demo: **98010** (3 hijas). Rama: `feature/bloque8.1-pool-mesa-ejecucion-fixes`.
 
 15. **Roles, permisos y navegación (23 jun 2026, diseño)**: capa transversal, **bloque futuro propio** (no urgente, no bloquea Bloque 9). Sistema actual híbrido (matriz estática `permissions.ts` + `role_permissions` dinámica con prioridad). Límites: 1 usuario = 1 rol, granularidad solo a módulo, sin permiso por recurso (caso Abraham/CD 102). Plan 3 ejes: multi-rol/capacidades → función fina → recurso. Objetivo navegación: "la Minerva de cada uno" (ve solo lo suyo; admin/gerencia todo). Briefing: `MINERVA_ROLES_Y_NAVEGACION.md`.
+
+16. **Bloque 8.1.2 — agrupación maestro y despachadas (23 jun 2026)**: misma UX barco que Pool/Pipeline en **Maestro OTs** y **OTs despachadas** (`ots-contenedor-display.ts`, expandir hijas lazy). Filtro vista: agrupado | solo simples | solo contenedores | todas planas. Maestro paginado excluye hijas en servidor cuando no es vista plana.
+
+17. **Bloque 10 — Presupuestos (23 jun 2026, diseño)**: **después** de cartelas (9) y antes de ventas/comercial (11+). Hoy las hijas se parten en **despacho** (8.2 puente); futuro: formas en presupuesto + **versión real** al copiar (estructura como se ejecutó, no solo teoría Optimus). Briefing: `MINERVA_BLOQUE10_PRESUPUESTOS.md`. Reunión planta jueves: `MINERVA_REUNION_HOJA_RUTA_JUEVES.md`.
 
 ## 📁 Estructura de carpetas relevante
 

@@ -1,6 +1,6 @@
 # Guía demo — Bloque 8.1 (OT contenedor 98010)
 
-> **Fecha:** demo con Albert / Jordi (jun 2026)  
+> **Fecha:** reunión jueves con Albert / Jordi (jun 2026)  
 > **Rama desplegada:** `feature/bloque8.1-pool-mesa-ejecucion-fixes`  
 > **Briefing completo:** `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` §8.1 / §8.1.1
 
@@ -50,7 +50,12 @@ Minerva modela pedidos complejos como un **barco** (OT padre) con **hijas reales
 - CTP, Impresión, Troquel finalizados con datos reales.
 - Encadenado de formatos / hojas visible.
 
-### 5. Preguntas para planta (§12 Bloque 8)
+### 5. OTs despachadas / Maestro OTs (agrupado)
+
+- Buscar **98010** → una fila barco; expandir → hijas `-01/-02/-03`.
+- Filtro **Vista OT: Agrupado (barco)**.
+
+### 6. Preguntas para planta (§12 Bloque 8)
 
 Tener a mano `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` §12:
 - ¿Quién define hijas al despachar?
