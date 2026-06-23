@@ -24,12 +24,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { CerrarProcesoDialog } from "@/components/produccion/planificacion/cerrar-proceso-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   exportEjecucionesExcel,
   exportEjecucionesPdf,
 } from "@/lib/planificacion-ejecucion-export";
+import {
+  applyHorasMesaToDatosProceso,
+  buildEjecucionHorasSyncPatch,
+  computeHorasMesaNetas,
+} from "@/lib/planificacion-ejecucion-horas";
 import {
   etiquetaAmbitoPlanificacion,
   getPlanificacionTipoMaquinaFilter,
@@ -1572,37 +1578,64 @@ function ExecutionCard({
   const isPendingStart = row.estadoEjecucion === "pendiente_inicio";
   const canEdit = row.estadoEjecucion !== "finalizada" && row.estadoEjecucion !== "cancelada";
 
-  const buildSyncPatch = useCallback((): Record<string, unknown> => {
-    const sync: Record<string, unknown> = {};
-    const dp = datosProcesoLocal;
-    const pid = row.procesoId;
-    if (!pid) return sync;
-    if (pid === 1 || pid === 2) {
-      const horasImpReal = parseNum(dp.horas_impresion_real);
-      if (horasImpReal != null) sync.horas_reales = horasImpReal;
-      const horasEntReal = parseNum(dp.horas_entrada_real);
-      if (horasEntReal != null) sync.horas_reales_entrada = horasEntReal;
-      const horasTirReal = parseNum(dp.horas_impresion_real);
-      if (horasTirReal != null) sync.horas_reales_tiraje = horasTirReal;
-      const hojasImp = parseNum(dp.hojas_impresas);
-      if (hojasImp != null) sync.num_hojas_producidas = hojasImp;
+  const buildSyncPatch = useCallback(
+    (datos: DatosProcesoGenerico = datosProcesoLocal): Record<string, unknown> =>
+      buildEjecucionHorasSyncPatch(row.procesoId, datos),
+    [datosProcesoLocal, row.procesoId],
+  );
+
+  const [cerrarProcesoOpen, setCerrarProcesoOpen] = useState(false);
+  const [cerrarDatosDraft, setCerrarDatosDraft] = useState<DatosProcesoGenerico>({});
+  const [horasMesaSnapshot, setHorasMesaSnapshot] = useState<number | null>(null);
+
+  const openCerrarProceso = useCallback(() => {
+    if (!row.inicioRealAt) {
+      toast.error("Inicia la OT antes de cerrar el proceso.");
+      return;
     }
-    if (pid === 10) {
-      const hPrep = parseNum(dp.horas_preparacion_real);
-      const hTir = parseNum(dp.horas_tiraje_real);
-      const totalTroq = (hPrep ?? 0) + (hTir ?? 0);
-      if (totalTroq > 0) sync.horas_reales_troquelado = totalTroq;
-      const hojasTroq = parseNum(dp.hojas_troqueladas);
-      if (hojasTroq != null) sync.num_hojas_producidas = hojasTroq;
-    }
-    if (pid === 12) {
-      const tReal = parseNum(dp.tiempo_real);
-      if (tReal != null) sync.horas_reales_engomado = tReal;
-      const estEng = parseNum(dp.estuches_engomados);
-      if (estEng != null) sync.cantidad_unidades = estEng;
-    }
-    return sync;
-  }, [datosProcesoLocal, row.procesoId]);
+    const mesa =
+      computeHorasMesaNetas({
+        inicioRealAt: row.inicioRealAt,
+        minutosPausadaAcum: row.minutosPausadaAcum,
+        pauses: pauses.map((p) => ({
+          pausedAt: p.pausedAt,
+          resumedAt: p.resumedAt,
+          minutosPausa: p.minutosPausa,
+        })),
+      }) ?? 0;
+    setHorasMesaSnapshot(mesa > 0 ? mesa : null);
+    setCerrarDatosDraft(
+      applyHorasMesaToDatosProceso(row.procesoId, datosProcesoLocal, mesa),
+    );
+    setDatosProcesoOpen(true);
+    setCerrarProcesoOpen(true);
+  }, [row.inicioRealAt, row.procesoId, row.minutosPausadaAcum, pauses, datosProcesoLocal]);
+
+  const confirmCerrarProceso = useCallback(() => {
+    setDatosProcesoLocal(cerrarDatosDraft);
+    onPatch(
+      {
+        estado_ejecucion: "finalizada",
+        fin_real_at: new Date().toISOString(),
+        maquinista: maquinista.trim() || null,
+        incidencia: incidencia.trim() || null,
+        accion_correctiva: accion.trim() || null,
+        observaciones: observaciones.trim() || null,
+        ...buildEjecucionHorasSyncPatch(row.procesoId, cerrarDatosDraft),
+      },
+      hasCamposConfig ? cerrarDatosDraft : null,
+    );
+    setCerrarProcesoOpen(false);
+  }, [
+    cerrarDatosDraft,
+    hasCamposConfig,
+    maquinista,
+    incidencia,
+    accion,
+    observaciones,
+    onPatch,
+    row.procesoId,
+  ]);
 
   // Campos que deben persistir en CUALQUIER acción (iniciar, pausar,
   // reanudar, guardar, finalizar) para no perder lo tecleado.
@@ -1997,7 +2030,8 @@ function ExecutionCard({
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         {row.procesoId === PROCESO_CTP_ID ? (
           <p className="text-xs text-slate-600">
-            Horas CTP: se guardan en datos del proceso y no computan contra Plan/Desv.
+            Plan: {row.horasPlanificadasSnapshot ?? "—"}h · Real:{" "}
+            {parseNum(datosProcesoLocal.horas_proceso) ?? row.horasReales ?? "—"}h
           </p>
         ) : (
           <p className="text-xs text-slate-600">
@@ -2067,22 +2101,37 @@ function ExecutionCard({
               size="sm"
               className="bg-[#002147] text-white hover:bg-[#001735]"
               disabled={saving}
-              onClick={() => {
-                onPatch(
-                  {
-                    estado_ejecucion: "finalizada",
-                    fin_real_at: new Date().toISOString(),
-                    ...buildCommonFieldsPatch(),
-                  },
-                  datosProcesoPatch,
-                );
-              }}
+              onClick={openCerrarProceso}
             >
-              <CheckCircle2 className="mr-1 size-4" /> Finalizar
+              <CheckCircle2 className="mr-1 size-4" /> Cerrar proceso
             </Button>
           ) : null}
         </div>
       </div>
+
+      <CerrarProcesoDialog
+        open={cerrarProcesoOpen}
+        onOpenChange={setCerrarProcesoOpen}
+        otNumero={row.ot}
+        procesoNombre={row.procesoNombre}
+        procesoId={row.procesoId}
+        horasMesa={horasMesaSnapshot}
+        minutosPausa={row.minutosPausadaAcum}
+        datosDraft={cerrarDatosDraft}
+        onDatosChange={setCerrarDatosDraft}
+        onUsarTiempoMesa={() => {
+          if (horasMesaSnapshot == null || horasMesaSnapshot <= 0) return;
+          setCerrarDatosDraft(
+            applyHorasMesaToDatosProceso(
+              row.procesoId,
+              cerrarDatosDraft,
+              horasMesaSnapshot,
+            ),
+          );
+        }}
+        onConfirm={confirmCerrarProceso}
+        saving={saving}
+      />
     </div>
   );
 }
