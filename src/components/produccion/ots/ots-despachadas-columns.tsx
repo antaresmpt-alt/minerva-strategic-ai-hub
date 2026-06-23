@@ -245,7 +245,7 @@ export function createOtsDespachadasColumns(
     },
     {
       accessorKey: "ot_numero",
-      size: 96,
+      size: 112,
       sortingFn: (rowA, rowB) =>
         String(rowA.original.ot_numero ?? "").localeCompare(
           String(rowB.original.ot_numero ?? ""),
@@ -257,7 +257,7 @@ export function createOtsDespachadasColumns(
         const r = row.original;
         const ot = String(r.ot_numero ?? "").trim();
         return (
-        <div className="flex min-h-6 min-w-0 max-w-[9rem] items-center px-0.5 py-0">
+        <div className="flex min-h-6 min-w-0 items-center px-0.5 py-0">
           <OtContenedorOtNumeroCell
             otNumero={ot}
             fechaEntregaIso={r.fecha_entrega_prevista}

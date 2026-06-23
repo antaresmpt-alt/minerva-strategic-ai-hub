@@ -66,6 +66,7 @@ import {
 import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
 import {
   resolveRowOtTipo,
+  sortRowsByOtNumero,
   useOtContenedorGroupedDisplay,
 } from "@/lib/ots-contenedor-display";
 import type { OtContenedorMeta, PlanificacionOtTipoFiltroUi } from "@/lib/planificacion-contenedor-query";
@@ -86,6 +87,53 @@ function serializeItinerarioProcesoIds(slots: DespachoItinerarioSlot[]): string 
 const OTS_DESPACHADAS_DEFAULT_SORTING: SortingState = [
   { id: "despachado_at", desc: true },
 ];
+
+function compareDespachadasRows(
+  a: OtsDespachadasTableRow,
+  b: OtsDespachadasTableRow,
+  sorting: SortingState,
+): number {
+  const s = sorting[0];
+  if (!s) return 0;
+  const mul = s.desc ? -1 : 1;
+  let cmp = 0;
+  switch (s.id) {
+    case "ot_numero":
+      cmp = String(a.ot_numero ?? "").localeCompare(
+        String(b.ot_numero ?? ""),
+        "es",
+        { numeric: true, sensitivity: "base" },
+      );
+      break;
+    case "fecha_entrega_prevista": {
+      const at = a.fecha_entrega_prevista
+        ? new Date(a.fecha_entrega_prevista).getTime()
+        : Number.NEGATIVE_INFINITY;
+      const bt = b.fecha_entrega_prevista
+        ? new Date(b.fecha_entrega_prevista).getTime()
+        : Number.NEGATIVE_INFINITY;
+      cmp = at - bt;
+      break;
+    }
+    case "despachado_at": {
+      const at = a.despachado_at
+        ? new Date(a.despachado_at).getTime()
+        : Number.NEGATIVE_INFINITY;
+      const bt = b.despachado_at
+        ? new Date(b.despachado_at).getTime()
+        : Number.NEGATIVE_INFINITY;
+      cmp = at - bt;
+      break;
+    }
+    default:
+      cmp = 0;
+  }
+  return cmp * mul;
+}
+
+function isDespachadasGroupedView(filtro: PlanificacionOtTipoFiltroUi): boolean {
+  return filtro !== "todas_planas";
+}
 
 /**
  * Normaliza `estado_material` para comparaciones laxas (mayúsculas, espacios,
@@ -797,13 +845,38 @@ export function OtsDespachadasPage({
     (r: OtsDespachadasTableRow) => resolveRowOtTipo(r.ot_tipo, r.ot_padre_numero),
     [],
   );
+  const getDespachoOtPadreNumero = useCallback(
+    (r: OtsDespachadasTableRow) => String(r.ot_padre_numero ?? "").trim() || null,
+    [],
+  );
+  const getDespachoFormaDescripcion = useCallback(
+    (r: OtsDespachadasTableRow) => r.forma_descripcion ?? null,
+    [],
+  );
+  const getDespachoTipoHija = useCallback(
+    (r: OtsDespachadasTableRow) => (r.tipo_hija as ProdOtTipoHija | null) ?? null,
+    [],
+  );
+  const getDespachoTitulo = useCallback(
+    (r: OtsDespachadasTableRow) => r.titulo,
+    [],
+  );
   const loadHijaRowsForDespachadas = useCallback(
     async (_padreOt: string, hijasMeta: OtContenedorMeta[]) => {
       const nums = new Set(hijasMeta.map((h) => h.numPedido));
-      return rows.filter((r) => nums.has(getDespachoOtNumero(r)));
+      const matched = rows.filter((r) => nums.has(getDespachoOtNumero(r)));
+      return sortRowsByOtNumero(matched, getDespachoOtNumero);
     },
     [rows, getDespachoOtNumero],
   );
+
+  const rowsForGrouping = useMemo(() => {
+    if (!isDespachadasGroupedView(otTipoFilter)) {
+      return rowsFiltradas;
+    }
+    const topLevel = rowsFiltradas.filter((r) => getDespachoOtTipo(r) !== "hija");
+    return [...topLevel].sort((a, b) => compareDespachadasRows(a, b, sorting));
+  }, [rowsFiltradas, otTipoFilter, sorting, getDespachoOtTipo]);
 
   const {
     displayRows,
@@ -812,14 +885,14 @@ export function OtsDespachadasPage({
     toggleContenedorExpand,
   } = useOtContenedorGroupedDisplay({
     supabase,
-    rows: rowsFiltradas,
+    rows: rowsForGrouping,
     otTipoFilter,
     getOtNumero: getDespachoOtNumero,
     getOtTipo: getDespachoOtTipo,
-    getOtPadreNumero: (r) => String(r.ot_padre_numero ?? "").trim() || null,
-    getFormaDescripcion: (r) => r.forma_descripcion ?? null,
-    getTipoHija: (r) => (r.tipo_hija as ProdOtTipoHija | null) ?? null,
-    getTitulo: (r) => r.titulo,
+    getOtPadreNumero: getDespachoOtPadreNumero,
+    getFormaDescripcion: getDespachoFormaDescripcion,
+    getTipoHija: getDespachoTipoHija,
+    getTitulo: getDespachoTitulo,
     loadHijaRows: loadHijaRowsForDespachadas,
   });
 
@@ -856,6 +929,11 @@ export function OtsDespachadasPage({
     [columnCtx],
   );
 
+  const displayRowIdsKey = useMemo(
+    () => displayRows.map((r) => r.id).join("\0"),
+    [displayRows],
+  );
+
   useEffect(() => {
     const allowed = new Set(displayRows.map((r) => r.id));
     setRowSelection((prev) => {
@@ -863,9 +941,19 @@ export function OtsDespachadasPage({
       for (const id of allowed) {
         if (prev[id]) next[id] = true;
       }
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(next);
+      if (
+        prevKeys.length === nextKeys.length &&
+        nextKeys.every((k) => prev[k] === next[k])
+      ) {
+        return prev;
+      }
       return next;
     });
-  }, [displayRows]);
+    // displayRowIdsKey resume la lista visible; displayRows es coherente en este render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayRowIdsKey]);
 
   const table = useReactTable({
     data: displayRows,
@@ -876,7 +964,9 @@ export function OtsDespachadasPage({
     onSortingChange: setSorting,
     enableMultiRowSelection: true,
     getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
+    ...(isDespachadasGroupedView(otTipoFilter)
+      ? {}
+      : { getSortedRowModel: getSortedRowModel() }),
   });
 
   const selectedRows = useMemo(() => {

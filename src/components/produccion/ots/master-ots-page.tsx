@@ -735,6 +735,22 @@ export function MasterOtsPage() {
     (r: ProdOtsGeneralRow) => resolveRowOtTipo(r.ot_tipo, r.ot_padre_numero),
     [],
   );
+  const getMasterOtPadreNumero = useCallback(
+    (r: ProdOtsGeneralRow) => String(r.ot_padre_numero ?? "").trim() || null,
+    [],
+  );
+  const getMasterFormaDescripcion = useCallback(
+    (r: ProdOtsGeneralRow) => r.forma_descripcion ?? null,
+    [],
+  );
+  const getMasterTipoHija = useCallback(
+    (r: ProdOtsGeneralRow) => r.tipo_hija ?? null,
+    [],
+  );
+  const getMasterTitulo = useCallback(
+    (r: ProdOtsGeneralRow) => r.titulo,
+    [],
+  );
   const loadHijaRowsForMaster = useCallback(
     async (_padreOt: string, hijasMeta: OtContenedorMeta[]) => {
       const nums = hijasMeta.map((h) => h.numPedido).filter(Boolean);
@@ -764,10 +780,10 @@ export function MasterOtsPage() {
     otTipoFilter,
     getOtNumero: getMasterOtNumero,
     getOtTipo: getMasterOtTipo,
-    getOtPadreNumero: (r) => String(r.ot_padre_numero ?? "").trim() || null,
-    getFormaDescripcion: (r) => r.forma_descripcion ?? null,
-    getTipoHija: (r) => r.tipo_hija ?? null,
-    getTitulo: (r) => r.titulo,
+    getOtPadreNumero: getMasterOtPadreNumero,
+    getFormaDescripcion: getMasterFormaDescripcion,
+    getTipoHija: getMasterTipoHija,
+    getTitulo: getMasterTitulo,
     loadHijaRows: loadHijaRowsForMaster,
   });
 

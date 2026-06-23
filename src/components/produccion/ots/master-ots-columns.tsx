@@ -166,7 +166,7 @@ export function createMasterOtsColumns(
         </div>
         );
       },
-      size: 96,
+      size: 112,
     },
     {
       id: "despachado",

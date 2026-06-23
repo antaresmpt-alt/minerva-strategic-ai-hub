@@ -35,6 +35,20 @@ export function resolveRowOtTipo(
   return "simple";
 }
 
+export function compareOtNumerosEs(a: string, b: string): number {
+  return a.localeCompare(b, "es", { numeric: true, sensitivity: "base" });
+}
+
+/** Orden lógico de hijas: 98010-01, -02, -03… */
+export function sortRowsByOtNumero<T>(
+  rows: T[],
+  getOtNumero: (row: T) => string,
+): T[] {
+  return [...rows].sort((a, b) =>
+    compareOtNumerosEs(getOtNumero(a), getOtNumero(b)),
+  );
+}
+
 export function filterRowsByOtTipoFiltro<T>(
   rows: T[],
   getOtTipo: (row: T) => ProdOtTipo,
@@ -100,7 +114,8 @@ export function buildGroupedOtDisplayRows<T>(
     });
 
     if (filtro === "agrupado" && otTipo === "contenedor" && expandedContenedores[ot]) {
-      for (const hija of hijaRowsByPadre[ot] ?? []) {
+      const hijas = sortRowsByOtNumero(hijaRowsByPadre[ot] ?? [], getOtNumero);
+      for (const hija of hijas) {
         const hijaOt = getOtNumero(hija);
         out.push({
           ...hija,
@@ -166,6 +181,12 @@ export function useOtContenedorGroupedDisplay<T>({
   const [loadingHijasPadre, setLoadingHijasPadre] = useState<string | null>(null);
 
   useEffect(() => {
+    if (otTipoFilter === "todas_planas" || otTipoFilter === "solo_simples") {
+      setHijasCountByPadre((prev) =>
+        Object.keys(prev).length === 0 ? prev : {},
+      );
+      return;
+    }
     const padres = [
       ...new Set(
         rows
@@ -175,7 +196,9 @@ export function useOtContenedorGroupedDisplay<T>({
       ),
     ];
     if (padres.length === 0) {
-      setHijasCountByPadre({});
+      setHijasCountByPadre((prev) =>
+        Object.keys(prev).length === 0 ? prev : {},
+      );
       return;
     }
     let cancelled = false;
@@ -185,12 +208,22 @@ export function useOtContenedorGroupedDisplay<T>({
       for (const [padre, list] of map) {
         counts[padre] = list.length;
       }
-      setHijasCountByPadre(counts);
+      setHijasCountByPadre((prev) => {
+        const prevKeys = Object.keys(prev);
+        const nextKeys = Object.keys(counts);
+        if (
+          prevKeys.length === nextKeys.length &&
+          nextKeys.every((k) => prev[k] === counts[k])
+        ) {
+          return prev;
+        }
+        return counts;
+      });
     });
     return () => {
       cancelled = true;
     };
-  }, [rows, supabase, getOtNumero, getOtTipo]);
+  }, [rows, supabase, getOtNumero, getOtTipo, otTipoFilter]);
 
   const loadHijasForContenedor = useCallback(
     async (padreOt: string) => {
@@ -201,18 +234,24 @@ export function useOtContenedorGroupedDisplay<T>({
           (r) => getOtTipo(r) === "hija" && (getOtPadreNumero?.(r) ?? "") === padreOt,
         );
         if (fromList.length > 0) {
-          setHijaRowsByPadre((prev) => ({ ...prev, [padreOt]: fromList }));
+          setHijaRowsByPadre((prev) => ({
+            ...prev,
+            [padreOt]: sortRowsByOtNumero(fromList, getOtNumero),
+          }));
           return;
         }
         const hijasMap = await fetchHijasByPadreNumeros(supabase, [padreOt]);
         const hijasMeta = hijasMap.get(padreOt) ?? [];
         const loaded = await loadHijaRows(padreOt, hijasMeta);
-        setHijaRowsByPadre((prev) => ({ ...prev, [padreOt]: loaded }));
+        setHijaRowsByPadre((prev) => ({
+          ...prev,
+          [padreOt]: sortRowsByOtNumero(loaded, getOtNumero),
+        }));
       } finally {
         setLoadingHijasPadre((cur) => (cur === padreOt ? null : cur));
       }
     },
-    [hijaRowsByPadre, rows, supabase, getOtTipo, getOtPadreNumero, loadHijaRows],
+    [hijaRowsByPadre, rows, supabase, getOtTipo, getOtPadreNumero, getOtNumero, loadHijaRows],
   );
 
   const toggleContenedorExpand = useCallback(
@@ -238,19 +277,9 @@ export function useOtContenedorGroupedDisplay<T>({
         getTipoHija,
         getTitulo,
       }),
-    [
-      rows,
-      otTipoFilter,
-      expandedContenedores,
-      hijaRowsByPadre,
-      hijasCountByPadre,
-      getOtNumero,
-      getOtTipo,
-      getOtPadreNumero,
-      getFormaDescripcion,
-      getTipoHija,
-      getTitulo,
-    ],
+    // Los getters deben ser estables (useCallback en el llamador).
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- evita recomputar en cada render
+    [rows, otTipoFilter, expandedContenedores, hijaRowsByPadre, hijasCountByPadre],
   );
 
   return {
