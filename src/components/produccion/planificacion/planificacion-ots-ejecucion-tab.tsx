@@ -2113,7 +2113,11 @@ function ExecutionCard({
         open={cerrarProcesoOpen}
         onOpenChange={setCerrarProcesoOpen}
         otNumero={row.ot}
-        procesoNombre={row.procesoNombre}
+        procesoNombre={
+          row.procesoId != null
+            ? (getCamposConfigByProcesoId(row.procesoId)?.procesoNombre ?? null)
+            : null
+        }
         procesoId={row.procesoId}
         horasMesa={horasMesaSnapshot}
         minutosPausa={row.minutosPausadaAcum}
