@@ -110,6 +110,19 @@ Filtro Pool "Próximo paso" ahora incluye **Guillotina** y **Desbroce** (Externo
 
 ---
 
+## Bloque 9 — Cartelas (24 jun)
+
+Ramón respondió el cuestionario (`MINERVA_CUESTIONARIO_CARTELAS_RAMON.md`). Decisiones en `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §3g y §13c:
+
+- **1 cartela = 1 palet = 1 ID Stock**; varias OTs sin cantidad por OT en la cartela.
+- **Juan:** solo muelle. **Emma/Ramón:** cartelas.
+- **Piloto:** Optimus en paralelo + **10–20 OTs** en Minerva (consumo maquinista obligatorio en piloto).
+- **Barco:** mismo material → 1 cartela multi-hija; material distinto → cartela separada.
+
+Pendiente con planta: H1/H2 recuento global y lista de OTs piloto.
+
+---
+
 ## Comandos útiles
 
 ```powershell

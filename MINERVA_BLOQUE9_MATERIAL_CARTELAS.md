@@ -6,8 +6,8 @@
 >
 > **Estado:** 📋 Diseño / brainstorming — **sin implementación**.
 > **Origen:** Optimus + cartelas CARPAPSA (15 jun 2026).
-> **Actualizado:** 23 jun 2026 — limpieza §7, sobrante = cartela que muta, movimientos desde almacén (3 flujos), ID Stock 10.310, extensibilidad §13 (tipo_stock/unidad, Gabri/PT, consumibles) + §13b recuento "día 0".
-> **PENDIENTE:** Dispositivo Juan (tablet/móvil). Rol de Emma tras autonomía de Juan. Recuento físico "día 0" (§13b).
+> **Actualizado:** 24 jun 2026 — cuestionario Ramón respondido (§3g); modelo **1 cartela = 1 palet**; roles Emma/Ramón cartelan; consumo MVP obligatorio; piloto paralelo §13c; barco §3g I1.
+> **PENDIENTE:** H1/H2 recuento global. Ubicación por filas de material (catálogo).
 
 **Relacionado:** sobrantes → Bloque 6 · expedición → Bloque 7 · material contenedor/hijas → Bloque 8 · FSC → maestro artículos.
 
@@ -25,8 +25,7 @@ Hoy la gestión de material se hace en Optimus + papel:
 Minerva necesita replicar este flujo de forma más ágil, con trazabilidad real
 y sin depender de que alguien recuerde manualmente qué hay en almacén.
 
-> **Objetivo Minerva (23 jun):** Juan como usuario principal de muelle + cartelas (ver §7.1).
-> Emma supervisa casos complejos. El §1–§2 describen el **hoy en Optimus**; el diseño objetivo está en §7.
+> **Objetivo Minerva (24 jun, validado con Ramón):** Juan en **Muelle** (recepción rápida + albarán). **Emma o Ramón** cartelan (paso separado). El §1–§2 describen el **hoy en Optimus**; el diseño objetivo está en §7 y §3g.
 
 ---
 
@@ -326,6 +325,62 @@ comanda 35862   750 fulles (1 palet) kraft liner 300gr 72x102
 
 **Relación con Minerva:** Este flujo es estructuralmente idéntico a un paso de itinerario (Bloque 8 — paso de "plastificado" o "acabado externo"). Si el itinerario está bien construido, ese paso podría generar automáticamente la ficha que Rita necesita. **No es Bloque 9 — es un bloque posterior** (módulo Externos/Flujos). Se documenta aquí como necesidad real identificada.
 
+---
+
+## 3g. Cuestionario Ramón respondido (23–24 jun 2026)
+
+> Fuente completa: `MINERVA_CUESTIONARIO_CARTELAS_RAMON.md`. Este apartado resume **decisiones que cambian el diseño**.
+
+### Regla de oro — cartela = palet
+
+**CARTELA = IDENTIFICADOR DE PALET INDIVIDUAL** (1 ID Stock = 1 palet físico).
+
+- Un palet puede servir a **varias OTs** (ej. 300 + 600 + 500 hojas “mentales” para OT1/2/3 + 400 sobrante en el mismo palet).
+- **No** se desglosa cantidad por OT en la cartela — el maquinista conoce las hojas brutas de la OT.
+- En físico se pegan **2 copias iguales** de la misma cartela (por pérdida), no dos cartelas con datos distintos.
+- Trazabilidad fina (qué OT consumió cuánto de qué ID Stock) → **`prod_stock_movimientos`**, no la cabecera de la cartela.
+
+### Roles (corrección 24 jun)
+
+| Persona | Muelle | Cartelas | Consumo / stock |
+|---------|--------|----------|-----------------|
+| **Juan** | ✅ Recepciona, sube albarán enseguida | ❌ **Nunca** cartela | Consulta stock; entrega material (con traspaso autorizado) |
+| **Emma / Ramón** | Pueden | ✅ Crean cartelas e imprimen | Supervisión, correcciones, autorización traspasos (Ramón) |
+| **Maquinista** | — | — | Descuenta en planta por ID Stock + OT **tras cada trabajo** |
+| **Otros** | — | ❌ No conviene ampliar | — |
+
+### Riesgos operativos a cubrir en MVP
+
+1. **Doble entrada de albarán** (Emma por mail + Ramón al llegar físico) → antiduplicado en Minerva por `nota_entrega` / albarán proveedor.
+2. **Consumo multi-palet** en urgencias: un trabajo puede descontar **varios ID Stock**.
+3. **No** wizard “pasar sobrante a stock libre” al cerrar OT si el palet sigue referenciando otras OTs (J2).
+
+### Barco / OT contenedor (I1 — WhatsApp 24 jun)
+
+| Caso | Cartelado |
+|------|-----------|
+| Hijas con **mismo material** | **1 cartela por palet**, OTs hijas listadas en la cartela |
+| Hijas con **material distinto** (ej. cara 350g / dorso 250g) | **1 cartela por material distinto** (cada palet/material su ID Stock) |
+
+La compra puede seguir siendo **una sola en el padre** (Bloque 8); el cartelado obedece a palet + material, no a “una cartela por hija”.
+
+### Ubicación en almacén (C3)
+
+Filas por familia de material: ALLYKING, ZENITH, COMCOTE/TPWHITE, GRISES, GRISES PAPRINSA, KRAFTLINER, ESTUCADOS, PAPELES ESPECIALES Y OFFSET. Campo `ubicacion_fila` (o catálogo) en consulta de stock — MVP puede ser texto; no bloquea cartelado.
+
+### Palets post-guillotina (C5)
+
+Sobrantes de corte no impreso deben **entrarse en stock con cartela** (flujo futuro enlazado a salida guillotina / entrada manual).
+
+### Prioridad MVP según Ramón (I3)
+
+1. Ver material **disponible / no reservado** para ninguna OT.
+2. Cartelas con **ID Stock** claras e impresión fiable.
+3. **Descuento tras cada trabajo** (imprescindible día 1 del piloto — E4).
+
+### Arranque — piloto paralelo (H3)
+
+Ver **§13c**. No corte limpio: Optimus sigue para el grueso del almacén; **10–20 OTs** piloto en Minerva con ciclo completo.
 
 ---
 
@@ -353,14 +408,15 @@ Caso típico:
 
 **En Optimus hoy:** se tacha la cantidad en la cartela física y se corrige a mano (§3c P4). No se crea cartela nueva.
 
-**En Minerva — dos momentos, mismo modelo (cartela que muta, no cartela nueva):**
+**En Minerva — un solo ID Stock, cantidad que muta:**
 
-| Momento | Cuándo | Qué pasa |
-|---------|--------|----------|
-| **Al cartelar (si se sabe)** | OC pide 1.500h, palet trae 2.000h | Juan crea **2 cartelas** en el acto: 1.500h `reservado` OT + 500h `disponible` stock libre (mismo `palet_fisico_ref`). Ver §7.3. |
-| **Al consumir/cerrar (merma variable)** | No se sabía el sobrante exacto al recepcionar | Una cartela de 1.800h para la OT → al consumir/cerrar: movimiento `ajuste`/`sobrante`, `cantidad_actual` baja (ej. 200h), `estado` → `parcial` o `disponible`, `ot_destino_numero` → null si pasa a libre. **No se genera fila nueva en `prod_stock_palets`.** |
+| Momento | Qué pasa |
+|---------|----------|
+| **Al consumir** | Maquinista registra consumo por OT + ID Stock; `cantidad_actual` baja. Puede consumir **varios ID Stock** en un mismo trabajo urgente. |
+| **Sobrante en palet** | **Misma cartela** (mismo ID Stock): movimiento `ajuste`/`consumo`, `cantidad_actual` actualizada. **No** se crea fila nueva. Cartela imprimible muestra **cantidad actual**. |
+| **Varias OTs en el palet** | Al cerrar OT **no** sugerir automáticamente “pasar a stock libre”: las hojas restantes pueden ser para **otra OT ya listada** en la cartela (§3g J2). |
 
-Regla: **Opción A al cartelar cuando Juan sabe las cantidades; ajuste de la misma cartela cuando la merma solo se conoce después.**
+Regla: **Opción A del diseño anterior (partir palet en N cartelas al recepcionar) queda descartada** tras cuestionario 24 jun. Un palet = una cartela; el reparto por OT vive en movimientos, no en líneas de cartela.
 
 ---
 
@@ -391,16 +447,17 @@ En Minerva la relación es **1 OT → N OCs** (no N:M):
 
 Esto simplifica el modelo: `prod_ot` → `prod_compra_material` es 1:N, sin tabla intermedia.
 
-### Cartela ≠ Palet físico (aclaración de modelo)
+### Cartela = Palet físico (modelo validado 24 jun 2026)
 
-Un **palet físico** puede tener **N cartelas** (N ≥ 1):
-- Caso normal: 1 palet = 1 cartela (una OT, todas las hojas para ella).
-- Caso frecuente: 1 palet = 2 cartelas (ej: 1.000h para OT-A + 500h para OT-B, físicamente en el mismo palet).
+**Una fila en `prod_stock_palets` = 1 cartela = 1 palet físico = 1 `id_stock`.**
 
-`prod_stock_palets` modela **cartelas**, no palets físicos. Para agrupar cartelas del mismo palet físico se usa el campo `palet_fisico_ref` (texto libre, opcional). Juan lo ve en la pantalla de consulta para saber qué cartelas están en el mismo palet.
+- Varias OTs pueden referenciarse en la **misma cartela** (tabla puente `prod_stock_palet_ots` o campo JSON `ots_referencia` — a decidir en 9.0).
+- **No** hay cantidad por OT en la cartela (Ramón D1).
+- ~~N cartelas por palet con `palet_fisico_ref`~~ — **deprecado** en favor de 1:1 palet/cartela.
+- Impresión: opción **“2 copias”** de la misma cartela para pegar en el palet (C1).
 
 ### Tabla nueva `prod_stock_palets` (las cartelas) — **corazón del Bloque 9**
-Cada fila = 1 cartela (asignación de cantidad a una OT). N cartelas pueden compartir palet físico.
+Cada fila = 1 palet identificado con un ID Stock.
 
 | Campo | Tipo | Notas |
 |-------|------|-------|
@@ -420,9 +477,11 @@ Cada fila = 1 cartela (asignación de cantidad a una OT). N cartelas pueden comp
 | `cantidad_peso_unidad` | enum | `kg` / `tn` — unidad del peso indicado por el proveedor. PROEMBASA usa Tn, Papers Tordera usa Kg. |
 | `cantidad_inicial` | integer | Hojas al recepcionar (calculado o introducido) |
 | `cantidad_actual` | integer | Hojas restantes (se descuenta al consumir) |
-| `ot_destino_numero` | text | **OT prevista al recepcionar** (null si stock libre). No implica exclusividad — un palet puede usarse para varias OTs; la trazabilidad real va en movimientos. |
+| `ot_destino_numero` | text nullable | **Legacy / stock libre:** null = disponible; si una sola OT prevista al cartelar. Para varias OTs usar `prod_stock_palet_ots` (§3g). |
+| `ots_referencia` | text[] o FK N:M | OT(s) previstas al cartelar (sin cantidad por OT). Ej. `{98010-01, 98010-02, 98010-03}`. |
 | `estado` | enum | `reservado` / `disponible` / `consumido` / `parcial` |
-| `palet_fisico_ref` | text | Identificador del palet físico (ej: "PA", "PB"). Opcional — permite agrupar N cartelas del mismo palet. |
+| `ubicacion_fila` | text nullable | Fila de almacén (ALLYKING, ZENITH, … — §3g C3) |
+| ~~`palet_fisico_ref`~~ | — | **Deprecado** (24 jun): 1 cartela = 1 palet; ya no agrupa N cartelas. |
 | `ref_lote_proveedor` | text | Nº lote del proveedor por palet (ej: 3238711). Para trazabilidad FSC. Distinto por palet incluso en mismo albarán (ver Comart §3d). |
 | `ref_lote` | text | OT + nombre trabajo (ej: "36016 - TEIKIT") — campo legacy Optimus, mantener para compatibilidad. |
 | `es_fsc` | boolean | Material certificado FSC. **Se hereda automáticamente del maestro de artículos** al seleccionar el artículo; editable. |
@@ -471,33 +530,28 @@ La pestaña **Muelle** ya existe en Minerva y Juan la usa hoy para recepcionar. 
 
 ---
 
-### 7.1 Rediseño del flujo: Juan como usuario principal
+### 7.1 Flujo objetivo: Muelle (Juan) → Cartelas (Emma/Ramón)
 
-**Cambio de rol documentado (22 jun 2026):**
-- Hoy: Emma crea cartelas en Optimus, Juan imprime y pega. Juan es ejecutor.
-- Objetivo gerencia: Juan autónomo — recepciona, crea cartelas, imprime. Emma supervisa y resuelve casos complejos.
-- Juan: mucha experiencia, formación académica básica. La interfaz debe hacer el trabajo intelectual por él. Botones grandes, pasos claros, sin ambigüedad. **Mobile-first obligatorio.**
+**Roles validados (24 jun 2026):**
+- **Juan:** recepciona en Muelle, introduce albarán/hojas/palets, sube el albarán **en cuanto puede** (acelera cartelado). **No cartela.**
+- **Emma o Ramón:** bandeja “pendiente de cartelar” → crean cartelas (1 por palet), asocian OT(s), imprimen (2 copias opcionales), pegan en palet.
+- Interfaz cartelas: **PC en oficina/almacén** para Emma/Ramón; Juan puede seguir en **tablet solo en Muelle**.
 
-**El flujo completo Juan-céntrico:**
+**Flujo:**
 
 ```
-[YA EXISTE — Muelle]
-Juan recepciona OC por OC en la pestaña Muelle
-→ Introduce nº albarán, hojas, palets
-→ "Finalizar recepción" → OC queda como Recibida
+[YA EXISTE — Muelle · Juan]
+Recepciona OC(s), nº albarán, hojas, palets
+→ "Finalizar recepción"
 
-[NUEVO — Almacén → Cartelas]
-Juan abre "Cartelas pendientes"
-→ Ve agrupadas por albarán las OCs ya recibidas sin cartela
-→ Pulsa el grupo → pantalla de asignación
-→ Minerva muestra las OCs pendientes y sus hojas esperadas
-→ Juan indica cómo repartir los palets entre OTs
-→ Pulsa "Imprimir cartelas"
-→ Salen las cartelas (tantas como haga falta)
-→ Juan las pega en los palets físicos
+[NUEVO — Almacén → Cartelas · Emma/Ramón]
+Bandeja agrupada por albarán (antiduplicado si ya cartelado)
+→ Por cada palet físico: material, cantidad, OT(s) referencia, STOCK si aplica
+→ "Imprimir cartela" (×2 copias opcional)
+→ Pegar en palet
 ```
 
-La generación de cartelas es un paso **separado y posterior** a la recepción en muelle — no automático al finalizar. Son dos momentos distintos: recepcionar es confirmar que llegó el camión; cartelar es decidir a qué OT va cada palet.
+Cartelado **separado** de recepción — dos momentos, dos intenciones.
 
 ### 7.2 Pantalla "Cartelas pendientes" (nueva)
 
@@ -528,51 +582,31 @@ Bandeja de OCs recibidas en muelle pero sin cartela todavía. Agrupadas por alba
 
 Juan pulsa "Generar cartelas" en el grupo → pantalla de asignación de palets.
 
-### 7.3 Pantalla de asignación de palets (nueva)
+### 7.3 Pantalla de cartelado por palet (nueva)
 
-Paso guiado, mobile-first. Minerva hace el trabajo intelectual; Juan confirma:
+Paso guiado para Emma/Ramón. **Un palet = una cartela = un ID Stock.**
 
 ```
 CARPAPSA · Albarán B26-2525
-Total recibido: 4 palets · 4.925 hojas
+Recibido: 4 palets · 4.925 hojas (muelle)
 
-┌── Palet 1 ──────────────────────────┐
-│ ¿A qué OT va este palet?            │
-│ [OT 35834 →] [OT 35851] [OT 35856] │
-│ Hojas: [_____]                      │
-└──────────────────────────────────────┘
-┌── Palet 2 ──────────────────────────┐
-│ ...                                  │
-└──────────────────────────────────────┘
+┌── Palet 1 de 4 ─────────────────────┐
+│ Material: Zenith 295gr 65×92          │
+│ Cantidad en palet: [1.500] hojas      │
+│ OT(s) referencia: [35834] [35851] [+] │
+│ □ Stock libre (sin OT)                │
+│ Ubicación fila: [ZENITH ▼]            │
+└───────────────────────────────────────┘
+… repetir por palet …
 
-[ + Añadir palet ]   [ Imprimir cartelas ✓ ]
+[ Imprimir cartelas ]  [ 2 copias por palet ✓ ]
 ```
 
-Si un palet se parte entre dos OTs → Juan añade dos líneas para ese palet (mismo `palet_fisico_ref`). Cada línea genera una cartela distinta.
+- **No** se pide cantidad por OT en la cartela (D1).
+- Validación suave: suma hojas palets ≈ hojas recepcionadas (aviso, no bloqueo).
+- **Antiduplicado:** si albarán ya tiene cartelas, bloquear o avisar fuerte (A5).
 
-Minerva valida que la suma de hojas asignadas ≈ hojas recibidas (aviso, no bloqueo).
-
-**Caso frecuente — palet mínimo mayor que la OC (2.000 → 1.500 + 500):**
-
-```
-Palet PA — 2.000 hojas recibidas
-
-  OT 35834  →  [1.500] hojas   (reservado)
-  Stock libre → [  500] hojas   (disponible)  ← Minerva calcula el resto en tiempo real
-               ──────────────
-               Total: 2.000 ✓
-
-  [ Imprimir 2 cartelas ]
-```
-
-Juan imprime ambas cartelas y las pega en el mismo palet físico.
-
-**Modo rápido vs. modo avanzado:**
-
-| Modo | Cuándo | UI |
-|------|--------|-----|
-| **Rápido** (default) | 1 palet = 1 OT, sin reparto | Un toque: palet entero a la OT de la OC. Cubre ~80% de casos. |
-| **Avanzado** | Varios palets, reparto entre OTs, palet partido | Pantalla completa de asignación (arriba). |
+~~Modo reparto / partir palet en N cartelas~~ — eliminado (§3g).
 
 ### 7.4 Cartela imprimible
 
@@ -589,7 +623,8 @@ Contenido mínimo (grande y legible para almacén).
 │  2.400 hojas iniciales      │
 │  ► 500 hojas actuales ◄     │
 │                             │
-│  OT prevista: 36016-TEIKIT  │
+│  OT(s): 35834 · 35851 · 35856     │
+│  (sin cantidad por OT)            │
 │  CARPAPSA  G6-3305          │
 │  15/06/2026                 │
 └─────────────────────────────┘
@@ -659,31 +694,36 @@ Vista Stock: "OT 35851 — déficit 100h (pendiente reponer)"
 
 ### 7.7 Consumo en producción
 
-Dos opciones (a decidir con planta):
+**Decisión planta (24 jun — E4):** descuento **imprescindible tras cada trabajo**, como hoy en Optimus (“Captura de datos en planta”).
 
-**Opción A — Registro manual al iniciar ejecución:**
-Al iniciar un paso en la mesa, el maquinista selecciona qué palet(es) va a usar.
-Minerva descuenta las hojas al finalizar el paso.
+| Campo en consumo | Origen |
+|------------------|--------|
+| `id_stock` | Cartela(s) usadas (puede ser **>1** en urgencias) |
+| `ot_numero` | OT en ejecución |
+| `cantidad` | Hojas consumidas en esa tirada |
+| Quién | **Maquinista** (E2–E3) |
 
-**Opción B — Registro al cerrar ejecución:**
-Al finalizar el paso, el maquinista informa cuántas hojas usó.
-Minerva busca el palet reservado para esa OT y descuenta.
+**Implementación MVP piloto (9.4, no posponer en piloto):**
 
-**Opción C — Solo trazabilidad documental (MVP mínimo):**
-No se descuenta en tiempo real. Solo se registra qué palet se asignó a qué OT.
-El stock se ajusta periódicamente (como ahora con Emma/Ramón).
+**Opción B — Registro al cerrar paso de impresión (recomendada):**
+Al cerrar ejecución / tirada, el maquinista indica ID Stock + hojas usadas.
+Minerva descuenta `cantidad_actual` y escribe `prod_stock_movimientos`.
 
-Recomendación MVP: **Opción C primero**, evolucionando a B.
-La Opción A requiere que el maquinista interactúe más con Minerva en planta.
+Enlace natural con **“Cerrar proceso”** ya existente en mesa de ejecución.
+
+~~Opción C solo trazabilidad~~ — **descartada** para el piloto (Ramón E4).
+
+**Opción A** (selección de palet al iniciar): fase posterior si planta lo pide.
 
 ### 7.8 Gestión de sobrantes
 
-Al cerrar una OT (Bloque 6 — `pendiente_revision` → `producida`):
-- Si cartelas reservadas de esa OT tienen `cantidad_actual` > 0:
-  - Minerva sugiere: "Sobraron X hojas del palet 10.310. ¿Pasar a stock libre?"
-  - Si sí → movimiento `ajuste`/`sobrante`, `cantidad_actual` se mantiene, `estado` → `disponible`, `ot_destino_numero` → null
-  - **No se crea cartela nueva** — la misma cartela muta (§5)
-  - Si no → ajuste manual posterior
+Al consumir o al cerrar tirada:
+- `cantidad_actual` baja en el **mismo** ID Stock; movimiento en log.
+- **No** crear cartela nueva.
+
+Al cerrar OT (Bloque 6) — **no** popup automático “¿pasar X hojas a stock libre?” si el palet tiene **varias OTs referenciadas** (§3g J2). El sobrante puede ser para otra OT del mismo palet.
+
+Ajuste manual / vista Stock sigue disponible para Emma/Ramón cuando el palet queda realmente libre (`estado` → `disponible`, OTs referencia vacías o solo stock).
 
 ---
 
@@ -730,17 +770,27 @@ Al cerrar una OT (Bloque 6 — `pendiente_revision` → `producida`):
 - ✅ ¿Reasignación reserva OT-A → OT-B? → `traspaso` + `autorizado_por` obligatorio + déficit en Stock (MVP; `material_status` en fase posterior)
 
 **Respondidas en sesión 23 jun (dispositivo Juan + rol Emma):**
-- ✅ ¿**Dispositivo de Juan**? → **Tablet/móvil** primero (muelle + cartelas + impresión, mobile-first). PC más adelante, cuando coja confianza, para gestionar más cosas. La UI mobile-first ya prevista es correcta para esta fase.
-- ✅ ¿**Rol de Emma**? → **No desaparece.** Hoy es crucial supliendo a Ramón en cartelas (él no da abasto). Objetivo: liberar a los tres — Juan asume recepción + cartelado básico, Emma vuelve a lo suyo, Ramón recupera tiempo. Emma y Juan crean cartelas **en paralelo sin pisarse** (cada cartela tiene `id_stock` único + `created_by`).
-- ✅ ¿**Quién autoriza traspasos**? → Lo **ejecuta Juan** (autónomo) con campo `autorizado_por` obligatorio; **no** es pantalla exclusiva de Ramón. Ver §7.6. Detalle de permisos en `MINERVA_ROLES_Y_NAVEGACION.md`.
+- ✅ ¿**Dispositivo de Juan**? → **Tablet/móvil** en Muelle. Cartelas: Emma/Ramón (PC).
+- ⚠️ ¿**Juan crea cartelas**? → **Corregido 24 jun: NO.** Solo Emma/Ramón (A2, A3).
+- ✅ ¿**Quién autoriza traspasos**? → Ramón; ejecuta Juan con `autorizado_por`. Ver §7.6.
+
+**Respondidas cuestionario 23–24 jun (§3g):**
+- ✅ Modelo **1 cartela = 1 palet = 1 ID Stock**; varias OTs sin qty por OT.
+- ✅ Consumo maquinista **obligatorio** tras cada trabajo (E4).
+- ✅ Prioridad: stock **libre / no reservado** visible (I3).
+- ✅ Barco: mismo material → 1 cartela multi-hija; distinto material → cartela separada (I1).
+- ✅ Arranque **piloto paralelo** Optimus + 10–20 OTs Minerva (H3, §13c).
+- ✅ Antiduplicado albarán (A5).
+- ⏳ H1/H2 recuento global — sin respuesta escrita.
 
 **Permisos resultantes (resumen — detalle en `MINERVA_ROLES_Y_NAVEGACION.md`):**
 
 ```
-Juan  (almacen) → Muelle + Cartelas (crear/imprimir) + Stock (consulta + entrega libre + traspaso con autorizado_por)
-Emma           → lo de Juan + correcciones + casos complejos + supervisión
-Ramón          → todo + autoriza traspasos de reserva
-Admin/Gerencia → todo
+Juan  (almacen) → Muelle + Stock (consulta + entrega libre + traspaso con autorizado_por)
+Emma / Ramón    → Muelle (opc.) + Cartelas (crear/imprimir) + Stock + correcciones
+Maquinista      → Consumo ID Stock al cerrar tirada (piloto)
+Ramón           → todo + autoriza traspasos de reserva
+Admin/Gerencia  → todo
 ```
 
 **Pendientes (prioritarias):**
@@ -756,7 +806,7 @@ Admin/Gerencia → todo
 - **No generar cartelas automáticamente** al finalizar la recepción en muelle — son dos pasos distintos con dos intenciones distintas. El camión no espera decisiones sobre distribución de palets.
 - **No tocar el Muelle existente** — funciona, Juan lo entiende, está bien diseñado. Solo asegurar que el nº albarán queda guardado correctamente.
 - No intentar sincronizar stock en tiempo real desde el primer día.
-- No obligar al maquinista a escanear/registrar consumos en planta hasta que haya tablet y flujo probado.
+- No obligar al maquinista a escanear en planta **excepto en OTs del piloto**, donde el descuento es **obligatorio** (E4).
 - No replicar exactamente el modelo de Optimus (complejidades heredadas sin valor).
 - No bloquear la producción si el stock no cuadra — avisos, no bloqueos.
 - **No priorizar OCR / lectura automática de albaranes** — primero cartelas y stock real; la foto del muelle ya existe como apoyo visual.
@@ -774,10 +824,10 @@ Objetivo: sustituir Optimus/papel en lo esencial — **qué hay en cada palet y 
 | Fase | Entregable |
 |------|------------|
 | **9.0** | SQL: `prod_stock_palets` + `prod_stock_movimientos` (incl. `ot_origen`/`ot_destino` en traspaso); ampliar `prod_recepciones_material` si hace falta (`cantidad_peso`, FSC/PEFC); secuencia `id_stock` desde **10.310** |
-| **9.1** | UI **Almacén → Cartelas**: bandeja pendientes agrupada por albarán + asignación palets→OTs (modo rápido/avanzado) + impresión. Usuario principal: **Juan** (mobile-first). |
-| **9.2** | UI **Almacén → Stock** + **entregar desde libre** + **reasignar reserva** (§7.6). Consulta para Juan; traspaso con `autorizado_por`. |
-| **9.3** | Sobrantes al cerrar OT — cartela que muta, no nueva fila (liga Bloque 6, §7.8) |
-| **9.4** | Consumos/movimientos en planta (cuando planta esté lista; empezar Opción C). Tras rodar: conectar déficit a `material_status` (Bloque 8). |
+| **9.1** | UI **Almacén → Cartelas**: bandeja pendientes por albarán + cartelado 1 palet = 1 ID Stock + OT(s) + impresión (2 copias). Usuarios: **Emma/Ramón**. Antiduplicado albarán. |
+| **9.2** | UI **Almacén → Stock** + filtros **libre vs reservado** (prioridad I3) + entregar desde libre + reasignar reserva (§7.6). |
+| **9.3** | Sobrantes — misma cartela muta; **sin** wizard auto “pasar a libre” multi-OT (§7.8) |
+| **9.4** | **Consumo maquinista al cerrar tirada** (piloto 10–20 OTs). Tras rodar: déficit → `material_status`. |
 
 **Prerrequisitos ligeros:** audio/notas Emma; ir respondiendo §9 pendientes en paralelo.
 
@@ -891,7 +941,33 @@ Juan trabaja en Minerva; a partir de aquí solo movimientos
 | estado | reservado / disponible | |
 | es_fsc | sí / no | |
 
-**Tarea puntual asociada:** Juan/Ramón hacen el inventario; Emma (o el responsable) lo importa como cartelas iniciales con `estado` según corresponda. Es trabajo único pero **bloqueante del valor real** de 9.x.
+**Tarea puntual asociada:** Juan/Ramón hacen el inventario; Emma (o el responsable) lo importa como cartelas iniciales con `estado` según corresponda. Es trabajo único pero **bloqueante del corte final** (no necesariamente del piloto — ver §13c).
+
+---
+
+## 13c. Arranque en piloto — paralelo con Optimus (H3, 24 jun 2026)
+
+> Acordado con Manel tras respuestas de Ramón. **No** corte limpio día 1.
+
+### Estrategia en 3 fases
+
+| Fase | Optimus | Minerva |
+|------|---------|---------|
+| **1 — Piloto** | Fuente de verdad del **stock general** y OTs fuera del piloto | **10–20 OTs** elegidas: muelle → cartela → consumo → sobrante |
+| **2 — Ampliación** | Stock viejo / OTs restantes | Más OTs y familias de material |
+| **3 — Corte** | Solo consulta o histórico | Recuento global (§13b) → import → cartelas nuevas solo en Minerva |
+
+### Reglas del piloto (evitar duplicados — lección A5)
+
+1. **Un albarán = un solo sistema:** si se cartela en Minerva (piloto), **no** volver a entrar en Optimus.
+2. **OTs piloto = ciclo completo en Minerva:** cartela, consumo maquinista, ajuste sobrante.
+3. **Maquinistas informados:** OTs piloto consumen **ID Stock Minerva** (≥10.310), no Optimus.
+4. **Stock inicial Minerva:** mini-recuento de palets de esas OTs **o** solo entradas nuevas desde fecha de inicio del piloto (sin importar todo el almacén).
+5. **Criterio de éxito antes de ampliar:** stock libre/reservado fiable; descuento sin líos; cero dobles entradas de albarán.
+
+### Selección sugerida de OTs piloto
+
+Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con material a corte o multi-albarán. Acordar lista con Emma/Ramón antes de fecha de inicio.
 
 ---
 
@@ -911,6 +987,7 @@ Juan trabaja en Minerva; a partir de aquí solo movimientos
 | 22 jun 2026 | **§7 revisado** — Juan como usuario principal. §7.0: análisis Muelle existente (no tocar). §7.1: flujo Juan-céntrico. §7.2: pantalla "Cartelas pendientes" agrupada por albarán. §7.3: pantalla asignación palets→OTs. Roadmap 9.1 actualizado. |
 | 23 jun 2026 | **Limpieza §7** — eliminadas secciones duplicadas; §7.6 movimientos desde almacén (3 flujos); §7.7 consumo; §7.8 sobrantes. Sobrante = cartela que muta (§5, §7.8). ID Stock unificado **10.310**. `pefc_certificado_proveedor`, `ot_origen`/`ot_destino` en movimientos. Modo rápido/avanzado §7.3. Déficit en Stock (MVP); `material_status` diferido a post-9.4. |
 | 23 jun 2026 | **§13 Extensibilidad** — patrón cartela como motor de stock; capas materia prima / semielaborado / producto terminado (Gabri) / consumibles. Campos `tipo_stock` + `unidad` en `prod_stock_palets` (MVP: `materia_prima` + `hojas`). Por qué el MRP legacy falló (agregado manual) y este no (derivado). **§13b** recuento físico "día 0" como prerrequisito: recuento con Optimus → Excel con columnas acordadas → import a cartelas cuando 9.1 esté listo. |
+| 24 jun 2026 | **§3g** — cuestionario Ramón respondido (`MINERVA_CUESTIONARIO_CARTELAS_RAMON.md`). **Modelo corregido:** 1 cartela = 1 palet = 1 ID Stock; varias OTs sin qty en cartela; Juan no cartela; consumo MVP obligatorio; I1 barco; **§13c** piloto paralelo 10–20 OTs; antiduplicado albarán; deprecado `palet_fisico_ref` / reparto N cartelas por palet. |
 
 ### Implementación (rellenar al avanzar)
 

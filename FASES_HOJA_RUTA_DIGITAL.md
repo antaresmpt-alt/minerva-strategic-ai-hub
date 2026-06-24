@@ -935,3 +935,20 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 ### OT de prueba 35990
 
 Itinerario validado: CTP → Guillotina → Impresión offset → Plastificado (ext.) → Troquel → Manipulados. Pipeline cerrado con 6 pasos verdes. PDF `hoja-ruta-35990.pdf` generado.
+
+---
+
+## Bloque 9 — Cartelas: cuestionario Ramón ✅ **24 jun 2026**
+
+> Fuente: `MINERVA_CUESTIONARIO_CARTELAS_RAMON.md` · diseño: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §3g, §13c.
+
+| Decisión | Detalle |
+|----------|---------|
+| Modelo | **1 cartela = 1 palet = 1 ID Stock**; varias OTs referenciadas sin qty por OT |
+| Roles | Juan **muelle**; Emma/Ramón **cartelas** |
+| Consumo MVP | Maquinista descuenta **tras cada trabajo** (obligatorio en piloto) |
+| Prioridad | Stock **libre / no reservado** visible |
+| Barco (I1) | Mismo material → 1 cartela multi-hija; distinto → cartela separada |
+| Arranque (H3) | **Piloto paralelo:** Optimus + 10–20 OTs en Minerva |
+
+Pendiente: H1/H2 recuento global; lista OTs piloto con Emma/Ramón.

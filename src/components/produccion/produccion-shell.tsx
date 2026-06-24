@@ -13,6 +13,7 @@ import {
   Package,
   Stamp,
   Tag,
+  Tags,
   Truck,
 } from "lucide-react";
 
@@ -68,6 +69,15 @@ const NAV_GROUPS: NavGroup[] = [
         compactNavIcon: true,
         match: (p) =>
           p === "/produccion/muelle" || p.startsWith("/produccion/muelle/"),
+      },
+      {
+        href: "/produccion/almacen/cartelas",
+        label: "Cartelas",
+        icon: Tags,
+        compactNavIcon: true,
+        match: (p) =>
+          p === "/produccion/almacen/cartelas" ||
+          p.startsWith("/produccion/almacen/cartelas/"),
       },
     ],
   },
