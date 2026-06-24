@@ -43,6 +43,18 @@ const ESTADO_COLORS: Record<string, string> = {
   consumido: "bg-slate-100 text-slate-500 border-slate-200",
 };
 
+/** PostgREST puede tipar joins FK como objeto o array según los tipos generados. */
+function unwrapJoinRow(value: unknown): Record<string, unknown> | null {
+  if (value == null) return null;
+  if (Array.isArray(value)) {
+    const first = value[0];
+    return first != null && typeof first === "object"
+      ? (first as Record<string, unknown>)
+      : null;
+  }
+  return typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
 export function CartelasPage() {
   const [tab, setTab] = useState<"pendientes" | "cartelas">("pendientes");
   const [loadingPendientes, setLoadingPendientes] = useState(false);
@@ -97,44 +109,71 @@ export function CartelasPage() {
 
       // agrupar por albaran_proveedor
       const byAlbaran = new Map<string, AlbaranPendienteGroup>();
-      for (const r of receps) {
-        const compra = r.prod_compra_material as Record<string, unknown>;
-        const proveedor = (
-          compra?.prod_proveedores as Record<string, unknown> | null
-        )?.nombre as string | null;
-        const key = r.albaran_proveedor ?? "(sin albarán)";
+      for (const raw of receps as Record<string, unknown>[]) {
+        const r = raw;
+        const compra = unwrapJoinRow(r.prod_compra_material);
+        const proveedorRow = compra
+          ? unwrapJoinRow(compra.prod_proveedores)
+          : null;
+        const proveedor =
+          typeof proveedorRow?.nombre === "string"
+            ? proveedorRow.nombre
+            : null;
+        const key =
+          typeof r.albaran_proveedor === "string" && r.albaran_proveedor.trim()
+            ? r.albaran_proveedor
+            : "(sin albarán)";
+
+        const recepcionId = String(r.id ?? "");
+        const fechaRecepcion = String(r.fecha_recepcion ?? "");
+        const paletsRecibidos =
+          typeof r.palets_recibidos === "number" ? r.palets_recibidos : null;
+        const hojasRecibidas =
+          typeof r.hojas_recibidas === "number" ? r.hojas_recibidas : 0;
 
         if (!byAlbaran.has(key)) {
           byAlbaran.set(key, {
             albaran_proveedor: key,
             proveedor_nombre: proveedor ?? null,
-            fecha_recepcion: r.fecha_recepcion,
-            palets_recibidos: r.palets_recibidos ?? null,
-            hojas_recibidas_total: r.hojas_recibidas ?? 0,
+            fecha_recepcion: fechaRecepcion,
+            palets_recibidos: paletsRecibidos,
+            hojas_recibidas_total: hojasRecibidas,
             recepciones: [],
-            cartelas_existentes: cartelasByRecepcion[r.id] ?? 0,
+            cartelas_existentes: cartelasByRecepcion[recepcionId] ?? 0,
           });
         }
 
         const group = byAlbaran.get(key)!;
         if (
-          new Date(r.fecha_recepcion) > new Date(group.fecha_recepcion)
+          new Date(fechaRecepcion) > new Date(group.fecha_recepcion)
         ) {
-          group.fecha_recepcion = r.fecha_recepcion;
+          group.fecha_recepcion = fechaRecepcion;
         }
-        group.hojas_recibidas_total += (r.hojas_recibidas as number) ?? 0;
-        group.cartelas_existentes += cartelasByRecepcion[r.id] ?? 0;
+        group.hojas_recibidas_total += hojasRecibidas;
+        group.cartelas_existentes += cartelasByRecepcion[recepcionId] ?? 0;
 
         const line: AlbaranRecepcionLine = {
-          recepcion_id: r.id,
-          compra_id: r.compra_id ?? "",
-          ot_numero: (compra?.ot_numero as string) ?? "",
-          material: (compra?.material as string) ?? null,
-          gramaje: (compra?.gramaje as number) ?? null,
-          tamano_hoja: (compra?.tamano_hoja as string) ?? null,
-          num_hojas_brutas: (compra?.num_hojas_brutas as number) ?? null,
-          cliente_nombre: (compra?.cliente_nombre as string) ?? null,
-          trabajo_titulo: (compra?.trabajo_titulo as string) ?? null,
+          recepcion_id: recepcionId,
+          compra_id: String(r.compra_id ?? compra?.id ?? ""),
+          ot_numero: String(compra?.ot_numero ?? ""),
+          material:
+            typeof compra?.material === "string" ? compra.material : null,
+          gramaje:
+            typeof compra?.gramaje === "number" ? compra.gramaje : null,
+          tamano_hoja:
+            typeof compra?.tamano_hoja === "string" ? compra.tamano_hoja : null,
+          num_hojas_brutas:
+            typeof compra?.num_hojas_brutas === "number"
+              ? compra.num_hojas_brutas
+              : null,
+          cliente_nombre:
+            typeof compra?.cliente_nombre === "string"
+              ? compra.cliente_nombre
+              : null,
+          trabajo_titulo:
+            typeof compra?.trabajo_titulo === "string"
+              ? compra.trabajo_titulo
+              : null,
           proveedor_nombre: proveedor ?? null,
         };
         group.recepciones.push(line);
