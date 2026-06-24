@@ -4,10 +4,10 @@
 > Tema: recepción de material, cartelas de palet, stock libre y trazabilidad.
 > Complementa `MINERVA_HUB_CONTEXTO_MAESTRO.md`, `FASES_HOJA_RUTA_DIGITAL.md` y briefings Bloques 6 y 7.
 >
-> **Estado:** 📋 Diseño / brainstorming — **sin implementación**.
+> **Estado:** ✅ **9.0 + 9.1 + 9.1b implementados** (24 jun 2026 noche) — smoke test en planta con cartelas #10310–#10312. **Pendiente:** 9.2 Stock, 9.3 sobrantes, 9.4 consumo.
 > **Origen:** Optimus + cartelas CARPAPSA (15 jun 2026).
-> **Actualizado:** 24 jun 2026 — cuestionario Ramón respondido (§3g); modelo **1 cartela = 1 palet**; roles Emma/Ramón cartelan; consumo MVP obligatorio; piloto paralelo §13c; barco §3g I1.
-> **PENDIENTE:** H1/H2 recuento global. Ubicación por filas de material (catálogo).
+> **Actualizado:** 24 jun 2026 — implementación MVP en repo; cuestionario Ramón (§3g); modelo **1 cartela = 1 palet**; roles Emma/Ramón cartelan; piloto paralelo §13c.
+> **PENDIENTE:** H1/H2 recuento global. Ubicación por filas de material (catálogo UI sin definir en planta). `codigo_articulo` en wizard. Ajuste impresión A6 física vs A4 PDF.
 
 **Relacionado:** sobrantes → Bloque 6 · expedición → Bloque 7 · material contenedor/hijas → Bloque 8 · FSC → maestro artículos.
 
@@ -823,9 +823,10 @@ Objetivo: sustituir Optimus/papel en lo esencial — **qué hay en cada palet y 
 
 | Fase | Entregable |
 |------|------------|
-| **9.0** | SQL: `prod_stock_palets` + `prod_stock_movimientos` (incl. `ot_origen`/`ot_destino` en traspaso); ampliar `prod_recepciones_material` si hace falta (`cantidad_peso`, FSC/PEFC); secuencia `id_stock` desde **10.310** |
-| **9.1** | UI **Almacén → Cartelas**: bandeja pendientes por albarán + cartelado 1 palet = 1 ID Stock + OT(s) + impresión (2 copias). Usuarios: **Emma/Ramón**. Antiduplicado albarán. |
-| **9.2** | UI **Almacén → Stock** + filtros **libre vs reservado** (prioridad I3) + entregar desde libre + reasignar reserva (§7.6). |
+| **9.0** | SQL: `prod_stock_palets` + `prod_stock_movimientos` + `prod_stock_palet_ots`; ampliar `prod_recepciones_material` (`cantidad_peso`); secuencia `id_stock` desde **10.310** | ✅ **Hecho** |
+| **9.1** | UI **Almacén → Cartelas**: bandeja pendientes por albarán + cartelado 1 palet = 1 ID Stock + OT(s) + impresión (2 copias). Usuarios: **Emma/Ramón**. Antiduplicado albarán. | ✅ **Hecho** |
+| **9.1b** | Post smoke: filtros bandeja, wizard split, selector OTs + hijas barco, fallback cliente/trabajo (`prod_ots_general`), `ref_lote` Optimus, fix impresión, cartela print estilo scan | ✅ **Hecho** |
+| **9.2** | UI **Almacén → Stock** + filtros **libre vs reservado** (prioridad I3) + entregar desde libre + reasignar reserva (§7.6). | ⏳ |
 | **9.3** | Sobrantes — misma cartela muta; **sin** wizard auto “pasar a libre” multi-OT (§7.8) |
 | **9.4** | **Consumo maquinista al cerrar tirada** (piloto 10–20 OTs). Tras rodar: déficit → `material_status`. |
 
@@ -988,6 +989,7 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 | 23 jun 2026 | **Limpieza §7** — eliminadas secciones duplicadas; §7.6 movimientos desde almacén (3 flujos); §7.7 consumo; §7.8 sobrantes. Sobrante = cartela que muta (§5, §7.8). ID Stock unificado **10.310**. `pefc_certificado_proveedor`, `ot_origen`/`ot_destino` en movimientos. Modo rápido/avanzado §7.3. Déficit en Stock (MVP); `material_status` diferido a post-9.4. |
 | 23 jun 2026 | **§13 Extensibilidad** — patrón cartela como motor de stock; capas materia prima / semielaborado / producto terminado (Gabri) / consumibles. Campos `tipo_stock` + `unidad` en `prod_stock_palets` (MVP: `materia_prima` + `hojas`). Por qué el MRP legacy falló (agregado manual) y este no (derivado). **§13b** recuento físico "día 0" como prerrequisito: recuento con Optimus → Excel con columnas acordadas → import a cartelas cuando 9.1 esté listo. |
 | 24 jun 2026 | **§3g** — cuestionario Ramón respondido (`MINERVA_CUESTIONARIO_CARTELAS_RAMON.md`). **Modelo corregido:** 1 cartela = 1 palet = 1 ID Stock; varias OTs sin qty en cartela; Juan no cartela; consumo MVP obligatorio; I1 barco; **§13c** piloto paralelo 10–20 OTs; antiduplicado albarán; deprecado `palet_fisico_ref` / reparto N cartelas por palet. |
+| 24 jun 2026 | **§15 Implementación** — 9.0 SQL + 9.1 UI cartelas + 9.1b post smoke desplegados. Cartelas #10310–#10312 en prod. Archivos en `src/components/produccion/almacen/cartelas/`, migración `20260624183000_…`, helper `cartelas-ot-metadata.ts`. Muelle **no tocado**. |
 
 ### Implementación (rellenar al avanzar)
 
@@ -995,8 +997,9 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 
 | Fase | Estado | Notas |
 |------|--------|-------|
-| 9.0 — SQL `prod_stock_palets` + movimientos | ⏳ | Reutilizar `prod_recepciones_material`; `id_stock` ≥ **10.310**; `cantidad_peso` + unidad |
-| 9.1 — UI cartelas + impresión | ⏳ | Juan; modo rápido/avanzado; toggle hojas/kg/tn |
+| 9.0 — SQL `prod_stock_palets` + movimientos | ✅ | Migración `20260624183000_bloque9_stock_palets_cartelas.sql`. Bridge `prod_stock_palet_ots` (decisión documentada en migración). Secuencia `prod_stock_id_stock_seq` desde **10310**. RLS: almacen, gerencia, produccion, etc. |
+| 9.1 — UI cartelas + impresión | ✅ | Ruta `/produccion/almacen/cartelas`. Nav en `produccion-shell.tsx`. Ver §15. |
+| 9.1b — Mejoras post smoke | ✅ | Filtros, wizard split, OTs checkboxes + hijas, fallback metadata, ref_lote Optimus, fix print 29→2 págs. Commit `c212e52` wizard ancho demo. |
 | 9.2 — Stock + entregas/traspasos | ⏳ | §7.6; déficit visible en Stock |
 | 9.3 — Sobrantes al cerrar OT (Bloque 6) | ⏳ | Cartela muta, no nueva fila |
 | 9.4 — Consumos y movimientos en planta | ⏳ | Opción C primero; luego `material_status` |
@@ -1009,3 +1012,77 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 | 9.6 — STOCK sin OC + multi-línea | ⏳ | |
 | 9.7 — Sugerencia desde foto (IA) | ⏳ | Confirmación humana obligatoria |
 | 9.8 — Fotos/adjuntos en flujo cartelas | ⏳ | |
+
+---
+
+## 15. Implementación en repo (24 jun 2026)
+
+> Detalle técnico de lo desplegado. Para decisiones de negocio seguir §3g y `MINERVA_CUESTIONARIO_CARTELAS_RAMON.md`.
+
+### 15.1 SQL (9.0)
+
+| Artefacto | Ubicación / notas |
+|-----------|-------------------|
+| Migración | `supabase/migrations/20260624183000_bloque9_stock_palets_cartelas.sql` |
+| `prod_stock_palets` | 1 fila = 1 palet = 1 `id_stock`. Campos material, cantidades, `ref_lote`, `ref_lote_proveedor`, `nota_entrega` (= albarán), `estado`, FSC/PEFC, etc. |
+| `prod_stock_palet_ots` | Bridge OTs referenciadas **sin cantidad por OT** (elegido vs `text[]` por convención repo + queries) |
+| `prod_stock_movimientos` | Log inmutable (consumo, ajuste, traspaso…) — listo para 9.4 |
+| Secuencia | `prod_stock_id_stock_seq` START **10310** |
+| Recepciones | `prod_recepciones_material` extendida: `cantidad_peso`, `cantidad_peso_unidad` |
+| Enums | `tipo_stock`, `unidad`, `estado` como `TEXT` + `CHECK` (extensible sin `ALTER TYPE`) |
+
+### 15.2 UI (9.1 + 9.1b)
+
+| Pieza | Archivo |
+|-------|---------|
+| Página | `src/app/produccion/almacen/cartelas/page.tsx` |
+| Bandeja + listado | `src/components/produccion/almacen/cartelas/cartelas-page.tsx` |
+| Wizard cartelado | `src/components/produccion/almacen/cartelas/cartela-wizard-dialog.tsx` |
+| Impresión | `src/components/produccion/almacen/cartelas/cartela-print.tsx` |
+| Tipos | `src/types/prod-stock.ts` |
+| Fallback OT metadata | `src/lib/cartelas-ot-metadata.ts` — `cliente`/`titulo` desde `prod_ots_general` si compra vacía |
+| Referencia visual | `docs/referencias/cartela-optimus-ejemplo.pdf` |
+
+**Bandeja "Pendientes de cartelar"**
+- Agrupación por `albaran_proveedor` (vacío → label `(sin albarán)`).
+- Filtros: búsqueda (OT, albarán, proveedor, cliente, material), **Ocultar sin albarán** (ON por defecto), **Solo 30 días**.
+- Cada línea OT: `OT · cliente · trabajo · material gramaje formato · hojas`.
+- Antiduplicado: badge si ya hay cartelas del albarán; no bloquea "Añadir cartelas".
+
+**Wizard**
+- Modal ancho: `w-[95vw] max-w-7xl` (demo desktop; responsive tablet).
+- Panel izquierdo sticky: proveedor, albarán, líneas OC (clic **usar** → prefill **solo esa OT**).
+- Panel derecho: form palet(s); por defecto **1 palet** (no forzar N del muelle).
+- OTs: checkboxes del albarán + hijas de contenedor (`prod_ots_general.ot_padre_numero`); input manual OT extra.
+- Al guardar: `ref_lote = "{primeraOT} - {trabajo}"` con fallback `prod_ots_general.titulo`.
+
+**Impresión**
+- 2 copias por palet (`copies={2}`) — requisito Ramón.
+- `CartelaPrint` fuera del Dialog; `window.print()` desde página padre (fix bug 29 páginas desde modal).
+- ID Stock dominante centrado; Ref. Lote estilo Optimus.
+- En PDF A4 las 2 copias A6 pueden verse apiladas en una hoja — comportamiento navegador, no bug de duplicado de palets.
+
+### 15.3 Smoke test (24 jun 2026)
+
+| ID Stock | Albarán | OT | Notas |
+|----------|---------|-----|-------|
+| **10310** | CARPAPSA g3-9999 | 98010-01 | Primera cartela Minerva. Barco / hija. |
+| **10311** | G6-3305 | 35990 | Prueba post-9.1; `ref_lote` solo OT (sin trabajo en compra). |
+| **10312** | G6-3305 | 35990 | Post-9.1b; `ref_lote` = `35990 - EXPOSITOR SEGLE - BLUSH STICK 4x6u` (fallback `prod_ots_general`). |
+
+**Validado OK:** filtros, wizard split, prefill por línea, impresión 2 copias, listado Creadas, cliente/trabajo en bandeja (COMART, CARPAPSA).
+
+**Pendiente UX / datos (no bloquea demo):**
+- `codigo_articulo` no se rellena en wizard (campo existe en BD).
+- Ubicación fila: catálogo fijo en código; planta aún sin convención operativa.
+- Permitir varias cartelas mismo OT/albarán (aviso amarillo, no bloqueo) — coherente con pruebas pero vigilar en piloto (§13c regla 1).
+- Impresión en etiquetadora A6 física: validar en planta (ahora probado en PDF A4).
+
+### 15.4 Commits de referencia (rama `feature/bloque8.1-pool-mesa-ejecucion-fixes`)
+
+| Commit | Descripción |
+|--------|-------------|
+| `8f354e8` | Primera versión cartelas — Bloque 9.0 SQL + UI MVP |
+| `3adcbe9` | Estilos cartelas-page |
+| `05509ef` | `cartelas-ot-metadata.ts` + mejoras 9.1b |
+| `c212e52` | Wizard modal más ancho (demo) |

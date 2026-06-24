@@ -260,3 +260,16 @@ No hace falta un speech largo: responde punto por punto. Si algo varía según e
 ---
 
 *Generado desde `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` — Bloque 9 Minerva Hub. Respuestas incorporadas 24 jun 2026.*
+
+---
+
+## Estado implementación (24 jun 2026 noche)
+
+| Fase | Estado |
+|------|--------|
+| 9.0 SQL | ✅ Migración aplicada; `id_stock` desde 10310 |
+| 9.1 UI cartelas | ✅ Bandeja pendientes + wizard + impresión + listado creadas |
+| 9.1b | ✅ Filtros, fallback `prod_ots_general`, ref_lote Optimus, fix print |
+| 9.2–9.4 | ⏳ Stock, sobrantes, consumo maquinista |
+
+Detalle técnico, archivos y smoke test: **`MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §15**.

@@ -112,14 +112,31 @@ Filtro Pool "Próximo paso" ahora incluye **Guillotina** y **Desbroce** (Externo
 
 ## Bloque 9 — Cartelas (24 jun)
 
-Ramón respondió el cuestionario (`MINERVA_CUESTIONARIO_CARTELAS_RAMON.md`). Decisiones en `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §3g y §13c:
+Ramón respondió el cuestionario (`MINERVA_CUESTIONARIO_CARTELAS_RAMON.md`). Decisiones en `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §3g y §13c.
+
+### Modelo (sin cambios)
 
 - **1 cartela = 1 palet = 1 ID Stock**; varias OTs sin cantidad por OT en la cartela.
 - **Juan:** solo muelle. **Emma/Ramón:** cartelas.
 - **Piloto:** Optimus en paralelo + **10–20 OTs** en Minerva (consumo maquinista obligatorio en piloto).
 - **Barco:** mismo material → 1 cartela multi-hija; material distinto → cartela separada.
 
-Pendiente con planta: H1/H2 recuento global y lista de OTs piloto.
+### Implementado (24 jun noche) — §15 briefing
+
+| Fase | Estado | Dónde |
+|------|--------|-------|
+| **9.0** SQL | ✅ | `supabase/migrations/20260624183000_bloque9_stock_palets_cartelas.sql` |
+| **9.1** UI cartelas | ✅ | `/produccion/almacen/cartelas` |
+| **9.1b** post smoke | ✅ | Filtros, wizard split, OTs+hijas, ref_lote Optimus, print fix |
+
+**Smoke test:** cartelas **#10310** (g3-9999, OT 98010-01), **#10311** y **#10312** (G6-3305, OT 35990).
+
+**Demo rápida:**
+1. Producción → **Cartelas** → Pendientes (filtros: ocultar sin albarán, buscar OT).
+2. Generar cartelas → wizard (panel izq. líneas, panel der. palet).
+3. Imprimir → 2 copias; ID Stock grande; Ref. Lote `OT - TRABAJO`.
+
+**Pendiente:** 9.2 Stock, 9.4 consumo, recuento §13b, lista OTs piloto con Emma/Ramón.
 
 ---
 
