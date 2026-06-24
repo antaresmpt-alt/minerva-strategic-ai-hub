@@ -8,6 +8,8 @@ import {
   Package,
   Printer,
   RefreshCw,
+  Search,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -23,6 +25,11 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  enrichRecepcionLine,
+  fetchOtMetadataMap,
+  formatClienteTrabajo,
+} from "@/lib/cartelas-ot-metadata";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type {
@@ -63,9 +70,15 @@ export function CartelasPage() {
   const [cartelas, setCartelas] = useState<ProdStockPaletConOts[]>([]);
   const [search, setSearch] = useState("");
 
+  // Filtros bandeja pendientes
+  const [searchPendientes, setSearchPendientes] = useState("");
+  const [ocultarSinAlbaran, setOcultarSinAlbaran] = useState(true);
+  const [soloUltimos30, setSoloUltimos30] = useState(false);
+
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardGrupo, setWizardGrupo] = useState<AlbaranPendienteGroup | null>(null);
-  const [printPalet, setPrintPalet] = useState<ProdStockPaletConOts | null>(null);
+  // P0: printPalet ahora puede ser un array (desde wizard) o null
+  const [printPalets, setPrintPalets] = useState<ProdStockPaletConOts[]>([]);
 
   // ── Carga bandeja pendientes ──────────────────────────────────────────
   const loadPendientes = useCallback(async () => {
@@ -179,6 +192,17 @@ export function CartelasPage() {
         group.recepciones.push(line);
       }
 
+      // Fallback cliente/trabajo desde prod_ots_general si compra viene vacía
+      const allOtNums = Array.from(byAlbaran.values()).flatMap((g) =>
+        g.recepciones.map((r) => r.ot_numero)
+      );
+      const otMeta = await fetchOtMetadataMap(supabase, allOtNums);
+      for (const group of byAlbaran.values()) {
+        group.recepciones = group.recepciones.map((line) =>
+          enrichRecepcionLine(line, otMeta)
+        );
+      }
+
       setPendientes(Array.from(byAlbaran.values()));
     } catch (e) {
       toast.error(`Error al cargar pendientes: ${e instanceof Error ? e.message : String(e)}`);
@@ -238,7 +262,7 @@ export function CartelasPage() {
     if (tab === "cartelas") loadCartelas();
   }, [tab, loadCartelas]);
 
-  // ── Filtro búsqueda ───────────────────────────────────────────────────
+  // ── Filtro búsqueda cartelas creadas ─────────────────────────────────
   const filteredCartelas = useMemo(() => {
     if (!search.trim()) return cartelas;
     const q = search.toLowerCase();
@@ -251,6 +275,52 @@ export function CartelasPage() {
     );
   }, [cartelas, search]);
 
+  // ── Filtro bandeja pendientes ─────────────────────────────────────────
+  const thirtyDaysAgo = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d;
+  }, []);
+
+  const filteredPendientes = useMemo(() => {
+    let list = pendientes.filter((g) => g.cartelas_existentes === 0);
+
+    if (ocultarSinAlbaran) {
+      list = list.filter(
+        (g) =>
+          g.albaran_proveedor !== "(sin albarán)" &&
+          g.albaran_proveedor !== "-" &&
+          g.albaran_proveedor.trim() !== ""
+      );
+    }
+
+    if (soloUltimos30) {
+      list = list.filter(
+        (g) => new Date(g.fecha_recepcion) >= thirtyDaysAgo
+      );
+    }
+
+    if (searchPendientes.trim()) {
+      const q = searchPendientes.toLowerCase();
+      list = list.filter(
+        (g) =>
+          g.albaran_proveedor.toLowerCase().includes(q) ||
+          (g.proveedor_nombre?.toLowerCase().includes(q) ?? false) ||
+          g.recepciones.some(
+            (r) =>
+              r.ot_numero.toLowerCase().includes(q) ||
+              (r.cliente_nombre?.toLowerCase().includes(q) ?? false) ||
+              (r.material?.toLowerCase().includes(q) ?? false) ||
+              (r.trabajo_titulo?.toLowerCase().includes(q) ?? false)
+          )
+      );
+    }
+
+    return list;
+  }, [pendientes, ocultarSinAlbaran, soloUltimos30, searchPendientes, thirtyDaysAgo]);
+
+  const pendientesConCartela = pendientes.filter((g) => g.cartelas_existentes > 0);
+
   function openWizard(grupo: AlbaranPendienteGroup) {
     setWizardGrupo(grupo);
     setWizardOpen(true);
@@ -262,16 +332,16 @@ export function CartelasPage() {
   }
 
   function handlePrint(palet: ProdStockPaletConOts) {
-    setPrintPalet(palet);
-    setTimeout(() => window.print(), 100);
+    setPrintPalets([palet]);
+    // wait for React render before triggering print
+    setTimeout(() => window.print(), 150);
   }
 
-  const pendientesSinCartela = pendientes.filter(
-    (g) => g.cartelas_existentes === 0
-  );
-  const pendientesConCartela = pendientes.filter(
-    (g) => g.cartelas_existentes > 0
-  );
+  /** P0 fix: el wizard emite la lista de palets recién creados; imprimimos desde aquí */
+  function handleWizardPrintReady(palets: ProdStockPaletConOts[]) {
+    setPrintPalets(palets);
+    setTimeout(() => window.print(), 100);
+  }
 
   return (
     <div className="space-y-6">
@@ -294,9 +364,9 @@ export function CartelasPage() {
           <TabsTrigger value="pendientes" className="flex items-center gap-2">
             <ClipboardList className="size-4" />
             Pendientes de cartelar
-            {pendientesSinCartela.length > 0 && (
+            {filteredPendientes.length > 0 && (
               <Badge variant="destructive" className="ml-1 text-xs px-1.5">
-                {pendientesSinCartela.length}
+                {filteredPendientes.length}
               </Badge>
             )}
           </TabsTrigger>
@@ -308,12 +378,39 @@ export function CartelasPage() {
 
         {/* ── Tab: Pendientes ─────────────────────────────── */}
         <TabsContent value="pendientes" className="space-y-3 mt-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-600">
-              {loadingPendientes
-                ? "Cargando…"
-                : `${pendientesSinCartela.length} albarán${pendientesSinCartela.length !== 1 ? "es" : ""} sin cartelar`}
-            </p>
+          {/* Barra de filtros */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-slate-400" />
+              <Input
+                placeholder="OT, albarán, proveedor, cliente, material…"
+                value={searchPendientes}
+                onChange={(e) => setSearchPendientes(e.target.value)}
+                className="pl-7 h-8 text-sm"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setOcultarSinAlbaran((v) => !v)}
+              className={`inline-flex items-center gap-1.5 text-xs rounded-full px-2 py-1 border transition-colors whitespace-nowrap ${
+                ocultarSinAlbaran
+                  ? "bg-[#002147] text-white border-[#002147]"
+                  : "bg-white text-slate-600 border-slate-300 hover:border-slate-400"
+              }`}
+            >
+              {ocultarSinAlbaran ? "✓ " : ""}Ocultar sin albarán
+            </button>
+            <button
+              type="button"
+              onClick={() => setSoloUltimos30((v) => !v)}
+              className={`inline-flex items-center gap-1.5 text-xs rounded-full px-2 py-1 border transition-colors whitespace-nowrap ${
+                soloUltimos30
+                  ? "bg-[#002147] text-white border-[#002147]"
+                  : "bg-white text-slate-600 border-slate-300 hover:border-slate-400"
+              }`}
+            >
+              {soloUltimos30 ? "✓ " : ""}Solo 30 días
+            </button>
             <Button
               size="sm"
               variant="outline"
@@ -328,21 +425,32 @@ export function CartelasPage() {
             </Button>
           </div>
 
+          <p className="text-xs text-slate-400 flex items-center gap-1">
+            <SlidersHorizontal className="size-3" />
+            {loadingPendientes
+              ? "Cargando…"
+              : `${filteredPendientes.length} albarán${filteredPendientes.length !== 1 ? "es" : ""} pendiente${filteredPendientes.length !== 1 ? "s" : ""}`}
+          </p>
+
           {loadingPendientes && (
             <div className="flex justify-center py-12">
               <Loader2 className="size-8 animate-spin text-slate-400" />
             </div>
           )}
 
-          {!loadingPendientes && pendientesSinCartela.length === 0 && (
+          {!loadingPendientes && filteredPendientes.length === 0 && (
             <div className="text-center py-12 text-slate-400">
               <CheckCircle2 className="size-8 mx-auto mb-2 text-emerald-400" />
-              <p>Todo cartelado — no hay recepciones pendientes</p>
+              <p>
+                {searchPendientes || ocultarSinAlbaran || soloUltimos30
+                  ? "Sin resultados con los filtros actuales"
+                  : "Todo cartelado — no hay recepciones pendientes"}
+              </p>
             </div>
           )}
 
-          {/* Albaranes SIN cartela */}
-          {pendientesSinCartela.map((grupo) => (
+          {/* Albaranes SIN cartela (filtrados) */}
+          {filteredPendientes.map((grupo) => (
             <AlbaranCard
               key={grupo.albaran_proveedor}
               grupo={grupo}
@@ -431,12 +539,13 @@ export function CartelasPage() {
           setWizardGrupo(null);
         }}
         onCreated={handleWizardCreated}
+        onPrintReady={handleWizardPrintReady}
       />
 
-      {/* Print area for individual cartela from listado */}
-      {printPalet && (
-        <CartelaPrint palet={printPalet} copies={2} />
-      )}
+      {/* Área de impresión — fuera del Dialog, gestiona el print tanto desde Creadas como desde el wizard (P0 fix) */}
+      {printPalets.map((p) => (
+        <CartelaPrint key={p.id} palet={p} copies={2} />
+      ))}
     </div>
   );
 }
@@ -487,22 +596,27 @@ function AlbaranCard({
         </div>
       </CardHeader>
       <CardContent className="pt-0">
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           {grupo.recepciones.map((line) => (
             <div
               key={`${line.recepcion_id}-${line.ot_numero}`}
-              className="flex items-center gap-2 text-xs text-slate-600"
+              className="flex items-start gap-2 text-xs text-slate-600"
             >
-              <span className="font-mono font-semibold text-slate-800 w-20 shrink-0">
+              <span className="font-mono font-semibold text-slate-800 w-20 shrink-0 pt-0.5">
                 OT {line.ot_numero}
               </span>
-              <span className="truncate">
-                {line.material}
-                {line.gramaje ? ` ${line.gramaje}gr` : ""}
-                {line.tamano_hoja ? ` · ${line.tamano_hoja}` : ""}
-              </span>
+              <div className="flex-1 min-w-0">
+                <div className="text-slate-500 truncate">
+                  {formatClienteTrabajo(line.cliente_nombre, line.trabajo_titulo)}
+                </div>
+                <div className="truncate">
+                  {line.material}
+                  {line.gramaje ? ` ${line.gramaje}gr` : ""}
+                  {line.tamano_hoja ? ` · ${line.tamano_hoja}` : ""}
+                </div>
+              </div>
               {line.num_hojas_brutas && (
-                <span className="ml-auto text-slate-400 shrink-0">
+                <span className="text-slate-400 shrink-0">
                   {line.num_hojas_brutas.toLocaleString("es-ES")} h
                 </span>
               )}
