@@ -328,7 +328,7 @@ export function CartelaWizardDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="w-[95vw] max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader className="shrink-0">
           <DialogTitle>
             Cartelar albarán{" "}
@@ -362,7 +362,7 @@ export function CartelaWizardDialog({
         <div className="flex-1 overflow-hidden flex gap-6 min-h-0 px-1">
 
           {/* PANEL IZQUIERDO — resumen albarán */}
-          <div className="w-64 min-w-[240px] shrink-0 overflow-y-auto pr-4 border-r border-slate-200 space-y-4">
+          <div className="w-72 min-w-[260px] shrink-0 overflow-y-auto pr-5 border-r border-slate-200 space-y-4">
             {grupo && (
               <>
                 <div>
