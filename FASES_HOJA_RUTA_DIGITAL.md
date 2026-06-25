@@ -561,11 +561,11 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 ⏳ **Bloque 6 PENDIENTE**: Producidas/Histórico (`prod_ot_producidas`, snapshot híbrido) + lifecycle de cierre (pendiente_revision → producida) + recálculo maestro
 ⏳ **Bloque 7 PENDIENTE**: Expedición/Albarán (depende de Bloque 6 + decisión Odoo)
 🔄 **Bloque 8 EN CURSO** (17–18 jun 2026): **Fase FORMATO ✅** + **8.0 ✅** + **8.1 ✅** + **8.1.1 ✅**. Pendiente 8.2–8.4. Fuente de verdad: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
-📋 **Bloque 9 DISEÑO** (18 jun): cartelas/stock — **Fase A** 9.0–9.4 primero; **Fase B** 9.5+ (muelle/foto/IA) después. `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`.
+📋 **Bloque 9 EN CURSO** (25 jun 2026): **9.0–9.1b ✅** + **9.4-preview ✅** (enlace documental cierre impresión → hoja de ruta/PDF). Pendiente: 9.2 Stock, 9.3 sobrantes, **9.4 operativo** (movimientos). `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §15.5.
 
 ---
 
-**Última actualización**: 18 de junio de 2026 (noche) — Bloque 8.1.1 fixes + OT 98010 probada; demo en `GUIA_MAÑANA.md`
+**Última actualización**: 25 de junio de 2026 — Bloque 9.4-preview cartela en cierre impresión; smoke OT 35858 + PDF hoja de ruta.
 
 ---
 
@@ -952,3 +952,37 @@ Itinerario validado: CTP → Guillotina → Impresión offset → Plastificado (
 | Arranque (H3) | **Piloto paralelo:** Optimus + 10–20 OTs en Minerva |
 
 Pendiente: H1/H2 recuento global; lista OTs piloto con Emma/Ramón.
+
+---
+
+## Bloque 9.4-preview — Cartela al cerrar impresión ✅ **25 jun 2026**
+
+> Fuente técnica: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §15.5 · referencia Optimus: `docs/referencias/cartelas-optimus-campo.md`.
+
+### Hecho
+
+- En **Mesa de ejecución → Cerrar proceso**, procesos **Impresión offset (1)** e **Impresión digital (2)** muestran bloque opcional **Cartela / material usado**.
+- Campos: **ID Stock** (lookup `prod_stock_palets`), **hojas consumidas** (opcional).
+- Persistencia en `prod_ot_pasos.datos_proceso`: `id_stock_cartela`, `material_real_cartela`, `cartela_hojas_consumidas`, `cartela_palet_id`.
+- **Hoja de ruta** (diálogo `HojaRutaOtDialog` + PDF `hoja-ruta-pdf.ts`) muestra los tres campos al final de “Datos del proceso”.
+- Aviso UI: piloto sin descuento automático de stock.
+
+### Archivos
+
+| Pieza | Ruta |
+|-------|------|
+| Lógica | `src/lib/cartela-ejecucion.ts` |
+| UI cierre | `src/components/produccion/planificacion/cartela-cierre-block.tsx` |
+| Diálogo | `cerrar-proceso-dialog.tsx` |
+| Vista HR | `src/lib/hoja-ruta/hoja-ruta-formatters.ts` |
+
+### Smoke test
+
+- **OT 35858** — cierre impresión con ID Stock → campos visibles en HR y PDF `hoja-ruta-35858.pdf`.
+- Contraste útil demo: material **plan** (despacho) vs **material real** (palet por ID Stock).
+
+### Pendiente (9.4 operativo)
+
+- [ ] Al confirmar cierre: `INSERT prod_stock_movimientos` + actualizar `cantidad_actual`.
+- [ ] Restringir a OTs piloto (§13c Bloque 9).
+- [ ] Cosmético PDF: línea “Horas OT” con espaciado/comilla errónea (preexistente).

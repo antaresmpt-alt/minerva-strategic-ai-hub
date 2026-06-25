@@ -4,9 +4,9 @@
 > Tema: recepción de material, cartelas de palet, stock libre y trazabilidad.
 > Complementa `MINERVA_HUB_CONTEXTO_MAESTRO.md`, `FASES_HOJA_RUTA_DIGITAL.md` y briefings Bloques 6 y 7.
 >
-> **Estado:** ✅ **9.0 + 9.1 + 9.1b implementados** (24 jun 2026 noche) — smoke test en planta con cartelas #10310–#10312. **Pendiente:** 9.2 Stock, 9.3 sobrantes, 9.4 consumo.
+> **Estado:** ✅ **9.0 + 9.1 + 9.1b + 9.4-preview** (25 jun 2026) — cartelas en almacén + enlace documental al **cerrar impresión** (procesos 1 y 2) → hoja de ruta y PDF. Smoke: cartelas #10310–#10313; cierre OT **35858** con ID Stock en HR. **Pendiente:** 9.2 Stock, 9.3 sobrantes, **9.4 operativo** (movimientos + descuento `cantidad_actual`).
 > **Origen:** Optimus + cartelas CARPAPSA (15 jun 2026).
-> **Actualizado:** 24 jun 2026 — implementación MVP en repo; cuestionario Ramón (§3g); modelo **1 cartela = 1 palet**; roles Emma/Ramón cartelan; piloto paralelo §13c.
+> **Actualizado:** 25 jun 2026 — 9.4-preview en mesa ejecución; wizard 3 tabs (Albarán · Palet · Resumen); ver §15.5 y `docs/referencias/cartelas-optimus-campo.md`.
 > **PENDIENTE:** H1/H2 recuento global. Ubicación por filas de material (catálogo UI sin definir en planta). `codigo_articulo` en wizard. Ajuste impresión A6 física vs A4 PDF.
 
 **Relacionado:** sobrantes → Bloque 6 · expedición → Bloque 7 · material contenedor/hijas → Bloque 8 · FSC → maestro artículos.
@@ -703,13 +703,18 @@ Vista Stock: "OT 35851 — déficit 100h (pendiente reponer)"
 | `cantidad` | Hojas consumidas en esa tirada |
 | Quién | **Maquinista** (E2–E3) |
 
-**Implementación MVP piloto (9.4, no posponer en piloto):**
+**Implementación — dos fases:**
 
-**Opción B — Registro al cerrar paso de impresión (recomendada):**
+| Fase | Estado | Qué hace |
+|------|--------|----------|
+| **9.4-preview** | ✅ 25 jun 2026 | Al **Cerrar proceso** (impresión offset `1` / digital `2`): ID Stock + hojas opcionales → `datos_proceso` + vista hoja de ruta/PDF. **Sin** movimientos ni descuento. Aviso piloto en UI. |
+| **9.4 operativo** | ⏳ post-demo | Mismo punto de captura; además `INSERT prod_stock_movimientos` + bajar `cantidad_actual`. Solo OTs piloto (§13c). |
+
+**Opción B — Registro al cerrar paso de impresión (elegida):**
 Al cerrar ejecución / tirada, el maquinista indica ID Stock + hojas usadas.
-Minerva descuenta `cantidad_actual` y escribe `prod_stock_movimientos`.
+En 9.4-preview solo documenta; en 9.4 operativo descuenta stock.
 
-Enlace natural con **“Cerrar proceso”** ya existente en mesa de ejecución.
+Enlace natural con **“Cerrar proceso”** ya existente en mesa de ejecución (§15.5).
 
 ~~Opción C solo trazabilidad~~ — **descartada** para el piloto (Ramón E4).
 
@@ -828,7 +833,8 @@ Objetivo: sustituir Optimus/papel en lo esencial — **qué hay en cada palet y 
 | **9.1b** | Post smoke: filtros bandeja, wizard split, selector OTs + hijas barco, fallback cliente/trabajo (`prod_ots_general`), `ref_lote` Optimus, fix impresión, cartela print estilo scan | ✅ **Hecho** |
 | **9.2** | UI **Almacén → Stock** + filtros **libre vs reservado** (prioridad I3) + entregar desde libre + reasignar reserva (§7.6). | ⏳ |
 | **9.3** | Sobrantes — misma cartela muta; **sin** wizard auto “pasar a libre” multi-OT (§7.8) |
-| **9.4** | **Consumo maquinista al cerrar tirada** (piloto 10–20 OTs). Tras rodar: déficit → `material_status`. |
+| **9.4-preview** | ✅ Enlace documental ID Stock ↔ cierre impresión → `datos_proceso` + hoja de ruta/PDF (§15.5) |
+| **9.4 operativo** | **Consumo maquinista al cerrar tirada** + movimientos (piloto 10–20 OTs). Tras rodar: déficit → `material_status`. |
 
 **Prerrequisitos ligeros:** audio/notas Emma; ir respondiendo §9 pendientes en paralelo.
 
@@ -990,6 +996,7 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 | 23 jun 2026 | **§13 Extensibilidad** — patrón cartela como motor de stock; capas materia prima / semielaborado / producto terminado (Gabri) / consumibles. Campos `tipo_stock` + `unidad` en `prod_stock_palets` (MVP: `materia_prima` + `hojas`). Por qué el MRP legacy falló (agregado manual) y este no (derivado). **§13b** recuento físico "día 0" como prerrequisito: recuento con Optimus → Excel con columnas acordadas → import a cartelas cuando 9.1 esté listo. |
 | 24 jun 2026 | **§3g** — cuestionario Ramón respondido (`MINERVA_CUESTIONARIO_CARTELAS_RAMON.md`). **Modelo corregido:** 1 cartela = 1 palet = 1 ID Stock; varias OTs sin qty en cartela; Juan no cartela; consumo MVP obligatorio; I1 barco; **§13c** piloto paralelo 10–20 OTs; antiduplicado albarán; deprecado `palet_fisico_ref` / reparto N cartelas por palet. |
 | 24 jun 2026 | **§15 Implementación** — 9.0 SQL + 9.1 UI cartelas + 9.1b post smoke desplegados. Cartelas #10310–#10312 en prod. Archivos en `src/components/produccion/almacen/cartelas/`, migración `20260624183000_…`, helper `cartelas-ot-metadata.ts`. Muelle **no tocado**. |
+| 25 jun 2026 | **§15.5** — 9.4-preview: bloque cartela en `Cerrar proceso` (impresión 1/2), campos en `datos_proceso`, hoja de ruta + PDF. Wizard cartelas: 3 tabs, `codigo_articulo`, hijas barco. Smoke OT 35858 + PDF `hoja-ruta-35858.pdf`. |
 
 ### Implementación (rellenar al avanzar)
 
@@ -1002,7 +1009,8 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 | 9.1b — Mejoras post smoke | ✅ | Filtros, wizard split, OTs checkboxes + hijas, fallback metadata, ref_lote Optimus, fix print 29→2 págs. Commit `c212e52` wizard ancho demo. |
 | 9.2 — Stock + entregas/traspasos | ⏳ | §7.6; déficit visible en Stock |
 | 9.3 — Sobrantes al cerrar OT (Bloque 6) | ⏳ | Cartela muta, no nueva fila |
-| 9.4 — Consumos y movimientos en planta | ⏳ | Opción C primero; luego `material_status` |
+| 9.4-preview — Enlace documental cierre impresión | ✅ | §15.5; procesos 1 y 2; sin stock |
+| 9.4 operativo — Consumos y movimientos en planta | ⏳ | Mismo UI; `prod_stock_movimientos` + `material_status` |
 
 **Fase B — mejoras (después)**
 
@@ -1069,14 +1077,77 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 | **10310** | CARPAPSA g3-9999 | 98010-01 | Primera cartela Minerva. Barco / hija. |
 | **10311** | G6-3305 | 35990 | Prueba post-9.1; `ref_lote` solo OT (sin trabajo en compra). |
 | **10312** | G6-3305 | 35990 | Post-9.1b; `ref_lote` = `35990 - EXPOSITOR SEGLE - BLUSH STICK 4x6u` (fallback `prod_ots_general`). |
+| **10313** | G6-3426 | 35970 | Wizard 3 tabs; impresión 2 copias. |
 
 **Validado OK:** filtros, wizard split, prefill por línea, impresión 2 copias, listado Creadas, cliente/trabajo en bandeja (COMART, CARPAPSA).
 
 **Pendiente UX / datos (no bloquea demo):**
-- `codigo_articulo` no se rellena en wizard (campo existe en BD).
+- ~~`codigo_articulo` no se rellena en wizard~~ → ✅ desde commit `e514e6c`.
+- Auto-quitar OT padre (98010) del prefill cuando hay hijas barco — pendiente post-demo.
 - Ubicación fila: catálogo fijo en código; planta aún sin convención operativa.
 - Permitir varias cartelas mismo OT/albarán (aviso amarillo, no bloqueo) — coherente con pruebas pero vigilar en piloto (§13c regla 1).
 - Impresión en etiquetadora A6 física: validar en planta (ahora probado en PDF A4).
+
+### 15.5 Enlace cierre impresión — 9.4-preview (25 jun 2026)
+
+> Documental únicamente: registra qué palet se usó, visible en hoja de ruta. **No** escribe `prod_stock_movimientos` ni modifica `cantidad_actual`.
+
+**Flujo UX (como Optimus RDC — David teclea Id stock):**
+
+```text
+Mesa ejecución → Cerrar proceso (OT en impresión offset o digital)
+  → Bloque opcional "Cartela / material usado"
+  → ID Stock (lookup prod_stock_palets) + hojas consumidas (opcional)
+  → Confirmar y finalizar → datos en prod_ot_pasos.datos_proceso
+  → Hoja de ruta (diálogo + PDF): ID Stock, material real, hojas
+```
+
+**Campos en `datos_proceso`:**
+
+| Clave | Tipo | Notas |
+|-------|------|-------|
+| `id_stock_cartela` | number | Normaliza "10.313" → 10313 |
+| `material_real_cartela` | string | Snapshot desde palet (nombre · gr · formato) |
+| `cartela_hojas_consumidas` | number? | Opcional |
+| `cartela_palet_id` | uuid? | FK interna para 9.4 operativo |
+
+**Archivos:**
+
+| Pieza | Archivo |
+|-------|---------|
+| Lógica compartida | `src/lib/cartela-ejecucion.ts` — `procesoUsaCartela`, lookup, `buildCartelaCamposVista` |
+| UI cierre | `src/components/produccion/planificacion/cartela-cierre-block.tsx` |
+| Diálogo | `src/components/produccion/planificacion/cerrar-proceso-dialog.tsx` |
+| Hoja de ruta / PDF | `src/lib/hoja-ruta/hoja-ruta-formatters.ts` — append tras campos del proceso |
+
+**Procesos:** `PROCESOS_IMPRESION_CARTELA = [1, 2]` (offset + digital plana).
+
+**Comportamiento:**
+
+- ID Stock **opcional** — se puede cerrar sin cartela.
+- Si el ID no existe en Minerva: aviso ámbar; se guarda el número igualmente.
+- Banner amarillo: *Piloto — sin descuento automático*.
+
+**Smoke test (25 jun 2026):**
+
+| OT | Proceso | ID Stock | Validado |
+|----|---------|----------|----------|
+| 35858 | Impresión offset | 10.310 / 10.313 (pruebas) | ✅ Diálogo cierre + `HojaRutaOtDialog` + PDF `hoja-ruta-35858.pdf` |
+
+**Siguiente (9.4 operativo):**
+
+1. En `confirmCerrarProceso`: si hay `id_stock_cartela` + hojas → `INSERT` movimiento `consumo` + `cantidad_actual -= hojas`.
+2. Flag o lista de OTs piloto (§13c) — no aplicar a todo el parque hasta validar.
+3. Tras rodar: conectar déficit stock ↔ `material_status` (pool/mesa).
+
+**Wizard cartelas — mejoras demo (mismo sprint, commits previos):**
+
+- 3 tabs: **Albarán · Palet · Resumen** (crear solo en Resumen).
+- `codigo_articulo` en wizard y BD.
+- Hijas barco vía `ot_padre_numero`; quitar OT padre del prefill cuando hay hijas — **pendiente UX** (~10 min post-demo).
+- Referencia campo a campo: `docs/referencias/cartelas-optimus-campo.md`.
+
+**Decisión maestro artículos:** no importar `prod_materiales_stock` en piloto; lookup por `id_stock` basta (como David en Optimus).
 
 ### 15.4 Commits de referencia (rama `feature/bloque8.1-pool-mesa-ejecucion-fixes`)
 
@@ -1086,3 +1157,5 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 | `3adcbe9` | Estilos cartelas-page |
 | `05509ef` | `cartelas-ot-metadata.ts` + mejoras 9.1b |
 | `c212e52` | Wizard modal más ancho (demo) |
+| `e514e6c` | Ajustes wizard cartelas (tabs, codigo_articulo, hijas) |
+| `d844d93` | 9.4-preview cierre impresión + docs |

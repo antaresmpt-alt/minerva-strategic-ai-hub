@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CartelaCierreBlock } from "@/components/produccion/planificacion/cartela-cierre-block";
+import { procesoUsaCartela } from "@/lib/cartela-ejecucion";
 import type { DatosProcesoGenerico } from "@/lib/hoja-ruta-campos-config";
 import {
   formatHorasEjecucionLabel,
@@ -61,7 +63,7 @@ export function CerrarProcesoDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Cerrar proceso</DialogTitle>
           <DialogDescription>
@@ -135,6 +137,14 @@ export function CerrarProcesoDialog({
             </p>
           ) : null}
         </div>
+
+        {procesoUsaCartela(procesoId) ? (
+          <CartelaCierreBlock
+            key={open ? "open" : "closed"}
+            datosDraft={datosDraft}
+            onDatosChange={onDatosChange}
+          />
+        ) : null}
 
         <DialogFooter className="gap-2 sm:gap-0">
           <Button type="button" variant="outline" disabled={saving} onClick={() => onOpenChange(false)}>

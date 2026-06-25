@@ -1,3 +1,4 @@
+import { buildCartelaCamposVista } from "@/lib/cartela-ejecucion";
 import {
   getCamposConfigByProcesoId,
   type CampoDefinicion,
@@ -126,5 +127,6 @@ export function buildCamposVista(
     const v = formatValor(datos[campo.id]);
     if (v != null) out.push({ label: campo.label, valor: suffix(campo, v) });
   }
+  out.push(...buildCartelaCamposVista(procesoId, datos));
   return out;
 }

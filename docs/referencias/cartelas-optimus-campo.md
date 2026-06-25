@@ -17,7 +17,7 @@ Cartela impresa (ID Stock grande en el palet)
 Optimus RDC → Consumir material: Id stock → código artículo + descripción + cantidad hojas
 ```
 
-**Minerva hoy:** cartelado (9.0–9.1b). **Siguiente fase:** consumo al cerrar tirada (9.4).
+**Minerva hoy:** cartelado (9.0–9.1b) + **enlace documental al cerrar impresión (9.4-preview)**. **Siguiente:** consumo operativo con movimientos de stock (9.4).
 
 ---
 
@@ -119,6 +119,12 @@ Caso habitual, no excepción → fase **9.6 STOCK sin OC**.
 | 10311–12 | G6-3305 | 35990 | |
 | 10313 | G6-3426 | 35970 | Prueba wizard tabs jun 2026 |
 
+### Cierre impresión → hoja de ruta (9.4-preview)
+
+| OT | ID Stock (prueba) | Validado |
+|----|-------------------|----------|
+| **35858** | 10.310 / 10.313 | ✅ `Cerrar proceso` + `HojaRutaOtDialog` + PDF |
+
 ---
 
 ## Consumo en planta — David (Speedmaster CD 102, Optimus RDC)
@@ -134,7 +140,14 @@ Confirmado en visita a planta (jun 2026):
 
 **Referencia estante** en consumo: suele ir **vacía** (aunque Juan use ubicación en almacén).
 
-**Diseño objetivo Minerva 9.4 (lite):** al cerrar tirada en ejecución → ID Stock + hojas consumidas → actualizar `cantidad_actual` + movimiento. Sin replicar todo el fichaje Optimus.
+**Diseño Minerva:**
+
+| Fase | Estado | Comportamiento |
+|------|--------|----------------|
+| **9.4-preview** | ✅ 25 jun 2026 | Cerrar proceso (impresión 1/2) → ID Stock + hojas en `datos_proceso` + hoja de ruta/PDF. Sin movimientos. |
+| **9.4 operativo** | ⏳ | Mismo punto de captura + `cantidad_actual` + `prod_stock_movimientos`. |
+
+Archivos: `src/lib/cartela-ejecucion.ts`, `cartela-cierre-block.tsx`, `cerrar-proceso-dialog.tsx`, `hoja-ruta-formatters.ts`.
 
 ---
 
@@ -216,7 +229,7 @@ No hace falta replicar la lógica de generación en Minerva: basta **lookup** o 
 
 1. Cartela = `material_nombre` + `gramaje` + `formato` + `id_stock` (como hoy).  
 2. `codigo_articulo` **opcional** (manual o vacío).  
-3. Consumo 9.4: lookup por `id_stock`, no por código.
+3. Consumo 9.4 operativo: lookup por `id_stock`, no por código. (Preview 9.4 ya guarda en `datos_proceso`.)
 
 **Fase 9.1c / 9.2** — asistencia sin rigidez:
 
@@ -250,4 +263,4 @@ No hace falta replicar la lógica de generación en Minerva: basta **lookup** o 
 
 ---
 
-*Última actualización: 25 jun 2026 — fuentes: fotos planta, albaranes, RDC David, reunión Ramón, export maestro Optimus (468 artículos).*
+*Última actualización: 25 jun 2026 — 9.4-preview cierre impresión (OT 35858); fuentes: fotos planta, albaranes, RDC David, reunión Ramón, export maestro Optimus (468 artículos).*
