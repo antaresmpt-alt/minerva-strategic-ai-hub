@@ -1158,4 +1158,4 @@ Mesa ejecución → Cerrar proceso (OT en impresión offset o digital)
 | `05509ef` | `cartelas-ot-metadata.ts` + mejoras 9.1b |
 | `c212e52` | Wizard modal más ancho (demo) |
 | `e514e6c` | Ajustes wizard cartelas (tabs, codigo_articulo, hijas) |
-| `d844d93` | 9.4-preview cierre impresión + docs |
+| `328e710` | 9.4-preview cierre impresión + docs |
