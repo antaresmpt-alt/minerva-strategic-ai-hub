@@ -78,7 +78,9 @@ export function CartelasPage() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardGrupo, setWizardGrupo] = useState<AlbaranPendienteGroup | null>(null);
   // P0: printPalet ahora puede ser un array (desde wizard) o null
-  const [printPalets, setPrintPalets] = useState<ProdStockPaletConOts[]>([]);
+  const [printQueue, setPrintQueue] = useState<
+    { palet: ProdStockPaletConOts; proveedorNombre?: string | null }[]
+  >([]);
 
   // ── Carga bandeja pendientes ──────────────────────────────────────────
   const loadPendientes = useCallback(async () => {
@@ -217,7 +219,12 @@ export function CartelasPage() {
     try {
       const { data: palets, error: paletsErr } = await supabase
         .from("prod_stock_palets")
-        .select("*")
+        .select(
+          `*,
+           prod_recepciones_material(
+             prod_compra_material(prod_proveedores(nombre))
+           )`
+        )
         .order("id_stock", { ascending: false })
         .limit(200);
 
@@ -241,10 +248,23 @@ export function CartelasPage() {
       }
 
       const enriched: ProdStockPaletConOts[] = palets.map(
-        (p: ProdStockPaletRow) => ({
-          ...p,
-          ots: otsByPalet[p.id] ?? (p.ot_destino_numero ? [p.ot_destino_numero] : []),
-        })
+        (raw: Record<string, unknown>) => {
+          const p = raw as ProdStockPaletRow;
+          const recep = unwrapJoinRow(raw.prod_recepciones_material);
+          const compra = recep
+            ? unwrapJoinRow(recep.prod_compra_material)
+            : null;
+          const prov = compra ? unwrapJoinRow(compra.prod_proveedores) : null;
+          const proveedorNombre =
+            typeof prov?.nombre === "string" ? prov.nombre : null;
+          return {
+            ...p,
+            ots:
+              otsByPalet[p.id] ??
+              (p.ot_destino_numero ? [p.ot_destino_numero] : []),
+            proveedor_nombre: proveedorNombre,
+          };
+        }
       );
       setCartelas(enriched);
     } catch (e) {
@@ -331,15 +351,23 @@ export function CartelasPage() {
     if (tab === "cartelas") loadCartelas();
   }
 
-  function handlePrint(palet: ProdStockPaletConOts) {
-    setPrintPalets([palet]);
-    // wait for React render before triggering print
+  function handlePrint(palet: ProdStockPaletConOts & { proveedor_nombre?: string | null }) {
+    setPrintQueue([
+      {
+        palet,
+        proveedorNombre: palet.proveedor_nombre ?? null,
+      },
+    ]);
     setTimeout(() => window.print(), 150);
   }
 
-  /** P0 fix: el wizard emite la lista de palets recién creados; imprimimos desde aquí */
-  function handleWizardPrintReady(palets: ProdStockPaletConOts[]) {
-    setPrintPalets(palets);
+  function handleWizardPrintReady(
+    palets: ProdStockPaletConOts[],
+    proveedorNombre?: string | null
+  ) {
+    setPrintQueue(
+      palets.map((palet) => ({ palet, proveedorNombre: proveedorNombre ?? null }))
+    );
     setTimeout(() => window.print(), 100);
   }
 
@@ -543,8 +571,13 @@ export function CartelasPage() {
       />
 
       {/* Área de impresión — fuera del Dialog, gestiona el print tanto desde Creadas como desde el wizard (P0 fix) */}
-      {printPalets.map((p) => (
-        <CartelaPrint key={p.id} palet={p} copies={2} />
+      {printQueue.map((job) => (
+        <CartelaPrint
+          key={job.palet.id}
+          palet={job.palet}
+          copies={2}
+          proveedorNombre={job.proveedorNombre}
+        />
       ))}
     </div>
   );

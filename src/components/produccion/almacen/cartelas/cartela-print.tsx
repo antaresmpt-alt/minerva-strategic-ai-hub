@@ -7,6 +7,8 @@ import type { ProdStockPaletConOts } from "@/types/prod-stock";
 interface CartelaPrintProps {
   palet: ProdStockPaletConOts;
   copies?: number;
+  /** Nombre proveedor (estilo Optimus); no persistido en prod_stock_palets. */
+  proveedorNombre?: string | null;
 }
 
 /**
@@ -14,7 +16,7 @@ interface CartelaPrintProps {
  * ID Stock = elemento visual dominante. Layout A6 apaisado, `copies` copias (default 2).
  */
 export const CartelaPrint = forwardRef<HTMLDivElement, CartelaPrintProps>(
-  function CartelaPrint({ palet, copies = 2 }, ref) {
+  function CartelaPrint({ palet, copies = 2, proveedorNombre }, ref) {
     const otsText = palet.ots.length > 0 ? palet.ots.join(" · ") : "(stock libre)";
 
     const fecha = new Date(palet.created_at).toLocaleDateString("es-ES", {
@@ -124,9 +126,15 @@ export const CartelaPrint = forwardRef<HTMLDivElement, CartelaPrintProps>(
               </div>
             )}
 
-            {/* Pie: albarán + fecha */}
+            {/* Pie: proveedor + albarán + fecha */}
             <div className="mt-auto flex justify-between items-end px-3 py-2 text-xs">
               <div>
+                {proveedorNombre && (
+                  <div className="mb-0.5">
+                    <span className="font-bold">Proveedor: </span>
+                    {proveedorNombre}
+                  </div>
+                )}
                 {palet.nota_entrega && (
                   <div>
                     <span className="font-bold">Nota Entrega: </span>

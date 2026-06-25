@@ -88,6 +88,8 @@ export type ProdStockMovimientoRow = {
 /** Palet enriquecido con sus OTs para la UI (join en memoria o PostgREST). */
 export type ProdStockPaletConOts = ProdStockPaletRow & {
   ots: string[];
+  /** Join opcional desde recepción → compra → proveedor (solo UI/impresión). */
+  proveedor_nombre?: string | null;
 };
 
 /**
@@ -125,6 +127,8 @@ export type WizardPaletInput = {
   gramaje: string;
   formato: string;
   cantidad_inicial: string;
+  /** Código artículo proveedor (PHFOAL…); opcional en piloto. */
+  codigo_articulo: string;
   /** OTs referenciadas en la cartela (sin cantidad). */
   ots_referencia: string[];
   stock_libre: boolean;
