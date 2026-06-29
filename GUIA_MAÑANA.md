@@ -2,7 +2,8 @@
 
 > **Fecha:** reunión jueves con Albert / Jordi (jun 2026)  
 > **Rama desplegada:** `feature/bloque8.1-pool-mesa-ejecucion-fixes`  
-> **Briefing completo:** `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` §8.1 / §8.1.1
+> **Briefing completo:** `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` §8.1 / §8.1.1  
+> **Pendiente CTP despacho:** `docs/despacho-wizard-ctp-pendiente.md`
 
 ---
 
