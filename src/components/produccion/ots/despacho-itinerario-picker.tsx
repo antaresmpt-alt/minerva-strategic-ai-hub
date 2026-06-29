@@ -87,7 +87,7 @@ function SortablePasoRow({
           <GripVertical className="size-3.5 shrink-0" />
         </button>
       )}
-      <span className="min-w-0 flex-1 truncate font-medium text-[#002147]">
+      <span className="min-w-0 flex-1 font-medium leading-snug text-[#002147]">
         {slot.nombre}
       </span>
       {!disabled ? (
@@ -110,6 +110,10 @@ type Props = {
   disabled?: boolean;
   slots: DespachoItinerarioSlot[];
   onSlotsChange: (next: DespachoItinerarioSlot[]) => void;
+  /** En wizard despacho: columnas más anchas (PC). */
+  layout?: "default" | "wide";
+  /** Sin borde superior cuando va incrustado en otra sección. */
+  embedded?: boolean;
 };
 
 export function DespachoItinerarioPicker({
@@ -118,6 +122,8 @@ export function DespachoItinerarioPicker({
   disabled,
   slots,
   onSlotsChange,
+  layout = "default",
+  embedded = false,
 }: Props) {
   const [procesos, setProcesos] = useState<ProdProcesoCatRow[]>([]);
   const [plantillas, setPlantillas] = useState<ProdRutaPlantillaRow[]>([]);
@@ -242,9 +248,16 @@ export function DespachoItinerarioPicker({
   if (!open) return null;
 
   const readOnly = !!disabled;
+  const isWide = layout === "wide";
+  const listMaxH = isWide ? "max-h-64" : "max-h-40";
 
   return (
-    <div className="space-y-2 border-t border-slate-200 pt-3 sm:col-span-2">
+    <div
+      className={cn(
+        "space-y-2",
+        !embedded && "border-t border-slate-200 pt-3 sm:col-span-2"
+      )}
+    >
       <p className="text-xs font-semibold text-[#002147]">
         {readOnly ? "Itinerario (solo lectura)" : "Itinerario (opcional)"}
       </p>
@@ -293,12 +306,25 @@ export function DespachoItinerarioPicker({
           </div>
         </div>
       ) : (
-        <div className="grid min-h-0 gap-2 md:grid-cols-3 md:items-start">
+        <div
+          className={cn(
+            "grid min-h-0 gap-3",
+            isWide
+              ? "grid-cols-3 items-stretch"
+              : "gap-2 md:grid-cols-3 md:items-start"
+          )}
+        >
           <div className="flex min-h-0 flex-col space-y-1 rounded border border-slate-200 bg-slate-50/60 p-2">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">
               Plantillas
             </p>
-            <div className="max-h-40 min-h-0 space-y-1 overflow-y-auto overscroll-contain pb-3 pr-2 [scrollbar-gutter:stable]">
+            <div
+              className={cn(
+                "min-h-0 space-y-1 overflow-y-auto overscroll-contain pb-3 pr-2 [scrollbar-gutter:stable]",
+                listMaxH,
+                isWide && "min-h-[16rem]"
+              )}
+            >
               {plantillas.length === 0 ? (
                 <p className="text-[10px] text-muted-foreground">Sin plantillas.</p>
               ) : (
@@ -319,7 +345,13 @@ export function DespachoItinerarioPicker({
             <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">
               Procesos
             </p>
-            <div className="flex min-h-0 max-h-40 flex-wrap gap-1 overflow-y-auto overscroll-contain pb-3 pr-2 [scrollbar-gutter:stable]">
+            <div
+              className={cn(
+                "flex min-h-0 flex-wrap gap-1 overflow-y-auto overscroll-contain pb-3 pr-2 [scrollbar-gutter:stable]",
+                listMaxH,
+                isWide && "min-h-[16rem]"
+              )}
+            >
               {procesos.map((p) => (
                 <Button
                   key={p.id}
@@ -347,7 +379,13 @@ export function DespachoItinerarioPicker({
               onDragEnd={onDragEnd}
             >
               <SortableContext items={slotIds} strategy={verticalListSortingStrategy}>
-                <div className="flex max-h-40 min-h-[5.625rem] flex-col gap-1 overflow-y-auto overscroll-contain rounded border border-dashed border-slate-200 bg-white p-1 pb-3 pr-2 [scrollbar-gutter:stable]">
+                <div
+                  className={cn(
+                    "flex min-h-[5.625rem] flex-col gap-1 overflow-y-auto overscroll-contain rounded border border-dashed border-slate-200 bg-white p-1 pb-3 pr-2 [scrollbar-gutter:stable]",
+                    listMaxH,
+                    isWide && "min-h-[16rem]"
+                  )}
+                >
                   {slots.length === 0 ? (
                     <p className="py-2 text-center text-[10px] text-muted-foreground">
                       Vacío

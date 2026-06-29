@@ -197,3 +197,165 @@ export const PROCESO_TROQUEL_ID = 10;
 export const PROCESO_ENGOMADO_ID = 12;
 export const PROCESO_MANIPULADOS_ID = 15;
 export const PROCESO_DESBROCE_ID = 22;
+
+/** Datos de proceso capturados en el wizard (se siembran en prod_ot_pasos.datos_proceso). */
+export type DespachoWizardGuillotinaDatos = {
+  patron_corte: string;
+  tamano_final: string;
+  hojas_iniciales: string;
+  hojas_finales: string;
+};
+
+export type DespachoWizardImpresionDatos = {
+  hojas_entrada: string;
+  formato_hojas: string;
+};
+
+export type DespachoWizardProcesoDatos = {
+  guillotina: DespachoWizardGuillotinaDatos;
+  impresion: DespachoWizardImpresionDatos;
+};
+
+export function emptyDespachoWizardProcesoDatos(): DespachoWizardProcesoDatos {
+  return {
+    guillotina: {
+      patron_corte: "",
+      tamano_final: "",
+      hojas_iniciales: "",
+      hojas_finales: "",
+    },
+    impresion: {
+      hojas_entrada: "",
+      formato_hojas: "",
+    },
+  };
+}
+
+export function hojasCompraDespacho(form: DespachoFormState): number {
+  const netas = integerOrZeroForDespacho(form.num_hojas_netas);
+  if (netas > 0) return netas;
+  return integerOrZeroForDespacho(form.num_hojas_brutas);
+}
+
+/** Hojas que alimentan troquel/desbroce (post guillotina si aplica). */
+export function hojasPostGuillotinaParaCadena(
+  form: DespachoFormState,
+  procesoDatos: DespachoWizardProcesoDatos,
+  procesoIdsInRoute: Set<number>
+): number {
+  if (procesoIdsInRoute.has(PROCESO_GUILLOTINA_ID)) {
+    const finales = integerOrZeroForDespacho(
+      procesoDatos.guillotina.hojas_finales
+    );
+    if (finales > 0) return finales;
+  }
+  if (
+    procesoIdsInRoute.has(PROCESO_OFFSET_ID) ||
+    procesoIdsInRoute.has(PROCESO_DIGITAL_ID)
+  ) {
+    const entrada = integerOrZeroForDespacho(procesoDatos.impresion.hojas_entrada);
+    if (entrada > 0) return entrada;
+  }
+  return hojasCompraDespacho(form);
+}
+
+export function estuchesEstimadosDespacho(
+  form: DespachoFormState,
+  procesoDatos: DespachoWizardProcesoDatos,
+  procesoIdsInRoute: Set<number>
+): { hojas: number; poses: number; estuches: number } | null {
+  const hojas = hojasPostGuillotinaParaCadena(form, procesoDatos, procesoIdsInRoute);
+  const poses = integerOrZeroForDespacho(form.poses);
+  if (!hojas || !poses) return null;
+  return { hojas, poses, estuches: hojas * poses };
+}
+
+function numOrNull(s: string): number | null {
+  const n = integerOrZeroForDespacho(s);
+  return n > 0 ? n : null;
+}
+
+/** Construye datos_proceso JSON al guardar despacho. */
+export function buildDatosProcesoSeed(
+  procesoId: number,
+  form: DespachoFormState,
+  procesoDatos: DespachoWizardProcesoDatos
+): Record<string, unknown> | null {
+  if (procesoId === PROCESO_GUILLOTINA_ID) {
+    const g = procesoDatos.guillotina;
+    const payload: Record<string, unknown> = {
+      tamano_inicial: form.tamano_hoja.trim() || null,
+      hojas_iniciales:
+        numOrNull(g.hojas_iniciales) ??
+        (hojasCompraDespacho(form) || null),
+      patron_corte: g.patron_corte.trim() || null,
+      tamano_final: g.tamano_final.trim() || null,
+      hojas_finales: numOrNull(g.hojas_finales),
+    };
+    return Object.values(payload).some((v) => v != null && v !== "") ? payload : null;
+  }
+  if (procesoId === PROCESO_OFFSET_ID || procesoId === PROCESO_DIGITAL_ID) {
+    const imp = procesoDatos.impresion;
+    const hojas =
+      numOrNull(imp.hojas_entrada) ??
+      numOrNull(procesoDatos.guillotina.hojas_finales) ??
+      hojasCompraDespacho(form);
+    const payload: Record<string, unknown> = {
+      hojas_brutas: hojas || null,
+      hojas_netas: hojas || null,
+      formato_hojas:
+        imp.formato_hojas.trim() ||
+        procesoDatos.guillotina.tamano_final.trim() ||
+        null,
+      horas_entrada_previsto: numberOrZeroForDespacho(form.horas_entrada) || null,
+      horas_impresion_previsto: numberOrZeroForDespacho(form.horas_tiraje) || null,
+    };
+    return Object.values(payload).some((v) => v != null && v !== "") ? payload : null;
+  }
+  if (procesoId === PROCESO_TROQUEL_ID) {
+    const hojas = numOrNull(procesoDatos.impresion.hojas_entrada);
+    if (!form.troquel.trim() && !hojas) return null;
+    return {
+      troquel: form.troquel.trim() || null,
+      num_figuras: integerOrZeroForDespacho(form.poses) || null,
+      hojas_a_troquelar: hojas,
+      horas_preparacion_previsto:
+        parseOptionalDecimalInput(form.horas_estimadas_troquelado) ?? null,
+    };
+  }
+  return null;
+}
+
+/** Restaura wizard proceso datos desde pasos existentes. */
+export function parseProcesoDatosFromPasos(
+  pasos: Array<{ proceso_id: number; datos_proceso?: unknown }>
+): DespachoWizardProcesoDatos {
+  const next = emptyDespachoWizardProcesoDatos();
+  for (const p of pasos) {
+    const raw = p.datos_proceso;
+    if (!raw || typeof raw !== "object") continue;
+    const d = raw as Record<string, unknown>;
+    if (p.proceso_id === PROCESO_GUILLOTINA_ID) {
+      next.guillotina = {
+        patron_corte: String(d.patron_corte ?? ""),
+        tamano_final: String(d.tamano_final ?? ""),
+        hojas_iniciales:
+          d.hojas_iniciales == null ? "" : String(d.hojas_iniciales),
+        hojas_finales:
+          d.hojas_finales == null ? "" : String(d.hojas_finales),
+      };
+    }
+    if (
+      p.proceso_id === PROCESO_OFFSET_ID ||
+      p.proceso_id === PROCESO_DIGITAL_ID
+    ) {
+      const hojas =
+        d.hojas_netas ?? d.hojas_brutas ?? d.hojas_impresas ?? "";
+      next.impresion = {
+        hojas_entrada: hojas === "" ? "" : String(hojas),
+        formato_hojas: String(d.formato_hojas ?? ""),
+      };
+    }
+  }
+  return next;
+}

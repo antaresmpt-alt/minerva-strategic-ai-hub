@@ -36,15 +36,20 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   applyClonePrefill,
+  buildDatosProcesoSeed,
   DESPACHO_CLONE_SELECT,
   DESPACHO_WIZARD_TABS,
   emptyDespachoForm,
   emptyDespachoMeta,
+  emptyDespachoWizardProcesoDatos,
+  estuchesEstimadosDespacho,
   formatFechaEntregaCorta,
+  hojasCompraDespacho,
   integerOrZeroForDespacho,
   numberOrZeroForDespacho,
   parseDescripcionReferenciaFromTitulo,
   parseOptionalDecimalInput,
+  parseProcesoDatosFromPasos,
   parseReferenciaClienteFromTitulo,
   PROCESO_CTP_ID,
   PROCESO_DESBROCE_ID,
@@ -64,6 +69,7 @@ import {
   type DespachoMeta,
   type DespachoSeleccion,
   type DespachoWizardTab,
+  type DespachoWizardProcesoDatos,
   type ReferenciaHistorialRow,
 } from "@/lib/despacho-wizard-shared";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -117,6 +123,9 @@ export function DespachoWizardDialog({
   const [itinerarioSlots, setItinerarioSlots] = useState<DespachoItinerarioSlot[]>(
     []
   );
+  const [procesoDatos, setProcesoDatos] = useState<DespachoWizardProcesoDatos>(
+    () => emptyDespachoWizardProcesoDatos()
+  );
   const [catalog, setCatalog] = useState<DespachoCatalogItem[]>([]);
   const [referenciaHistorial, setReferenciaHistorial] = useState<
     ReferenciaHistorialRow[]
@@ -133,6 +142,7 @@ export function DespachoWizardDialog({
     setCompraGenerada(false);
     setForm(emptyDespachoForm());
     setItinerarioSlots([]);
+    setProcesoDatos(emptyDespachoWizardProcesoDatos());
     setReferenciaHistorial([]);
   }, []);
 
@@ -161,6 +171,7 @@ export function DespachoWizardDialog({
           setMeta(emptyDespachoMeta());
           setItinerarioSlots([]);
           setForm(emptyDespachoForm());
+          setProcesoDatos(emptyDespachoWizardProcesoDatos());
           return;
         }
         const sel: DespachoSeleccion = {
@@ -204,7 +215,7 @@ export function DespachoWizardDialog({
             .maybeSingle(),
           supabase
             .from(TABLE_OT_PASOS)
-            .select("proceso_id, orden")
+            .select("proceso_id, orden, datos_proceso")
             .eq("ot_id", sel.id)
             .order("orden", { ascending: true }),
           supabase.from("prod_procesos_cat").select("id, nombre"),
@@ -290,6 +301,34 @@ export function DespachoWizardDialog({
             nombre: nombreById.get(p.proceso_id) ?? `Proceso #${p.proceso_id}`,
           }));
         setItinerarioSlots(nextSlots);
+
+        const parsedProceso = parseProcesoDatosFromPasos(
+          (pasosRows ?? []) as Array<{
+            proceso_id: number;
+            datos_proceso?: unknown;
+          }>
+        );
+        const hojasCompra = String(
+          d.num_hojas_netas ?? d.num_hojas_brutas ?? ""
+        );
+        if (!parsedProceso.guillotina.hojas_iniciales && hojasCompra) {
+          parsedProceso.guillotina.hojas_iniciales = hojasCompra;
+        }
+        if (
+          !parsedProceso.impresion.hojas_entrada &&
+          parsedProceso.guillotina.hojas_finales
+        ) {
+          parsedProceso.impresion.hojas_entrada =
+            parsedProceso.guillotina.hojas_finales;
+        }
+        if (
+          !parsedProceso.impresion.formato_hojas &&
+          parsedProceso.guillotina.tamano_final
+        ) {
+          parsedProceso.impresion.formato_hojas =
+            parsedProceso.guillotina.tamano_final;
+        }
+        setProcesoDatos(parsedProceso);
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "No se pudo cargar la OT.");
       } finally {
@@ -569,12 +608,66 @@ export function DespachoWizardDialog({
     [itinerarioSlots]
   );
 
-  const estuchesEstimados = useMemo(() => {
-    const hojas = integerOrZeroForDespacho(form.num_hojas_netas || form.num_hojas_brutas);
-    const poses = integerOrZeroForDespacho(form.poses);
-    if (!hojas || !poses) return null;
-    return hojas * poses;
-  }, [form.num_hojas_brutas, form.num_hojas_netas, form.poses]);
+  const estuchesEstimados = useMemo(
+    () => estuchesEstimadosDespacho(form, procesoDatos, procesoIdsInRoute),
+    [form, procesoDatos, procesoIdsInRoute]
+  );
+
+  const hojasCadenaLabel = useMemo(() => {
+    if (procesoIdsInRoute.has(PROCESO_GUILLOTINA_ID)) {
+      const hf = integerOrZeroForDespacho(procesoDatos.guillotina.hojas_finales);
+      if (hf > 0) {
+        return procesoDatos.guillotina.tamano_final.trim()
+          ? `post guillotina (${procesoDatos.guillotina.tamano_final.trim()})`
+          : "post guillotina";
+      }
+    }
+    if (
+      procesoIdsInRoute.has(PROCESO_OFFSET_ID) ||
+      procesoIdsInRoute.has(PROCESO_DIGITAL_ID)
+    ) {
+      return procesoDatos.impresion.formato_hojas.trim()
+        ? `post guillotina (${procesoDatos.impresion.formato_hojas.trim()})`
+        : "post guillotina / impresión";
+    }
+    return "formato compra";
+  }, [procesoDatos, procesoIdsInRoute]);
+
+  /** Sincroniza hojas compra → guillotina iniciales cuando aún vacío. */
+  useEffect(() => {
+    const compra = hojasCompraDespacho(form);
+    if (!compra) return;
+    setProcesoDatos((prev) => {
+      if (prev.guillotina.hojas_iniciales.trim()) return prev;
+      return {
+        ...prev,
+        guillotina: { ...prev.guillotina, hojas_iniciales: String(compra) },
+      };
+    });
+  }, [form.num_hojas_brutas, form.num_hojas_netas]);
+
+  /** Sincroniza hojas finales guillotina → impresión entrada. */
+  useEffect(() => {
+    const finales = procesoDatos.guillotina.hojas_finales.trim();
+    const formato = procesoDatos.guillotina.tamano_final.trim();
+    if (!finales && !formato) return;
+    setProcesoDatos((prev) => {
+      let changed = false;
+      const imp = { ...prev.impresion };
+      if (finales && !imp.hojas_entrada.trim()) {
+        imp.hojas_entrada = finales;
+        changed = true;
+      }
+      if (formato && !imp.formato_hojas.trim()) {
+        imp.formato_hojas = formato;
+        changed = true;
+      }
+      return changed ? { ...prev, impresion: imp } : prev;
+    });
+  }, [
+    procesoDatos.guillotina.hojas_finales,
+    procesoDatos.guillotina.tamano_final,
+  ]);
 
   const canGoNext = useMemo(() => {
     if (wizardTab === "cabecera") return Boolean(seleccion);
@@ -601,12 +694,16 @@ export function DespachoWizardDialog({
           .delete()
           .eq("ot_id", selectedRowId);
         if (errDelPasos) throw errDelPasos;
-        const pasoRows = itinerarioSlots.map((s, i) => ({
-          ot_id: selectedRowId,
-          orden: i + 1,
-          proceso_id: s.procesoId,
-          estado: i === 0 ? "disponible" : "pendiente",
-        }));
+        const pasoRows = itinerarioSlots.map((s, i) => {
+          const datos = buildDatosProcesoSeed(s.procesoId, form, procesoDatos);
+          return {
+            ot_id: selectedRowId,
+            orden: i + 1,
+            proceso_id: s.procesoId,
+            estado: i === 0 ? "disponible" : "pendiente",
+            ...(datos ? { datos_proceso: datos } : {}),
+          };
+        });
         const { error: errInsPasos } = await supabase
           .from(TABLE_OT_PASOS)
           .insert(pasoRows);
@@ -665,6 +762,7 @@ export function DespachoWizardDialog({
         setMeta(emptyDespachoMeta());
         setOtInput("");
         setItinerarioSlots([]);
+        setProcesoDatos(emptyDespachoWizardProcesoDatos());
         setWizardTab("cabecera");
         window.setTimeout(() => otInputRef.current?.focus(), 80);
       } else {
@@ -682,6 +780,7 @@ export function DespachoWizardDialog({
     itinerarioSlots,
     onDespachado,
     onOpenChange,
+    procesoDatos,
     seleccion,
     supabase,
   ]);
@@ -719,6 +818,7 @@ export function DespachoWizardDialog({
       );
     }
     if (pid === PROCESO_GUILLOTINA_ID) {
+      const g = procesoDatos.guillotina;
       return (
         <section
           key={slot.key}
@@ -727,25 +827,89 @@ export function DespachoWizardDialog({
           <h4 className="mb-3 text-sm font-semibold text-[#002147]">
             {slot.nombre}
           </h4>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <p className="mb-3 text-[11px] text-slate-500">
+            Lo que definas aquí pre-rellena la mesa de Miguel (guillotina). Podrá
+            ajustar al ejecutar.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div className="grid gap-1">
               <Label className="text-xs">Formato inicial (compra)</Label>
               <Input
                 className="h-8 text-xs"
                 value={form.tamano_hoja}
                 readOnly
-                placeholder="Definido en Material"
               />
             </div>
             <div className="grid gap-1">
-              <Label className="text-xs">Formato tras corte</Label>
+              <Label className="text-xs">Hojas iniciales (compra)</Label>
               <Input
                 className="h-8 text-xs"
-                placeholder="ej: 72×102 cm — en ejecución"
-                disabled
+                type="number"
+                value={g.hojas_iniciales}
+                onChange={(e) =>
+                  setProcesoDatos((prev) => ({
+                    ...prev,
+                    guillotina: {
+                      ...prev.guillotina,
+                      hojas_iniciales: e.target.value,
+                    },
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label className="text-xs">Patrón corte guillotina</Label>
+              <Input
+                className="h-8 text-xs"
+                placeholder="ej: Medio · 2 salidas"
+                value={g.patron_corte}
+                onChange={(e) =>
+                  setProcesoDatos((prev) => ({
+                    ...prev,
+                    guillotina: {
+                      ...prev.guillotina,
+                      patron_corte: e.target.value,
+                    },
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label className="text-xs">Formato final (salida)</Label>
+              <Input
+                className="h-8 text-xs"
+                placeholder="ej: 51×72 cm"
+                value={g.tamano_final}
+                onChange={(e) =>
+                  setProcesoDatos((prev) => ({
+                    ...prev,
+                    guillotina: {
+                      ...prev.guillotina,
+                      tamano_final: e.target.value,
+                    },
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-1 sm:col-span-2 lg:col-span-2">
+              <Label className="text-xs">Hojas finales (post corte)</Label>
+              <Input
+                className="h-8 text-xs"
+                type="number"
+                placeholder="ej: 1500 (750 compra × 2 salidas)"
+                value={g.hojas_finales}
+                onChange={(e) =>
+                  setProcesoDatos((prev) => ({
+                    ...prev,
+                    guillotina: {
+                      ...prev.guillotina,
+                      hojas_finales: e.target.value,
+                    },
+                  }))
+                }
               />
               <p className="text-[10px] text-slate-400">
-                El formato de corte se encadena en guillotina al ejecutar.
+                Estas hojas alimentan impresión, troquel y desbroce.
               </p>
             </div>
           </div>
@@ -753,6 +917,7 @@ export function DespachoWizardDialog({
       );
     }
     if (pid === PROCESO_OFFSET_ID || pid === PROCESO_DIGITAL_ID) {
+      const imp = procesoDatos.impresion;
       return (
         <section
           key={slot.key}
@@ -766,7 +931,41 @@ export function DespachoWizardDialog({
               {pid === PROCESO_DIGITAL_ID ? "Digital" : "Offset"}
             </Badge>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-1">
+              <Label className="text-xs">Hojas de entrada (post guillotina)</Label>
+              <Input
+                className="h-8 text-xs"
+                type="number"
+                value={imp.hojas_entrada}
+                onChange={(e) =>
+                  setProcesoDatos((prev) => ({
+                    ...prev,
+                    impresion: {
+                      ...prev.impresion,
+                      hojas_entrada: e.target.value,
+                    },
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label className="text-xs">Formato hojas impresión</Label>
+              <Input
+                className="h-8 text-xs"
+                placeholder="ej: 51×72 cm"
+                value={imp.formato_hojas}
+                onChange={(e) =>
+                  setProcesoDatos((prev) => ({
+                    ...prev,
+                    impresion: {
+                      ...prev.impresion,
+                      formato_hojas: e.target.value,
+                    },
+                  }))
+                }
+              />
+            </div>
             <div className="grid gap-1">
               <Label htmlFor="wiz-horas-entrada" className="text-xs">
                 Horas entrada estimadas
@@ -798,9 +997,6 @@ export function DespachoWizardDialog({
               />
             </div>
           </div>
-          <p className="mt-2 text-[10px] text-slate-400">
-            Formato de impresión se encadena desde guillotina o compra en mesa.
-          </p>
         </section>
       );
     }
@@ -893,14 +1089,18 @@ export function DespachoWizardDialog({
           {estuchesEstimados != null ? (
             <p className="text-sm text-orange-900">
               Estuches estimados tras troquel:{" "}
-              <strong>{estuchesEstimados.toLocaleString("es-ES")}</strong>{" "}
-              <span className="text-xs text-orange-800">
-                (hojas × poses)
+              <strong>
+                {estuchesEstimados.estuches.toLocaleString("es-ES")}
+              </strong>
+              <span className="mt-1 block text-xs font-normal text-orange-800">
+                {estuchesEstimados.hojas.toLocaleString("es-ES")} hojas (
+                {hojasCadenaLabel}) × {estuchesEstimados.poses} poses
               </span>
             </p>
           ) : (
             <p className="text-xs text-slate-600">
-              Indica hojas y poses para estimar estuches en desbroce.
+              Indica hojas finales en guillotina (o hojas compra si no hay
+              corte), y poses en troquelado.
             </p>
           )}
         </section>
@@ -985,7 +1185,7 @@ export function DespachoWizardDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[min(94vh,900px)] w-[95vw] max-w-7xl flex-col gap-0 overflow-hidden p-0">
+      <DialogContent className="flex h-[min(94vh,920px)] w-[98vw] max-w-[min(98vw,1600px)] flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="shrink-0 border-b border-slate-100 px-6 py-4">
           <DialogTitle className="flex items-center gap-2 text-lg">
             <ClipboardCheck className="size-5 text-emerald-700" aria-hidden />
@@ -1042,18 +1242,18 @@ export function DespachoWizardDialog({
           >
             {wizardTab === "cabecera" ? (
               <div className="grid gap-4">
-                <div className="rounded-lg border border-[#C69C2B]/35 bg-amber-50/40 p-4">
-                  <Label
-                    htmlFor="wiz-ot-input"
-                    className="text-xs font-semibold text-[#002147]"
-                  >
-                    Nº OT
-                  </Label>
-                  <div className="mt-2 flex gap-2">
+                <div className="flex flex-wrap items-end gap-2 border-b border-slate-100 pb-3">
+                  <div className="flex min-w-[12rem] flex-1 items-center gap-2">
+                    <Label
+                      htmlFor="wiz-ot-input"
+                      className="shrink-0 text-xs text-slate-600"
+                    >
+                      Nº OT
+                    </Label>
                     <Input
                       id="wiz-ot-input"
                       ref={otInputRef}
-                      className="h-9 font-mono text-sm"
+                      className="h-8 max-w-[8rem] font-mono text-sm"
                       value={otInput}
                       onChange={(e) => setOtInput(e.target.value)}
                       onKeyDown={(e) => {
@@ -1062,11 +1262,13 @@ export function DespachoWizardDialog({
                           void hydrateForOt(otInput);
                         }
                       }}
-                      placeholder="Escribe nº OT y pulsa Enter"
+                      placeholder="99905"
                     />
                     <Button
                       type="button"
+                      size="sm"
                       variant="outline"
+                      className="h-8"
                       disabled={loadingOt || !otInput.trim()}
                       onClick={() => void hydrateForOt(otInput)}
                     >
@@ -1077,51 +1279,71 @@ export function DespachoWizardDialog({
                       )}
                     </Button>
                   </div>
-                  <p className="mt-2 text-[11px] text-slate-600">
-                    Enter carga la OT · En Resumen: Ctrl+Enter guarda despacho
+                  <p className="text-[10px] text-slate-500">
+                    Enter · Resumen: Ctrl+Enter guarda
                   </p>
                   {despachoStatus === "despachada_sin_compra" ? (
-                    <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-900">
-                      OT ya despachada sin compra: puedes modificar el despacho.
+                    <p className="w-full rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-900">
+                      OT ya despachada sin compra: puedes modificar.
                     </p>
                   ) : null}
                   {despachoStatus === "despachada_con_compra" ? (
-                    <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-800">
-                      OT despachada con compra generada: despacho bloqueado.
+                    <p className="w-full rounded border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-800">
+                      OT con compra generada: despacho bloqueado.
                     </p>
                   ) : null}
                 </div>
 
                 {seleccion ? (
-                  <div className="grid gap-2 rounded-md border border-slate-200 bg-slate-50/60 px-4 py-3 text-xs text-slate-700 sm:grid-cols-2 lg:grid-cols-5">
-                    <p className="truncate">
-                      <span className="font-semibold text-[#002147]">
-                        Cliente:
-                      </span>{" "}
-                      {meta.cliente || "—"}
-                    </p>
-                    <p className="truncate sm:col-span-2" title={meta.trabajo}>
-                      <span className="font-semibold text-[#002147]">
-                        Trabajo:
-                      </span>{" "}
-                      {meta.trabajo || "—"}
-                    </p>
-                    <p className="truncate">
-                      <span className="font-semibold text-[#002147]">
-                        Cantidad:
-                      </span>{" "}
-                      {meta.cantidad || "—"}
-                    </p>
-                    <p className="truncate">
-                      <span className="font-semibold text-[#002147]">
-                        Entrega:
-                      </span>{" "}
-                      {formatFechaEntregaCorta(meta.fecha_entrega) || "—"}
-                    </p>
+                  <div className="rounded-lg border border-[#002147]/20 bg-gradient-to-br from-[#002147]/[0.04] to-white px-5 py-4">
+                    <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                          Cliente
+                        </p>
+                        <p className="text-sm font-semibold leading-snug text-[#002147]">
+                          {meta.cliente || "—"}
+                        </p>
+                      </div>
+                      <div className="shrink-0 rounded-lg border border-[#C69C2B]/40 bg-amber-50/80 px-4 py-2 text-center">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-900/80">
+                          Cantidad pedida
+                        </p>
+                        <p className="font-mono text-2xl font-bold tabular-nums text-[#002147]">
+                          {meta.cantidad
+                            ? Number(meta.cantidad).toLocaleString("es-ES")
+                            : "—"}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right text-xs text-slate-600">
+                        <p>
+                          <span className="font-semibold text-[#002147]">
+                            Entrega:
+                          </span>{" "}
+                          {formatFechaEntregaCorta(meta.fecha_entrega) || "—"}
+                        </p>
+                        {meta.pedido_cliente ? (
+                          <p className="mt-0.5">
+                            <span className="font-semibold text-[#002147]">
+                              Pedido:
+                            </span>{" "}
+                            {meta.pedido_cliente}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        Trabajo
+                      </p>
+                      <p className="text-sm leading-relaxed text-slate-800">
+                        {meta.trabajo || "—"}
+                      </p>
+                    </div>
                   </div>
                 ) : null}
 
-                <div className="grid gap-4 rounded-lg border border-[#002147]/15 bg-[#002147]/[0.02] p-4 lg:grid-cols-2">
+                <div className="grid gap-4 lg:grid-cols-2">
                   <ReferenciaMinervaPicker
                     value={
                       {
@@ -1300,9 +1522,14 @@ export function DespachoWizardDialog({
                     proceso.
                   </p>
                 </div>
+                <div className="grid gap-1 sm:col-span-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Hojas del formato compra
+                  </p>
+                </div>
                 <div className="grid gap-1">
                   <Label htmlFor="wiz-brutas" className="text-xs">
-                    Hojas brutas
+                    Hojas brutas (compra)
                   </Label>
                   <Input
                     id="wiz-brutas"
@@ -1319,7 +1546,7 @@ export function DespachoWizardDialog({
                 </div>
                 <div className="grid gap-1">
                   <Label htmlFor="wiz-netas" className="text-xs">
-                    Hojas netas
+                    Hojas netas (compra)
                   </Label>
                   <Input
                     id="wiz-netas"
@@ -1383,7 +1610,7 @@ export function DespachoWizardDialog({
             ) : null}
 
             {wizardTab === "itinerario" ? (
-              <div className="max-w-3xl">
+              <div>
                 <p className="mb-3 text-xs text-slate-600">
                   Define la ruta de procesos. Las pestañas siguientes se adaptan
                   a los pasos que incluyas.
@@ -1394,6 +1621,8 @@ export function DespachoWizardDialog({
                   disabled={saving}
                   slots={itinerarioSlots}
                   onSlotsChange={setItinerarioSlots}
+                  layout="wide"
+                  embedded
                 />
               </div>
             ) : null}
@@ -1466,10 +1695,28 @@ export function DespachoWizardDialog({
                       {form.tamano_hoja || "—"}
                     </p>
                     <p>
-                      <span className="text-slate-500">Hojas:</span>{" "}
+                      <span className="text-slate-500">Hojas compra:</span>{" "}
                       {form.num_hojas_brutas || "0"} brutas /{" "}
                       {form.num_hojas_netas || "0"} netas
+                      {form.tamano_hoja ? ` · ${form.tamano_hoja}` : ""}
                     </p>
+                    {procesoDatos.guillotina.hojas_finales ? (
+                      <p>
+                        <span className="text-slate-500">Post guillotina:</span>{" "}
+                        {procesoDatos.guillotina.hojas_finales} hojas
+                        {procesoDatos.guillotina.tamano_final
+                          ? ` · ${procesoDatos.guillotina.tamano_final}`
+                          : ""}
+                      </p>
+                    ) : null}
+                    {estuchesEstimados ? (
+                      <p>
+                        <span className="text-slate-500">Estuches est.:</span>{" "}
+                        {estuchesEstimados.estuches.toLocaleString("es-ES")} (
+                        {estuchesEstimados.hojas.toLocaleString("es-ES")} ×{" "}
+                        {estuchesEstimados.poses})
+                      </p>
+                    ) : null}
                     <p>
                       <span className="text-slate-500">Troquel:</span>{" "}
                       {form.troquel || "—"}
