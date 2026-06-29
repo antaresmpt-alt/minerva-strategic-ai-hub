@@ -44,7 +44,8 @@ import {
   emptyDespachoWizardProcesoDatos,
   estuchesEstimadosDespacho,
   formatFechaEntregaCorta,
-  hojasCompraDespacho,
+  hojasBrutasCompraDespacho,
+  hojasBrutasImpresionDespacho,
   integerOrZeroForDespacho,
   numberOrZeroForDespacho,
   parseDescripcionReferenciaFromTitulo,
@@ -308,17 +309,15 @@ export function DespachoWizardDialog({
             datos_proceso?: unknown;
           }>
         );
-        const hojasCompra = String(
-          d.num_hojas_netas ?? d.num_hojas_brutas ?? ""
-        );
-        if (!parsedProceso.guillotina.hojas_iniciales && hojasCompra) {
-          parsedProceso.guillotina.hojas_iniciales = hojasCompra;
+        const hojasBrutasCompra = String(d.num_hojas_brutas ?? "");
+        if (!parsedProceso.guillotina.hojas_iniciales && hojasBrutasCompra) {
+          parsedProceso.guillotina.hojas_iniciales = hojasBrutasCompra;
         }
         if (
-          !parsedProceso.impresion.hojas_entrada &&
+          !parsedProceso.impresion.hojas_brutas &&
           parsedProceso.guillotina.hojas_finales
         ) {
-          parsedProceso.impresion.hojas_entrada =
+          parsedProceso.impresion.hojas_brutas =
             parsedProceso.guillotina.hojas_finales;
         }
         if (
@@ -614,6 +613,15 @@ export function DespachoWizardDialog({
   );
 
   const hojasCadenaLabel = useMemo(() => {
+    if (
+      procesoIdsInRoute.has(PROCESO_OFFSET_ID) ||
+      procesoIdsInRoute.has(PROCESO_DIGITAL_ID)
+    ) {
+      const fmt = procesoDatos.impresion.formato_hojas.trim();
+      return fmt
+        ? `netas impresión (${fmt})`
+        : "netas impresión (post guillotina)";
+    }
     if (procesoIdsInRoute.has(PROCESO_GUILLOTINA_ID)) {
       const hf = integerOrZeroForDespacho(procesoDatos.guillotina.hojas_finales);
       if (hf > 0) {
@@ -622,31 +630,28 @@ export function DespachoWizardDialog({
           : "post guillotina";
       }
     }
-    if (
-      procesoIdsInRoute.has(PROCESO_OFFSET_ID) ||
-      procesoIdsInRoute.has(PROCESO_DIGITAL_ID)
-    ) {
-      return procesoDatos.impresion.formato_hojas.trim()
-        ? `post guillotina (${procesoDatos.impresion.formato_hojas.trim()})`
-        : "post guillotina / impresión";
-    }
     return "formato compra";
   }, [procesoDatos, procesoIdsInRoute]);
 
-  /** Sincroniza hojas compra → guillotina iniciales cuando aún vacío. */
+  const hojasBrutasImpresion = useMemo(
+    () => hojasBrutasImpresionDespacho(form, procesoDatos, procesoIdsInRoute),
+    [form, procesoDatos, procesoIdsInRoute]
+  );
+
+  /** Sincroniza hojas brutas compra → guillotina iniciales cuando aún vacío. */
   useEffect(() => {
-    const compra = hojasCompraDespacho(form);
-    if (!compra) return;
+    const brutas = hojasBrutasCompraDespacho(form);
+    if (!brutas) return;
     setProcesoDatos((prev) => {
       if (prev.guillotina.hojas_iniciales.trim()) return prev;
       return {
         ...prev,
-        guillotina: { ...prev.guillotina, hojas_iniciales: String(compra) },
+        guillotina: { ...prev.guillotina, hojas_iniciales: String(brutas) },
       };
     });
-  }, [form.num_hojas_brutas, form.num_hojas_netas]);
+  }, [form.num_hojas_brutas]);
 
-  /** Sincroniza hojas finales guillotina → impresión entrada. */
+  /** Sincroniza salida guillotina → impresión brutas y formato. */
   useEffect(() => {
     const finales = procesoDatos.guillotina.hojas_finales.trim();
     const formato = procesoDatos.guillotina.tamano_final.trim();
@@ -654,8 +659,8 @@ export function DespachoWizardDialog({
     setProcesoDatos((prev) => {
       let changed = false;
       const imp = { ...prev.impresion };
-      if (finales && !imp.hojas_entrada.trim()) {
-        imp.hojas_entrada = finales;
+      if (finales && !imp.hojas_brutas.trim()) {
+        imp.hojas_brutas = finales;
         changed = true;
       }
       if (formato && !imp.formato_hojas.trim()) {
@@ -841,7 +846,7 @@ export function DespachoWizardDialog({
               />
             </div>
             <div className="grid gap-1">
-              <Label className="text-xs">Hojas iniciales (compra)</Label>
+              <Label className="text-xs">Hojas iniciales (brutas compra)</Label>
               <Input
                 className="h-8 text-xs"
                 type="number"
@@ -909,7 +914,8 @@ export function DespachoWizardDialog({
                 }
               />
               <p className="text-[10px] text-slate-400">
-                Estas hojas alimentan impresión, troquel y desbroce.
+                Salida alimenta impresión (brutas). Desbroce usa netas tras
+                imprimir.
               </p>
             </div>
           </div>
@@ -931,19 +937,50 @@ export function DespachoWizardDialog({
               {pid === PROCESO_DIGITAL_ID ? "Digital" : "Offset"}
             </Badge>
           </div>
+          <p className="mb-3 text-[11px] text-slate-500">
+            Formato = salida del paso anterior (guillotina). Brutas entran al
+            troquel; netas alimentan desbroce.
+          </p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div className="grid gap-1">
-              <Label className="text-xs">Hojas de entrada (post guillotina)</Label>
+              <Label className="text-xs">
+                Hojas brutas entrada (post guillotina)
+              </Label>
               <Input
                 className="h-8 text-xs"
                 type="number"
-                value={imp.hojas_entrada}
+                placeholder={
+                  hojasBrutasImpresion > 0
+                    ? String(hojasBrutasImpresion)
+                    : "ej: 1200"
+                }
+                value={imp.hojas_brutas}
                 onChange={(e) =>
                   setProcesoDatos((prev) => ({
                     ...prev,
                     impresion: {
                       ...prev.impresion,
-                      hojas_entrada: e.target.value,
+                      hojas_brutas: e.target.value,
+                    },
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label className="text-xs">
+                Hojas netas previstas (plan impresión)
+              </Label>
+              <Input
+                className="h-8 text-xs"
+                type="number"
+                placeholder="ej: 950 (brutas − merma)"
+                value={imp.hojas_netas}
+                onChange={(e) =>
+                  setProcesoDatos((prev) => ({
+                    ...prev,
+                    impresion: {
+                      ...prev.impresion,
+                      hojas_netas: e.target.value,
                     },
                   }))
                 }
@@ -1099,8 +1136,8 @@ export function DespachoWizardDialog({
             </p>
           ) : (
             <p className="text-xs text-slate-600">
-              Indica hojas finales en guillotina (o hojas compra si no hay
-              corte), y poses en troquelado.
+              Indica hojas netas previstas en impresión (plan) y poses en
+              troquelado.
             </p>
           )}
         </section>
@@ -1185,7 +1222,7 @@ export function DespachoWizardDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[min(94vh,920px)] w-[98vw] max-w-[min(98vw,1600px)] flex-col gap-0 overflow-hidden p-0">
+      <DialogContent className="flex h-[min(94vh,920px)] w-[calc(100%-1rem)] !max-w-[min(96vw,1800px)] flex-col gap-0 overflow-hidden p-0 sm:!max-w-[min(96vw,1800px)]">
         <DialogHeader className="shrink-0 border-b border-slate-100 px-6 py-4">
           <DialogTitle className="flex items-center gap-2 text-lg">
             <ClipboardCheck className="size-5 text-emerald-700" aria-hidden />
@@ -1703,9 +1740,21 @@ export function DespachoWizardDialog({
                     {procesoDatos.guillotina.hojas_finales ? (
                       <p>
                         <span className="text-slate-500">Post guillotina:</span>{" "}
-                        {procesoDatos.guillotina.hojas_finales} hojas
+                        {procesoDatos.guillotina.hojas_finales} hojas brutas
                         {procesoDatos.guillotina.tamano_final
                           ? ` · ${procesoDatos.guillotina.tamano_final}`
+                          : ""}
+                      </p>
+                    ) : null}
+                    {procesoDatos.impresion.hojas_netas ? (
+                      <p>
+                        <span className="text-slate-500">Impresión netas:</span>{" "}
+                        {procesoDatos.impresion.hojas_netas}
+                        {procesoDatos.impresion.hojas_brutas
+                          ? ` (de ${procesoDatos.impresion.hojas_brutas} brutas)`
+                          : ""}
+                        {procesoDatos.impresion.formato_hojas
+                          ? ` · ${procesoDatos.impresion.formato_hojas}`
                           : ""}
                       </p>
                     ) : null}
@@ -1713,8 +1762,8 @@ export function DespachoWizardDialog({
                       <p>
                         <span className="text-slate-500">Estuches est.:</span>{" "}
                         {estuchesEstimados.estuches.toLocaleString("es-ES")} (
-                        {estuchesEstimados.hojas.toLocaleString("es-ES")} ×{" "}
-                        {estuchesEstimados.poses})
+                        {estuchesEstimados.hojas.toLocaleString("es-ES")} netas
+                        × {estuchesEstimados.poses})
                       </p>
                     ) : null}
                     <p>

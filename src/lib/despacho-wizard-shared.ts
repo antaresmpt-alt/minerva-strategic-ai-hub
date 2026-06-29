@@ -207,7 +207,10 @@ export type DespachoWizardGuillotinaDatos = {
 };
 
 export type DespachoWizardImpresionDatos = {
-  hojas_entrada: string;
+  /** Brutas de entrada a impresión (salida guillotina / paso anterior). */
+  hojas_brutas: string;
+  /** Netas previstas tras impresión (alimentan desbroce). */
+  hojas_netas: string;
   formato_hojas: string;
 };
 
@@ -225,38 +228,69 @@ export function emptyDespachoWizardProcesoDatos(): DespachoWizardProcesoDatos {
       hojas_finales: "",
     },
     impresion: {
-      hojas_entrada: "",
+      hojas_brutas: "",
+      hojas_netas: "",
       formato_hojas: "",
     },
   };
 }
 
-export function hojasCompraDespacho(form: DespachoFormState): number {
-  const netas = integerOrZeroForDespacho(form.num_hojas_netas);
-  if (netas > 0) return netas;
+/** Hojas brutas del pliego compra (entrada típica a guillotina). */
+export function hojasBrutasCompraDespacho(form: DespachoFormState): number {
   return integerOrZeroForDespacho(form.num_hojas_brutas);
 }
 
-/** Hojas que alimentan troquel/desbroce (post guillotina si aplica). */
-export function hojasPostGuillotinaParaCadena(
+/** Hojas netas del pliego compra. */
+export function hojasNetasCompraDespacho(form: DespachoFormState): number {
+  return integerOrZeroForDespacho(form.num_hojas_netas);
+}
+
+/** Fallback genérico compra (netas si hay, si no brutas). */
+export function hojasCompraDespacho(form: DespachoFormState): number {
+  const netas = hojasNetasCompraDespacho(form);
+  if (netas > 0) return netas;
+  return hojasBrutasCompraDespacho(form);
+}
+
+function tieneImpresionEnRuta(procesoIdsInRoute: Set<number>): boolean {
+  return (
+    procesoIdsInRoute.has(PROCESO_OFFSET_ID) ||
+    procesoIdsInRoute.has(PROCESO_DIGITAL_ID)
+  );
+}
+
+/** Brutas de entrada a impresión (post guillotina / paso anterior). */
+export function hojasBrutasImpresionDespacho(
   form: DespachoFormState,
   procesoDatos: DespachoWizardProcesoDatos,
   procesoIdsInRoute: Set<number>
 ): number {
+  if (tieneImpresionEnRuta(procesoIdsInRoute)) {
+    const brutas = integerOrZeroForDespacho(procesoDatos.impresion.hojas_brutas);
+    if (brutas > 0) return brutas;
+  }
   if (procesoIdsInRoute.has(PROCESO_GUILLOTINA_ID)) {
     const finales = integerOrZeroForDespacho(
       procesoDatos.guillotina.hojas_finales
     );
     if (finales > 0) return finales;
   }
-  if (
-    procesoIdsInRoute.has(PROCESO_OFFSET_ID) ||
-    procesoIdsInRoute.has(PROCESO_DIGITAL_ID)
-  ) {
-    const entrada = integerOrZeroForDespacho(procesoDatos.impresion.hojas_entrada);
-    if (entrada > 0) return entrada;
+  return hojasBrutasCompraDespacho(form) || hojasCompraDespacho(form);
+}
+
+/** Netas previstas tras impresión — base para estuches en desbroce. */
+export function hojasNetasParaEstuchesDespacho(
+  form: DespachoFormState,
+  procesoDatos: DespachoWizardProcesoDatos,
+  procesoIdsInRoute: Set<number>
+): number {
+  if (tieneImpresionEnRuta(procesoIdsInRoute)) {
+    return integerOrZeroForDespacho(procesoDatos.impresion.hojas_netas);
   }
-  return hojasCompraDespacho(form);
+  if (procesoIdsInRoute.has(PROCESO_GUILLOTINA_ID)) {
+    return integerOrZeroForDespacho(procesoDatos.guillotina.hojas_finales);
+  }
+  return hojasNetasCompraDespacho(form) || hojasBrutasCompraDespacho(form);
 }
 
 export function estuchesEstimadosDespacho(
@@ -264,7 +298,11 @@ export function estuchesEstimadosDespacho(
   procesoDatos: DespachoWizardProcesoDatos,
   procesoIdsInRoute: Set<number>
 ): { hojas: number; poses: number; estuches: number } | null {
-  const hojas = hojasPostGuillotinaParaCadena(form, procesoDatos, procesoIdsInRoute);
+  const hojas = hojasNetasParaEstuchesDespacho(
+    form,
+    procesoDatos,
+    procesoIdsInRoute
+  );
   const poses = integerOrZeroForDespacho(form.poses);
   if (!hojas || !poses) return null;
   return { hojas, poses, estuches: hojas * poses };
@@ -287,7 +325,7 @@ export function buildDatosProcesoSeed(
       tamano_inicial: form.tamano_hoja.trim() || null,
       hojas_iniciales:
         numOrNull(g.hojas_iniciales) ??
-        (hojasCompraDespacho(form) || null),
+        (hojasBrutasCompraDespacho(form) || null),
       patron_corte: g.patron_corte.trim() || null,
       tamano_final: g.tamano_final.trim() || null,
       hojas_finales: numOrNull(g.hojas_finales),
@@ -296,13 +334,14 @@ export function buildDatosProcesoSeed(
   }
   if (procesoId === PROCESO_OFFSET_ID || procesoId === PROCESO_DIGITAL_ID) {
     const imp = procesoDatos.impresion;
-    const hojas =
-      numOrNull(imp.hojas_entrada) ??
+    const hojasBrutas =
+      numOrNull(imp.hojas_brutas) ??
       numOrNull(procesoDatos.guillotina.hojas_finales) ??
-      hojasCompraDespacho(form);
+      (hojasBrutasCompraDespacho(form) || null);
+    const hojasNetas = numOrNull(imp.hojas_netas);
     const payload: Record<string, unknown> = {
-      hojas_brutas: hojas || null,
-      hojas_netas: hojas || null,
+      hojas_brutas: hojasBrutas,
+      hojas_netas: hojasNetas,
       formato_hojas:
         imp.formato_hojas.trim() ||
         procesoDatos.guillotina.tamano_final.trim() ||
@@ -313,7 +352,9 @@ export function buildDatosProcesoSeed(
     return Object.values(payload).some((v) => v != null && v !== "") ? payload : null;
   }
   if (procesoId === PROCESO_TROQUEL_ID) {
-    const hojas = numOrNull(procesoDatos.impresion.hojas_entrada);
+    const hojas =
+      numOrNull(procesoDatos.impresion.hojas_brutas) ??
+      numOrNull(procesoDatos.guillotina.hojas_finales);
     if (!form.troquel.trim() && !hojas) return null;
     return {
       troquel: form.troquel.trim() || null,
@@ -349,10 +390,11 @@ export function parseProcesoDatosFromPasos(
       p.proceso_id === PROCESO_OFFSET_ID ||
       p.proceso_id === PROCESO_DIGITAL_ID
     ) {
-      const hojas =
-        d.hojas_netas ?? d.hojas_brutas ?? d.hojas_impresas ?? "";
       next.impresion = {
-        hojas_entrada: hojas === "" ? "" : String(hojas),
+        hojas_brutas:
+          d.hojas_brutas == null ? "" : String(d.hojas_brutas),
+        hojas_netas:
+          d.hojas_netas == null ? "" : String(d.hojas_netas),
         formato_hojas: String(d.formato_hojas ?? ""),
       };
     }
