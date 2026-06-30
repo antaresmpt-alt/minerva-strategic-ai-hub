@@ -1,166 +1,147 @@
-# Pendiente: instrucciones CTP en wizard de despacho
+# CTP en wizard de despacho y ejecución
 
-> **Fecha nota:** 24 jun 2026 (noche)  
-> **Contexto:** Tras iteración wizard despacho (guillotina / impresión brutas-netas / desbroce).  
-> **Usuarios CTP:** Gemma y Marc (`preimpresion`).  
-> **Estado actual:** La pestaña Producción del wizard solo muestra texto informativo en CTP; no se siembran opciones.
-
----
-
-## Problema (igual patrón que Rita / ficha acabados)
-
-Hoy CTP trabaja con **instrucciones en papel** porque Optimus no transmite bien qué hay que hacer en cada OT.
-
-**Objetivo:** Al despachar, Carlos/Jordi marcan qué requiere esta OT en CTP. Gemma y Marc, al abrir la OT en su cola, ven **qué tienen que hacer** sin preguntar a oficina. Al cerrar CTP, deben haber cumplido/marcado esas tareas.
+> **Fecha nota inicial:** 24 jun 2026  
+> **Última actualización:** 30 jun 2026  
+> **Usuarios CTP:** Gemma y Marc (`ctp@minervaglobal.es`, `ctp2@minervaglobal.es`, rol `ctp`).  
+> **Estado:** ✅ **Implementado v1** — pendiente feedback piloto con Marc/Gemma (3 OTs piloto).
 
 ---
 
-## Modelo de dos fases (importante)
+## Resumen ejecutivo
+
+| Fase | Qué hace | Estado |
+|------|----------|--------|
+| **Despacho** (wizard → Producción → CTP) | Marca checkboxes de lo **requerido** para esta OT (`requiere_*` en `datos_proceso`) | ✅ |
+| **Ejecución CTP** (mesa / OTs en ejecución) | Muestra **todas** las tareas; las pedidas en despacho van **sombreadas**; el operario marca **hecho** (`pdf_x_ok`, `gestion_fsc`, etc.) | ✅ híbrido 30 jun |
+| **Cierre CTP** | Aviso toast si faltan tareas **pedidas en despacho** sin confirmar (no bloquea) | ✅ |
+| **Hoja de Ruta Simplificada** | PDF A5 al despachar: cabecera + itinerario + checkbox y línea de firma por proceso | ✅ |
+
+---
+
+## Modelo de dos fases
 
 | Fase | Quién | Qué |
 |------|-------|-----|
 | **Despacho** | Oficina (wizard tab Producción → CTP) | Marca checkboxes de lo **requerido** para esta OT. Puede dejar en blanco lo que aún no se sabe. |
-| **Ejecución CTP** | Gemma / Marc (mesa / cola CTP) | Ven lo requerido, lo ejecutan, marcan **hecho** al terminar. |
+| **Ejecución CTP** | Gemma / Marc (mesa / cola CTP) | Ven lo requerido destacado, ejecutan, marcan **hecho**. Pueden marcar también tareas **no pedidas** si surgen (FSC, retoque, etc.). |
 
-### Regla de negocio acordada
+### Reglas de negocio
 
-- En **despacho**: las opciones son **requeridas si se marcan**, pero **no es obligatorio marcar todas** al despachar (quien despacha pone lo que sabe).
-- En **CTP al cerrar**: lo que quedó marcado como requerido en despacho debe poder validarse como completado (checkboxes de ejecución). Si algo requerido no está confirmado → aviso tipo **«Pendiente de confirmar»** (no bloquear ciego el primer día; iterar severidad).
+- En **despacho**: las opciones son **requeridas si se marcan**, pero **no es obligatorio marcar todas** al despachar.
+- En **ejecución**: UI **híbrida** (30 jun): las 9 tareas visibles siempre; las pedidas en despacho con recuadro ámbar/verde; el resto en gris («Opcional» / «Hecho adicional»).
+- Al **cerrar CTP**: solo se avisa por tareas con `requiere_*` sin `hecho` correspondiente.
 
 Analogía: despacho = «pedido de trabajo»; ejecución = «albarán de hecho».
 
 ---
 
-## Opciones Optimus → Minerva (referencia RDC / terminal planta)
+## Catálogo de tareas CTP (9 + 3 solo ejecución)
 
-De las capturas Optimus y del catálogo ya modelado en Minerva (`hoja-ruta-campos-config.ts`, proceso id **16**):
+Definidas en `src/lib/ctp-despacho.ts` y `CTP_PREIMPRESION_CAMPOS` (`hoja-ruta-campos-config.ts`, proceso id **16**):
 
-| Campo `datos_proceso` | Etiqueta UI | Tipo Optimus / notas |
-|----------------------|-------------|----------------------|
-| `prueba_digital` | Prueba digital | Checkbox |
-| `prueba_gmg` | Prueba GMG | Prueba contractual color |
-| `pdf_x_ok` | PDF X OK | Validación contractual PDF/X |
-| `maqueta` | Maqueta | Checkbox |
-| `gestion_troquel` | Gestión troquel | Nuevo troquel o recuperado archivo |
-| `preparacion_montaje` | Preparación montaje | Checkbox |
-| `retoque_diseno` | Retoque diseño | Checkbox |
-| `gestion_relieves_stamping` | Relieves / stamping / varios | Checkbox |
-| `gestion_fsc` | Gestión FSC | Checkbox |
-| `planchas_hechas` | Planchas hechas | Solo ejecución (real) |
-| `num_planchas` | Nº de planchas | Solo ejecución; condicional a planchas hechas |
-| `horas_proceso` | Horas proceso | Solo ejecución (real) |
-
-**En despacho (propuesta):** checkboxes de la primera fila (requerimientos de trabajo).  
-**Solo en mesa CTP:** planchas hechas, nº planchas, horas reales.
+| Campo ejecución | Campo despacho (`requiere_*`) | Etiqueta |
+|-----------------|-------------------------------|----------|
+| `prueba_digital` | `requiere_prueba_digital` | Prueba digital |
+| `prueba_gmg` | `requiere_prueba_gmg` | Prueba GMG |
+| `pdf_x_ok` | `requiere_pdf_x_ok` | **PDF X OK** |
+| `maqueta` | `requiere_maqueta` | Maqueta |
+| `gestion_troquel` | `requiere_gestion_troquel` | Gestión troquel |
+| `preparacion_montaje` | `requiere_preparacion_montaje` | Preparación montaje |
+| `retoque_diseno` | `requiere_retoque_diseno` | Retoque diseño |
+| `gestion_relieves_stamping` | `requiere_gestion_relieves_stamping` | Relieves / stamping |
+| `gestion_fsc` | `requiere_gestion_fsc` | Gestión FSC |
+| `planchas_hechas` | — | Solo ejecución |
+| `num_planchas` | — | Solo ejecución |
+| `horas_proceso` | — | Solo ejecución |
 
 ---
 
-## UX deseada
+## UX implementada
 
 ### Wizard — tab Producción, bloque CTP
 
-Reemplazar el texto actual («Planchas y detalle CTP se registran en mesa…») por:
+- Grid de 9 checkboxes («Instrucciones CTP para esta OT»).
+- Semilla `requiere_*` en `prod_ot_pasos.datos_proceso` vía `buildCtpRequisitosSeedFromWizard()`.
+- Tab Resumen: línea CTP con tareas marcadas.
+- Re-despacho mismo itinerario: **merge** de seeds sin borrar datos de ejecución (`mergeDatosProcesoSeed`).
 
-```
-Instrucciones CTP para esta OT
-Marca lo que Gemma/Marc deben hacer. Lo no marcado no se exige.
-```
+### Wizard — tras despachar
 
-- Grid de checkboxes (mismas etiquetas que Optimus / `CTP_PREIMPRESION_CAMPOS`).
-- Opcional: campo notas CTP libre (`notas_ctp` o reutilizar `notas` despacho si no hay columna).
-- Guardar en `prod_ot_pasos.datos_proceso` del paso CTP al despachar (semilla, como guillotina/impresión).
+- Pantalla de éxito con **Imprimir hoja simplificada** / **Descargar PDF**.
+- PDF: **Hoja de Ruta Simplificada**, DIN A5 vertical (`hoja-ruta-simplificada-{OT}.pdf`).
 
-**Propuesta técnica campos despacho vs ejecución:**
+### Editar despacho (wizard, no modal legacy)
 
-```json
-{
-  "requiere_prueba_digital": true,
-  "requiere_prueba_gmg": true,
-  "requiere_maqueta": false,
-  "requiere_gestion_troquel": true,
-  "requiere_preparacion_montaje": true,
-  "requiere_retoque_diseno": false,
-  "requiere_gestion_relieves_stamping": false,
-  "requiere_gestion_fsc": false
-}
-```
+- OT Maestro, OTs Despachadas (icono verde + lápiz), Pool planificación → `DespachoWizardDialog`.
 
-En ejecución, los booleanos existentes (`prueba_gmg`, `maqueta`, …) pasan a **hecho**. La UI puede mostrar:
+### Ejecución CTP — `ctp-ejecucion-requisitos-block.tsx`
 
-- ✓ Requerido en despacho + ✓ Hecho en CTP → verde  
-- ⚠ Requerido en despacho + vacío en CTP → «Pendiente de confirmar»  
-- (no requerido) → oculto o gris
+- Bloque «Tareas CTP» encima de maquinista/incidencias.
+- Estilos: pedido pendiente (ámbar), pedido hecho (verde), opcional (gris), adicional hecho (blanco).
+- Campos duplicados excluidos del acordeón «Datos del proceso» (`excludeFieldIds`).
+- Chips compactos en vistas reducidas: requeridos + cualquier tarea marcada hecha.
 
-### Cola / tarjeta CTP (Gemma, Marc)
+### Validación al cerrar
 
-En planificación pool, mesa diaria o tarjeta de ejecución:
-
-- Lista compacta de requerimientos marcados en despacho (iconos o chips).
-- Destacar pendientes si el paso está en curso y falta confirmar.
-
-### Hoja de ruta / resumen despacho
-
-- Tab Resumen: línea «CTP: prueba GMG, maqueta, gestión troquel…» si hay algo marcado.
+- `ctpRequisitosPendientes()` → toast warning (soft).
+- Planchas / horas reales siguen en «Datos del proceso».
 
 ---
 
-## Estado código actual (24 jun 2026)
+## Archivos clave
 
-| Pieza | Estado |
-|-------|--------|
-| `hoja-ruta-campos-config.ts` → `CTP_PREIMPRESION_CAMPOS` | ✅ Campos ejecución definidos |
-| `despacho-wizard-dialog.tsx` → sección CTP | ✅ Checkboxes requerimiento |
-| `buildDatosProcesoSeed()` para `PROCESO_CTP_ID` | ✅ `requiere_*` en `datos_proceso` |
-| `DespachoWizardProcesoDatos.ctp` | ✅ |
-| Cola CTP — bloque requisitos en ejecución | ✅ `ctp-ejecucion-requisitos-block.tsx` |
-| Validación al cerrar CTP | ✅ Aviso toast (soft, no bloquea) |
-| Resumen wizard + seed engomado | ✅ |
-
-**Archivos a tocar en la iteración:**
-
-1. `src/lib/despacho-wizard-shared.ts` — tipo `DespachoWizardCtpDatos`, seed/parse `datos_proceso`
-2. `src/components/produccion/ots/despacho-wizard-dialog.tsx` — UI checkboxes CTP + resumen
-3. `src/components/produccion/planificacion/` — tarjeta OT en área preimpresión (mostrar chips)
-4. `src/lib/hoja-ruta-campos-config.ts` — opcional: flags `despachable` / `soloEjecucion` por campo
+| Archivo | Rol |
+|---------|-----|
+| `src/lib/ctp-despacho.ts` | Definiciones, seeds, merge, helpers estado |
+| `src/lib/despacho-wizard-shared.ts` | `DespachoWizardCtpDatos`, `buildDatosProcesoSeed` |
+| `src/components/produccion/ots/despacho-wizard-dialog.tsx` | UI despacho + post-despacho print |
+| `src/components/produccion/planificacion/ctp-ejecucion-requisitos-block.tsx` | UI ejecución híbrida |
+| `src/components/produccion/planificacion/planificacion-ots-ejecucion-tab.tsx` | Integración bloque CTP + cierre |
+| `src/lib/hoja-ruta/hoja-ruta-cartelita-pdf.ts` | Hoja de Ruta Simplificada A5 |
 
 ---
 
-## Alcance sugerido mañana (v1 CTP despacho)
+## Commits de referencia (rama `feature/bloque8.1-pool-mesa-ejecucion-fixes`)
 
-**Mínimo viable:**
-
-1. Checkboxes requerimiento en wizard (8 opciones de trabajo, sin planchas/horas).
-2. Persistir en `datos_proceso` al guardar despacho.
-3. En mesa ejecución CTP: bloque «Requerido en despacho» read-only arriba del formulario actual.
-
-**Siguiente iteración:**
-
-4. Validación al cerrar paso CTP (avisos pendientes).
-5. Import desde Optimus si algún día hay API/campo (hoy manual en despacho).
-6. Prefill desde OT anterior / referencia Minerva (clonar requerimientos CTP).
+| Commit | Contenido |
+|--------|-----------|
+| `0a3021d` | CTP checkboxes en wizard (inicio) |
+| `074575b` | PDF X OK + wizard en OTs Despachadas / Pool |
+| `7f292cc` | CTP resumen + Hoja de Ruta Simplificada |
+| `2fb50ad` | CTP ejecución híbrida + A5 + textos |
 
 ---
 
-## Fuera de alcance (por ahora)
+## Prueba manual (validada 30 jun — OT 35989)
+
+1. Despachar OT con CTP → marcar PDF X OK, gestión troquel, preparación montaje, prueba digital, etc.
+2. Imprimir **Hoja de Ruta Simplificada** → A5, itinerario con líneas de firma.
+3. Mesa CTP / OTs en ejecución → ver 9 tareas; pedidas sombreadas.
+4. Marcar hechas + tarea adicional (ej. retoque diseño) → guardar.
+5. Cerrar proceso → aviso solo si falta alguna **pedida en despacho**; planchas/horas en datos del proceso.
+
+---
+
+## Pendiente / siguiente iteración
+
+- [ ] **Feedback Marc/Gemma** con 3 OTs piloto (añadir/quitar tareas del catálogo).
+- [ ] Chips CTP en columna pool mesa diaria (opcional).
+- [ ] Mostrar requisitos CTP en PDF hoja de ruta completa (no solo simplificada).
+- [ ] Reimprimir hoja simplificada desde `HojaRutaOtDialog` (botón dedicado).
+- [ ] Endurecer validación al cerrar (bloquear vs aviso) según acuerdo planta.
+
+---
+
+## Fuera de alcance
 
 - Sustituir Optimus como fuente de verdad de diseño.
 - Obligar a marcar todo en despacho antes de guardar.
-- CTP compartido entre hijas de contenedor (ver `GUIA_MAÑANA.md` — cada hija independiente hoy).
-
----
-
-## Prueba manual sugerida (cuando esté implementado)
-
-1. Despachar OT con CTP en itinerario → marcar prueba GMG + gestión troquel.
-2. Login Gemma → cola CTP → OT muestra esos dos chips.
-3. Abrir ejecución → marcar prueba GMG hecha, dejar troquel pendiente → aviso al cerrar.
-4. Completar ambos → cerrar CTP OK.
-5. Resumen despacho y hoja de ruta reflejan lo guardado.
+- CTP compartido entre hijas de contenedor (cada hija independiente hoy).
 
 ---
 
 ## Relacionado
 
-- `GUIA_MAÑANA.md` — demo OT 98010, hijas en fase CTP  
-- `src/lib/hoja-ruta-campos-config.ts` — `CTP_PREIMPRESION_CAMPOS`, `PROCESO_CTP_ID = 16`  
-- Wizard despacho — iteración noche 24 jun: modal ancho, guillotina, impresión brutas/netas, desbroce con netas
+- `GUIA_MAÑANA.md` — demo OT 98010, piloto CTP  
+- `FASES_HOJA_RUTA_DIGITAL.md` — Bloque 4 (PDF) + sesión 30 jun  
+- `src/lib/hoja-ruta-campos-config.ts` — `CTP_PREIMPRESION_CAMPOS`, `PROCESO_CTP_ID = 16`

@@ -3,7 +3,7 @@
 > **Fecha:** reunión jueves con Albert / Jordi (jun 2026)  
 > **Rama desplegada:** `feature/bloque8.1-pool-mesa-ejecucion-fixes`  
 > **Briefing completo:** `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` §8.1 / §8.1.1  
-> **Pendiente CTP despacho:** `docs/despacho-wizard-ctp-pendiente.md`
+> **Pendiente CTP despacho:** `docs/despacho-wizard-ctp-pendiente.md` — ✅ **v1 implementado** (30 jun 2026)
 
 ---
 
@@ -138,6 +138,23 @@ Ramón respondió el cuestionario (`MINERVA_CUESTIONARIO_CARTELAS_RAMON.md`). De
 3. Imprimir → 2 copias; ID Stock grande; Ref. Lote `OT - TRABAJO`.
 
 **Pendiente:** 9.2 Stock, 9.4 consumo, recuento §13b, lista OTs piloto con Emma/Ramón.
+
+---
+
+## CTP despacho + Hoja Ruta Simplificada (30 jun) ✅
+
+Documentación completa: `docs/despacho-wizard-ctp-pendiente.md`.
+
+| Pieza | Dónde probar |
+|-------|----------------|
+| Marcar requisitos CTP al despachar | Wizard → tab **Producción** (incl. **PDF X OK**) |
+| Imprimir papel entre departamentos | Tras despachar → **Imprimir hoja simplificada** (A5) |
+| Ejecutar CTP | Mesa diaria CTP MNRV u **OTs en ejecución** → área preimpresión |
+| UI híbrida | 9 tareas visibles; sombreadas = pedidas en despacho; opcionales para imprevistos (FSC, retoque…) |
+
+**Próximo paso:** sentarse con **Marc y Gemma** con **3 OTs piloto** — recoger si añadirían/quitarían tareas del catálogo.
+
+**OT de referencia probada:** 35989 (PLANTILLAS COIMBRA).
 
 ---
 

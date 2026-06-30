@@ -427,6 +427,19 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 - [ ] QR / enlace directo a vista digital cuando haya URL estable y permisos definidos.
 - [ ] Integrar FSC, cartelas de recepción de material y ficha técnica automática cuando esos bloques estén completos.
 
+### Hoja de Ruta Simplificada ✅ (30 jun 2026)
+
+PDF compacto para acompañar la OT entre departamentos (sustituto papel de la hoja viajera clásica, una sola tira imprimible).
+
+- [x] Generación al **final del wizard de despacho** (Imprimir / Descargar).
+- [x] Título **«HOJA DE RUTA SIMPLIFICADA»** (no «hoja viajera»).
+- [x] Formato **DIN A5 vertical** (`hoja-ruta-simplificada-{OT}.pdf`).
+- [x] Cabecera: OT, cliente, trabajo, cantidad, entrega, material, formato, tintas, troquel.
+- [x] Itinerario: cada proceso con **checkbox vacío** + **línea de firma** a ancho completo.
+- [x] Archivo: `src/lib/hoja-ruta/hoja-ruta-cartelita-pdf.ts`.
+
+**Pendiente:** botón reimprimir desde `HojaRutaOtDialog`; feedback tamaño/papel con planta.
+
 ---
 
 ## 🏷️ Bloque 5: Integración Etiquetas ↔ Hoja de Ruta (Flujo Hugo)
@@ -784,9 +797,21 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 
 ## 📌 Punto de continuación (próxima sesión)
 
-**👉 Retomar aquí:** Reunión **jueves** Albert/Jordi (OT 98010) → respuestas §12 → Fase **8.2** wizard despacho. Cartelas **9.0** SQL en curso. Unión hijas **8.5** post-reunión.
+**👉 Retomar aquí:** Piloto CTP con Marc/Gemma (3 OTs) → feedback catálogo tareas. Fase **8.2** wizard contenedor (post-reunión §12). Cartelas **9.4** operativo stock.
 
-**Fase FORMATO** ✅ · **Fase 8.0** ✅ · **Fase 8.1** ✅ · **Fase 8.1.1** ✅ · **Fase 8.1.2** ✅ (maestro + despachadas)
+**Fase FORMATO** ✅ · **Fase 8.0** ✅ · **Fase 8.1** ✅ · **Fase 8.1.1** ✅ · **Fase 8.1.2** ✅ · **CTP despacho v1** ✅ · **Hoja Ruta Simplificada** ✅
+
+**Sesión 30 jun 2026** — CTP despacho + ejecución híbrida + PDF simplificado ✅
+
+### Hecho
+- Wizard despacho: 9 checkboxes CTP (`requiere_*`), resumen, merge re-despacho, **PDF X OK**.
+- Editar despacho → `DespachoWizardDialog` en OTs Despachadas, Pool y Maestro (modal legacy sin uso).
+- Ejecución CTP: bloque híbrido — todas las tareas visibles; pedidas en despacho sombreadas; adicionales permitidas.
+- Cierre CTP: toast soft si faltan requeridas; planchas/horas en datos del proceso.
+- **Hoja de Ruta Simplificada** A5 al despachar (`hoja-ruta-cartelita-pdf.ts`).
+- Docs: `docs/despacho-wizard-ctp-pendiente.md` actualizado.
+- Commits: `074575b`, `7f292cc`, `2fb50ad` en rama `feature/bloque8.1-pool-mesa-ejecucion-fixes`.
+- Prueba manual OT **35989** (mesa CTP + cierre proceso).
 
 **Sesión 18 jun 2026 (noche)** — Prueba OT 98010 + fixes 8.1.1 ✅
 
