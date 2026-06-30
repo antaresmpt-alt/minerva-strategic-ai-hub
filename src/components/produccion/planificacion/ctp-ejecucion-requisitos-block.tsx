@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   CTP_REQUISITO_DEFS,
   ctpRequisitosPendientes,
-  ctpRequisitosRequeridos,
+  listCtpRequisitosEstado,
   type CtpRequisitoHechoKey,
 } from "@/lib/ctp-despacho";
 import type { DatosProcesoGenerico } from "@/lib/hoja-ruta-campos-config";
@@ -25,22 +25,9 @@ export function CtpEjecucionRequisitosBlock({
   readonly = false,
   compact = false,
 }: CtpEjecucionRequisitosBlockProps) {
-  const requeridos = ctpRequisitosRequeridos(datos);
+  const estados = listCtpRequisitosEstado(datos);
   const pendientes = ctpRequisitosPendientes(datos);
-
-  if (requeridos.length === 0) {
-    return (
-      <div
-        className={cn(
-          "rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-xs text-slate-600",
-          compact && "py-1.5",
-        )}
-      >
-        Sin instrucciones CTP marcadas en despacho. Si la OT es anterior al
-        wizard, redespacha o marca requisitos en datos del proceso.
-      </div>
-    );
-  }
+  const hayRequeridos = estados.some((e) => e.requerido);
 
   const toggleHecho = (hechoKey: CtpRequisitoHechoKey, checked: boolean) => {
     if (readonly) return;
@@ -54,24 +41,30 @@ export function CtpEjecucionRequisitosBlock({
   };
 
   if (compact) {
+    const chips = estados.filter((e) => e.requerido || e.hecho);
+    if (chips.length === 0) return null;
     return (
       <div className="flex flex-wrap gap-1">
-        {requeridos.map((r) => (
+        {chips.map((e) => (
           <span
-            key={r.hechoKey}
+            key={e.hechoKey}
             className={cn(
               "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
-              r.hecho
-                ? "bg-emerald-100 text-emerald-800"
-                : "bg-amber-100 text-amber-900",
+              e.requerido
+                ? e.hecho
+                  ? "bg-emerald-100 text-emerald-800"
+                  : "bg-amber-100 text-amber-900"
+                : e.hecho
+                  ? "bg-slate-200 text-slate-800"
+                  : "bg-slate-100 text-slate-600",
             )}
           >
-            {r.hecho ? (
+            {e.hecho ? (
               <CheckCircle2 className="size-3" aria-hidden />
-            ) : (
+            ) : e.requerido ? (
               <AlertTriangle className="size-3" aria-hidden />
-            )}
-            {r.label}
+            ) : null}
+            {e.label}
           </span>
         ))}
       </div>
@@ -82,18 +75,17 @@ export function CtpEjecucionRequisitosBlock({
     <div className="rounded-lg border border-violet-200 bg-violet-50/50 p-3">
       <div className="mb-2">
         <p className="text-sm font-semibold text-[#002147]">
-          Instrucciones CTP (despacho)
+          Tareas CTP
         </p>
         <p className="text-[11px] text-slate-600">
-          Marca cada tarea como hecha al completarla. Solo se exige lo marcado al
-          despachar.
+          Lo sombreado es lo pedido al despachar. Puedes marcar también otras
+          tareas si surgen durante el trabajo (FSC, retoque, etc.).
         </p>
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2">
         {CTP_REQUISITO_DEFS.map((def) => {
-          const estado = requeridos.find((r) => r.hechoKey === def.hechoKey);
-          if (!estado) return null;
+          const estado = estados.find((e) => e.hechoKey === def.hechoKey)!;
           const id = `ctp-req-${def.hechoKey}`;
           return (
             <label
@@ -101,9 +93,13 @@ export function CtpEjecucionRequisitosBlock({
               htmlFor={id}
               className={cn(
                 "flex cursor-pointer items-start gap-2 rounded-md border px-2.5 py-2 text-xs transition-colors",
-                estado.hecho
-                  ? "border-emerald-200 bg-emerald-50/80"
-                  : "border-amber-200 bg-white",
+                estado.requerido
+                  ? estado.hecho
+                    ? "border-emerald-300 bg-emerald-50/90 shadow-sm"
+                    : "border-amber-300 bg-amber-50/80 shadow-sm"
+                  : estado.hecho
+                    ? "border-slate-200 bg-white"
+                    : "border-slate-100 bg-slate-50/50",
                 readonly && "cursor-default opacity-80",
               )}
             >
@@ -119,10 +115,22 @@ export function CtpEjecucionRequisitosBlock({
                 <span
                   className={cn(
                     "mt-0.5 block text-[10px]",
-                    estado.hecho ? "text-emerald-700" : "text-amber-800",
+                    estado.requerido
+                      ? estado.hecho
+                        ? "text-emerald-700"
+                        : "text-amber-800"
+                      : estado.hecho
+                        ? "text-slate-600"
+                        : "text-slate-400",
                   )}
                 >
-                  {estado.hecho ? "Hecho" : "Pendiente de confirmar"}
+                  {estado.requerido
+                    ? estado.hecho
+                      ? "Hecho (pedido en despacho)"
+                      : "Pendiente — pedido en despacho"
+                    : estado.hecho
+                      ? "Hecho (adicional)"
+                      : "Opcional"}
                 </span>
               </span>
             </label>
@@ -130,16 +138,23 @@ export function CtpEjecucionRequisitosBlock({
         })}
       </div>
 
-      {pendientes.length > 0 ? (
-        <p className="mt-2 flex items-start gap-1.5 text-[11px] text-amber-800">
-          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-          {pendientes.length} tarea{pendientes.length !== 1 ? "s" : ""} pendiente
-          {pendientes.length !== 1 ? "s" : ""} de confirmar al cerrar.
-        </p>
+      {hayRequeridos ? (
+        pendientes.length > 0 ? (
+          <p className="mt-2 flex items-start gap-1.5 text-[11px] text-amber-800">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+            {pendientes.length} tarea{pendientes.length !== 1 ? "s" : ""} pedida
+            {pendientes.length !== 1 ? "s" : ""} en despacho sin confirmar al
+            cerrar.
+          </p>
+        ) : (
+          <p className="mt-2 flex items-center gap-1.5 text-[11px] text-emerald-800">
+            <CheckCircle2 className="size-3.5" aria-hidden />
+            Todas las tareas pedidas en despacho están confirmadas.
+          </p>
+        )
       ) : (
-        <p className="mt-2 flex items-center gap-1.5 text-[11px] text-emerald-800">
-          <CheckCircle2 className="size-3.5" aria-hidden />
-          Todas las tareas requeridas están confirmadas.
+        <p className="mt-2 text-[11px] text-slate-500">
+          Sin tareas marcadas en despacho. Marca aquí lo que hagáis en CTP.
         </p>
       )}
     </div>

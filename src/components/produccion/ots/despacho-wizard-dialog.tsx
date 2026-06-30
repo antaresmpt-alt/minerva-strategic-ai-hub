@@ -1935,9 +1935,8 @@ export function DespachoWizardDialog({
                   OT {postDespachoCartelita.otNumero} despachada
                 </p>
                 <p className="text-emerald-800">
-                  Imprime la cartelita de acompañamiento (ancho A4, formato
-                  compacto) para que viaje entre departamentos con el itinerario
-                  y las firmas.
+                  Imprime la Hoja de Ruta Simplificada (DIN A5) para que viaje
+                  entre departamentos con el itinerario y las firmas.
                 </p>
               </div>
               <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
@@ -1948,7 +1947,7 @@ export function DespachoWizardDialog({
                   onClick={handlePrintCartelita}
                 >
                   <Printer className="size-4" />
-                  Imprimir cartelita
+                  Imprimir hoja simplificada
                 </Button>
                 <Button
                   type="button"
