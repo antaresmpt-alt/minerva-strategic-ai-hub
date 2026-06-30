@@ -25,6 +25,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { CerrarProcesoDialog } from "@/components/produccion/planificacion/cerrar-proceso-dialog";
+import { CtpEjecucionRequisitosBlock } from "@/components/produccion/planificacion/ctp-ejecucion-requisitos-block";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -51,6 +52,10 @@ import {
   PROCESO_DESBROCE_ID,
 } from "@/lib/hoja-ruta-campos-config";
 import type { DatosProcesoGenerico } from "@/lib/hoja-ruta-campos-config";
+import {
+  CTP_REQUISITO_DEFS,
+  ctpRequisitosPendientes,
+} from "@/lib/ctp-despacho";
 import {
   aplicarPrefillFormatoEncadenado,
   buildFormatoAnteriorByOtPasoId,
@@ -1645,7 +1650,16 @@ function ExecutionCard({
   }, [row.inicioRealAt, row.procesoId, row.minutosPausadaAcum, pauses, datosProcesoLocal]);
 
   const confirmCerrarProceso = useCallback(() => {
-    setDatosProcesoLocal(cerrarDatosDraft);
+    const datosFinal = { ...datosProcesoLocal, ...cerrarDatosDraft };
+    if (row.procesoId === PROCESO_CTP_ID) {
+      const pendientes = ctpRequisitosPendientes(datosFinal);
+      if (pendientes.length > 0) {
+        toast.warning(
+          `CTP: ${pendientes.length} tarea${pendientes.length !== 1 ? "s" : ""} requerida${pendientes.length !== 1 ? "s" : ""} sin confirmar (${pendientes.map((p) => p.label).join(", ")}).`,
+        );
+      }
+    }
+    setDatosProcesoLocal(datosFinal);
     onPatch(
       {
         estado_ejecucion: "finalizada",
@@ -1654,13 +1668,14 @@ function ExecutionCard({
         incidencia: incidencia.trim() || null,
         accion_correctiva: accion.trim() || null,
         observaciones: observaciones.trim() || null,
-        ...buildEjecucionHorasSyncPatch(row.procesoId, cerrarDatosDraft),
+        ...buildEjecucionHorasSyncPatch(row.procesoId, datosFinal),
       },
-      hasCamposConfig ? cerrarDatosDraft : null,
+      hasCamposConfig ? datosFinal : null,
     );
     setCerrarProcesoOpen(false);
   }, [
     cerrarDatosDraft,
+    datosProcesoLocal,
     hasCamposConfig,
     maquinista,
     incidencia,
@@ -1759,6 +1774,16 @@ function ExecutionCard({
               · El tamaño de corte del troquel es independiente del pliego.
             </span>
           ) : null}
+        </div>
+      ) : null}
+
+      {row.procesoId === PROCESO_CTP_ID ? (
+        <div className="mt-3">
+          <CtpEjecucionRequisitosBlock
+            datos={datosProcesoLocal}
+            onDatosChange={setDatosProcesoLocal}
+            readonly={!canEdit}
+          />
         </div>
       ) : null}
 
@@ -1933,6 +1958,11 @@ function ExecutionCard({
                 datosInicial={datosProcesoLocal}
                 onChange={setDatosProcesoLocal}
                 readonly={!canEdit}
+                excludeFieldIds={
+                  row.procesoId === PROCESO_CTP_ID
+                    ? CTP_REQUISITO_DEFS.map((d) => d.hechoKey)
+                    : undefined
+                }
                 dynamicOptions={cajasDynamicOptions}
                 computeDerived={(datos, changedFieldId) => {
                   let base = datos;

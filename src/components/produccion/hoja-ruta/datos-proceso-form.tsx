@@ -42,6 +42,8 @@ type DatosProcesoFormProps = {
    * de BD). Si existe entrada para un campo, sustituye `campo.options`.
    */
   dynamicOptions?: Record<string, { value: string; label: string }[]>;
+  /** Oculta campos (p. ej. checkboxes CTP gestionados en bloque aparte). */
+  excludeFieldIds?: string[];
 };
 
 /** Traduce el ancho de un campo a clases de columna en una rejilla de 6. */
@@ -130,10 +132,15 @@ export function DatosProcesoForm({
   readonly = false,
   computeDerived,
   dynamicOptions,
+  excludeFieldIds,
 }: DatosProcesoFormProps) {
   const [datos, setDatos] = useState<DatosProcesoGenerico>(datosInicial);
 
   const config = useMemo(() => getCamposConfigByProcesoId(procesoId), [procesoId]);
+  const excludeSet = useMemo(
+    () => new Set(excludeFieldIds ?? []),
+    [excludeFieldIds],
+  );
 
   const handleChange = useCallback(
     (fieldId: string, value: unknown) => {
@@ -203,6 +210,7 @@ export function DatosProcesoForm({
 
       <div className="grid grid-cols-6 gap-3">
         {config.campos.map((campo) => {
+          if (excludeSet.has(campo.id)) return null;
           if (!shouldShowField(campo)) return null;
 
           const colClass = widthToColClass(campo.width);

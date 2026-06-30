@@ -73,6 +73,7 @@ import {
   type DespachoWizardProcesoDatos,
   type ReferenciaHistorialRow,
 } from "@/lib/despacho-wizard-shared";
+import { CTP_REQUISITO_DEFS, buildCtpRequisitosSeedFromWizard, formatCtpRequisitosResumen, mergeDatosProcesoSeed } from "@/lib/ctp-despacho";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
 import type { ProdReferenciaRow } from "@/types/prod-referencias";
@@ -694,25 +695,72 @@ export function DespachoWizardDialog({
       if (!selectedOt) throw new Error("OT inválida.");
 
       if (itinerarioSlots.length > 0) {
-        const { error: errDelPasos } = await supabase
+        const { data: existingPasos, error: errLoadPasos } = await supabase
           .from(TABLE_OT_PASOS)
-          .delete()
-          .eq("ot_id", selectedRowId);
-        if (errDelPasos) throw errDelPasos;
-        const pasoRows = itinerarioSlots.map((s, i) => {
-          const datos = buildDatosProcesoSeed(s.procesoId, form, procesoDatos);
-          return {
-            ot_id: selectedRowId,
-            orden: i + 1,
-            proceso_id: s.procesoId,
-            estado: i === 0 ? "disponible" : "pendiente",
-            ...(datos ? { datos_proceso: datos } : {}),
-          };
-        });
-        const { error: errInsPasos } = await supabase
-          .from(TABLE_OT_PASOS)
-          .insert(pasoRows);
-        if (errInsPasos) throw errInsPasos;
+          .select("id, orden, proceso_id, datos_proceso")
+          .eq("ot_id", selectedRowId)
+          .order("orden", { ascending: true });
+        if (errLoadPasos) throw errLoadPasos;
+
+        const sameItinerario =
+          (existingPasos?.length ?? 0) === itinerarioSlots.length &&
+          itinerarioSlots.every(
+            (s, i) => existingPasos?.[i]?.proceso_id === s.procesoId,
+          );
+
+        if (sameItinerario && existingPasos && existingPasos.length > 0) {
+          for (let i = 0; i < itinerarioSlots.length; i++) {
+            const slot = itinerarioSlots[i]!;
+            const paso = existingPasos[i]!;
+            const seed = buildDatosProcesoSeed(
+              slot.procesoId,
+              form,
+              procesoDatos,
+              procesoIdsInRoute,
+            );
+            const merged = mergeDatosProcesoSeed(
+              paso.datos_proceso as Record<string, unknown> | null,
+              seed ??
+                (slot.procesoId === PROCESO_CTP_ID
+                  ? buildCtpRequisitosSeedFromWizard(procesoDatos.ctp)
+                  : null),
+              slot.procesoId,
+            );
+            const { error: errUpd } = await supabase
+              .from(TABLE_OT_PASOS)
+              .update({
+                orden: i + 1,
+                ...(merged ? { datos_proceso: merged } : { datos_proceso: null }),
+              })
+              .eq("id", paso.id);
+            if (errUpd) throw errUpd;
+          }
+        } else {
+          const { error: errDelPasos } = await supabase
+            .from(TABLE_OT_PASOS)
+            .delete()
+            .eq("ot_id", selectedRowId);
+          if (errDelPasos) throw errDelPasos;
+          const pasoRows = itinerarioSlots.map((s, i) => {
+            const datos = buildDatosProcesoSeed(
+              s.procesoId,
+              form,
+              procesoDatos,
+              procesoIdsInRoute,
+            );
+            return {
+              ot_id: selectedRowId,
+              orden: i + 1,
+              proceso_id: s.procesoId,
+              estado: i === 0 ? "disponible" : "pendiente",
+              ...(datos ? { datos_proceso: datos } : {}),
+            };
+          });
+          const { error: errInsPasos } = await supabase
+            .from(TABLE_OT_PASOS)
+            .insert(pasoRows);
+          if (errInsPasos) throw errInsPasos;
+        }
       }
 
       const dataToInsert = {
@@ -786,6 +834,7 @@ export function DespachoWizardDialog({
     onDespachado,
     onOpenChange,
     procesoDatos,
+    procesoIdsInRoute,
     seleccion,
     supabase,
   ]);
@@ -807,18 +856,46 @@ export function DespachoWizardDialog({
   function renderProcesoSection(slot: DespachoItinerarioSlot) {
     const pid = slot.procesoId;
     if (pid === PROCESO_CTP_ID) {
+      const ctp = procesoDatos.ctp;
       return (
         <section
           key={slot.key}
-          className="rounded-lg border border-slate-200 bg-slate-50/50 p-4"
+          className="rounded-lg border border-violet-200 bg-violet-50/30 p-4"
         >
-          <h4 className="mb-2 text-sm font-semibold text-[#002147]">
+          <h4 className="mb-1 text-sm font-semibold text-[#002147]">
             {slot.nombre}
           </h4>
-          <p className="text-xs text-slate-600">
-            Planchas y detalle CTP se registran en mesa de ejecución. Aquí solo
-            defines el itinerario.
+          <p className="mb-3 text-[11px] text-slate-600">
+            Instrucciones para Gemma/Marc. Marca lo que deben hacer; lo no marcado
+            no se exige. Planchas y horas reales se registran en mesa CTP.
           </p>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {CTP_REQUISITO_DEFS.map((def) => {
+              const id = `wiz-ctp-${def.hechoKey}`;
+              return (
+                <label
+                  key={def.hechoKey}
+                  htmlFor={id}
+                  className="flex cursor-pointer items-center gap-2 rounded-md border border-violet-100 bg-white px-2.5 py-2 text-xs"
+                >
+                  <Checkbox
+                    id={id}
+                    checked={ctp[def.hechoKey]}
+                    onCheckedChange={(v) =>
+                      setProcesoDatos((prev) => ({
+                        ...prev,
+                        ctp: {
+                          ...prev.ctp,
+                          [def.hechoKey]: v === true,
+                        },
+                      }))
+                    }
+                  />
+                  <span className="text-slate-800">{def.label}</span>
+                </label>
+              );
+            })}
+          </div>
         </section>
       );
     }
@@ -1771,6 +1848,21 @@ export function DespachoWizardDialog({
                       {form.troquel || "—"}
                       {form.poses ? ` · ${form.poses} poses` : ""}
                     </p>
+                    {formatCtpRequisitosResumen(procesoDatos.ctp) ? (
+                      <p className="sm:col-span-2">
+                        <span className="text-slate-500">CTP:</span>{" "}
+                        {formatCtpRequisitosResumen(procesoDatos.ctp)}
+                      </p>
+                    ) : null}
+                    {form.tipo_engomado || form.horas_estimadas_engomado ? (
+                      <p>
+                        <span className="text-slate-500">Engomado:</span>{" "}
+                        {form.tipo_engomado || "—"}
+                        {form.horas_estimadas_engomado
+                          ? ` · ${form.horas_estimadas_engomado} h est.`
+                          : ""}
+                      </p>
+                    ) : null}
                   </div>
                   <Separator className="my-3" />
                   <p className="text-xs font-medium text-slate-700">

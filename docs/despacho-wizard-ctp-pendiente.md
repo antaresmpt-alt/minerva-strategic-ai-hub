@@ -108,11 +108,12 @@ En planificación pool, mesa diaria o tarjeta de ejecución:
 | Pieza | Estado |
 |-------|--------|
 | `hoja-ruta-campos-config.ts` → `CTP_PREIMPRESION_CAMPOS` | ✅ Campos ejecución definidos |
-| `despacho-wizard-dialog.tsx` → sección CTP | ❌ Solo placeholder |
-| `buildDatosProcesoSeed()` para `PROCESO_CTP_ID` | ❌ No implementado |
-| `DespachoWizardProcesoDatos` | ❌ Sin sub-objeto `ctp` |
-| Cola CTP — mostrar requerimientos despacho | ❌ Pendiente |
-| Validación al cerrar CTP | ❌ Pendiente (definir soft vs hard) |
+| `despacho-wizard-dialog.tsx` → sección CTP | ✅ Checkboxes requerimiento |
+| `buildDatosProcesoSeed()` para `PROCESO_CTP_ID` | ✅ `requiere_*` en `datos_proceso` |
+| `DespachoWizardProcesoDatos.ctp` | ✅ |
+| Cola CTP — bloque requisitos en ejecución | ✅ `ctp-ejecucion-requisitos-block.tsx` |
+| Validación al cerrar CTP | ✅ Aviso toast (soft, no bloquea) |
+| Resumen wizard + seed engomado | ✅ |
 
 **Archivos a tocar en la iteración:**
 

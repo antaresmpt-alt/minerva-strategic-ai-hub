@@ -1,5 +1,14 @@
 /** Tipos y helpers compartidos del wizard de despacho OT. */
 
+import {
+  buildCtpRequisitosSeedFromWizard,
+  emptyDespachoWizardCtpDatos,
+  parseCtpWizardFromDatosProceso,
+  type DespachoWizardCtpDatos,
+} from "@/lib/ctp-despacho";
+
+export type { DespachoWizardCtpDatos };
+
 export const TABLE_OT_DESPACHADAS = "produccion_ot_despachadas";
 export const TABLE_OT_PASOS = "prod_ot_pasos";
 export const TABLE_OTS = "prod_ots_general";
@@ -217,6 +226,7 @@ export type DespachoWizardImpresionDatos = {
 export type DespachoWizardProcesoDatos = {
   guillotina: DespachoWizardGuillotinaDatos;
   impresion: DespachoWizardImpresionDatos;
+  ctp: DespachoWizardCtpDatos;
 };
 
 export function emptyDespachoWizardProcesoDatos(): DespachoWizardProcesoDatos {
@@ -232,6 +242,7 @@ export function emptyDespachoWizardProcesoDatos(): DespachoWizardProcesoDatos {
       hojas_netas: "",
       formato_hojas: "",
     },
+    ctp: emptyDespachoWizardCtpDatos(),
   };
 }
 
@@ -317,7 +328,8 @@ function numOrNull(s: string): number | null {
 export function buildDatosProcesoSeed(
   procesoId: number,
   form: DespachoFormState,
-  procesoDatos: DespachoWizardProcesoDatos
+  procesoDatos: DespachoWizardProcesoDatos,
+  procesoIdsInRoute: Set<number> = new Set(),
 ): Record<string, unknown> | null {
   if (procesoId === PROCESO_GUILLOTINA_ID) {
     const g = procesoDatos.guillotina;
@@ -364,6 +376,20 @@ export function buildDatosProcesoSeed(
         parseOptionalDecimalInput(form.horas_estimadas_troquelado) ?? null,
     };
   }
+  if (procesoId === PROCESO_CTP_ID) {
+    const seed = buildCtpRequisitosSeedFromWizard(procesoDatos.ctp);
+    return Object.keys(seed).length > 0 ? seed : null;
+  }
+  if (procesoId === PROCESO_ENGOMADO_ID) {
+    const est = estuchesEstimadosDespacho(form, procesoDatos, procesoIdsInRoute);
+    const payload: Record<string, unknown> = {};
+    const tipo = form.tipo_engomado.trim();
+    if (tipo) payload.tipo_engomado = tipo;
+    const tiempo = parseOptionalDecimalInput(form.horas_estimadas_engomado);
+    if (tiempo != null && tiempo > 0) payload.tiempo_previsto = tiempo;
+    if (est != null && est.estuches > 0) payload.estuches_realizar = est.estuches;
+    return Object.keys(payload).length > 0 ? payload : null;
+  }
   return null;
 }
 
@@ -397,6 +423,9 @@ export function parseProcesoDatosFromPasos(
           d.hojas_netas == null ? "" : String(d.hojas_netas),
         formato_hojas: String(d.formato_hojas ?? ""),
       };
+    }
+    if (p.proceso_id === PROCESO_CTP_ID) {
+      next.ctp = parseCtpWizardFromDatosProceso(d);
     }
   }
   return next;
