@@ -64,6 +64,7 @@ import {
   type CompraDetalleVista,
 } from "@/components/produccion/ots/detalles-compra-dialog";
 import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
+import { DespachoWizardDialog } from "@/components/produccion/ots/despacho-wizard-dialog";
 import {
   resolveRowOtTipo,
   sortRowsByOtNumero,
@@ -428,6 +429,10 @@ export function OtsDespachadasPage({
   );
 
   const [editOpen, setEditOpen] = useState(false);
+  const [despachoWizardOpen, setDespachoWizardOpen] = useState(false);
+  const [despachoWizardInitialOt, setDespachoWizardInitialOt] = useState<
+    string | null
+  >(null);
   const [editRow, setEditRow] = useState<OtsDespachadasTableRow | null>(null);
   const [editForm, setEditForm] = useState<DespachoEditFormState>(
     emptyDespachoEditForm
@@ -467,11 +472,11 @@ export function OtsDespachadasPage({
   }, []);
 
   const handleEditarDespacho = useCallback((row: OtsDespachadasTableRow) => {
-    setEditRow(row);
-    setEditForm(rowToEditForm(row));
-    resetEditItinerarioState();
-    setEditOpen(true);
-  }, [resetEditItinerarioState]);
+    const ot = String(row.ot_numero ?? "").trim();
+    if (!ot) return;
+    setDespachoWizardInitialOt(ot);
+    setDespachoWizardOpen(true);
+  }, []);
 
   const handleVerHojaRuta = useCallback((row: OtsDespachadasTableRow) => {
     setHojaRutaOt(String(row.ot_numero ?? "").trim() || null);
@@ -1285,6 +1290,19 @@ export function OtsDespachadasPage({
         open={hojaRutaOt != null}
         onOpenChange={(o) => {
           if (!o) setHojaRutaOt(null);
+        }}
+      />
+
+      <DespachoWizardDialog
+        open={despachoWizardOpen}
+        onOpenChange={(o) => {
+          setDespachoWizardOpen(o);
+          if (!o) setDespachoWizardInitialOt(null);
+        }}
+        initialOt={despachoWizardInitialOt}
+        batchModeDefault={false}
+        onDespachado={() => {
+          void loadRows();
         }}
       />
 

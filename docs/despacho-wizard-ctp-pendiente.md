@@ -39,6 +39,7 @@ De las capturas Optimus y del catálogo ya modelado en Minerva (`hoja-ruta-campo
 |----------------------|-------------|----------------------|
 | `prueba_digital` | Prueba digital | Checkbox |
 | `prueba_gmg` | Prueba GMG | Prueba contractual color |
+| `pdf_x_ok` | PDF X OK | Validación contractual PDF/X |
 | `maqueta` | Maqueta | Checkbox |
 | `gestion_troquel` | Gestión troquel | Nuevo troquel o recuperado archivo |
 | `preparacion_montaje` | Preparación montaje | Checkbox |

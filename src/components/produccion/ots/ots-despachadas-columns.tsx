@@ -536,8 +536,8 @@ export function createOtsDespachadasColumns(
               aria-label={`Itinerario y despacho OT ${row.original.ot_numero}`}
               title={
                 row.original.has_itinerario
-                  ? "Itinerario asignado"
-                  : "Sin itinerario asignado"
+                  ? "Editar despacho (wizard)"
+                  : "Despachar / asignar itinerario"
               }
               onClick={() => ctx.onItinerario(row.original)}
             >
@@ -587,7 +587,7 @@ export function createOtsDespachadasColumns(
             size="icon"
             className="h-7 w-7 shrink-0 text-slate-600 hover:text-[#002147]"
             aria-label={`Editar despacho OT ${row.original.ot_numero}`}
-            title="Editar despacho"
+            title="Editar despacho (wizard)"
             onClick={() => ctx.onEditarDespacho(row.original)}
           >
             <Pencil className="h-4 w-4" aria-hidden />

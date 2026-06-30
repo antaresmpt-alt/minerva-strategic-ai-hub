@@ -931,6 +931,13 @@ const CTP_PREIMPRESION_CAMPOS: CampoDefinicion[] = [
     hint: 'Prueba contractual de color cuando aplique.',
   },
   {
+    id: 'pdf_x_ok',
+    label: 'PDF X OK',
+    tipo: 'boolean',
+    width: 'third',
+    hint: 'Validación contractual PDF/X en preimpresión.',
+  },
+  {
     id: 'prueba_digital',
     label: 'Prueba digital',
     tipo: 'boolean',

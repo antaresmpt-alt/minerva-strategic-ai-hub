@@ -22,6 +22,7 @@ import {
   DespachoItinerarioPicker,
   type DespachoItinerarioSlot,
 } from "@/components/produccion/ots/despacho-itinerario-picker";
+import { DespachoWizardDialog } from "@/components/produccion/ots/despacho-wizard-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -401,6 +402,10 @@ export function PlanificacionPoolOtsTab() {
   const [hojaRutaOt, setHojaRutaOt] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftRow | null>(null);
   const [poolEditDialogOpen, setPoolEditDialogOpen] = useState(false);
+  const [despachoWizardOpen, setDespachoWizardOpen] = useState(false);
+  const [despachoWizardInitialOt, setDespachoWizardInitialOt] = useState<
+    string | null
+  >(null);
   const [poolEditOtGeneralId, setPoolEditOtGeneralId] = useState<string | null>(
     null
   );
@@ -1372,19 +1377,9 @@ export function PlanificacionPoolOtsTab() {
   }, []);
 
   const startEdit = useCallback((r: PoolRow) => {
-    setEditingOt(r.ot);
-    setDraft({
-      trabajo: r.trabajo,
-      tintas: r.tintas === "—" ? "" : r.tintas,
-      troquel: r.troquelLabel,
-      troquelModo: r.troquelModo,
-      acabadoPral: r.acabadoPral,
-      horasEntrada: r.horasEntrada.toFixed(2),
-      horasTiraje: r.horasTiraje.toFixed(2),
-    });
-    resetPoolEditItinerario();
-    setPoolEditDialogOpen(true);
-  }, [resetPoolEditItinerario]);
+    setDespachoWizardInitialOt(r.ot);
+    setDespachoWizardOpen(true);
+  }, []);
 
   const cancelEdit = useCallback(() => {
     setEditingOt(null);
@@ -2328,7 +2323,7 @@ export function PlanificacionPoolOtsTab() {
                             size="icon"
                             className="size-8 text-slate-600 hover:text-[#002147]"
                             onClick={() => startEdit(r)}
-                            title="Editar despacho e itinerario"
+                            title="Editar despacho (wizard)"
                           >
                             <Edit3 className="size-4" />
                           </Button>
@@ -2347,6 +2342,18 @@ export function PlanificacionPoolOtsTab() {
         open={hojaRutaOt != null}
         onOpenChange={(o) => {
           if (!o) setHojaRutaOt(null);
+        }}
+      />
+      <DespachoWizardDialog
+        open={despachoWizardOpen}
+        onOpenChange={(o) => {
+          setDespachoWizardOpen(o);
+          if (!o) setDespachoWizardInitialOt(null);
+        }}
+        initialOt={despachoWizardInitialOt}
+        batchModeDefault={false}
+        onDespachado={() => {
+          void loadRows();
         }}
       />
       <Dialog

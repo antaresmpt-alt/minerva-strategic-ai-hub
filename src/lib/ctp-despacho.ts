@@ -17,6 +17,11 @@ export const CTP_REQUISITO_DEFS = [
     label: "Prueba GMG",
   },
   {
+    requiereKey: "requiere_pdf_x_ok",
+    hechoKey: "pdf_x_ok",
+    label: "PDF X OK",
+  },
+  {
     requiereKey: "requiere_maqueta",
     hechoKey: "maqueta",
     label: "Maqueta",
@@ -56,6 +61,7 @@ export function emptyDespachoWizardCtpDatos(): DespachoWizardCtpDatos {
   return {
     prueba_digital: false,
     prueba_gmg: false,
+    pdf_x_ok: false,
     maqueta: false,
     gestion_troquel: false,
     preparacion_montaje: false,
