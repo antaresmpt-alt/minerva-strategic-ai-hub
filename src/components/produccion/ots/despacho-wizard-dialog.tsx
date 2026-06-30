@@ -5,6 +5,7 @@ import {
   ArrowRight,
   ClipboardCheck,
   Loader2,
+  Printer,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -74,6 +75,11 @@ import {
   type ReferenciaHistorialRow,
 } from "@/lib/despacho-wizard-shared";
 import { CTP_REQUISITO_DEFS, buildCtpRequisitosSeedFromWizard, formatCtpRequisitosResumen, mergeDatosProcesoSeed } from "@/lib/ctp-despacho";
+import {
+  exportHojaRutaCartelitaPdf,
+  printHojaRutaCartelitaPdf,
+  type HojaRutaCartelitaInput,
+} from "@/lib/hoja-ruta/hoja-ruta-cartelita-pdf";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
 import type { ProdReferenciaRow } from "@/types/prod-referencias";
@@ -102,6 +108,29 @@ function prevTab(tab: DespachoWizardTab): DespachoWizardTab | null {
   return i > 0 ? DESPACHO_WIZARD_TABS[i - 1]!.id : null;
 }
 
+function buildCartelitaFromWizard(
+  ot: string,
+  meta: DespachoMeta,
+  form: DespachoFormState,
+  slots: DespachoItinerarioSlot[],
+): HojaRutaCartelitaInput {
+  return {
+    otNumero: ot,
+    cliente: meta.cliente.trim() || null,
+    trabajo: meta.trabajo.trim() || null,
+    cantidad: meta.cantidad.trim() || null,
+    fechaEntrega: meta.fecha_entrega.trim() || null,
+    material: form.material.trim() || null,
+    tamanoHoja: form.tamano_hoja.trim() || null,
+    tintas: form.tintas.trim() || null,
+    troquel: form.troquel.trim() || null,
+    pasos: slots.map((s, i) => ({
+      orden: i + 1,
+      nombre: s.nombre,
+    })),
+  };
+}
+
 export function DespachoWizardDialog({
   open,
   onOpenChange,
@@ -121,6 +150,8 @@ export function DespachoWizardDialog({
   const [loadingOt, setLoadingOt] = useState(false);
   const [saving, setSaving] = useState(false);
   const [batchMode, setBatchMode] = useState(batchModeDefault);
+  const [postDespachoCartelita, setPostDespachoCartelita] =
+    useState<HojaRutaCartelitaInput | null>(null);
   const [form, setForm] = useState<DespachoFormState>(() => emptyDespachoForm());
   const [itinerarioSlots, setItinerarioSlots] = useState<DespachoItinerarioSlot[]>(
     []
@@ -146,6 +177,7 @@ export function DespachoWizardDialog({
     setItinerarioSlots([]);
     setProcesoDatos(emptyDespachoWizardProcesoDatos());
     setReferenciaHistorial([]);
+    setPostDespachoCartelita(null);
   }, []);
 
   const hydrateForOt = useCallback(
@@ -807,37 +839,49 @@ export function DespachoWizardDialog({
       toast.success("OT despachada correctamente");
       onDespachado?.({ ot: selectedOt, rowId: selectedRowId });
 
-      if (batchMode) {
-        setForm(emptyDespachoForm());
-        setSeleccion(null);
-        setYaDespachada(false);
-        setCompraGenerada(false);
-        setMeta(emptyDespachoMeta());
-        setOtInput("");
-        setItinerarioSlots([]);
-        setProcesoDatos(emptyDespachoWizardProcesoDatos());
-        setWizardTab("cabecera");
-        window.setTimeout(() => otInputRef.current?.focus(), 80);
-      } else {
-        onOpenChange(false);
-      }
+      setPostDespachoCartelita(
+        buildCartelitaFromWizard(selectedOt, meta, form, itinerarioSlots),
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Error al despachar.");
     } finally {
       setSaving(false);
     }
   }, [
-    batchMode,
     despachoStatus,
     form,
     itinerarioSlots,
+    meta,
     onDespachado,
-    onOpenChange,
     procesoDatos,
     procesoIdsInRoute,
     seleccion,
     supabase,
   ]);
+
+  const continueNextOt = useCallback(() => {
+    setPostDespachoCartelita(null);
+    setForm(emptyDespachoForm());
+    setSeleccion(null);
+    setYaDespachada(false);
+    setCompraGenerada(false);
+    setMeta(emptyDespachoMeta());
+    setOtInput("");
+    setItinerarioSlots([]);
+    setProcesoDatos(emptyDespachoWizardProcesoDatos());
+    setWizardTab("cabecera");
+    window.setTimeout(() => otInputRef.current?.focus(), 80);
+  }, []);
+
+  const handlePrintCartelita = useCallback(() => {
+    if (!postDespachoCartelita) return;
+    printHojaRutaCartelitaPdf(postDespachoCartelita);
+  }, [postDespachoCartelita]);
+
+  const handleDownloadCartelita = useCallback(() => {
+    if (!postDespachoCartelita) return;
+    exportHojaRutaCartelitaPdf(postDespachoCartelita);
+  }, [postDespachoCartelita]);
 
   function goNext() {
     if (!canGoNext) {
@@ -1884,6 +1928,58 @@ export function DespachoWizardDialog({
         </Tabs>
 
         <DialogFooter className="shrink-0 flex-col gap-3 border-t border-slate-100 px-6 py-4 sm:flex-row sm:items-center">
+          {postDespachoCartelita ? (
+            <>
+              <div className="mr-auto rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+                <p className="font-semibold">
+                  OT {postDespachoCartelita.otNumero} despachada
+                </p>
+                <p className="text-emerald-800">
+                  Imprime la cartelita de acompañamiento (ancho A4, formato
+                  compacto) para que viaje entre departamentos con el itinerario
+                  y las firmas.
+                </p>
+              </div>
+              <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="gap-2 bg-[#002147] text-white hover:bg-[#001a38]"
+                  onClick={handlePrintCartelita}
+                >
+                  <Printer className="size-4" />
+                  Imprimir cartelita
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadCartelita}
+                >
+                  Descargar PDF
+                </Button>
+                {batchMode ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={continueNextOt}
+                  >
+                    Siguiente OT
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onOpenChange(false)}
+                >
+                  Cerrar
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
           <label className="mr-auto flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
             <Checkbox
               id="wiz-batch-mode"
@@ -1956,6 +2052,8 @@ export function DespachoWizardDialog({
               Cancelar
             </Button>
           </div>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
