@@ -2106,7 +2106,7 @@ export function DespachoWizardDialog({
                                 </div>
                                 <div className="grid gap-0.5">
                                   <Label className="text-[10px] text-slate-500">
-                                    Poses en chapa
+                                    Poses en troquel
                                   </Label>
                                   <div className="flex items-center gap-1">
                                     <Input
@@ -2225,60 +2225,77 @@ export function DespachoWizardDialog({
                 })}
 
                 {/* Validaciones globales */}
-                {formasValidation && formas.length > 0 && (
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                      Resumen
-                    </p>
-                    <div className="grid gap-1 text-xs">
-                      <p>
-                        <span className="text-slate-500">Formas:</span>{" "}
-                        {formas.length}
+                {formasValidation && formas.length > 0 && (() => {
+                  const totalEst = totalEstuchesFormas(formas);
+                  const pedidoNum = integerOrZeroForDespacho(meta.cantidad);
+                  const margen = pedidoNum > 0 ? totalEst - pedidoNum : null;
+                  const margenNegativo = margen !== null && margen < 0;
+                  return (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        Resumen
                       </p>
-                      <p>
-                        <span className="text-slate-500">
-                          Hojas brutas totales:
-                        </span>{" "}
-                        {totalHojasBrutasFormas(formas).toLocaleString("es-ES")}
-                      </p>
-                      <p>
-                        <span className="text-slate-500">Estuches Σ est.:</span>{" "}
-                        {totalEstuchesFormas(formas).toLocaleString("es-ES")}
-                        {meta.cantidad &&
-                          integerOrZeroForDespacho(meta.cantidad) > 0 && (
+                      <div className="grid gap-1 text-xs">
+                        <p>
+                          <span className="text-slate-500">Formas:</span>{" "}
+                          {formas.length}
+                        </p>
+                        <p>
+                          <span className="text-slate-500">
+                            Hojas brutas totales:
+                          </span>{" "}
+                          {totalHojasBrutasFormas(formas).toLocaleString("es-ES")}
+                        </p>
+                        <p>
+                          <span className="text-slate-500">Estuches teóricos Σ:</span>{" "}
+                          <span className={margenNegativo ? "text-red-700 font-semibold" : "text-slate-700"}>
+                            {totalEst.toLocaleString("es-ES")}
+                          </span>
+                          {pedidoNum > 0 && (
                             <span className="ml-1 text-slate-400">
-                              / pedido:{" "}
-                              {integerOrZeroForDespacho(
-                                meta.cantidad
-                              ).toLocaleString("es-ES")}
+                              / pedido: {pedidoNum.toLocaleString("es-ES")}
                             </span>
                           )}
-                      </p>
-                    </div>
-                    {formasValidation.errores.length > 0 && (
-                      <ul className="mt-2 space-y-1">
-                        {formasValidation.errores.map((e, i) => (
-                          <li
+                        </p>
+                        {margen !== null && !margenNegativo && margen > 0 && (
+                          <p className="text-emerald-700">
+                            +{margen.toLocaleString("es-ES")} estuches de margen para mermas en proceso
+                          </p>
+                        )}
+                        {margenNegativo && (
+                          <p className="flex gap-1.5 text-red-700">
+                            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                            Producción insuficiente: faltan {Math.abs(margen!).toLocaleString("es-ES")} estuches para cubrir el pedido
+                          </p>
+                        )}
+                      </div>
+                      {formasValidation.errores.length > 0 && (
+                        <ul className="mt-2 space-y-1">
+                          {formasValidation.errores.map((e, i) => (
+                            <li
+                              key={i}
+                              className="flex gap-1.5 text-xs text-red-700"
+                            >
+                              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                              {e}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {formasValidation.warnings
+                        .filter((w) => !w.includes("≠"))
+                        .map((w, i) => (
+                          <p
                             key={i}
-                            className="flex gap-1.5 text-xs text-red-700"
+                            className="mt-1 flex gap-1.5 text-xs text-amber-700"
                           >
                             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                            {e}
-                          </li>
+                            {w}
+                          </p>
                         ))}
-                      </ul>
-                    )}
-                    {formasValidation.warnings.map((w, i) => (
-                      <p
-                        key={i}
-                        className="mt-1 flex gap-1.5 text-xs text-amber-700"
-                      >
-                        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                        {w}
-                      </p>
-                    ))}
-                  </div>
-                )}
+                    </div>
+                  );
+                })()}
               </div>
             ) : null}
 
@@ -2356,23 +2373,9 @@ export function DespachoWizardDialog({
                       }))
                     }
                   />
-                </div>
-                <div className="grid gap-1">
-                  <Label htmlFor="wiz-netas" className="text-xs">
-                    Hojas netas (compra)
-                  </Label>
-                  <Input
-                    id="wiz-netas"
-                    className="h-8 text-xs"
-                    type="number"
-                    value={form.num_hojas_netas}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        num_hojas_netas: e.target.value,
-                      }))
-                    }
-                  />
+                  <p className="text-[10px] text-slate-400">
+                    Pliegos que compras al proveedor. Las netas se calculan proceso a proceso en Producción.
+                  </p>
                 </div>
                 <div className="grid gap-1">
                   <Label htmlFor="wiz-tintas" className="text-xs">
@@ -2509,8 +2512,7 @@ export function DespachoWizardDialog({
                     </p>
                     <p>
                       <span className="text-slate-500">Hojas compra:</span>{" "}
-                      {form.num_hojas_brutas || "0"} brutas /{" "}
-                      {form.num_hojas_netas || "0"} netas
+                      {form.num_hojas_brutas || "0"} brutas
                       {form.tamano_hoja ? ` · ${form.tamano_hoja}` : ""}
                     </p>
                     {procesoDatos.guillotina.hojas_finales ? (

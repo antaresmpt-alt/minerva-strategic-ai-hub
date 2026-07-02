@@ -94,6 +94,7 @@ export const DESPACHO_WIZARD_TABS_CONTENEDOR: {
   { id: "formas", label: "Formas / Hijas" },
   { id: "material", label: "Material padre" },
   { id: "itinerario", label: "Itinerario" },
+  { id: "produccion", label: "Producción padre" },
   { id: "resumen", label: "Resumen" },
 ];
 
@@ -232,9 +233,9 @@ export function validarFormas(
 
   if (cantidadPedido > 0) {
     const totalEst = totalEstuchesFormas(formas);
-    if (totalEst > 0 && totalEst !== cantidadPedido) {
+    if (totalEst > 0 && totalEst < cantidadPedido) {
       warnings.push(
-        `Estuches calculados (${totalEst.toLocaleString("es-ES")}) ≠ cantidad pedida (${cantidadPedido.toLocaleString("es-ES")}).`
+        `Producción insuficiente: ${totalEst.toLocaleString("es-ES")} estuches teóricos < pedido (${cantidadPedido.toLocaleString("es-ES")}).`
       );
     }
   }
