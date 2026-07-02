@@ -37,6 +37,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -200,6 +207,9 @@ export function DespachoWizardDialog({
     () => emptyDespachoWizardProcesoDatos()
   );
   const [catalog, setCatalog] = useState<DespachoCatalogItem[]>([]);
+  const [acabadosPlastificado, setAcabadosPlastificado] = useState<
+    Array<{ id: string; nombre: string }>
+  >([]);
   const [referenciaHistorial, setReferenciaHistorial] = useState<
     ReferenciaHistorialRow[]
   >([]);
@@ -888,6 +898,25 @@ export function DespachoWizardDialog({
       if (cancelled) return;
       if (error) return;
       setCajasEmbalaje((data ?? []) as CajaEmbalajeOption[]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, supabase]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase
+        .from("prod_cat_acabados")
+        .select("id, nombre")
+        .order("nombre", { ascending: true });
+      if (cancelled) return;
+      if (error) return;
+      setAcabadosPlastificado(
+        (data ?? []) as Array<{ id: string; nombre: string }>
+      );
     })();
     return () => {
       cancelled = true;
@@ -1733,35 +1762,81 @@ export function DespachoWizardDialog({
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div className="grid gap-1 sm:col-span-2 lg:col-span-3">
               <Label className="text-xs">Acabado principal</Label>
-              <Input
-                className="h-8 text-xs"
-                list="wiz-acabado-suggestions"
-                placeholder="pp brillo, pp mate, soft-touch…"
-                value={ext.acabado_detalle}
-                onChange={(e) =>
-                  setExt({ acabado_detalle: e.target.value })
-                }
-              />
+              <Select
+                value={ext.acabado_detalle ?? ""}
+                onValueChange={(v) => setExt({ acabado_detalle: v || "" })}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Selecciona acabado…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {acabadosPlastificado.length === 0 ? (
+                    <SelectItem value="__loading__" disabled>
+                      Cargando acabados…
+                    </SelectItem>
+                  ) : (
+                    acabadosPlastificado.map((a) => (
+                      <SelectItem key={a.id} value={a.nombre}>
+                        {a.nombre}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid gap-1">
               <Label className="text-xs">Cara</Label>
-              <Input
-                className="h-8 text-xs"
-                list="wiz-acabado-suggestions"
-                placeholder="ej: pp brillo"
-                value={ext.acabado_cara}
-                onChange={(e) => setExt({ acabado_cara: e.target.value })}
-              />
+              <Select
+                value={ext.acabado_cara ?? ""}
+                onValueChange={(v) => setExt({ acabado_cara: v || "" })}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Selecciona…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {acabadosPlastificado.length === 0 ? (
+                    <SelectItem value="__loading__" disabled>
+                      Cargando…
+                    </SelectItem>
+                  ) : (
+                    <>
+                      <SelectItem value="—">— (sin acabado cara)</SelectItem>
+                      {acabadosPlastificado.map((a) => (
+                        <SelectItem key={a.id} value={a.nombre}>
+                          {a.nombre}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid gap-1">
               <Label className="text-xs">Dorso</Label>
-              <Input
-                className="h-8 text-xs"
-                list="wiz-acabado-suggestions"
-                placeholder="ej: pp mate o —"
-                value={ext.acabado_dorso}
-                onChange={(e) => setExt({ acabado_dorso: e.target.value })}
-              />
+              <Select
+                value={ext.acabado_dorso ?? ""}
+                onValueChange={(v) => setExt({ acabado_dorso: v || "" })}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Selecciona…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {acabadosPlastificado.length === 0 ? (
+                    <SelectItem value="__loading__" disabled>
+                      Cargando…
+                    </SelectItem>
+                  ) : (
+                    <>
+                      <SelectItem value="—">— (sin acabado dorso)</SelectItem>
+                      {acabadosPlastificado.map((a) => (
+                        <SelectItem key={a.id} value={a.nombre}>
+                          {a.nombre}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </section>
@@ -2453,11 +2528,11 @@ export function DespachoWizardDialog({
                         {/* Hojas */}
                         <div className="grid gap-3">
                           <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                            Hojas
+                            Hojas impresión
                           </p>
                           <div className="grid grid-cols-2 gap-2">
                             <div className="grid gap-1">
-                              <Label className="text-xs">Netas previstas</Label>
+                              <Label className="text-xs">Netas impresión</Label>
                               <Input
                                 className="h-8 text-xs"
                                 type="number"
@@ -2497,7 +2572,7 @@ export function DespachoWizardDialog({
                           </div>
                           {netasNum > 0 && (
                             <p className="text-[11px] text-slate-500">
-                              Brutas a comprar:{" "}
+                              Brutas impresión:{" "}
                               <span className="font-semibold text-slate-700">
                                 {hojasBrutas.toLocaleString("es-ES")}
                               </span>{" "}
@@ -2718,7 +2793,7 @@ export function DespachoWizardDialog({
                         </p>
                         <p>
                           <span className="text-slate-500">
-                            Hojas brutas totales:
+                            Hojas brutas impresión (Σ):
                           </span>{" "}
                           {totalHojasBrutasFormas(formas).toLocaleString("es-ES")}
                         </p>
@@ -3254,7 +3329,7 @@ export function DespachoWizardDialog({
                       </span>{" "}
                       ·{" "}
                       {totalHojasBrutasFormas(formas).toLocaleString("es-ES")}{" "}
-                      hojas brutas Σ
+                      hojas brutas impresión
                     </p>
                   </div>
                 )}

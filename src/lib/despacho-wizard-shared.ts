@@ -95,8 +95,8 @@ export const DESPACHO_WIZARD_TABS_CONTENEDOR: {
   label: string;
 }[] = [
   { id: "cabecera", label: "Cabecera" },
-  { id: "formas", label: "Formas / Hijas" },
   { id: "material", label: "Material padre" },
+  { id: "formas", label: "Formas / Hijas" },
   { id: "itinerario", label: "Itinerario" },
   { id: "produccion", label: "Producción padre" },
   { id: "resumen", label: "Resumen" },
