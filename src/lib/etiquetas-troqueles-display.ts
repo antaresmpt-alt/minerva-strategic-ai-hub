@@ -51,7 +51,7 @@ export function resolveTroquelDisplay(
   if (troquel) return formatTroquelCatalogLabel(troquel);
 
   const libre = String(row.troquel_utillaje ?? "").trim();
-  if (libre) return `${libre} (texto libre)`;
+  if (libre) return libre;
 
   return "—";
 }

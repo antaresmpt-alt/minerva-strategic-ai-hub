@@ -71,6 +71,8 @@ const ORDEN_OPTIONS: Option[] = [
   { value: "fecha_entrega_ot_desc", label: "Fecha entrega OT (desc)" },
   { value: "fecha_entrada_asc", label: "Fecha entrada depto (asc)" },
   { value: "fecha_entrada_desc", label: "Fecha entrada depto (desc)" },
+  { value: "fecha_fin_konica_asc", label: "Fecha impresión Konica (asc)" },
+  { value: "fecha_fin_konica_desc", label: "Fecha impresión Konica (desc)" },
   { value: "ot_asc", label: "OT (asc)" },
   { value: "ot_desc", label: "OT (desc)" },
 ];
@@ -94,6 +96,14 @@ function fmtDateShort(iso: string | null): string {
     day: "2-digit",
     month: "2-digit",
     year: "2-digit",
+  });
+}
+
+function fmtMetrosCell(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(Number(value))) return "—";
+  return Number(value).toLocaleString("es-ES", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1,
   });
 }
 
@@ -460,6 +470,12 @@ export function EtiquetasHojaRutaTab() {
             -((a.ot_numero ?? "").localeCompare(b.ot_numero ?? "", "es", { numeric: true }))
         );
         break;
+      case "fecha_fin_konica_asc":
+        list.sort((a, b) => cmpStr(a.fecha_fin_konica, b.fecha_fin_konica, true));
+        break;
+      case "fecha_fin_konica_desc":
+        list.sort((a, b) => cmpStr(a.fecha_fin_konica, b.fecha_fin_konica, false));
+        break;
       default:
         list.sort((a, b) => cmpStr(a.fecha_entrega_ot, b.fecha_entrega_ot, true));
     }
@@ -498,10 +514,10 @@ export function EtiquetasHojaRutaTab() {
   const exportOptions = useMemo(
     () => ({
       includeKpis: !compactMode,
-      kpis,
+      kpis: exportKpis,
       troquelesById,
     }),
-    [compactMode, kpis, troquelesById]
+    [compactMode, exportKpis, troquelesById]
   );
 
   const exportHint = compactMode
@@ -517,6 +533,17 @@ export function EtiquetasHojaRutaTab() {
     }
     return presetRange(exportPreset);
   }, [exportFrom, exportPreset, exportTo]);
+
+  const exportKpis = useMemo(() => {
+    if (exportMode !== "date") return kpis;
+    const start =
+      exportRange.start <= exportRange.end ? exportRange.start : exportRange.end;
+    const end =
+      exportRange.start <= exportRange.end ? exportRange.end : exportRange.start;
+    return buildEtiquetasHojaRutaKpis(rows, {
+      metrosRange: { start, end },
+    });
+  }, [exportMode, exportRange.end, exportRange.start, kpis, rows]);
 
   const exportDateFieldLabel = useMemo(
     () =>
@@ -1069,16 +1096,18 @@ export function EtiquetasHojaRutaTab() {
               {formatMetrosKpi(kpis.metrosHoy)}
             </p>
             <p className="mt-0.5 text-[10px] text-emerald-800/80">
-              Papel consumido · Konica hoy
+              Papel consumido · Konica hoy (fecha impresión)
             </p>
           </div>
           <div className="rounded-md border border-emerald-200 bg-emerald-50/60 px-3 py-2">
-            <p className="text-[11px] text-emerald-800">Metros este mes</p>
+            <p className="text-[11px] text-emerald-800">
+              {kpis.metrosMesLabel ?? "Metros este mes"}
+            </p>
             <p className="text-sm font-semibold text-emerald-900">
               {formatMetrosKpi(kpis.metrosMes)}
             </p>
             <p className="mt-0.5 text-[10px] text-emerald-800/80">
-              Papel consumido · Konica del mes
+              Mes calendario en curso · fecha impresión Konica
             </p>
           </div>
           <div className="rounded-md border border-slate-200 bg-amber-50 px-3 py-2">
@@ -1176,6 +1205,12 @@ export function EtiquetasHojaRutaTab() {
                 ))}
                 <TableHead className="whitespace-nowrap font-semibold text-[#002147]">
                   Troquel
+                </TableHead>
+                <TableHead
+                  className="whitespace-nowrap text-right font-semibold text-[#002147]"
+                  title="Metros de papel consumidos en Konica"
+                >
+                  Mts
                 </TableHead>
                 <TableHead className="text-right font-semibold text-[#002147]">
                   Caj / Bob / Etq
@@ -1316,12 +1351,25 @@ export function EtiquetasHojaRutaTab() {
                   ))}
                   <TableCell
                     className={cn(
-                      "max-w-[9rem] truncate",
+                      "max-w-[7rem] truncate",
                       compactMode && "py-1 text-[11px]"
                     )}
                     title={resolveTroquelDisplay(r, troquelesById)}
                   >
                     {resolveTroquelDisplay(r, troquelesById)}
+                  </TableCell>
+                  <TableCell
+                    className={cn(
+                      "whitespace-nowrap text-right tabular-nums text-slate-700",
+                      compactMode && "py-1 text-[11px]"
+                    )}
+                    title={
+                      r.konica
+                        ? "Metros impresión Konica"
+                        : "Sin impresión Konica"
+                    }
+                  >
+                    {r.konica ? fmtMetrosCell(r.metros_impresion) : "—"}
                   </TableCell>
                   <TableCell
                     className={cn(

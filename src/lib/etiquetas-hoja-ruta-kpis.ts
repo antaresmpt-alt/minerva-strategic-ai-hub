@@ -6,6 +6,9 @@ export type EtiquetasHojaRutaKpis = {
   metrosMes: number;
   colaKonica: number;
   plazoCritico: number;
+  /** Etiquetas opcionales cuando el periodo de metros no es el mes en curso. */
+  metrosHoyLabel?: string;
+  metrosMesLabel?: string;
 };
 
 function ymdKey(iso: string | null | undefined): string | null {
@@ -38,6 +41,43 @@ export function formatMetrosKpi(n: number): string {
   })} m`;
 }
 
+function readMetrosImpresion(
+  r: ProdEtiquetasHojaRutaRow
+): number | null {
+  if (
+    r.metros_impresion != null &&
+    Number.isFinite(Number(r.metros_impresion))
+  ) {
+    const mts = Number(r.metros_impresion);
+    return mts >= 0 ? mts : null;
+  }
+  return null;
+}
+
+/** Suma metros Konica con fecha de impresión en el rango [start, end] (YYYY-MM-DD). */
+export function sumMetrosKonicaInYmdRange(
+  rows: ProdEtiquetasHojaRutaRow[],
+  start: string,
+  end: string
+): number {
+  let total = 0;
+  for (const r of rows) {
+    if (!r.konica) continue;
+    const fk = ymdKey(r.fecha_fin_konica);
+    if (fk == null || fk < start || fk > end) continue;
+    const mts = readMetrosImpresion(r);
+    if (mts != null) total += mts;
+  }
+  return total;
+}
+
+export function sumMetrosKonicaOnDay(
+  rows: ProdEtiquetasHojaRutaRow[],
+  dayYmd: string
+): number {
+  return sumMetrosKonicaInYmdRange(rows, dayYmd, dayYmd);
+}
+
 /** Cantidad de etiquetas de la OT en hoja de ruta (campo `cantidad`). */
 export function cantidadEtiquetasKpi(
   cantidad: number | null | undefined
@@ -48,12 +88,16 @@ export function cantidadEtiquetasKpi(
   return qty;
 }
 
-/** KPIs globales (todas las filas cargadas), no dependen de filtros de tabla. */
+/** KPIs globales (cola/plazo) + metros según periodo. */
 export function buildEtiquetasHojaRutaKpis(
-  rows: ProdEtiquetasHojaRutaRow[]
+  rows: ProdEtiquetasHojaRutaRow[],
+  options?: {
+    /** Si se indica, `metrosMes` suma Konica en este rango (p. ej. exportación mes anterior). */
+    metrosRange?: { start: string; end: string };
+  }
 ): EtiquetasHojaRutaKpis {
   const today = todayYmdLocal();
-  const { start: mesInicio, end: mesFin } = currentMonthRangeYmd();
+  const mesRange = options?.metrosRange ?? currentMonthRangeYmd();
 
   let metrosHoy = 0;
   let metrosMes = 0;
@@ -70,20 +114,37 @@ export function buildEtiquetasHojaRutaKpis(
     const fk = ymdKey(r.fecha_fin_konica);
     if (fk == null) continue;
 
-    const mts =
-      r.metros_impresion != null && Number.isFinite(Number(r.metros_impresion))
-        ? Number(r.metros_impresion)
-        : null;
-    if (mts != null && mts >= 0) {
+    const mts = readMetrosImpresion(r);
+    if (mts == null) continue;
+
+    if (options?.metrosRange) {
+      if (fk >= mesRange.start && fk <= mesRange.end) metrosMes += mts;
+      if (fk === today && today >= mesRange.start && today <= mesRange.end) {
+        metrosHoy += mts;
+      }
+    } else {
       if (fk === today) metrosHoy += mts;
-      if (fk >= mesInicio && fk <= mesFin) metrosMes += mts;
+      if (fk >= mesRange.start && fk <= mesRange.end) metrosMes += mts;
     }
   }
+
+  const monthName = new Intl.DateTimeFormat("es-ES", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(`${mesRange.start}T12:00:00`));
 
   return {
     metrosHoy,
     metrosMes,
     colaKonica,
     plazoCritico,
+    ...(options?.metrosRange
+      ? {
+          metrosHoyLabel: "Metros hoy (en periodo)",
+          metrosMesLabel: `Metros Konica (${monthName})`,
+        }
+      : {
+          metrosMesLabel: "Metros este mes",
+        }),
   };
 }

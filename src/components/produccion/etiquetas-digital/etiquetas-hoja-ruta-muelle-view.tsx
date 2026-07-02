@@ -35,6 +35,8 @@ const ORDEN_OPTIONS: Option[] = [
   { value: "fecha_entrega_ot_desc", label: "Fecha entrega OT (desc)" },
   { value: "fecha_entrada_asc", label: "Fecha entrada depto (asc)" },
   { value: "fecha_entrada_desc", label: "Fecha entrada depto (desc)" },
+  { value: "fecha_fin_konica_asc", label: "Fecha impresión Konica (asc)" },
+  { value: "fecha_fin_konica_desc", label: "Fecha impresión Konica (desc)" },
   { value: "ot_asc", label: "OT (asc)" },
   { value: "ot_desc", label: "OT (desc)" },
 ];
@@ -79,6 +81,12 @@ function sortRows(list: ProdEtiquetasHojaRutaRow[], orden: string): ProdEtiqueta
         (a, b) =>
           -((a.ot_numero ?? "").localeCompare(b.ot_numero ?? "", "es", { numeric: true }))
       );
+      break;
+    case "fecha_fin_konica_asc":
+      out.sort((a, b) => cmpStr(a.fecha_fin_konica, b.fecha_fin_konica, true));
+      break;
+    case "fecha_fin_konica_desc":
+      out.sort((a, b) => cmpStr(a.fecha_fin_konica, b.fecha_fin_konica, false));
       break;
     default:
       out.sort((a, b) => cmpStr(a.fecha_entrega_ot, b.fecha_entrega_ot, true));

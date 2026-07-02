@@ -327,10 +327,16 @@ function buildSummaryAoa(
       ["Indicadores"],
       [
         "Nota",
-        "Etiquetas OTs respeta la selección exportada; el resto de KPIs son globales.",
+        "Etiquetas OTs respeta la selección exportada; cola/plazo son globales. Metros: por fecha impresión Konica en el periodo indicado.",
       ],
-      ["Metros hoy (Konica)", formatMetrosKpi(k.metrosHoy)],
-      ["Metros este mes (Konica)", formatMetrosKpi(k.metrosMes)],
+      [
+        k.metrosHoyLabel ?? "Metros hoy (Konica)",
+        formatMetrosKpi(k.metrosHoy),
+      ],
+      [
+        k.metrosMesLabel ?? "Metros este mes (Konica)",
+        formatMetrosKpi(k.metrosMes),
+      ],
       ["Cola Konica (OTs)", k.colaKonica],
       ["Plazo ≤ 4 días (OTs activas)", k.plazoCritico]
     );
@@ -362,12 +368,12 @@ function drawKpisBlock(
       fill: LIGHT_BG,
     },
     {
-      label: "Metros hoy",
+      label: kpis.metrosHoyLabel ?? "Metros hoy",
       value: formatMetrosKpi(kpis.metrosHoy),
       fill: [220, 252, 231],
     },
     {
-      label: "Metros este mes",
+      label: kpis.metrosMesLabel ?? "Metros este mes",
       value: formatMetrosKpi(kpis.metrosMes),
       fill: [209, 250, 229],
     },
