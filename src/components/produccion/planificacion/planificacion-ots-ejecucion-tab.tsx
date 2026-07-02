@@ -57,14 +57,23 @@ import {
   ctpRequisitosPendientes,
 } from "@/lib/ctp-despacho";
 import {
-  aplicarPrefillFormatoEncadenado,
-  buildFormatoAnteriorByOtPasoId,
-  type PasoItinerarioFormato,
-} from "@/lib/hoja-ruta-formato-encadenado";
+  buildComponentesDesbroceSeed,
+  hojasNetasFormaFromComponentes,
+  shouldShowNoMezclarBanner,
+  TABLE_HIJA_COMPONENTES,
+  totalEstuchesFormaComponentes,
+  type HijaComponenteRow,
+  type OtHijaMeta,
+} from "@/lib/desbroce-hija-componentes";
 import {
   margenSobreproduccionPorProceso,
   type SobreproduccionMargenesParametros,
 } from "@/lib/sys-parametros-sobreproduccion";
+import {
+  aplicarPrefillFormatoEncadenado,
+  buildFormatoAnteriorByOtPasoId,
+  type PasoItinerarioFormato,
+} from "@/lib/hoja-ruta-formato-encadenado";
 import { DatosProcesoForm } from "@/components/produccion/hoja-ruta/datos-proceso-form";
 import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
 import type {
@@ -85,6 +94,13 @@ const TABLE_DESPACHO = "produccion_ot_despachadas";
 const TABLE_DESPACHO_MATERIALES_LINEAS = "prod_despacho_materiales_lineas";
 const TABLE_OTS_GENERAL = "prod_ots_general";
 const TABLE_TROQUELES = "prod_troqueles";
+
+type OtMetaInfo = {
+  otTipo: string | null;
+  otPadreNumero: string | null;
+  tipoHija: string | null;
+  formaDescripcion: string | null;
+};
 
 type DespachoInfo = {
   cliente: string | null;
@@ -610,6 +626,8 @@ export function PlanificacionOtsEjecucionTab({
   const [rows, setRows] = useState<MesaEjecucion[]>([]);
   const [pausesByExecutionId, setPausesByExecutionId] = useState<Record<string, MesaEjecucionPausa[]>>({});
   const [despachoByOt, setDespachoByOt] = useState<Record<string, DespachoInfo>>({});
+  const [otMetaByOt, setOtMetaByOt] = useState<Record<string, OtMetaInfo>>({});
+  const [hijaComponentesByOt, setHijaComponentesByOt] = useState<Record<string, HijaComponenteRow[]>>({});
   const [motivosPausa, setMotivosPausa] = useState<MotivoPausa[]>([]);
   const [cajasEmbalaje, setCajasEmbalaje] = useState<CajaEmbalajeOption[]>([]);
   const [tipoEngomadoOptions, setTipoEngomadoOptions] = useState<string[]>([]);
@@ -744,6 +762,9 @@ export function PlanificacionOtsEjecucionTab({
       }
       const otNumeros = [...new Set(execRows.map((r) => r.ot_numero.trim()).filter(Boolean))];
       const despachoMap: Record<string, DespachoInfo> = {};
+      const otMetaMap: Record<string, OtMetaInfo> = {};
+      const hijaComponentesMap: Record<string, HijaComponenteRow[]> = {};
+
       if (otNumeros.length > 0) {
         const { data: despData } = await supabase
           .from(TABLE_DESPACHO)
@@ -767,7 +788,7 @@ export function PlanificacionOtsEjecucionTab({
           .in("ot_numero", otNumeros);
         const { data: generalData } = await supabase
           .from(TABLE_OTS_GENERAL)
-          .select("num_pedido, cliente, cantidad, titulo, fecha_entrega")
+          .select("num_pedido, cliente, cantidad, titulo, fecha_entrega, ot_tipo, ot_padre_numero, tipo_hija, forma_descripcion")
           .in("num_pedido", otNumeros);
         const { data: materialesData } = await supabase
           .from(TABLE_DESPACHO_MATERIALES_LINEAS)
@@ -776,7 +797,17 @@ export function PlanificacionOtsEjecucionTab({
           .order("ot_numero", { ascending: true })
           .order("orden", { ascending: true });
         const generalMap = new Map<string, { cliente: string | null; cantidad: number | null; titulo: string | null; fechaEntrega: string | null }>();
-        for (const g of (generalData ?? []) as Array<{ num_pedido?: string; cliente?: string | null; cantidad?: number | null; titulo?: string | null; fecha_entrega?: string | null }>) {
+        for (const g of (generalData ?? []) as Array<{ 
+          num_pedido?: string; 
+          cliente?: string | null; 
+          cantidad?: number | null; 
+          titulo?: string | null; 
+          fecha_entrega?: string | null;
+          ot_tipo?: string | null;
+          ot_padre_numero?: string | null;
+          tipo_hija?: string | null;
+          forma_descripcion?: string | null;
+        }>) {
           const ot = String(g.num_pedido ?? "").trim();
           if (ot) {
             generalMap.set(ot, {
@@ -785,6 +816,12 @@ export function PlanificacionOtsEjecucionTab({
               titulo: g.titulo ?? null,
               fechaEntrega: g.fecha_entrega ?? null,
             });
+            otMetaMap[ot] = {
+              otTipo: g.ot_tipo ?? null,
+              otPadreNumero: g.ot_padre_numero ?? null,
+              tipoHija: g.tipo_hija ?? null,
+              formaDescripcion: g.forma_descripcion ?? null,
+            };
           }
         }
         const materialesByOt = new Map<string, MaterialLineaInfo[]>();
@@ -873,6 +910,210 @@ export function PlanificacionOtsEjecucionTab({
             fechaEntrega: gen?.fechaEntrega ?? null,
             materiales,
           };
+        }
+
+        // Fallback despacho para hijas (Bloque 8.2)
+        const hijasSinDespacho = otNumeros.filter((ot) => {
+          const meta = otMetaMap[ot];
+          return (
+            meta?.otTipo === "hija" &&
+            meta.otPadreNumero &&
+            !despachoMap[ot]
+          );
+        });
+        const padresNeeded = [
+          ...new Set(
+            hijasSinDespacho
+              .map((h) => otMetaMap[h]?.otPadreNumero)
+              .filter((p): p is string => Boolean(p))
+          ),
+        ];
+        if (padresNeeded.length > 0) {
+          const { data: padreDespData } = await supabase
+            .from(TABLE_DESPACHO)
+            .select(`
+              ot_numero,
+              material,
+              gramaje,
+              tamano_hoja,
+              num_hojas_brutas,
+              num_hojas_netas,
+              tintas,
+              acabado_pral,
+              troquel,
+              poses,
+              horas_entrada,
+              horas_tiraje,
+              horas_estimadas_troquelado,
+              horas_estimadas_engomado,
+              tipo_engomado
+            `)
+            .in("ot_numero", padresNeeded);
+          const { data: padreGeneralData } = await supabase
+            .from(TABLE_OTS_GENERAL)
+            .select("num_pedido, cliente, titulo, fecha_entrega")
+            .in("num_pedido", padresNeeded);
+          const { data: padreMaterialesData } = await supabase
+            .from(TABLE_DESPACHO_MATERIALES_LINEAS)
+            .select("ot_numero, tipo, descripcion, orden, soporte_impresion")
+            .in("ot_numero", padresNeeded)
+            .order("ot_numero", { ascending: true })
+            .order("orden", { ascending: true });
+
+          const padreGeneralMap = new Map<string, { cliente: string | null; titulo: string | null; fechaEntrega: string | null }>();
+          for (const pg of (padreGeneralData ?? []) as Array<{
+            num_pedido?: string;
+            cliente?: string | null;
+            titulo?: string | null;
+            fecha_entrega?: string | null;
+          }>) {
+            const ot = String(pg.num_pedido ?? "").trim();
+            if (ot) {
+              padreGeneralMap.set(ot, {
+                cliente: pg.cliente ?? null,
+                titulo: pg.titulo ?? null,
+                fechaEntrega: pg.fecha_entrega ?? null,
+              });
+            }
+          }
+
+          const padreMaterialesByOt = new Map<string, MaterialLineaInfo[]>();
+          for (const pm of (padreMaterialesData ?? []) as Array<{
+            ot_numero?: string | null;
+            tipo?: string | null;
+            descripcion?: string | null;
+            orden?: number | string | null;
+            soporte_impresion?: boolean | null;
+          }>) {
+            const ot = String(pm.ot_numero ?? "").trim();
+            const descripcion = String(pm.descripcion ?? "").trim();
+            if (!ot || !descripcion) continue;
+            const list = padreMaterialesByOt.get(ot) ?? [];
+            list.push({
+              descripcion,
+              tipo: pm.tipo ?? null,
+              orden: parseNum(pm.orden),
+              soporteImpresion: Boolean(pm.soporte_impresion),
+            });
+            padreMaterialesByOt.set(ot, list);
+          }
+
+          const padreTroquelNums = [
+            ...new Set(
+              ((padreDespData ?? []) as Array<{ troquel?: string | null }>)
+                .map((d) => String(d.troquel ?? "").trim())
+                .filter(Boolean),
+            ),
+          ];
+          const padreTroquelMap = new Map<string, ReturnType<typeof mapTroquelRow>>();
+          if (padreTroquelNums.length > 0) {
+            const { data: troqData } = await supabase
+              .from(TABLE_TROQUELES)
+              .select("num_troquel,mides,num_figuras,figuras_hoja,pinza,expulsion,num_expulsion,caucho_acrilico")
+              .in("num_troquel", padreTroquelNums);
+            for (const t of (troqData ?? []) as TroquelInfoRow[]) {
+              const key = normalizeTroquelKey(t.num_troquel);
+              if (key) padreTroquelMap.set(key, mapTroquelRow(t));
+            }
+          }
+
+          const padreDespachoMap: Record<string, DespachoInfo> = {};
+          for (const pd of (padreDespData ?? []) as Array<{
+            ot_numero?: string;
+            material?: string | null;
+            gramaje?: number | null;
+            tamano_hoja?: string | null;
+            num_hojas_brutas?: number | null;
+            num_hojas_netas?: number | null;
+            tintas?: string | null;
+            acabado_pral?: string | null;
+            troquel?: string | null;
+            poses?: number | null;
+            horas_entrada?: number | null;
+            horas_tiraje?: number | null;
+            horas_estimadas_troquelado?: number | null;
+            horas_estimadas_engomado?: number | null;
+            tipo_engomado?: string | null;
+          }>) {
+            const ot = String(pd.ot_numero ?? "").trim();
+            if (!ot) continue;
+            const gen = padreGeneralMap.get(ot);
+            const troq = padreTroquelMap.get(normalizeTroquelKey(pd.troquel));
+            const materiales = padreMaterialesByOt.get(ot) ?? [];
+            padreDespachoMap[ot] = {
+              cliente: gen?.cliente ?? null,
+              cantidad: null,
+              titulo: gen?.titulo ?? null,
+              material: pd.material ?? null,
+              gramaje: typeof pd.gramaje === "number" ? pd.gramaje : null,
+              tamanoHoja: pd.tamano_hoja ?? null,
+              hojasBrutas: typeof pd.num_hojas_brutas === "number" ? pd.num_hojas_brutas : null,
+              hojasNetas: typeof pd.num_hojas_netas === "number" ? pd.num_hojas_netas : null,
+              tintas: pd.tintas ?? null,
+              acabadoPral: pd.acabado_pral ?? null,
+              troquel: pd.troquel ?? null,
+              poses: parseNum(pd.poses) ?? troq?.poses ?? null,
+              tamanoCorte: troq?.tamanoCorte ?? null,
+              pinza: troq?.pinza ?? null,
+              expulsor: troq?.expulsor ?? null,
+              cauchoAcrilico: troq?.cauchoAcrilico ?? null,
+              horasEntrada: typeof pd.horas_entrada === "number" ? pd.horas_entrada : null,
+              horasTiraje: typeof pd.horas_tiraje === "number" ? pd.horas_tiraje : null,
+              horasTroquelado: typeof pd.horas_estimadas_troquelado === "number" ? pd.horas_estimadas_troquelado : null,
+              horasEngomado: typeof pd.horas_estimadas_engomado === "number" ? pd.horas_estimadas_engomado : null,
+              tipoEngomado: pd.tipo_engomado ?? null,
+              fechaEntrega: gen?.fechaEntrega ?? null,
+              materiales,
+            };
+          }
+
+          for (const hijaOt of hijasSinDespacho) {
+            const meta = otMetaMap[hijaOt];
+            const padreOt = meta?.otPadreNumero;
+            if (!padreOt) continue;
+            const padreDesp = padreDespachoMap[padreOt];
+            if (!padreDesp) continue;
+            const hijaGen = generalMap.get(hijaOt);
+            despachoMap[hijaOt] = {
+              ...padreDesp,
+              cantidad: hijaGen?.cantidad ?? null,
+              titulo: meta.formaDescripcion ?? hijaGen?.titulo ?? padreDesp.titulo,
+            };
+          }
+        }
+
+        // Cargar componentes de hijas para desbroce (Bloque 8.3)
+        const hijasForma = otNumeros.filter((ot) => {
+          const meta = otMetaMap[ot];
+          return meta?.otTipo === "hija" && meta?.tipoHija === "forma";
+        });
+        if (hijasForma.length > 0) {
+          const { data: compData } = await supabase
+            .from(TABLE_HIJA_COMPONENTES)
+            .select("ot_hija_numero, referencia_codigo, referencia_descripcion, poses_en_forma, cantidad_objetivo, orden")
+            .in("ot_hija_numero", hijasForma)
+            .order("ot_hija_numero", { ascending: true })
+            .order("orden", { ascending: true });
+          for (const c of (compData ?? []) as Array<{
+            ot_hija_numero?: string | null;
+            referencia_codigo?: string | null;
+            referencia_descripcion?: string | null;
+            poses_en_forma?: number | null;
+            cantidad_objetivo?: number | null;
+            orden?: number | null;
+          }>) {
+            const ot = String(c.ot_hija_numero ?? "").trim();
+            if (!ot) continue;
+            const list = hijaComponentesMap[ot] ?? [];
+            list.push({
+              referencia_codigo: String(c.referencia_codigo ?? "").trim(),
+              referencia_descripcion: c.referencia_descripcion ?? null,
+              poses_en_forma: typeof c.poses_en_forma === "number" ? c.poses_en_forma : 0,
+              cantidad_objetivo: typeof c.cantidad_objetivo === "number" ? c.cantidad_objetivo : null,
+              orden: typeof c.orden === "number" ? c.orden : 0,
+            });
+            hijaComponentesMap[ot] = list;
+          }
         }
       }
 
@@ -995,6 +1236,8 @@ export function PlanificacionOtsEjecucionTab({
         Object.fromEntries(Array.from(pauseMap.entries()).map(([k, v]) => [k, v] as const)),
       );
       setDespachoByOt(despachoMap);
+      setOtMetaByOt(otMetaMap);
+      setHijaComponentesByOt(hijaComponentesMap);
       setRows(execRows.map((r) => mapRow(r, pauseMap, salidaAnteriorByPasoKey, formatoAnteriorByOtPasoId)));
       setMotivosPausa(motivos);
       setCajasEmbalaje(cajas);
@@ -1411,6 +1654,8 @@ export function PlanificacionOtsEjecucionTab({
                       key={`${row.id}-${row.updatedAt}`}
                       row={row}
                       despacho={despachoByOt[row.ot] ?? null}
+                      otMeta={otMetaByOt[row.ot] ?? null}
+                      hijaComponentes={hijaComponentesByOt[row.ot] ?? []}
                       pauses={pausesByExecutionId[row.id] ?? []}
                       motivosPausa={motivosPausa}
                       cajasEmbalaje={cajasEmbalaje}
@@ -1439,6 +1684,8 @@ export function PlanificacionOtsEjecucionTab({
 function ExecutionCard({
   row,
   despacho,
+  otMeta,
+  hijaComponentes,
   pauses,
   motivosPausa,
   cajasEmbalaje,
@@ -1454,6 +1701,8 @@ function ExecutionCard({
 }: {
   row: MesaEjecucion;
   despacho: DespachoInfo | null;
+  otMeta: OtMetaInfo | null;
+  hijaComponentes: HijaComponenteRow[];
   pauses: MesaEjecucionPausa[];
   motivosPausa: MotivoPausa[];
   cajasEmbalaje: CajaEmbalajeOption[];
@@ -1587,12 +1836,30 @@ function ExecutionCard({
       if (despacho.tipoEngomado) base.tipo_engomado = despacho.tipoEngomado;
     }
     if (pid === PROCESO_DESBROCE_ID) {
-      if (row.salidaProcesoAnterior != null) base.hojas_entrada = row.salidaProcesoAnterior;
-      if (despacho.poses != null) base.poses = despacho.poses;
-      const hojas = toFiniteNum(base.hojas_entrada);
-      const poses = toFiniteNum(base.poses);
-      if (hojas != null && poses != null && poses > 0) {
-        base.estuches_desbrozados = Math.max(0, Math.floor(hojas * poses));
+      if (hijaComponentes.length > 0) {
+        const hojasNetas = hojasNetasFormaFromComponentes(hijaComponentes);
+        if (hojasNetas != null) {
+          base.hojas_entrada = hojasNetas;
+        } else if (row.salidaProcesoAnterior != null) {
+          base.hojas_entrada = row.salidaProcesoAnterior;
+        }
+        const primeraRef = hijaComponentes[0];
+        if (primeraRef && primeraRef.poses_en_forma > 0) {
+          base.poses = primeraRef.poses_en_forma;
+        }
+        const totalEstuches = totalEstuchesFormaComponentes(hijaComponentes);
+        if (totalEstuches > 0) {
+          base.estuches_desbrozados = totalEstuches;
+        }
+        base.componentes_forma = buildComponentesDesbroceSeed(hijaComponentes);
+      } else {
+        if (row.salidaProcesoAnterior != null) base.hojas_entrada = row.salidaProcesoAnterior;
+        if (despacho.poses != null) base.poses = despacho.poses;
+        const hojas = toFiniteNum(base.hojas_entrada);
+        const poses = toFiniteNum(base.poses);
+        if (hojas != null && poses != null && poses > 0) {
+          base.estuches_desbrozados = Math.max(0, Math.floor(hojas * poses));
+        }
       }
     }
     if (pid === 15) {
@@ -1704,7 +1971,12 @@ function ExecutionCard({
     <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-xs">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="font-mono text-sm font-bold text-[#002147]">OT {row.ot}</p>
+          <p className="font-mono text-sm font-bold text-[#002147]">
+            OT {row.ot}
+            {otMeta?.tipoHija === "forma" && otMeta.formaDescripcion ? (
+              <span className="ml-1.5 text-xs font-normal text-slate-600">· {otMeta.formaDescripcion}</span>
+            ) : null}
+          </p>
           <p className="text-xs text-slate-600">
             {row.maquinaNombre} · {row.fechaPlanificada ?? "sin fecha"} · {row.turno ?? "sin turno"}
           </p>
@@ -1774,6 +2046,34 @@ function ExecutionCard({
               · El tamaño de corte del troquel es independiente del pliego.
             </span>
           ) : null}
+        </div>
+      ) : null}
+
+      {row.procesoId === PROCESO_DESBROCE_ID && shouldShowNoMezclarBanner(otMeta?.tipoHija, hijaComponentes) ? (
+        <div className="mt-2 rounded border-2 border-orange-400 bg-orange-50 px-3 py-2 text-xs">
+          <div className="flex items-start gap-2">
+            <span className="text-base leading-none">⚠️</span>
+            <div className="flex-1">
+              <p className="font-semibold text-orange-900">
+                FORMA CON VARIAS REFERENCIAS — NO MEZCLAR
+              </p>
+              <div className="mt-1.5 space-y-1 text-[11px] text-orange-800">
+                {hijaComponentes.map((comp, idx) => (
+                  <div key={idx} className="flex items-baseline gap-2">
+                    <span className="font-medium">{comp.poses_en_forma} {comp.poses_en_forma === 1 ? "pose" : "poses"}</span>
+                    <span>→</span>
+                    <span className="font-semibold">{comp.referencia_codigo}</span>
+                    {comp.referencia_descripcion ? (
+                      <span className="text-orange-700">({comp.referencia_descripcion})</span>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+              <p className="mt-1.5 text-[11px] font-medium text-orange-900">
+                Salida esperada: {hijaComponentes.map(c => `${(c.cantidad_objetivo ?? 0).toLocaleString("es-ES")} uds`).join(" + ")} = {totalEstuchesFormaComponentes(hijaComponentes).toLocaleString("es-ES")} uds totales
+              </p>
+            </div>
+          </div>
         </div>
       ) : null}
 
