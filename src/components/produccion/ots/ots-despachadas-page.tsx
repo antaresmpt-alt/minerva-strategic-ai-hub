@@ -1144,7 +1144,7 @@ export function OtsDespachadasPage({
           const { error: updateError } = await supabase
             .from(TABLE_DESPACHADAS)
             .update({ estado_material: "Pendiente de pedir" })
-            .eq("id", row.id);
+            .eq("ot_numero", ot);
           if (updateError) throw updateError;
           ok++;
         }
@@ -1180,6 +1180,15 @@ export function OtsDespachadasPage({
 
   const handleGenerarComprasLote = useCallback(async () => {
     if (selectedRows.length === 0) return;
+    const hijasSeleccionadas = selectedRows.filter(
+      (r) => getDespachoOtTipo(r) === "hija",
+    );
+    if (hijasSeleccionadas.length > 0) {
+      toast.error(
+        "La compra de material va en el contenedor (padre), no en las hijas. Selecciona la OT barco, p. ej. 36204.",
+      );
+      return;
+    }
     const invalid = selectedRows.filter(
       (r) => !estadoMaterialPermiteNuevaCompra(r.estado_material)
     );
@@ -1207,7 +1216,7 @@ export function OtsDespachadasPage({
         e instanceof Error ? e.message : "No se pudo comprobar el itinerario."
       );
     }
-  }, [ejecutarGenerarComprasLote, selectedRows, supabase]);
+  }, [ejecutarGenerarComprasLote, getDespachoOtTipo, selectedRows, supabase]);
 
   /**
    * Carga el itinerario (slots) de una OT por número.

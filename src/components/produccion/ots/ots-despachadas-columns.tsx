@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 import { OtContenedorOtNumeroCell } from "@/components/produccion/ots/ot-contenedor-ot-numero-cell";
 import { formatDateDDMMYY } from "@/components/produccion/ots/master-ots-table-helpers";
 import type { WithOtContenedorDisplay } from "@/lib/ots-contenedor-display";
-import { isOtRowSelectableInGroupedList } from "@/lib/ots-contenedor-display";
+import { isOtRowSelectableForCompraMaterial } from "@/lib/ots-contenedor-display";
 import type { PlanificacionOtTipoFiltroUi } from "@/lib/planificacion-contenedor-query";
 
 /** Datos «Tipo Excel» desde `prod_troqueles` (clave = `num_troquel` en minúsculas). */
@@ -222,7 +222,7 @@ export function createOtsDespachadasColumns(
       cell: ({ row }) => {
         const disabled =
           ctx.isSeleccionCompraDeshabilitada(row.original) ||
-          !isOtRowSelectableInGroupedList(row.original);
+          !isOtRowSelectableForCompraMaterial(row.original);
         return (
           <div
             className={cn(

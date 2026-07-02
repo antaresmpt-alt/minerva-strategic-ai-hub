@@ -315,4 +315,13 @@ export function isOtRowSelectableInGroupedList(row: {
   return true;
 }
 
+/** Compra material barco: solo padre/contenedor o OT simple; nunca hijas. */
+export function isOtRowSelectableForCompraMaterial(row: {
+  isHijaRow?: boolean;
+  displayOtTipo?: ProdOtTipo;
+}): boolean {
+  if (row.isHijaRow || row.displayOtTipo === "hija") return false;
+  return true;
+}
+
 export { isOtVisibleInPlanificacionList };
