@@ -49,6 +49,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   applyClonePrefill,
   buildDatosProcesoSeed,
+  buildDatosProcesoSeedForForma,
   buildHijaNumPedido,
   calcCantidadObjetivoComponente,
   calcHojasBrutasForma,
@@ -106,6 +107,7 @@ import {
   exportHojaRutaCartelitaPdf,
   printHojaRutaCartelitaPdf,
   type HojaRutaCartelitaInput,
+  type HojaRutaCartelitaPack,
 } from "@/lib/hoja-ruta/hoja-ruta-cartelita-pdf";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
@@ -176,6 +178,85 @@ function buildCartelitaFromWizard(
   };
 }
 
+function buildCartelitaPackFromWizard(
+  ot: string,
+  meta: DespachoMeta,
+  form: DespachoFormState,
+  slots: DespachoItinerarioSlot[],
+  formas: DespachoFormaState[],
+): HojaRutaCartelitaPack {
+  const pasos = slots.map((s, i) => ({
+    orden: i + 1,
+    nombre: s.nombre,
+  }));
+  const shared = {
+    cliente: meta.cliente.trim() || null,
+    trabajo: meta.trabajo.trim() || null,
+    fechaEntrega: meta.fecha_entrega.trim() || null,
+    material: form.material.trim() || null,
+    tamanoHoja: form.tamano_hoja.trim() || null,
+    tintas: form.tintas.trim() || null,
+    troquel: form.troquel.trim() || null,
+  };
+
+  if (formas.length === 0) {
+    return {
+      portada: null,
+      hijas: [buildCartelitaFromWizard(ot, meta, form, slots)],
+    };
+  }
+
+  const portada: HojaRutaCartelitaInput = {
+    otNumero: ot,
+    cantidad: meta.cantidad.trim() || null,
+    pasos: [],
+    esPortadaBarco: true,
+    hijasResumen: formas.map((forma, fi) => {
+      const netas = integerOrZeroForDespacho(forma.hojas_netas);
+      const refs = forma.componentes
+        .filter((c) => c.referencia_codigo.trim())
+        .map(
+          (c) =>
+            `${c.referencia_codigo.trim()} (${integerOrZeroForDespacho(c.poses_en_forma)}p)`,
+        )
+        .join(", ");
+      return {
+        otNumero: buildHijaNumPedido(ot, fi),
+        label: forma.descripcion.trim() || `Forma ${fi + 1}`,
+        netas,
+        refs,
+      };
+    }),
+    ...shared,
+  };
+
+  const hijas: HojaRutaCartelitaInput[] = formas.map((forma, fi) => {
+    const hijaNum = buildHijaNumPedido(ot, fi);
+    const netas = integerOrZeroForDespacho(forma.hojas_netas);
+    const brutas = calcHojasBrutasForma(forma);
+    const estuches = totalPosesForma(forma) * netas;
+    const comps = forma.componentes.filter((c) => c.referencia_codigo.trim());
+    return {
+      otNumero: hijaNum,
+      cantidad: estuches > 0 ? String(estuches) : null,
+      formaLabel: forma.descripcion.trim() || `Forma ${fi + 1}`,
+      hojasNetas: netas > 0 ? netas : null,
+      hojasBrutas: brutas > 0 ? brutas : null,
+      componentes: comps.map((c) => ({
+        referencia_codigo: c.referencia_codigo.trim(),
+        referencia_descripcion: c.referencia_descripcion.trim() || null,
+        poses_en_forma: integerOrZeroForDespacho(c.poses_en_forma),
+        cantidad_objetivo: calcCantidadObjetivoComponente(forma, c),
+      })),
+      avisoNoMezclar: comps.length >= 2,
+      pasos,
+      ...shared,
+    };
+  });
+
+  return { portada, hijas };
+}
+
 export function DespachoWizardDialog({
   open,
   onOpenChange,
@@ -199,7 +280,7 @@ export function DespachoWizardDialog({
   const [saving, setSaving] = useState(false);
   const [batchMode, setBatchMode] = useState(batchModeDefault);
   const [postDespachoCartelita, setPostDespachoCartelita] =
-    useState<HojaRutaCartelitaInput | null>(null);
+    useState<HojaRutaCartelitaPack | null>(null);
   const [form, setForm] = useState<DespachoFormState>(() => emptyDespachoForm());
   const [itinerarioSlots, setItinerarioSlots] = useState<DespachoItinerarioSlot[]>(
     []
@@ -1249,11 +1330,12 @@ export function DespachoWizardDialog({
 
           // Insertar nuevos pasos en la hija
           const pasosHija = hijaSlots.map((s, i) => {
-            const datos = buildDatosProcesoSeed(
+            const datos = buildDatosProcesoSeedForForma(
               s.procesoId,
               form,
               procesoDatos,
               procesoIdsInRoute,
+              forma,
             );
             return {
               ot_id: hijaId,
@@ -1400,7 +1482,25 @@ export function DespachoWizardDialog({
       onDespachado?.({ ot: selectedOt, rowId: selectedRowId });
 
       setPostDespachoCartelita(
-        buildCartelitaFromWizard(selectedOt, meta, form, itinerarioSlots),
+        modoContenedor && formas.length > 0
+          ? buildCartelitaPackFromWizard(
+              selectedOt,
+              meta,
+              form,
+              itinerarioSlots,
+              formas,
+            )
+          : {
+              portada: null,
+              hijas: [
+                buildCartelitaFromWizard(
+                  selectedOt,
+                  meta,
+                  form,
+                  itinerarioSlots,
+                ),
+              ],
+            },
       );
     } catch (e) {
       toast.error(formatSupabaseErrorMessage(e));
@@ -3371,11 +3471,17 @@ export function DespachoWizardDialog({
             <>
               <div className="mr-auto rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
                 <p className="font-semibold">
-                  OT {postDespachoCartelita.otNumero} despachada
+                  OT {postDespachoCartelita.portada?.otNumero ?? postDespachoCartelita.hijas[0]?.otNumero} despachada
+                  {postDespachoCartelita.hijas.length > 1
+                    ? ` · ${postDespachoCartelita.hijas.length} hojas simplificadas`
+                    : ""}
                 </p>
                 <p className="text-emerald-800">
                   Imprime la Hoja de Ruta Simplificada (DIN A5) para que viaje
                   entre departamentos con el itinerario y las firmas.
+                  {postDespachoCartelita.portada
+                    ? " Portada barco + 1 hoja por forma."
+                    : ""}
                 </p>
               </div>
               <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">

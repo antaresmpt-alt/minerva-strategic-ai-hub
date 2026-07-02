@@ -136,6 +136,57 @@ function isDespachadasGroupedView(filtro: PlanificacionOtTipoFiltroUi): boolean 
   return filtro !== "todas_planas";
 }
 
+/** Fila sintética para hija sin entrada en produccion_ot_despachadas (MVP barco). */
+function synthesizeDespachoHijaRow(
+  parent: OtsDespachadasTableRow,
+  hijaMeta: OtContenedorMeta,
+  master?: {
+    cantidad: number | null;
+    cliente: string | null;
+    titulo: string | null;
+    fecha_entrega: string | null;
+    tipo_hija: string | null;
+    forma_descripcion: string | null;
+  } | null,
+): OtsDespachadasTableRow {
+  return {
+    id: `synthetic-${hijaMeta.numPedido}`,
+    ot_numero: hijaMeta.numPedido,
+    has_itinerario: true,
+    despachado_at: parent.despachado_at,
+    material: parent.material,
+    gramaje: parent.gramaje,
+    tamano_hoja: parent.tamano_hoja,
+    num_hojas_netas: null,
+    num_hojas_brutas: null,
+    horas_entrada: parent.horas_entrada,
+    horas_tiraje: parent.horas_tiraje,
+    horas_estimadas_troquelado: parent.horas_estimadas_troquelado,
+    horas_estimadas_engomado: parent.horas_estimadas_engomado,
+    tipo_engomado: parent.tipo_engomado,
+    tintas: parent.tintas,
+    notas: parent.notas,
+    estado_material: parent.estado_material,
+    cliente: master?.cliente ?? hijaMeta.cliente ?? parent.cliente,
+    titulo: master?.titulo ?? hijaMeta.titulo ?? parent.titulo,
+    cantidad: master?.cantidad ?? parent.cantidad,
+    fecha_entrega_prevista:
+      master?.fecha_entrega ?? hijaMeta.fechaEntrega ?? parent.fecha_entrega_prevista,
+    troquel: parent.troquel,
+    poses: parent.poses,
+    acabado_pral: parent.acabado_pral,
+    referencia_id: parent.referencia_id ?? null,
+    referencia_codigo: parent.referencia_codigo ?? null,
+    ot_anterior_numero: parent.ot_anterior_numero ?? null,
+    ot_anterior_id: parent.ot_anterior_id ?? null,
+    ot_tipo: "hija",
+    ot_padre_numero: hijaMeta.otPadreNumero ?? parent.ot_numero,
+    tipo_hija: (master?.tipo_hija as OtsDespachadasTableRow["tipo_hija"]) ?? hijaMeta.tipoHija,
+    forma_descripcion:
+      master?.forma_descripcion ?? hijaMeta.formaDescripcion ?? null,
+  };
+}
+
 /**
  * Normaliza `estado_material` para comparaciones laxas (mayúsculas, espacios,
  * acentos combinantes Unicode).
@@ -867,12 +918,84 @@ export function OtsDespachadasPage({
     [],
   );
   const loadHijaRowsForDespachadas = useCallback(
-    async (_padreOt: string, hijasMeta: OtContenedorMeta[]) => {
-      const nums = new Set(hijasMeta.map((h) => h.numPedido));
-      const matched = rows.filter((r) => nums.has(getDespachoOtNumero(r)));
-      return sortRowsByOtNumero(matched, getDespachoOtNumero);
+    async (padreOt: string, hijasMeta: OtContenedorMeta[]) => {
+      const nums = hijasMeta.map((h) => h.numPedido);
+      const matched = rows.filter((r) => nums.includes(getDespachoOtNumero(r)));
+      if (matched.length >= nums.length) {
+        return sortRowsByOtNumero(matched, getDespachoOtNumero);
+      }
+
+      const parentRow = rows.find((r) => getDespachoOtNumero(r) === padreOt);
+      if (!parentRow) {
+        return sortRowsByOtNumero(matched, getDespachoOtNumero);
+      }
+
+      const missingNums = nums.filter(
+        (n) => !matched.some((r) => getDespachoOtNumero(r) === n),
+      );
+      const masterByOt = new Map<
+        string,
+        {
+          cantidad: number | null;
+          cliente: string | null;
+          titulo: string | null;
+          fecha_entrega: string | null;
+          tipo_hija: string | null;
+          forma_descripcion: string | null;
+        }
+      >();
+
+      if (missingNums.length > 0) {
+        const { data: masterRows, error: mErr } = await supabase
+          .from(TABLE_MASTER)
+          .select(
+            "num_pedido, cantidad, cliente, titulo, fecha_entrega, tipo_hija, forma_descripcion",
+          )
+          .in("num_pedido", missingNums);
+        if (mErr) throw mErr;
+        for (const r of masterRows ?? []) {
+          const row = r as {
+            num_pedido?: string;
+            cantidad?: number | null;
+            cliente?: string | null;
+            titulo?: string | null;
+            fecha_entrega?: string | null;
+            tipo_hija?: string | null;
+            forma_descripcion?: string | null;
+          };
+          const ot = String(row.num_pedido ?? "").trim();
+          if (!ot) continue;
+          masterByOt.set(ot, {
+            cantidad: typeof row.cantidad === "number" ? row.cantidad : null,
+            cliente: row.cliente ?? null,
+            titulo: row.titulo ?? null,
+            fecha_entrega: row.fecha_entrega ?? null,
+            tipo_hija: row.tipo_hija ?? null,
+            forma_descripcion: row.forma_descripcion ?? null,
+          });
+        }
+      }
+
+      const synthesized: OtsDespachadasTableRow[] = [];
+      for (const meta of hijasMeta) {
+        const existing = matched.find(
+          (r) => getDespachoOtNumero(r) === meta.numPedido,
+        );
+        if (existing) {
+          synthesized.push(existing);
+          continue;
+        }
+        synthesized.push(
+          synthesizeDespachoHijaRow(
+            parentRow,
+            meta,
+            masterByOt.get(meta.numPedido) ?? null,
+          ),
+        );
+      }
+      return sortRowsByOtNumero(synthesized, getDespachoOtNumero);
     },
-    [rows, getDespachoOtNumero],
+    [rows, getDespachoOtNumero, supabase],
   );
 
   const rowsForGrouping = useMemo(() => {

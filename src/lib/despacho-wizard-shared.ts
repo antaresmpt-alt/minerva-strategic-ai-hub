@@ -628,6 +628,76 @@ export function buildDatosProcesoSeed(
   return null;
 }
 
+/** Estuches teóricos de una forma (netas × Σ poses componentes). */
+export function totalEstuchesForma(forma: DespachoFormaState): number {
+  const netas = integerOrZeroForDespacho(forma.hojas_netas);
+  return netas * totalPosesForma(forma);
+}
+
+/**
+ * Seed de datos_proceso para pasos de una OT hija (forma).
+ * Parte del plan del padre y sobreescribe hojas/estuches/refs de la forma.
+ */
+export function buildDatosProcesoSeedForForma(
+  procesoId: number,
+  form: DespachoFormState,
+  procesoDatos: DespachoWizardProcesoDatos,
+  procesoIdsInRoute: Set<number>,
+  forma: DespachoFormaState,
+): Record<string, unknown> | null {
+  const base =
+    buildDatosProcesoSeed(procesoId, form, procesoDatos, procesoIdsInRoute) ??
+    {};
+
+  const netasForma = integerOrZeroForDespacho(forma.hojas_netas);
+  const brutasForma = calcHojasBrutasForma(forma);
+  const estuchesForma = totalEstuchesForma(forma);
+  const posesTroquel = integerOrZeroForDespacho(form.poses);
+
+  if (procesoId === PROCESO_OFFSET_ID || procesoId === PROCESO_DIGITAL_ID) {
+    const merged = { ...base };
+    if (netasForma > 0) merged.hojas_netas = netasForma;
+    if (brutasForma > 0) merged.hojas_brutas = brutasForma;
+    return Object.keys(merged).length > 0 ? merged : null;
+  }
+
+  if (procesoId === PROCESO_TROQUEL_ID) {
+    const merged = { ...base };
+    if (brutasForma > 0) merged.hojas_a_troquelar = brutasForma;
+    if (posesTroquel > 0) merged.num_figuras = posesTroquel;
+    return Object.keys(merged).length > 0 ? merged : null;
+  }
+
+  if (procesoId === PROCESO_DESBROCE_ID) {
+    const componentes = forma.componentes
+      .filter((c) => c.referencia_codigo.trim())
+      .map((c) => ({
+        referencia_codigo: c.referencia_codigo.trim(),
+        referencia_descripcion: c.referencia_descripcion.trim() || null,
+        poses_en_forma: integerOrZeroForDespacho(c.poses_en_forma),
+        cantidad_objetivo: calcCantidadObjetivoComponente(forma, c),
+      }));
+    const payload: Record<string, unknown> = {};
+    if (netasForma > 0) payload.hojas_entrada = netasForma;
+    if (posesTroquel > 0) payload.poses = posesTroquel;
+    if (estuchesForma > 0) payload.estuches_desbrozados = estuchesForma;
+    if (componentes.length > 0) payload.componentes_forma = componentes;
+    return Object.keys(payload).length > 0 ? payload : null;
+  }
+
+  if (procesoId === PROCESO_ENGOMADO_ID) {
+    const merged = { ...base };
+    if (estuchesForma > 0) {
+      merged.estuches_realizar = estuchesForma;
+      merged.estuches_engomados = estuchesForma;
+      merged.cantidad_total = estuchesForma;
+    }
+    return Object.keys(merged).length > 0 ? merged : null;
+  }
+
+  return Object.keys(base).length > 0 ? base : null;
+}
+
 /** Restaura wizard proceso datos desde pasos existentes. */
 export function parseProcesoDatosFromPasos(
   pasos: Array<{ proceso_id: number; datos_proceso?: unknown }>
