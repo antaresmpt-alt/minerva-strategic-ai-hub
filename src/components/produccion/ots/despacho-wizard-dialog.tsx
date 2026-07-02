@@ -214,6 +214,9 @@ export function DespachoWizardDialog({
   const [formas, setFormas] = useState<DespachoFormaState[]>([]);
   const [troquelInfo, setTroquelInfo] = useState<TroquelInfoPanel | null>(null);
   const [cajasEmbalaje, setCajasEmbalaje] = useState<CajaEmbalajeOption[]>([]);
+  const [itinerarioOverrides, setItinerarioOverrides] = useState<
+    Record<string, DespachoItinerarioSlot[] | null>
+  >({});
 
   const activeTabs = useMemo(
     () =>
@@ -239,6 +242,7 @@ export function DespachoWizardDialog({
     setModoContenedor(false);
     setFormas([]);
     setTroquelInfo(null);
+    setItinerarioOverrides({});
     guillotinaInicialesAutoRef.current = true;
     impresionBrutasAutoRef.current = true;
     impresionFormatoAutoRef.current = true;
@@ -577,6 +581,85 @@ export function DespachoWizardDialog({
               };
             });
             setFormas(hijasHydrated);
+
+            // Cargar itinerarios de las hijas
+            const { data: catRows } = await supabase
+              .from("prod_procesos_cat")
+              .select("id, nombre");
+            const nombreById = new Map<number, string>();
+            for (const c of (catRows ?? []) as Array<{
+              id: number;
+              nombre: string | null;
+            }>) {
+              nombreById.set(c.id, String(c.nombre ?? `Proceso #${c.id}`));
+            }
+
+            const hijasItinerarios: Array<{
+              hijaNum: string;
+              formaKey: string;
+              slots: DespachoItinerarioSlot[];
+            }> = [];
+
+            for (let i = 0; i < hijasNumeros.length; i++) {
+              const hijaNum = hijasNumeros[i]!;
+              const { data: hijaIdRow } = await supabase
+                .from(TABLE_OTS)
+                .select("id")
+                .eq("num_pedido", hijaNum)
+                .maybeSingle();
+              if (!hijaIdRow?.id) continue;
+
+              const { data: pasosRows } = await supabase
+                .from(TABLE_OT_PASOS)
+                .select("proceso_id, orden")
+                .eq("ot_id", String(hijaIdRow.id))
+                .order("orden", { ascending: true });
+
+              const slots = ((pasosRows ?? []) as Array<{
+                proceso_id: number;
+                orden: number;
+              }>).map((p) => ({
+                key: crypto.randomUUID(),
+                procesoId: p.proceso_id,
+                nombre:
+                  nombreById.get(p.proceso_id) ?? `Proceso #${p.proceso_id}`,
+              }));
+
+              hijasItinerarios.push({
+                hijaNum,
+                formaKey: hijasHydrated[i]?.key ?? "",
+                slots,
+              });
+            }
+
+            // Detectar si todos tienen el mismo itinerario o hay overrides
+            if (hijasItinerarios.length > 0) {
+              const primeraRuta = hijasItinerarios[0]!.slots;
+              const todasIguales = hijasItinerarios.every((h) =>
+                h.slots.length === primeraRuta.length &&
+                h.slots.every((s, i) => s.procesoId === primeraRuta[i]?.procesoId)
+              );
+
+              if (todasIguales) {
+                // Todas las hijas tienen el mismo itinerario → plantilla
+                setItinerarioSlots(primeraRuta);
+                setItinerarioOverrides({});
+              } else {
+                // Algunas hijas difieren → primera como plantilla, resto como overrides
+                setItinerarioSlots(primeraRuta);
+                const overrides: Record<string, DespachoItinerarioSlot[]> = {};
+                for (let i = 1; i < hijasItinerarios.length; i++) {
+                  const h = hijasItinerarios[i]!;
+                  const igual =
+                    h.slots.length === primeraRuta.length &&
+                    h.slots.every((s, j) => s.procesoId === primeraRuta[j]?.procesoId);
+                  if (!igual) {
+                    overrides[h.formaKey] = h.slots;
+                  }
+                }
+                setItinerarioOverrides(overrides);
+              }
+            }
           }
         }
       } catch (e) {
@@ -1096,7 +1179,74 @@ export function DespachoWizardDialog({
       }
       // ── fin Bloque 8.2 ────────────────────────────────────────────────────
 
-      if (itinerarioSlots.length > 0) {
+      // ── Itinerario: padre contenedor vacío, hijas con pasos ───────────────
+      if (modoContenedor && formas.length > 0) {
+        // Padre contenedor: borrar pasos si existen (no ejecuta)
+        const { error: errDelPadre } = await supabase
+          .from(TABLE_OT_PASOS)
+          .delete()
+          .eq("ot_id", selectedRowId);
+        if (errDelPadre) throw errDelPadre;
+
+        // Para cada hija: escribir su itinerario (plantilla o override)
+        for (let fi = 0; fi < formas.length; fi++) {
+          const forma = formas[fi]!;
+          const hijaNum = buildHijaNumPedido(selectedOt, fi);
+
+          // Obtener ID de la hija
+          const { data: hijaRow, error: errHijaId } = await supabase
+            .from(TABLE_OTS)
+            .select("id")
+            .eq("num_pedido", hijaNum)
+            .maybeSingle();
+          if (errHijaId) throw errHijaId;
+          if (!hijaRow?.id) continue;
+
+          const hijaId = String(hijaRow.id);
+          const useOverride = itinerarioOverrides[forma.key] !== undefined;
+          const hijaSlots = useOverride
+            ? (itinerarioOverrides[forma.key] ?? [])
+            : itinerarioSlots;
+
+          if (hijaSlots.length === 0) continue;
+
+          // Borrar pasos anteriores de la hija
+          const { error: errDelHija } = await supabase
+            .from(TABLE_OT_PASOS)
+            .delete()
+            .eq("ot_id", hijaId);
+          if (errDelHija) throw errDelHija;
+
+          // Insertar nuevos pasos en la hija
+          const pasosHija = hijaSlots.map((s, i) => {
+            const datos = buildDatosProcesoSeed(
+              s.procesoId,
+              form,
+              procesoDatos,
+              procesoIdsInRoute,
+            );
+            return {
+              ot_id: hijaId,
+              orden: i + 1,
+              proceso_id: s.procesoId,
+              estado: i === 0 ? "disponible" : "pendiente",
+              ...(datos ? { datos_proceso: datos } : {}),
+            };
+          });
+          const { error: errInsHija } = await supabase
+            .from(TABLE_OT_PASOS)
+            .insert(pasosHija);
+          if (errInsHija) throw errInsHija;
+
+          // Marcar hija como despachada
+          const { error: errDespHija } = await supabase
+            .from(TABLE_OTS)
+            .update({ despachado: true })
+            .eq("num_pedido", hijaNum);
+          if (errDespHija) throw errDespHija;
+        }
+      } else if (itinerarioSlots.length > 0) {
+        // OT simple: escribir pasos en la OT normal
         const { data: existingPasos, error: errLoadPasos } = await supabase
           .from(TABLE_OT_PASOS)
           .select("id, orden, proceso_id, datos_proceso")
@@ -2752,20 +2902,132 @@ export function DespachoWizardDialog({
             ) : null}
 
             {wizardTab === "itinerario" ? (
-              <div>
-                <p className="mb-3 text-xs text-slate-600">
-                  Define la ruta de procesos. Las pestañas siguientes se adaptan
-                  a los pasos que incluyas.
-                </p>
-                <DespachoItinerarioPicker
-                  open={open && wizardTab === "itinerario"}
-                  supabase={supabase}
-                  disabled={saving}
-                  slots={itinerarioSlots}
-                  onSlotsChange={setItinerarioSlots}
-                  layout="wide"
-                  embedded
-                />
+              <div className="grid gap-6">
+                {modoContenedor ? (
+                  <>
+                    <div>
+                      <div className="mb-2 flex items-center gap-2">
+                        <Label className="text-sm font-semibold text-[#002147]">
+                          Plantilla de itinerario
+                        </Label>
+                        <Badge variant="secondary" className="text-xs">
+                          Base para todas las hijas
+                        </Badge>
+                      </div>
+                      <p className="mb-3 text-xs text-slate-600">
+                        Este itinerario se clonará a cada hija ({formas.length}{" "}
+                        forma{formas.length !== 1 ? "s" : ""}). Puedes personalizarlo
+                        por hija más abajo.
+                      </p>
+                      <DespachoItinerarioPicker
+                        open={open && wizardTab === "itinerario"}
+                        supabase={supabase}
+                        disabled={saving}
+                        slots={itinerarioSlots}
+                        onSlotsChange={setItinerarioSlots}
+                        layout="wide"
+                        embedded
+                      />
+                    </div>
+
+                    {formas.length > 0 && (
+                      <div>
+                        <Label className="mb-2 block text-sm font-semibold text-[#002147]">
+                          Itinerario por hija
+                        </Label>
+                        <p className="mb-3 text-xs text-slate-600">
+                          Por defecto cada hija usa la plantilla. Desmarca para
+                          personalizar su ruta.
+                        </p>
+                        <div className="grid gap-3">
+                          {formas.map((forma, idx) => {
+                            const hijaNum = buildHijaNumPedido(
+                              seleccion?.num_pedido ?? "",
+                              idx
+                            );
+                            const useOverride = itinerarioOverrides[forma.key] !== undefined;
+                            const slots = useOverride
+                              ? (itinerarioOverrides[forma.key] ?? [])
+                              : itinerarioSlots;
+
+                            return (
+                              <div
+                                key={forma.key}
+                                className="rounded-lg border border-slate-200 bg-white p-3"
+                              >
+                                <div className="mb-2 flex items-center gap-2">
+                                  <Checkbox
+                                    checked={!useOverride}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        setItinerarioOverrides((prev) => {
+                                          const next = { ...prev };
+                                          delete next[forma.key];
+                                          return next;
+                                        });
+                                      } else {
+                                        setItinerarioOverrides((prev) => ({
+                                          ...prev,
+                                          [forma.key]: [...itinerarioSlots],
+                                        }));
+                                      }
+                                    }}
+                                  />
+                                  <div className="flex-1">
+                                    <p className="text-sm font-medium text-[#002147]">
+                                      {hijaNum} · {forma.descripcion || `Forma ${idx + 1}`}
+                                    </p>
+                                    {!useOverride && (
+                                      <p className="text-xs text-slate-500">
+                                        Usa plantilla (
+                                        {itinerarioSlots.length} proceso
+                                        {itinerarioSlots.length !== 1 ? "s" : ""})
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                                {useOverride && (
+                                  <div className="mt-3 border-t border-slate-100 pt-3">
+                                    <DespachoItinerarioPicker
+                                      open={open && wizardTab === "itinerario"}
+                                      supabase={supabase}
+                                      disabled={saving}
+                                      slots={slots}
+                                      onSlotsChange={(newSlots) => {
+                                        setItinerarioOverrides((prev) => ({
+                                          ...prev,
+                                          [forma.key]: newSlots,
+                                        }));
+                                      }}
+                                      layout="wide"
+                                      embedded
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs text-slate-600">
+                      Define la ruta de procesos. Las pestañas siguientes se adaptan
+                      a los pasos que incluyas.
+                    </p>
+                    <DespachoItinerarioPicker
+                      open={open && wizardTab === "itinerario"}
+                      supabase={supabase}
+                      disabled={saving}
+                      slots={itinerarioSlots}
+                      onSlotsChange={setItinerarioSlots}
+                      layout="wide"
+                      embedded
+                    />
+                  </>
+                )}
               </div>
             ) : null}
 
