@@ -532,11 +532,11 @@ Rama: `feature/bloque8.1-pool-mesa-ejecucion-fixes` (commit `2d9d3ab`).
 **Ajustes aplicados 3 jul noche:**
 
 - **Troquel prefill:** `hojas_troquelar` ahora carga desde `salidaProcesoAnterior` (Impresión → Troquel).
+- **Selector cartelas:** Dropdown en diálogo cerrar proceso con cartelas asignadas a la OT (desde `prod_stock_palet_ots`). Opción texto libre como fallback. UX mejorada para casos reales.
 
 **Pendiente 8.2 (no bloqueante demo):**
 
 - Re-despachar **36204** si se quieren pasos con seed por forma actualizado (despacho anterior al fix).
-- Cartela cierre: dropdown con cartelas asignadas a OT (hoy texto libre funciona).
 - Itinerario override distinto por hija (MVP usa misma plantilla).
 - Merge `wizard-despacho` → `main` + deploy estable.
 

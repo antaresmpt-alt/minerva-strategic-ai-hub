@@ -141,6 +141,7 @@ export function CerrarProcesoDialog({
         {procesoUsaCartela(procesoId) ? (
           <CartelaCierreBlock
             key={open ? "open" : "closed"}
+            otNumero={otNumero}
             datosDraft={datosDraft}
             onDatosChange={onDatosChange}
           />

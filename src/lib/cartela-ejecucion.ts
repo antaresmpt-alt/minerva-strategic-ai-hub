@@ -61,6 +61,58 @@ export async function fetchPaletByIdStock(
   return data as ProdStockPaletRow | null;
 }
 
+export type CartelaOption = {
+  idStock: number;
+  label: string;
+  palet: Pick<ProdStockPaletRow, "id" | "id_stock" | "material_nombre" | "descripcion_material" | "gramaje" | "formato" | "cantidad_actual">;
+};
+
+/**
+ * Carga todas las cartelas asignadas a una OT específica (desde prod_stock_palet_ots).
+ * Devuelve opciones para un dropdown con ID Stock y descripción del material.
+ */
+export async function fetchCartelasForOt(
+  supabase: SupabaseClient,
+  otNumero: string,
+): Promise<CartelaOption[]> {
+  const { data: bridgeData, error: bridgeErr } = await supabase
+    .from("prod_stock_palet_ots")
+    .select("palet_id")
+    .eq("ot_numero", otNumero);
+  
+  if (bridgeErr) throw bridgeErr;
+  if (!bridgeData || bridgeData.length === 0) return [];
+  
+  const paletIds = bridgeData.map((row) => row.palet_id);
+  
+  const { data: palets, error: paletsErr } = await supabase
+    .from("prod_stock_palets")
+    .select("id, id_stock, material_nombre, descripcion_material, gramaje, formato, cantidad_actual")
+    .in("id", paletIds)
+    .order("id_stock", { ascending: true });
+  
+  if (paletsErr) throw paletsErr;
+  if (!palets) return [];
+  
+  return palets.map((p) => ({
+    idStock: p.id_stock,
+    label: buildCartelaOptionLabel(p),
+    palet: p,
+  }));
+}
+
+function buildCartelaOptionLabel(
+  palet: Pick<ProdStockPaletRow, "id_stock" | "material_nombre" | "descripcion_material" | "gramaje" | "formato" | "cantidad_actual">,
+): string {
+  const parts: string[] = [`#${formatIdStockDisplay(palet.id_stock)}`];
+  const nombre = palet.material_nombre ?? palet.descripcion_material;
+  if (nombre) parts.push(nombre);
+  if (palet.gramaje != null) parts.push(`${palet.gramaje}gr`);
+  if (palet.formato) parts.push(palet.formato);
+  parts.push(`(${palet.cantidad_actual.toLocaleString("es-ES")}h)`);
+  return parts.join(" · ");
+}
+
 export function applyCartelaToDatos(
   datos: DatosProcesoGenerico,
   palet: ProdStockPaletRow | null,

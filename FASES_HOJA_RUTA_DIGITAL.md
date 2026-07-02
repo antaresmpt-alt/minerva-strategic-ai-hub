@@ -818,18 +818,23 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 - Merge `wizard-despacho` → `main`.
 - Fase **8.4** cierre contenedor + Bloque 6.
 
-**Sesión 3 jul 2026 (00:00–01:00h)** — Prueba real 36204-01 completa + fix troquel ✅
+**Sesión 3 jul 2026 (00:00–01:30h)** — Prueba real 36204-01 completa + fixes troquel + selector cartelas ✅
 
 ### Hecho
 - **Prueba punta a punta 36204-01:** CTP → Guillotina → Impresión → Externo (Plastificado) → Troquel → Desbroce → Engomado. Todos los pasos ejecutados con datos reales.
 - Encadenado formato validado en todos los pasos (72×102 → /2 → 51×72).
 - Desbroce con banner **NO MEZCLAR** + componentes 605212/605229 validado en ejecución real — **súper**.
 - **Fix troquel prefill:** `hojas_troquelar` ahora carga desde `salidaProcesoAnterior` (salida Impresión → entrada Troquel).
-- Cartela #10320 (Folding blanco zenith 300gr · 72×102 · 1050h) usada en cierre Impresión — texto libre funcional.
-- Commit: fix prefill troquel en rama `wizard-despacho`.
+- **Selector cartelas asignadas:** Diálogo cerrar proceso (Impresión) ahora muestra dropdown con cartelas de la OT (desde `prod_stock_palet_ots`). Texto libre como fallback. UX mejorada para casos reales.
+- Cartela #10320 (Folding blanco zenith 300gr · 72×102 · 1050h) usada en cierre Impresión.
+- Commits: fix prefill troquel + selector cartelas en rama `wizard-despacho`.
+
+### Cambios técnicos selector cartelas
+- `cartela-ejecucion.ts`: `fetchCartelasForOt()` carga opciones desde bridge `prod_stock_palet_ots`.
+- `cartela-cierre-block.tsx`: dropdown con cartelas asignadas + toggle texto libre.
+- `cerrar-proceso-dialog.tsx`: pasa `otNumero` al componente.
 
 ### Pendiente refinamiento post-MVP (no bloqueante)
-- Cartela cierre: dropdown con cartelas asignadas a OT (hoy texto libre).
 - Re-despachar 36204 opcional si se quieren pasos con seed por forma.
 
 ---

@@ -1,17 +1,27 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Loader2, Package } from "lucide-react";
+import { AlertTriangle, ChevronDown, Loader2, Package } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   applyCartelaToDatos,
   CARTELA_DATOS_KEYS,
+  fetchCartelasForOt,
   fetchPaletByIdStock,
   formatIdStockDisplay,
   normalizeIdStockInput,
+  type CartelaOption,
 } from "@/lib/cartela-ejecucion";
 import type { DatosProcesoGenerico } from "@/lib/hoja-ruta-campos-config";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -20,6 +30,7 @@ import type { ProdStockPaletRow } from "@/types/prod-stock";
 type LookupState = "idle" | "loading" | "found" | "not_found" | "error";
 
 type CartelaCierreBlockProps = {
+  otNumero: string;
   datosDraft: DatosProcesoGenerico;
   onDatosChange: (datos: DatosProcesoGenerico) => void;
 };
@@ -37,7 +48,7 @@ function readHojasFromDatos(datos: DatosProcesoGenerico): number | null {
   return null;
 }
 
-export function CartelaCierreBlock({ datosDraft, onDatosChange }: CartelaCierreBlockProps) {
+export function CartelaCierreBlock({ otNumero, datosDraft, onDatosChange }: CartelaCierreBlockProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const datosRef = useRef(datosDraft);
   datosRef.current = datosDraft;
@@ -45,6 +56,9 @@ export function CartelaCierreBlock({ datosDraft, onDatosChange }: CartelaCierreB
   const initialId = readIdStockFromDatos(datosDraft);
   const initialHojas = readHojasFromDatos(datosDraft);
 
+  const [cartelasOt, setCartelasOt] = useState<CartelaOption[]>([]);
+  const [loadingCartelas, setLoadingCartelas] = useState(true);
+  const [modoTextoLibre, setModoTextoLibre] = useState(false);
   const [idInput, setIdInput] = useState(
     initialId != null ? formatIdStockDisplay(initialId) : "",
   );
@@ -53,6 +67,32 @@ export function CartelaCierreBlock({ datosDraft, onDatosChange }: CartelaCierreB
   );
   const [lookupState, setLookupState] = useState<LookupState>(initialId != null ? "loading" : "idle");
   const [paletPreview, setPaletPreview] = useState<ProdStockPaletRow | null>(null);
+
+  // Cargar cartelas asignadas a esta OT
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingCartelas(true);
+    void (async () => {
+      try {
+        const options = await fetchCartelasForOt(supabase, otNumero);
+        if (cancelled) return;
+        setCartelasOt(options);
+        // Si no hay cartelas asignadas, habilitar texto libre por defecto
+        if (options.length === 0) {
+          setModoTextoLibre(true);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setCartelasOt([]);
+        setModoTextoLibre(true);
+      } finally {
+        if (!cancelled) setLoadingCartelas(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, otNumero]);
 
   useEffect(() => {
     const trimmed = idInput.trim();
@@ -101,11 +141,34 @@ export function CartelaCierreBlock({ datosDraft, onDatosChange }: CartelaCierreB
     setHojasInput(raw);
   };
 
+  const handleSelectCartela = (idStockStr: string | null) => {
+    if (!idStockStr) return;
+    const option = cartelasOt.find((c) => String(c.idStock) === idStockStr);
+    if (option) {
+      setIdInput(formatIdStockDisplay(option.idStock));
+      // Trigger lookup inmediato
+      const hojas = parseHojasInput(hojasInput);
+      setLookupState("loading");
+      void (async () => {
+        try {
+          const palet = await fetchPaletByIdStock(supabase, option.idStock);
+          setPaletPreview(palet);
+          setLookupState(palet ? "found" : "not_found");
+          onDatosChange(applyCartelaToDatos(datosRef.current, palet, option.idStock, hojas));
+        } catch {
+          setPaletPreview(null);
+          setLookupState("error");
+          onDatosChange(applyCartelaToDatos(datosRef.current, null, option.idStock, hojas));
+        }
+      })();
+    }
+  };
+
   return (
     <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-3">
       <div className="flex items-start gap-2">
         <Package className="mt-0.5 size-4 shrink-0 text-[#002147]" aria-hidden />
-        <div>
+        <div className="flex-1">
           <p className="text-sm font-semibold text-[#002147]">Cartela / material usado</p>
           <p className="text-xs text-slate-500">
             Opcional. Mismo ID Stock que en almacén (como en Optimus RDC).
@@ -113,37 +176,104 @@ export function CartelaCierreBlock({ datosDraft, onDatosChange }: CartelaCierreB
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <Label htmlFor="cerrar-id-stock" className="text-xs text-slate-600">
-            ID Stock
-          </Label>
-          <Input
-            id="cerrar-id-stock"
-            type="text"
-            inputMode="numeric"
-            placeholder="Ej. 10.313"
-            className="mt-1 font-mono"
-            value={idInput}
-            onChange={(e) => setIdInput(e.target.value)}
-          />
+      {loadingCartelas ? (
+        <p className="flex items-center gap-1.5 text-xs text-slate-500">
+          <Loader2 className="size-3.5 animate-spin" aria-hidden />
+          Cargando cartelas asignadas…
+        </p>
+      ) : cartelasOt.length > 0 && !modoTextoLibre ? (
+        <div className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="cerrar-cartela-select" className="text-xs text-slate-600">
+                Cartelas asignadas a esta OT
+              </Label>
+              <Select onValueChange={handleSelectCartela}>
+                <SelectTrigger id="cerrar-cartela-select" className="mt-1">
+                  <SelectValue placeholder="Selecciona una cartela…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {cartelasOt.map((opt) => (
+                    <SelectItem key={opt.idStock} value={String(opt.idStock)}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="cerrar-hojas-cartela-select" className="text-xs text-slate-600">
+                Hojas consumidas (opcional)
+              </Label>
+              <Input
+                id="cerrar-hojas-cartela-select"
+                type="number"
+                min={0}
+                step={1}
+                placeholder="—"
+                className="mt-1"
+                value={hojasInput}
+                onChange={(e) => updateHojas(e.target.value)}
+              />
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => setModoTextoLibre(true)}
+          >
+            o introducir ID Stock manualmente
+          </Button>
         </div>
-        <div>
-          <Label htmlFor="cerrar-hojas-cartela" className="text-xs text-slate-600">
-            Hojas consumidas (opcional)
-          </Label>
-          <Input
-            id="cerrar-hojas-cartela"
-            type="number"
-            min={0}
-            step={1}
-            placeholder="—"
-            className="mt-1"
-            value={hojasInput}
-            onChange={(e) => updateHojas(e.target.value)}
-          />
+      ) : null}
+
+      {(modoTextoLibre || cartelasOt.length === 0) && !loadingCartelas ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="cerrar-id-stock" className="text-xs text-slate-600">
+              ID Stock
+            </Label>
+            <Input
+              id="cerrar-id-stock"
+              type="text"
+              inputMode="numeric"
+              placeholder="Ej. 10.313"
+              className="mt-1 font-mono"
+              value={idInput}
+              onChange={(e) => setIdInput(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="cerrar-hojas-cartela" className="text-xs text-slate-600">
+              Hojas consumidas (opcional)
+            </Label>
+            <Input
+              id="cerrar-hojas-cartela"
+              type="number"
+              min={0}
+              step={1}
+              placeholder="—"
+              className="mt-1"
+              value={hojasInput}
+              onChange={(e) => updateHojas(e.target.value)}
+            />
+          </div>
         </div>
-      </div>
+      ) : null}
+
+      {cartelasOt.length > 0 && modoTextoLibre && !loadingCartelas ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 text-xs"
+          onClick={() => setModoTextoLibre(false)}
+        >
+          Volver a cartelas asignadas
+        </Button>
+      ) : null}
 
       {lookupState === "loading" ? (
         <p className="flex items-center gap-1.5 text-xs text-slate-500">
