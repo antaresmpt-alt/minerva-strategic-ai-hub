@@ -172,9 +172,15 @@ Generado desde componentes; sin texto manual en despacho.
 
 Con 2 formas y mismo material, candidato: **una hija `preimpresion`** (36204-00) o CTP en cada forma. Validar con planta mañana en demo.
 
-#### Script smoke test (futuro)
+#### Script smoke test
 
-`scripts/setup-contenedor-test-36204.mjs` — análogo a `setup-contenedor-test-98010.mjs`, con números de este caso para probar wizard + validaciones sin Optimus.
+| Script / OT | Uso |
+|-------------|-----|
+| `scripts/setup-contenedor-test-98010.mjs` | Barco en ejecución (pool/mesa/cartelas). **No re-ejecutar** si hay datos reales. |
+| **OT 98011** (maestro solo) | Demo wizard **desde cero** — clone 36204 en `prod_ots_general`, sin hijas ni despacho. Creada 2 jul 2026 en prod. |
+| **OT 36204** | Caso real Optimus ya **despachado** vía wizard (36204-01/02 + componentes). Referencia post-despacho. |
+
+`scripts/setup-contenedor-test-36204.mjs` — **no creado**; sustituido por flujo wizard + **98011** para demo en vivo.
 
 ---
 
@@ -347,7 +353,7 @@ En BD pueden ser todas `ot_tipo = hija`; el subtipo guía wizard y listados.
 
 ### Componentes dentro de una forma (referencias / poses)
 
-Tabla **`prod_ot_hija_componentes`** (migración pendiente — Fase 8.2):
+Tabla **`prod_ot_hija_componentes`** ✅ **2 jul 2026** — migración `20260702200000_prod_ot_hija_componentes.sql` aplicada en prod (RLS + grants).
 
 | Campo | Uso |
 |-------|-----|
@@ -495,34 +501,43 @@ Rama: `feature/bloque8.1-pool-mesa-ejecucion-fixes` (commit `2d9d3ab`).
 - `98010-02`: CTP confirmado en mesa diaria.
 - `98010-03`: pendiente en pool lateral CTP (correcto: aún no arrastrada a mesa).
 
-### Fase 8.2 — Despacho contenedor + wizard de hijas
+### Fase 8.2 — Despacho contenedor + wizard de hijas ✅ **MVP 2–3 jul 2026** (rama `wizard-despacho`)
 
 > **Caso de referencia:** §3 **Caso A.2 — OT 36204** (ampollas, 2 formas, 4 refs, troquel 4 poses).
-> **Demo:** priorizar flujo mínimo creable en wizard + validación aritmética; ejecución completa puede seguir con 98010.
+> **Smoke test real:** OT **36204** despachada en prod (36204-01, 36204-02 + `prod_ot_hija_componentes`).
+> **Demo wizard en vivo:** OT **98011** (solo maestro, sin hijas) — despachar mañana en reunión.
 
-- Al despachar `contenedor`, definir N hijas:
-  - `tipo_hija`, descripción, material (heredado o propio), hojas netas/brutas/aumento, poses en chapa.
-  - Componentes/referencias por hija (`prod_ot_hija_componentes`) — tabla §7.
-  - Clon de plantilla de itinerario; override por hija.
-- Pestaña **Formas/Hijas** en wizard (mock §3 Caso A.2).
-- Validaciones antes de guardar: poses = troquel, Σ uds = pedido, Σ hojas brutas compra.
-- Creación batch de OTs hijas (`36204-01`, `-02`…) + despachos pre-rellenados.
-- Respetar límite práctico ~8 formas (avisar / partir pedido).
+| Pieza | Estado | Dónde |
+|-------|--------|-------|
+| Pestaña **Formas/Hijas** en wizard | ✅ | `despacho-wizard-dialog.tsx` — detecta `ot_tipo = contenedor` |
+| Componentes por forma | ✅ | `prod_ot_hija_componentes` + UI refs/poses |
+| Validaciones aritméticas | ✅ | poses = troquel, Σ uds, Σ hojas brutas compra |
+| Creación batch hijas + pasos | ✅ | `36204-01`, `-02`… en `prod_ots_general` + `prod_ot_pasos` |
+| Seed `datos_proceso` **por forma** | ✅ | `buildDatosProcesoSeedForForma` en `despacho-wizard-shared.ts` |
+| Desglose desbroce en wizard | ✅ | Bloque informativo por forma antes de guardar |
+| **Hoja simplificada** contenedor | ✅ | Portada barco + 1 A5 por hija + NO MEZCLAR (`hoja-ruta-cartelita-pdf.ts`) |
+| Errores Supabase legibles | ✅ | `formatSupabaseErrorMessage` |
+| Plastificado Select en Dialog | ✅ | z-index `select.tsx` |
 
-**MVP demo (orden sugerido):**
+**Pendiente 8.2 (no bloqueante demo):**
 
-1. Migración `prod_ot_hija_componentes`.
-2. Rama wizard contenedor: detectar `ot_tipo = contenedor` → pestaña Formas.
-3. UI formas + componentes + validación (aunque persistencia sea parcial).
-4. Script `setup-contenedor-test-36204.mjs` o carga manual en demo con números del caso.
-5. Narrativa demo: explicar barco + 2 formas + aviso desbroce (mock si falta código).
+- Re-despachar **36204** si se quieren pasos con seed por forma (despacho anterior al fix).
+- Itinerario override distinto por hija (MVP usa misma plantilla).
+- Script `setup-contenedor-test-36204.mjs` (opcional; **98011** cubre demo wizard).
+- Merge `wizard-despacho` → `main` + deploy estable.
 
-### Fase 8.3 — Ejecución por hija
+### Fase 8.3 — Ejecución por hija 🟡 **parcial 2–3 jul 2026**
 
-- Mesa y `ExecutionCard`: hijas son OTs normales.
-- Maquinista ve identificador claro (ej. `36204-01 · Forma 1 — Verlavy`).
-- Contenedor agrega estado de hijas.
-- **Desbroce multi-ref:** bloque «NO MEZCLAR» si forma tiene 2+ componentes (§3 Caso A.2).
+- Mesa y `ExecutionCard`: hijas son OTs normales — **sin cambio de motor** (ya OK).
+- Maquinista ve identificador claro (ej. `36204-01 · Forma 1 — Verlavy`) — vía maestro + forma.
+- Contenedor agrega estado de hijas — **8.1** ✅.
+- **Desbroce multi-ref:** bloque «NO MEZCLAR» si forma tiene 2+ componentes — ✅ `planificacion-ots-ejecucion-tab.tsx` + `desbroce-hija-componentes.ts`.
+- Fallback despacho hija vía padre cuando no hay fila en `produccion_ot_despachadas` — ✅.
+
+**Pendiente 8.3:**
+
+- Validar en planta desbroce **36204-01** con banner + prefill real.
+- Horas prep/tiraje por forma (Abraham) — sin cambio aún.
 
 ### Fase 8.4 — Cierre del contenedor
 
@@ -560,8 +575,8 @@ Rama: `feature/bloque8.1-pool-mesa-ejecucion-fixes` (commit `2d9d3ab`).
 |--------|---------|
 | `prod_ots_general` | +4 campos nullable (8.0). Migración aditiva. |
 | Pool / Pipeline | **Agrupación visual** (8.1). Queries filtran `ot_tipo != hija` por defecto. Material barco + % pasos (8.1.1). |
-| **Maestro OTs / OTs despachadas** | **Agrupación visual** (8.1.2). Mismo patrón barco + expandir hijas. |
-| Despacho | Wizard hijas para `contenedor` (8.2). Form `simple` sin cambios. Compra conjunta en padre (validado 98010). **Hoy:** hijas al despachar; **futuro:** presupuesto Bloque 10. |
+| **Maestro OTs / OTs despachadas** | **Agrupación visual** (8.1.2). Mismo patrón barco + expandir hijas. **2 jul:** expand hijas sintéticas si solo existe despacho padre; **compra en lote** solo en contenedor (no hijas). |
+| Despacho | Wizard hijas para `contenedor` (8.2) ✅ MVP. Form `simple` sin cambios. Compra conjunta en padre (validado 98010 + fix selección 36204). |
 | Mesa / ejecución | Por hija: **sin cambio de motor** (8.3). Pool lateral filtrado por tipo de paso (8.1.1). Merma impresión + prefill troquel corregidos. **Cerrar proceso** con horas reloj + declaradas (8.7.1). |
 | Hoja de ruta | Por hija: sin cambio. **Vista agregada contenedor (8.7):** modal + PDF barco con anexos por hija. **Horas totales** prev/real/desv. en cabecera (8.7.1). |
 | Semáforo | Sin cambio en hijas simples; **futuro** ajuste por componente (8.6). |
@@ -683,6 +698,27 @@ Responder con Jordi / Zaida / Abraham / Carlos:
 - Mock UX wizard Formas/Hijas + aviso desbroce «NO MEZCLAR».
 - Prioridad demo: **8.2 contenedor** usando 36204; ejecución demo sigue con 98010.
 
+### 2–3 jul 2026 (noche) — Wizard contenedor MVP + fixes OTs despachadas ✅
+
+**Rama:** `wizard-despacho` (commits `1b07777` … `bf9ea93`).
+
+| Área | Hecho |
+|------|--------|
+| **Wizard 8.2** | Pestaña Formas/Hijas, validaciones, batch hijas, componentes, seed pasos por forma, hoja simplificada pack (portada + 1/hija) |
+| **SQL prod** | `prod_ot_hija_componentes` aplicada en Supabase prod (`20260702200000`) |
+| **Despacho real** | OT **36204** → 36204-01/02 en prod |
+| **Demo mañana** | OT **98011** creada en maestro (clone 36204, sin hijas) para wizard en vivo |
+| **Ejecución 8.3** | Banner NO MEZCLAR desbroce + fallback despacho hija vía padre |
+| **OTs despachadas** | Expand hijas sin fila despacho (filas sintéticas desde maestro) |
+| **Compra material** | Selección lote: **contenedor sí, hijas no**; update por `ot_numero` (fix error lote) |
+
+**Pendiente inmediato:**
+
+- Demo: despachar **98011** en wizard; compra en **36204** (padre); desbroce **36204-01**.
+- Responder **§12** con planta (CTP compartido, quién define hijas).
+- Merge `wizard-despacho` → `main`.
+- Re-despachar 36204 si se quieren `datos_proceso` por forma en pasos ya creados.
+
 ---
 
 ## 16. Orden de trabajo recomendado
@@ -690,27 +726,29 @@ Responder con Jordi / Zaida / Abraham / Carlos:
 1. ~~**Fase FORMATO** — encadenado tamaño de hoja (código).~~ ✅ 17 jun 2026
 2. ~~**Fase 8.0** — migración SQL aditiva.~~ ✅
 3. ~~**Fase 8.1** — agrupación UI pool/pipeline.~~ ✅ 17 jun 2026
-4. **Fase 8.2** — wizard despacho contenedor + hijas — **👉 PRIORIDAD DEMO** (caso **36204**).
-5. **Responder §12** con planta (puede ir en la misma demo).
-6. **Fase 8.3** — ejecución (mayormente gratis; aviso desbroce multi-ref).
+4. ~~**Fase 8.2** — wizard despacho contenedor + hijas — MVP ✅ **2–3 jul 2026** (rama `wizard-despacho`).
+5. **Responder §12** con planta — **👉 PRIORIDAD DEMO mañana** (puede ir en la misma sesión).
+6. **Fase 8.3** — ejecución desbroce multi-ref — 🟡 parcial; validar **36204-01** en planta.
 7. **Fase 8.4** — cierre contenedor + Bloque 6.
+8. **Merge** `wizard-despacho` → `main` + deploy estable.
 
-### Retomar desde casa — impulso demo contenedor
+### Retomar — demo pedidos complejos (3 jul 2026)
 
 | Qué leer primero | Dónde |
 |------------------|--------|
 | Caso completo 36204 | Este doc **§3 Caso A.2** |
-| Barco en ejecución (ya montado) | `GUIA_MAÑANA.md` · OT **98010** |
-| Wizard simple (ya en main) | `DespachoWizardDialog` — extender para `contenedor` |
-| SQL componentes | Este doc **§7** |
+| Barco en ejecución | `GUIA_MAÑANA.md` · OT **98010** |
+| Wizard en vivo (sin script) | OT **98011** — solo maestro |
+| Caso ya despachado | OT **36204** — compra padre + desbroce 36204-01 |
+| Wizard código | `DespachoWizardDialog` + `despacho-wizard-shared.ts` |
 
-**Historia demo sugerida (5 min):**
+**Historia demo sugerida (8–10 min):**
 
-1. Mostrar **98010** agrupado en Pool/Pipeline (barco + hijas en distinto avance).
-2. Explicar limitación actual: hijas creadas con script, no wizard.
-3. Mostrar diseño **36204** en doc: 2 formas, 4 refs, validación 6.000 estuches.
-4. Si hay código nuevo: wizard contenedor creando `36204-01/02` con componentes.
-5. Opcional: aviso desbroce multi-ref en mock o pantalla.
+1. **98010** agrupado en Pool/Pipeline (barco + hijas a distinto avance) — “así se ejecuta”.
+2. **98011** en Maestro → abrir wizard → definir 2 formas / 4 refs → despachar en vivo — “así se crea sin Optimus ni script”.
+3. **36204** ya despachada: expandir en OTs Despachadas → generar **compra en el padre** (no hijas) → hoja simplificada (portada + 2 formas).
+4. **36204-01** en Ejecución → desbroce → banner **NO MEZCLAR**.
+5. Preguntas §12 (CTP compartido, quién parte formas).
 
 **No mezclar en la demo:** wizard OT simple (CTP, cartelita) — ya desplegado; foco en **complejos**.
 

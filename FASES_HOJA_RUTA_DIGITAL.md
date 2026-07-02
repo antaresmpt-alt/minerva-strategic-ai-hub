@@ -797,9 +797,27 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 
 ## 📌 Punto de continuación (próxima sesión)
 
-**👉 Retomar aquí:** **Demo pedidos complejos (mañana)** → Fase **8.2** wizard contenedor con caso **OT 36204** (`MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` §3 Caso A.2). Ejecución barco: OT **98010**. Piloto CTP Marc/Gemma en paralelo.
+**👉 Retomar aquí:** **Demo pedidos complejos (3 jul 2026)** → desplegar rama **`wizard-despacho`**, guion en `GUIA_MAÑANA.md`. OTs: **98010** (ejecución), **98011** (wizard en vivo), **36204** (despachada + desbroce).
 
-**Fase FORMATO** ✅ · **Fase 8.0** ✅ · **Fase 8.1** ✅ · **Fase 8.1.1** ✅ · **Fase 8.1.2** ✅ · **CTP despacho v1** ✅ · **Hoja Ruta Simplificada** ✅ · **Caso ref. 36204** ✅ doc
+**Fase FORMATO** ✅ · **Fase 8.0** ✅ · **Fase 8.1** ✅ · **Fase 8.1.1** ✅ · **Fase 8.1.2** ✅ · **CTP despacho v1** ✅ · **Hoja Ruta Simplificada** ✅ (pack contenedor 2–3 jul) · **Fase 8.2 MVP** ✅ · **Fase 8.3** 🟡 · **Caso ref. 36204** ✅ doc + despacho real
+
+**Sesión 2–3 jul 2026 (noche)** — Wizard contenedor MVP + fixes OTs despachadas ✅
+
+### Hecho
+- **Fase 8.2 MVP** (`wizard-despacho`): wizard Formas/Hijas, `prod_ot_hija_componentes`, validaciones, batch hijas, seed `datos_proceso` por forma, hoja simplificada portada + 1/hija, errores Supabase legibles.
+- Migración `20260702200000_prod_ot_hija_componentes.sql` aplicada en Supabase prod.
+- OT **36204** despachada en prod (36204-01/02 + componentes).
+- OT **98011** creada en maestro (demo wizard mañana).
+- **Fase 8.3 parcial:** banner NO MEZCLAR desbroce, fallback despacho hija vía padre.
+- **OTs despachadas:** expand hijas sintéticas; compra en lote solo contenedor (fix selección + update por `ot_numero`).
+- Commits: `1b07777` … `bf9ea93` en rama `wizard-despacho`.
+
+### Pendiente
+- Demo 3 jul: guion `GUIA_MAÑANA.md` § recorrido ampliado.
+- Responder §12 Bloque 8 con planta (CTP compartido, quién define formas).
+- Merge `wizard-despacho` → `main`.
+- Re-despachar 36204 si se quieren pasos con seed por forma (despacho anterior al fix).
+- Fase **8.4** cierre contenedor + Bloque 6.
 
 **Sesión 2 jul 2026** — Documentación caso 36204 para wizard 8.2 / demo contenedor
 
