@@ -64,6 +64,120 @@ Pedido (contenedor)
 
 **Nota Zaida:** con más de ~8 formas, Optimus parte en 2 pedidos. Límite a tener en cuenta en el wizard de creación de hijas.
 
+### Caso A.2 — Ampollas 4 modelos / 2 formas / troquel 4 poses ✅ **REFERENCIA OFICIAL 8.2** (jul 2026)
+
+> **OT Optimus real:** `36204` (creada jul 2026). PDF de referencia: `docs/referencias/` o export del usuario.
+> **Uso:** diseño del wizard despacho contenedor (Fase 8.2), smoke test y **demo pedidos complejos**.
+> **Comparación:** `98010` = barco ya en ejecución (pool/mesa/cartelas); `36204` = **definición de formas** al despachar.
+
+#### Pedido cliente (contenedor)
+
+| Campo | Valor |
+|-------|--------|
+| Producto | Estuches 30 ampollas |
+| Total | **6.000 estuches** en **4 modelos** |
+| Troquel común | **4 poses** (compartido por las dos formas) |
+| Material (indicativo) | Folding 295 g · 60×76 cm (validar en Optimus/PDF) |
+
+**Referencias:**
+
+| Código | Cantidad pedida | Modelo |
+|--------|-----------------|--------|
+| `605212` | 2.000 uds | VERLAVY HYPERTONIQUE |
+| `605229` | 2.000 uds | VERLAVY ISOTONIQUE |
+| `115735` | 1.000 uds | BIOTHALASSOL HYPERTONIQUE |
+| `202037` | 1.000 uds | EST LA VIE CLAIRE ISOTONIQUE |
+
+#### Dos formas de impresión
+
+```text
+OT contenedor 36204 (barco)
+  ESTUCHES 30 AMPOLLAS — 6.000 uds
+  Troquel: TAM00534 (ej.) — 4 poses
+  Compra material: ~1.800 hojas brutas (1.300 + 800) en el PADRE
+  │
+  ├── 36204-01  tipo_hija: forma
+  │     "Forma 1 — Verlavy (2 modelos)"
+  │     Hojas netas: 1.000  |  Aumento: 300  |  Brutas: 1.300
+  │     Imposición en chapa (4 poses):
+  │       605212 · VERLAVY HYPERTONIQUE     · 2 poses → 1.000×2 = 2.000 uds
+  │       605229 · VERLAVY ISOTONIQUE       · 2 poses → 1.000×2 = 2.000 uds
+  │
+  └── 36204-02  tipo_hija: forma
+        "Forma 2 — Biothalassol + La Vie Claire"
+        Hojas netas: 500   |  Aumento: 300  |  Brutas: 800
+        Imposición en chapa (4 poses):
+          115735 · BIOTHALASSOL HYPERTONIQUE    · 2 poses → 500×2 = 1.000 uds
+          202037 · EST LA VIE CLAIRE ISOTONIQUE · 2 poses → 500×2 = 1.000 uds
+```
+
+#### Validación aritmética (obligatoria en wizard antes de guardar)
+
+| Regla | Cálculo | Resultado |
+|-------|---------|-----------|
+| Por referencia | `hojas_netas_forma × poses_en_forma` | 2.000 / 2.000 / 1.000 / 1.000 ✓ |
+| Por forma | `hojas_netas × poses_totales_chapa` | F1: 1.000×4=4.000 · F2: 500×4=2.000 ✓ |
+| Barco | Σ estuches todas las formas | 4.000 + 2.000 = **6.000** ✓ |
+| Poses vs troquel | Σ poses componentes en cada forma | 2+2 = **4** = poses troquel ✓ |
+| Compra padre | Σ hojas brutas hijas | 1.300 + 800 = **1.800** |
+
+Fórmula por componente: **`cantidad_objetivo = hojas_netas × poses_en_forma`**.
+
+#### Wizard 8.2 — pestaña Formas/Hijas (mock UX)
+
+```text
+┌─ FORMA 1 ─────────────────────────────────────┐
+│ Descripción: Verlavy (2 modelos)             │
+│ Hojas netas: [1000]  Aumento: [300]  → 1300 brutas │
+│                                              │
+│ Componentes (poses en esta forma):           │
+│ ┌──────────────────────────────────────────┐ │
+│ │ Ref.        │ Poses │ Uds calculadas     │ │
+│ │ 605212 ···  │  [2]  │ 1000×2 = 2.000 ✓  │ │
+│ │ 605229 ···  │  [2]  │ 1000×2 = 2.000 ✓  │ │
+│ │ [ + Añadir referencia ]                  │ │
+│ └──────────────────────────────────────────┘ │
+│ Total poses en chapa: 4 ← = troquel contenedor │
+└──────────────────────────────────────────────┘
+
+┌─ FORMA 2 ─────────────────────────────────────┐
+│ (misma estructura)                           │
+└──────────────────────────────────────────────┘
+[ + Añadir forma ]
+```
+
+**Validaciones UI:**
+
+1. Suma poses componentes de la forma = poses del troquel del barco (si no → aviso bloqueante o warning fuerte).
+2. Σ `cantidad_objetivo` todas las hijas = cantidad del contenedor.
+3. Aviso si > 8 formas (partir pedido, nota Zaida).
+
+#### Desbroce — aviso automático multi-referencia (Fase 8.3+)
+
+Cuando Laury/Mayo abren la tarjeta de **36204-01** en desbroce y la forma tiene 2+ referencias en `prod_ot_hija_componentes`:
+
+```text
+⚠️ ATENCIÓN — FORMA CON MÚLTIPLES REFERENCIAS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  2 poses → VERLAVY HYPERTONIQUE (605212)
+  2 poses → VERLAVY ISOTONIQUE (605229)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+NO MEZCLAR. Separar por referencia al desbrocar.
+Resultado esperado: 2.000 uds de cada modelo.
+```
+
+Generado desde componentes; sin texto manual en despacho.
+
+#### CTP (pendiente §12.10)
+
+Con 2 formas y mismo material, candidato: **una hija `preimpresion`** (36204-00) o CTP en cada forma. Validar con planta mañana en demo.
+
+#### Script smoke test (futuro)
+
+`scripts/setup-contenedor-test-36204.mjs` — análogo a `setup-contenedor-test-98010.mjs`, con números de este caso para probar wizard + validaciones sin Optimus.
+
+---
+
 ### Caso B — Multi-componente físico
 
 **Ejemplo:** FOLDERS PORTAMUESTRAS CÉSPED 2026 — 4.000 uds.
@@ -233,14 +347,39 @@ En BD pueden ser todas `ot_tipo = hija`; el subtipo guía wizard y listados.
 
 ### Componentes dentro de una forma (referencias / poses)
 
-Tabla auxiliar candidata `prod_ot_hija_componentes` (nombre provisional):
+Tabla **`prod_ot_hija_componentes`** (migración pendiente — Fase 8.2):
 
 | Campo | Uso |
 |-------|-----|
-| `ot_hija_numero` | FK hija |
-| `referencia_id` | FK maestro |
-| `poses` | Poses de ese modelo en la forma |
-| `cantidad_objetivo` | Estuches/unidades objetivo |
+| `ot_hija_numero` | FK → `prod_ots_general.num_pedido` (ej. `36204-01`) |
+| `referencia_id` | FK opcional → `prod_referencias` |
+| `referencia_codigo` | Código Optimus / cliente (ej. `605212`) |
+| `referencia_descripcion` | Texto legible (ej. `VERLAVY HYPERTONIQUE`) |
+| `poses_en_forma` | Poses de esa ref en la chapa (no confundir con poses troquel total) |
+| `cantidad_objetivo` | Uds calculadas: `hojas_netas × poses_en_forma` |
+| `orden` | Orden en UI |
+
+**Borrador SQL** (ajustar FKs al implementar):
+
+```sql
+create table prod_ot_hija_componentes (
+  id uuid primary key default gen_random_uuid(),
+  ot_hija_numero text not null
+    references prod_ots_general(num_pedido) on delete cascade,
+  referencia_id uuid references prod_referencias(id),
+  referencia_codigo text not null,
+  referencia_descripcion text,
+  poses_en_forma integer not null check (poses_en_forma > 0),
+  cantidad_objetivo integer check (cantidad_objetivo >= 0),
+  orden integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index idx_ot_hija_componentes_ot
+  on prod_ot_hija_componentes(ot_hija_numero);
+```
+
+**Caso de referencia:** ver **§3 Caso A.2** (OT 36204).
 
 Responde pregunta §12.7: Caso A = **varias referencias** por forma; a veces misma familia con poses distintas.
 
@@ -358,18 +497,32 @@ Rama: `feature/bloque8.1-pool-mesa-ejecucion-fixes` (commit `2d9d3ab`).
 
 ### Fase 8.2 — Despacho contenedor + wizard de hijas
 
+> **Caso de referencia:** §3 **Caso A.2 — OT 36204** (ampollas, 2 formas, 4 refs, troquel 4 poses).
+> **Demo:** priorizar flujo mínimo creable en wizard + validación aritmética; ejecución completa puede seguir con 98010.
+
 - Al despachar `contenedor`, definir N hijas:
-  - `tipo_hija`, descripción, material (heredado o propio), hojas, planchas, poses.
-  - Componentes/referencias por hija (`prod_ot_hija_componentes`).
+  - `tipo_hija`, descripción, material (heredado o propio), hojas netas/brutas/aumento, poses en chapa.
+  - Componentes/referencias por hija (`prod_ot_hija_componentes`) — tabla §7.
   - Clon de plantilla de itinerario; override por hija.
-- Creación batch de OTs hijas + despachos pre-rellenados.
+- Pestaña **Formas/Hijas** en wizard (mock §3 Caso A.2).
+- Validaciones antes de guardar: poses = troquel, Σ uds = pedido, Σ hojas brutas compra.
+- Creación batch de OTs hijas (`36204-01`, `-02`…) + despachos pre-rellenados.
 - Respetar límite práctico ~8 formas (avisar / partir pedido).
+
+**MVP demo (orden sugerido):**
+
+1. Migración `prod_ot_hija_componentes`.
+2. Rama wizard contenedor: detectar `ot_tipo = contenedor` → pestaña Formas.
+3. UI formas + componentes + validación (aunque persistencia sea parcial).
+4. Script `setup-contenedor-test-36204.mjs` o carga manual en demo con números del caso.
+5. Narrativa demo: explicar barco + 2 formas + aviso desbroce (mock si falta código).
 
 ### Fase 8.3 — Ejecución por hija
 
 - Mesa y `ExecutionCard`: hijas son OTs normales.
-- Maquinista ve identificador claro (ej. `35698 · F2 — Hoja exterior`).
+- Maquinista ve identificador claro (ej. `36204-01 · Forma 1 — Verlavy`).
 - Contenedor agrega estado de hijas.
+- **Desbroce multi-ref:** bloque «NO MEZCLAR» si forma tiene 2+ componentes (§3 Caso A.2).
 
 ### Fase 8.4 — Cierre del contenedor
 
@@ -523,6 +676,13 @@ Responder con Jordi / Zaida / Abraham / Carlos:
 - **Impresión:** encadenado desde Guillotina en badge y datos proceso.
 - **Manipulados:** etiquetar + paquetes. Externos: revisión pendiente.
 
+### 2 jul 2026 — Caso referencia OT 36204 (ampollas) para wizard 8.2
+
+- Documentado **§3 Caso A.2** en este archivo: 4 modelos, 2 formas, troquel 4 poses, validaciones aritméticas.
+- Borrador SQL `prod_ot_hija_componentes` ampliado (§7).
+- Mock UX wizard Formas/Hijas + aviso desbroce «NO MEZCLAR».
+- Prioridad demo: **8.2 contenedor** usando 36204; ejecución demo sigue con 98010.
+
 ---
 
 ## 16. Orden de trabajo recomendado
@@ -530,10 +690,29 @@ Responder con Jordi / Zaida / Abraham / Carlos:
 1. ~~**Fase FORMATO** — encadenado tamaño de hoja (código).~~ ✅ 17 jun 2026
 2. ~~**Fase 8.0** — migración SQL aditiva.~~ ✅
 3. ~~**Fase 8.1** — agrupación UI pool/pipeline.~~ ✅ 17 jun 2026
-4. **Responder §12** con planta.
-5. **Fase 8.2** — wizard despacho contenedor + hijas.
-6. **Fase 8.3** — ejecución (mayormente gratis).
+4. **Fase 8.2** — wizard despacho contenedor + hijas — **👉 PRIORIDAD DEMO** (caso **36204**).
+5. **Responder §12** con planta (puede ir en la misma demo).
+6. **Fase 8.3** — ejecución (mayormente gratis; aviso desbroce multi-ref).
 7. **Fase 8.4** — cierre contenedor + Bloque 6.
+
+### Retomar desde casa — impulso demo contenedor
+
+| Qué leer primero | Dónde |
+|------------------|--------|
+| Caso completo 36204 | Este doc **§3 Caso A.2** |
+| Barco en ejecución (ya montado) | `GUIA_MAÑANA.md` · OT **98010** |
+| Wizard simple (ya en main) | `DespachoWizardDialog` — extender para `contenedor` |
+| SQL componentes | Este doc **§7** |
+
+**Historia demo sugerida (5 min):**
+
+1. Mostrar **98010** agrupado en Pool/Pipeline (barco + hijas en distinto avance).
+2. Explicar limitación actual: hijas creadas con script, no wizard.
+3. Mostrar diseño **36204** en doc: 2 formas, 4 refs, validación 6.000 estuches.
+4. Si hay código nuevo: wizard contenedor creando `36204-01/02` con componentes.
+5. Opcional: aviso desbroce multi-ref en mock o pantalla.
+
+**No mezclar en la demo:** wizard OT simple (CTP, cartelita) — ya desplegado; foco en **complejos**.
 
 ---
 
@@ -550,7 +729,7 @@ Devuélveme:
 1. Riesgos del modelo y mitigaciones.
 2. SQL mínimo Fase 8.0 + tabla componentes por hija.
 3. Cambios concretos en pool/pipeline (Fase 8.1).
-4. Diseño wizard despacho (Fase 8.2) para Caso A con 6 formas.
+4. Diseño wizard despacho (Fase 8.2) para **Caso A.2 — OT 36204** (2 formas; ver §3).
 
 --- BRIEFING ---
 <pegar MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md>

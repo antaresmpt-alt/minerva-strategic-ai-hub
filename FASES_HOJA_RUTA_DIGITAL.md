@@ -797,9 +797,16 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 
 ## 📌 Punto de continuación (próxima sesión)
 
-**👉 Retomar aquí:** Piloto CTP con Marc/Gemma (3 OTs) → feedback catálogo tareas. Fase **8.2** wizard contenedor (post-reunión §12). Cartelas **9.4** operativo stock.
+**👉 Retomar aquí:** **Demo pedidos complejos (mañana)** → Fase **8.2** wizard contenedor con caso **OT 36204** (`MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` §3 Caso A.2). Ejecución barco: OT **98010**. Piloto CTP Marc/Gemma en paralelo.
 
-**Fase FORMATO** ✅ · **Fase 8.0** ✅ · **Fase 8.1** ✅ · **Fase 8.1.1** ✅ · **Fase 8.1.2** ✅ · **CTP despacho v1** ✅ · **Hoja Ruta Simplificada** ✅
+**Fase FORMATO** ✅ · **Fase 8.0** ✅ · **Fase 8.1** ✅ · **Fase 8.1.1** ✅ · **Fase 8.1.2** ✅ · **CTP despacho v1** ✅ · **Hoja Ruta Simplificada** ✅ · **Caso ref. 36204** ✅ doc
+
+**Sesión 2 jul 2026** — Documentación caso 36204 para wizard 8.2 / demo contenedor
+
+### Hecho
+- **§3 Caso A.2** en `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`: ampollas 4 modelos, 2 formas, troquel 4 poses, validaciones, mock wizard, desbroce, SQL componentes.
+- §16 retomar desde casa + guion demo 5 min.
+- Prioridad explícita 8.2 antes de cerrar §12 planta.
 
 **Sesión 30 jun 2026** — CTP despacho + ejecución híbrida + PDF simplificado ✅
 

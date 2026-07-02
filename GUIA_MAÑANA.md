@@ -3,7 +3,8 @@
 > **Fecha:** reunión jueves con Albert / Jordi (jun 2026)  
 > **Rama desplegada:** `feature/bloque8.1-pool-mesa-ejecucion-fixes`  
 > **Briefing completo:** `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` §8.1 / §8.1.1  
-> **Pendiente CTP despacho:** `docs/despacho-wizard-ctp-pendiente.md` — ✅ **v1 implementado** (30 jun 2026)
+> **Pendiente CTP despacho:** `docs/despacho-wizard-ctp-pendiente.md` — ✅ **v1 implementado** (30 jun 2026)  
+> **Pedidos complejos / demo:** `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` **§3 Caso A.2 — OT 36204**
 
 ---
 
@@ -155,6 +156,21 @@ Documentación completa: `docs/despacho-wizard-ctp-pendiente.md`.
 **Próximo paso:** sentarse con **Marc y Gemma** con **3 OTs piloto** — recoger si añadirían/quitarían tareas del catálogo.
 
 **OT de referencia probada:** 35989 (PLANTILLAS COIMBRA).
+
+---
+
+## Demo pedidos complejos — OT 36204 (jul 2026)
+
+**Fuente de verdad:** `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` §3 **Caso A.2**.
+
+| Rol | OT | Para qué en la demo |
+|-----|-----|---------------------|
+| Barco en ejecución | **98010** | Pool, Pipeline, cartelas, hijas a distinto avance |
+| Definición de formas (diseño 8.2) | **36204** | 4 refs, 2 formas, troquel 4 poses, 6.000 estuches |
+
+**Mensaje clave:** Optimus ya parte el pedido en hijas; Minerva necesita el **wizard al despachar** para no usar scripts. Caso 36204 es el ejemplo real del día.
+
+**Al retomar desde casa:** leer §16 «Retomar desde casa» en Bloque 8 → implementar MVP 8.2 o ensayar guion con doc + 98010.
 
 ---
 
