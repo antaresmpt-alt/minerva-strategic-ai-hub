@@ -532,7 +532,10 @@ Rama: `feature/bloque8.1-pool-mesa-ejecucion-fixes` (commit `2d9d3ab`).
 **Ajustes aplicados 3 jul noche:**
 
 - **Troquel prefill:** `hojas_troquelar` ahora carga desde `salidaProcesoAnterior` (Impresión → Troquel).
-- **Selector cartelas:** Dropdown en diálogo cerrar proceso con cartelas asignadas a la OT (desde `prod_stock_palet_ots`). Opción texto libre como fallback. UX mejorada para casos reales.
+- **Engomado prefill:** `estuches_realizar` desde salida Desbroce (`estuches_desbrozados`), no seed teórico del wizard (6800).
+- **Selector cartelas:** Dropdown en diálogo cerrar proceso con cartelas asignadas a la OT.
+- **PDF hoja de ruta:** Máquina real desde ejecución (no "Sin máquina"); troquel previsto fallback desde impresión.
+- **Cabecera mesa hijas:** H.netas calculadas desde componentes de forma cuando el padre no las tiene.
 
 **Pendiente 8.2 (no bloqueante demo):**
 

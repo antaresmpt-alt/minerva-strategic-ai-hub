@@ -473,7 +473,8 @@ function drawPvistoRealChart(
     merma: number;
   }[] = [];
 
-  for (const paso of pasos) {
+  for (let i = 0; i < pasos.length; i++) {
+    const paso = pasos[i];
     const dp = paso.datosProceso;
     if (!dp) continue;
     const hojasBrutas = n(dp.hojas_brutas);
@@ -483,7 +484,11 @@ function drawPvistoRealChart(
     const hojasTroqueladas = n(dp.hojas_troqueladas);
     const hojasMerma = n(dp.hojas_merma);
 
-    const previsto = hojasTroquelar || hojasNetas || hojasBrutas;
+    let previsto = hojasTroquelar || hojasNetas || hojasBrutas;
+    if (previsto === 0 && paso.procesoId === 10 && i > 0) {
+      const prevDp = pasos[i - 1]?.datosProceso;
+      previsto = n(prevDp?.hojas_impresas) || n(prevDp?.hojas_finales);
+    }
     const real = hojasTroqueladas || hojasImpresas;
     if (previsto > 0 || real > 0) {
       rows.push({

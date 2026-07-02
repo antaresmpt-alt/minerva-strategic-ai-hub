@@ -825,7 +825,10 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 - Encadenado formato validado en todos los pasos (72×102 → /2 → 51×72).
 - Desbroce con banner **NO MEZCLAR** + componentes 605212/605229 validado en ejecución real — **súper**.
 - **Fix troquel prefill:** `hojas_troquelar` ahora carga desde `salidaProcesoAnterior` (salida Impresión → entrada Troquel).
-- **Selector cartelas asignadas:** Diálogo cerrar proceso (Impresión) ahora muestra dropdown con cartelas de la OT (desde `prod_stock_palet_ots`). Texto libre como fallback. UX mejorada para casos reales.
+- **Fix engomado prefill:** `estuches_realizar` desde Desbroce (4200 real, no 6800 seed wizard).
+- **PDF hoja de ruta:** Máquina real en cada paso; gráfico prev/real troquel con fallback impresión.
+- **Cabecera mesa hijas:** H.netas desde componentes forma (1100 en 36204-01).
+- **Selector cartelas asignadas:** Diálogo cerrar proceso (Impresión) con dropdown + texto libre.
 - Cartela #10320 (Folding blanco zenith 300gr · 72×102 · 1050h) usada en cierre Impresión.
 - Commits: fix prefill troquel + selector cartelas en rama `wizard-despacho`.
 

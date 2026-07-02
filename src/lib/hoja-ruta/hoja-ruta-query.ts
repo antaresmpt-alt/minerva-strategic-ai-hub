@@ -178,6 +178,7 @@ type PasoRow = {
 type EjecRow = {
   id: string;
   ot_paso_id: string | null;
+  maquina_id: string | null;
   estado_ejecucion: string;
   inicio_real_at: string | null;
   fin_real_at: string | null;
@@ -191,6 +192,10 @@ type EjecRow = {
   num_pausas: number | string | null;
   ha_estado_pausada: boolean | null;
   updated_at: string | null;
+  prod_maquinas:
+    | { nombre: string | null; tipo_maquina: string | null }
+    | { nombre: string | null; tipo_maquina: string | null }[]
+    | null;
 };
 
 type ExtRow = {
@@ -326,7 +331,7 @@ export async function fetchHojaRutaOt(
       const { data: ejecData, error: ejecErr } = await supabase
         .from(TABLE_EJECUCIONES)
         .select(
-          "id, ot_paso_id, estado_ejecucion, inicio_real_at, fin_real_at, horas_reales, num_hojas_producidas, cantidad_unidades, maquinista, incidencia, accion_correctiva, observaciones, num_pausas, ha_estado_pausada, updated_at",
+          "id, ot_paso_id, maquina_id, estado_ejecucion, inicio_real_at, fin_real_at, horas_reales, num_hojas_producidas, cantidad_unidades, maquinista, incidencia, accion_correctiva, observaciones, num_pausas, ha_estado_pausada, updated_at, prod_maquinas(nombre, tipo_maquina)",
         )
         .in("ot_paso_id", pasoIds)
         .order("updated_at", { ascending: false });
@@ -399,12 +404,14 @@ export async function fetchHojaRutaOt(
       const maq = pickJoin(p.prod_maquinas);
       const seccionSlug = str(cat?.seccion_slug);
       const procesoNombre = str(cat?.nombre);
-      const rawTipo = str(maq?.tipo_maquina);
+
+      const ejec = pasoId ? ejecByPaso.get(pasoId) : undefined;
+      const ejecMaq = ejec ? pickJoin(ejec.prod_maquinas) : null;
+      const maquinaNombre = str(maq?.nombre) ?? str(ejecMaq?.nombre);
+      const rawTipo = str(maq?.tipo_maquina) ?? str(ejecMaq?.tipo_maquina);
       const tipoMaquina: PlanificacionTipoMaquina | null =
         parsePlanificacionTipoMaquina(rawTipo) ??
         inferPlanificacionTipoFromProceso(seccionSlug, procesoNombre);
-
-      const ejec = pasoId ? ejecByPaso.get(pasoId) : undefined;
       const ext = pasoId ? extByPaso.get(pasoId) : undefined;
 
       return {
@@ -414,7 +421,7 @@ export async function fetchHojaRutaOt(
         procesoId: num(p.proceso_id),
         procesoNombre,
         esExterno: Boolean(cat?.es_externo),
-        maquinaNombre: str(maq?.nombre),
+        maquinaNombre,
         tipoMaquina,
         fechaDisponible: dateIso(p.fecha_disponible),
         fechaInicio: dateIso(p.fecha_inicio),

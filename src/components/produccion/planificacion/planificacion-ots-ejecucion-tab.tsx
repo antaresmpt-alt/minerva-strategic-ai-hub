@@ -1114,6 +1114,14 @@ export function PlanificacionOtsEjecucionTab({
             });
             hijaComponentesMap[ot] = list;
           }
+          for (const ot of hijasForma) {
+            const comps = hijaComponentesMap[ot];
+            if (!comps?.length || !despachoMap[ot]) continue;
+            const netasForma = hojasNetasFormaFromComponentes(comps);
+            if (netasForma != null && netasForma > 0) {
+              despachoMap[ot] = { ...despachoMap[ot], hojasNetas: netasForma };
+            }
+          }
         }
       }
 
@@ -1762,7 +1770,22 @@ function ExecutionCard({
     const existing = (row.datosProcesoJson as DatosProcesoGenerico) ?? {};
     const pid = row.procesoId;
     if (Object.keys(existing).length > 0) {
-      const seeded = seedRealValuesFromPrevistos(pid, existing);
+      let seeded = seedRealValuesFromPrevistos(pid, existing);
+      if (pid === PROCESO_ENGOMADO && row.salidaProcesoAnterior != null) {
+        const prevUnit =
+          PROCESO_CAMPOS_CONFIG[row.procesoAnteriorId ?? 0]?.outputUnit ?? "";
+        if (prevUnit === "estuches") {
+          const est = Math.max(0, Math.trunc(row.salidaProcesoAnterior));
+          if (est > 0) {
+            seeded = {
+              ...seeded,
+              estuches_realizar: est,
+              estuches_engomados: est,
+              cantidad_total: est,
+            };
+          }
+        }
+      }
       return pid != null
         ? aplicarPrefillFormatoEncadenado(pid, seeded, row.formatoAnterior)
         : seeded;
@@ -1834,7 +1857,19 @@ function ExecutionCard({
       }
     }
     if (pid === 12) {
-      if (despacho.cantidad != null) {
+      const prevUnit =
+        PROCESO_CAMPOS_CONFIG[row.procesoAnteriorId ?? 0]?.outputUnit ?? "";
+      const estDesdeAnterior =
+        row.salidaProcesoAnterior != null &&
+        Number.isFinite(row.salidaProcesoAnterior) &&
+        prevUnit === "estuches"
+          ? Math.max(0, Math.trunc(row.salidaProcesoAnterior))
+          : null;
+      if (estDesdeAnterior != null && estDesdeAnterior > 0) {
+        base.estuches_realizar = estDesdeAnterior;
+        base.estuches_engomados = estDesdeAnterior;
+        base.cantidad_total = estDesdeAnterior;
+      } else if (despacho.cantidad != null) {
         base.estuches_realizar = despacho.cantidad;
         base.estuches_engomados = despacho.cantidad;
         base.cantidad_total = despacho.cantidad;
