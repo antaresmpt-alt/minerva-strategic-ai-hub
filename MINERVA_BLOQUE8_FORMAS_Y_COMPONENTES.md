@@ -519,11 +519,25 @@ Rama: `feature/bloque8.1-pool-mesa-ejecucion-fixes` (commit `2d9d3ab`).
 | Errores Supabase legibles | ✅ | `formatSupabaseErrorMessage` |
 | Plastificado Select en Dialog | ✅ | z-index `select.tsx` |
 
+**Prueba punta a punta 36204-01** (3 jul 2026 — 00:00h):
+
+| Paso | Resultado |
+|------|-----------|
+| **CTP → Guillotina → Impresión** | ✅ Encadenado formato OK |
+| **Externo (Plastificado)** | ✅ Gestión + recepción correcta |
+| **Troquel** | 🟡 Badge OK; prefill hojas plan **fijo** (3 jul 00:15) |
+| **Desbroce** | ✅ Banner NO MEZCLAR + componentes + cantidades — **súper** |
+| **Engomado** | ✅ Llegó correctamente |
+
+**Ajustes aplicados 3 jul noche:**
+
+- **Troquel prefill:** `hojas_troquelar` ahora carga desde `salidaProcesoAnterior` (Impresión → Troquel).
+
 **Pendiente 8.2 (no bloqueante demo):**
 
-- Re-despachar **36204** si se quieren pasos con seed por forma (despacho anterior al fix).
+- Re-despachar **36204** si se quieren pasos con seed por forma actualizado (despacho anterior al fix).
+- Cartela cierre: dropdown con cartelas asignadas a OT (hoy texto libre funciona).
 - Itinerario override distinto por hija (MVP usa misma plantilla).
-- Script `setup-contenedor-test-36204.mjs` (opcional; **98011** cubre demo wizard).
 - Merge `wizard-despacho` → `main` + deploy estable.
 
 ### Fase 8.3 — Ejecución por hija 🟡 **parcial 2–3 jul 2026**
@@ -714,10 +728,18 @@ Responder con Jordi / Zaida / Abraham / Carlos:
 
 **Pendiente inmediato:**
 
-- Demo: despachar **98011** en wizard; compra en **36204** (padre); desbroce **36204-01**.
+- Demo: despachar **98011** en wizard; compra en **36204** (padre); desbroce **36204-01** ✅ probado noche 3 jul.
 - Responder **§12** con planta (CTP compartido, quién define hijas).
 - Merge `wizard-despacho` → `main`.
-- Re-despachar 36204 si se quieren `datos_proceso` por forma en pasos ya creados.
+
+### 3 jul 2026 (00:00–01:00h) — Prueba real 36204-01 completa + fix troquel
+
+- Prueba punta a punta: CTP → Guillotina → Impresión → Externo (Plastificado) → Troquel → Desbroce → Engomado ✅.
+- Encadenado formato funcionó en todos los pasos.
+- Desbroce con banner NO MEZCLAR + componentes 605212/605229 — validado en ejecución real.
+- **Fix:** Troquel prefill `hojas_troquelar` desde Impresión (`salidaProcesoAnterior`).
+- Cartela #10320 (Folding blanco zenith 300gr · 72×102 · 1050h) usada en cierre Impresión — texto libre OK.
+- Commits: `fix-troquel-prefill` + docs en rama `wizard-despacho`.
 
 ---
 

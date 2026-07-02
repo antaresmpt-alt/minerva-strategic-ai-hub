@@ -816,8 +816,23 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 - Demo 3 jul: guion `GUIA_MAÑANA.md` § recorrido ampliado.
 - Responder §12 Bloque 8 con planta (CTP compartido, quién define formas).
 - Merge `wizard-despacho` → `main`.
-- Re-despachar 36204 si se quieren pasos con seed por forma (despacho anterior al fix).
 - Fase **8.4** cierre contenedor + Bloque 6.
+
+**Sesión 3 jul 2026 (00:00–01:00h)** — Prueba real 36204-01 completa + fix troquel ✅
+
+### Hecho
+- **Prueba punta a punta 36204-01:** CTP → Guillotina → Impresión → Externo (Plastificado) → Troquel → Desbroce → Engomado. Todos los pasos ejecutados con datos reales.
+- Encadenado formato validado en todos los pasos (72×102 → /2 → 51×72).
+- Desbroce con banner **NO MEZCLAR** + componentes 605212/605229 validado en ejecución real — **súper**.
+- **Fix troquel prefill:** `hojas_troquelar` ahora carga desde `salidaProcesoAnterior` (salida Impresión → entrada Troquel).
+- Cartela #10320 (Folding blanco zenith 300gr · 72×102 · 1050h) usada en cierre Impresión — texto libre funcional.
+- Commit: fix prefill troquel en rama `wizard-despacho`.
+
+### Pendiente refinamiento post-MVP (no bloqueante)
+- Cartela cierre: dropdown con cartelas asignadas a OT (hoy texto libre).
+- Re-despachar 36204 opcional si se quieren pasos con seed por forma.
+
+---
 
 **Sesión 2 jul 2026** — Documentación caso 36204 para wizard 8.2 / demo contenedor
 

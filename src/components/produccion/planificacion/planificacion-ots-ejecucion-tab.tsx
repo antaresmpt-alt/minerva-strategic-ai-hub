@@ -1807,6 +1807,13 @@ function ExecutionCard({
       if (despacho.troquel) base.troquel = despacho.troquel;
       if (despacho.poses != null) base.poses = despacho.poses;
       if (despacho.tamanoCorte) base.tamano_corte = despacho.tamanoCorte;
+      const hojasDesdeAnterior =
+        row.salidaProcesoAnterior != null && Number.isFinite(row.salidaProcesoAnterior)
+          ? Math.max(0, Math.trunc(row.salidaProcesoAnterior))
+          : null;
+      if (hojasDesdeAnterior != null && hojasDesdeAnterior > 0) {
+        base.hojas_troquelar = hojasDesdeAnterior;
+      }
       if (despacho.pinza != null) base.pinza = despacho.pinza;
       if (despacho.expulsor) base.expulsor = despacho.expulsor;
       if (despacho.cauchoAcrilico) base.codigo_caucho = despacho.cauchoAcrilico;
