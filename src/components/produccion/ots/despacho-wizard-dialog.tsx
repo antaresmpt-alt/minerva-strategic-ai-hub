@@ -56,6 +56,7 @@ import {
   estuchesEstimadosDespacho,
   FORMAS_MAX_WARNING,
   formatFechaEntregaCorta,
+  getExternoDatosWizard,
   hojasBrutasCompraDespacho,
   hojasBrutasImpresionDespacho,
   integerOrZeroForDespacho,
@@ -127,6 +128,23 @@ function makeTabHelpers(tabs: { id: DespachoWizardTab; label: string }[]) {
   return { tabIndex, nextTab, prevTab };
 }
 
+type TroquelInfoPanel = {
+  num_troquel: string;
+  mides: string | null;
+  num_figuras: string | null;
+  pinza: string | null;
+  expulsion: string | null;
+  num_expulsion: string | null;
+  caucho_acrilico: string | null;
+  maquina: string | null;
+  notas: string | null;
+};
+
+type CajaEmbalajeOption = {
+  codigo: string;
+  descripcion: string | null;
+};
+
 function buildCartelitaFromWizard(
   ot: string,
   meta: DespachoMeta,
@@ -159,6 +177,9 @@ export function DespachoWizardDialog({
 }: DespachoWizardDialogProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const otInputRef = useRef<HTMLInputElement | null>(null);
+  const guillotinaInicialesAutoRef = useRef(true);
+  const impresionBrutasAutoRef = useRef(true);
+  const impresionFormatoAutoRef = useRef(true);
 
   const [wizardTab, setWizardTab] = useState<DespachoWizardTab>("cabecera");
   const [otInput, setOtInput] = useState("");
@@ -191,6 +212,8 @@ export function DespachoWizardDialog({
   );
   const [modoContenedor, setModoContenedor] = useState(false);
   const [formas, setFormas] = useState<DespachoFormaState[]>([]);
+  const [troquelInfo, setTroquelInfo] = useState<TroquelInfoPanel | null>(null);
+  const [cajasEmbalaje, setCajasEmbalaje] = useState<CajaEmbalajeOption[]>([]);
 
   const activeTabs = useMemo(
     () =>
@@ -215,6 +238,10 @@ export function DespachoWizardDialog({
     setOtTipo("simple");
     setModoContenedor(false);
     setFormas([]);
+    setTroquelInfo(null);
+    guillotinaInicialesAutoRef.current = true;
+    impresionBrutasAutoRef.current = true;
+    impresionFormatoAutoRef.current = true;
     setForm(emptyDespachoForm());
     setItinerarioSlots([]);
     setProcesoDatos(emptyDespachoWizardProcesoDatos());
@@ -307,11 +334,61 @@ export function DespachoWizardDialog({
         if (compraErr) throw compraErr;
 
         const d = (despachoRow ?? {}) as Record<string, unknown>;
-        setYaDespachada(
+        const yaDesp =
           Boolean((masterRow as { despachado?: boolean | null }).despachado) ||
-            despachoRow != null
-        );
+          despachoRow != null;
+        setYaDespachada(yaDesp);
         setCompraGenerada(Boolean((compraRows ?? []).length > 0));
+
+        guillotinaInicialesAutoRef.current = true;
+        impresionBrutasAutoRef.current = true;
+        impresionFormatoAutoRef.current = true;
+
+        const pasosList = (pasosRows ?? []) as Array<{
+          proceso_id: number;
+          datos_proceso?: unknown;
+        }>;
+
+        let horasEntradaForm = d.horas_entrada == null ? "" : String(d.horas_entrada);
+        let horasTirajeForm = d.horas_tiraje == null ? "" : String(d.horas_tiraje);
+        let horasTroquelPrep = "";
+        let horasTroquelTiraje = "";
+        let horasTroquelTotal =
+          d.horas_estimadas_troquelado == null
+            ? ""
+            : String(d.horas_estimadas_troquelado);
+        let codigoCajaEmb = "";
+        let udsEmbalaje = "";
+
+        if (yaDesp) {
+          for (const p of pasosList) {
+            const raw = p.datos_proceso;
+            if (!raw || typeof raw !== "object") continue;
+            const pd = raw as Record<string, unknown>;
+            if (
+              p.proceso_id === PROCESO_OFFSET_ID ||
+              p.proceso_id === PROCESO_DIGITAL_ID
+            ) {
+              if (pd.horas_entrada_previsto != null)
+                horasEntradaForm = String(pd.horas_entrada_previsto);
+              if (pd.horas_impresion_previsto != null)
+                horasTirajeForm = String(pd.horas_impresion_previsto);
+            }
+            if (p.proceso_id === PROCESO_TROQUEL_ID) {
+              if (pd.horas_preparacion_previsto != null)
+                horasTroquelPrep = String(pd.horas_preparacion_previsto);
+              if (pd.horas_tiraje_previsto != null)
+                horasTroquelTiraje = String(pd.horas_tiraje_previsto);
+            }
+            if (p.proceso_id === PROCESO_ENGOMADO_ID) {
+              if (typeof pd.codigo_caja_embalaje === "string")
+                codigoCajaEmb = pd.codigo_caja_embalaje;
+              if (pd.unidades_por_paquete != null)
+                udsEmbalaje = String(pd.unidades_por_paquete);
+            }
+          }
+        }
+
         setForm({
           tintas: String(d.tintas ?? ""),
           material: String(d.material ?? ""),
@@ -321,12 +398,11 @@ export function DespachoWizardDialog({
             d.num_hojas_brutas == null ? "" : String(d.num_hojas_brutas),
           num_hojas_netas:
             d.num_hojas_netas == null ? "" : String(d.num_hojas_netas),
-          horas_entrada: d.horas_entrada == null ? "" : String(d.horas_entrada),
-          horas_tiraje: d.horas_tiraje == null ? "" : String(d.horas_tiraje),
-          horas_estimadas_troquelado:
-            d.horas_estimadas_troquelado == null
-              ? ""
-              : String(d.horas_estimadas_troquelado),
+          horas_entrada: horasEntradaForm,
+          horas_tiraje: horasTirajeForm,
+          horas_estimadas_troquelado: horasTroquelTotal,
+          horas_troquel_preparacion: horasTroquelPrep,
+          horas_troquel_tiraje: horasTroquelTiraje,
           horas_estimadas_engomado:
             d.horas_estimadas_engomado == null
               ? ""
@@ -335,6 +411,8 @@ export function DespachoWizardDialog({
           troquel: String(d.troquel ?? ""),
           poses: d.poses == null ? "" : String(d.poses),
           acabado_pral: String(d.acabado_pral ?? ""),
+          codigo_caja_embalaje: codigoCajaEmb,
+          unidades_por_embalaje: udsEmbalaje,
           notas: String(d.notas ?? ""),
           referencia_id:
             typeof d.referencia_id === "string" ? d.referencia_id : null,
@@ -378,13 +456,11 @@ export function DespachoWizardDialog({
           }));
         setItinerarioSlots(nextSlots);
 
-        const parsedProceso = parseProcesoDatosFromPasos(
-          (pasosRows ?? []) as Array<{
-            proceso_id: number;
-            datos_proceso?: unknown;
-          }>
-        );
+        const parsedProceso = yaDesp
+          ? parseProcesoDatosFromPasos(pasosList)
+          : emptyDespachoWizardProcesoDatos();
         const hojasBrutasCompra = String(d.num_hojas_brutas ?? "");
+        const tamanoCompra = String(d.tamano_hoja ?? "").trim();
         if (!parsedProceso.guillotina.hojas_iniciales && hojasBrutasCompra) {
           parsedProceso.guillotina.hojas_iniciales = hojasBrutasCompra;
         }
@@ -395,12 +471,13 @@ export function DespachoWizardDialog({
           parsedProceso.impresion.hojas_brutas =
             parsedProceso.guillotina.hojas_finales;
         }
-        if (
-          !parsedProceso.impresion.formato_hojas &&
-          parsedProceso.guillotina.tamano_final
-        ) {
-          parsedProceso.impresion.formato_hojas =
-            parsedProceso.guillotina.tamano_final;
+        if (!parsedProceso.impresion.formato_hojas) {
+          if (parsedProceso.guillotina.tamano_final) {
+            parsedProceso.impresion.formato_hojas =
+              parsedProceso.guillotina.tamano_final;
+          } else if (tamanoCompra) {
+            parsedProceso.impresion.formato_hojas = tamanoCompra;
+          }
         }
         setProcesoDatos(parsedProceso);
 
@@ -716,6 +793,66 @@ export function DespachoWizardDialog({
   }, [open, supabase]);
 
   useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase
+        .from("prod_cajas_embalaje")
+        .select("codigo, descripcion")
+        .eq("activo", true)
+        .order("orden", { ascending: true })
+        .order("codigo", { ascending: true });
+      if (cancelled) return;
+      if (error) return;
+      setCajasEmbalaje((data ?? []) as CajaEmbalajeOption[]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, supabase]);
+
+  useEffect(() => {
+    const code = form.troquel.trim();
+    if (!open || !code) {
+      setTroquelInfo(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase
+        .from("prod_troqueles")
+        .select(
+          "num_troquel, mides, num_figuras, pinza, expulsion, num_expulsion, caucho_acrilico, maquina, notas"
+        )
+        .ilike("num_troquel", code)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error || !data) {
+        setTroquelInfo(null);
+        return;
+      }
+      const row = data as Record<string, unknown>;
+      setTroquelInfo({
+        num_troquel: String(row.num_troquel ?? code),
+        mides: row.mides == null ? null : String(row.mides),
+        num_figuras:
+          row.num_figuras == null ? null : String(row.num_figuras),
+        pinza: row.pinza == null ? null : String(row.pinza),
+        expulsion: row.expulsion == null ? null : String(row.expulsion),
+        num_expulsion:
+          row.num_expulsion == null ? null : String(row.num_expulsion),
+        caucho_acrilico:
+          row.caucho_acrilico == null ? null : String(row.caucho_acrilico),
+        maquina: row.maquina == null ? null : String(row.maquina),
+        notas: row.notas == null ? null : String(row.notas),
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [form.troquel, open, supabase]);
+
+  useEffect(() => {
     const referenciaId = form.referencia_id;
     if (!open || !referenciaId) {
       setReferenciaHistorial([]);
@@ -812,12 +949,14 @@ export function DespachoWizardDialog({
     [form, procesoDatos, procesoIdsInRoute]
   );
 
-  /** Sincroniza hojas brutas compra → guillotina iniciales cuando aún vacío. */
+  /** Sincroniza hojas brutas compra → guillotina iniciales (auto hasta edición manual). */
   useEffect(() => {
     const brutas = hojasBrutasCompraDespacho(form);
     if (!brutas) return;
     setProcesoDatos((prev) => {
-      if (prev.guillotina.hojas_iniciales.trim()) return prev;
+      if (!guillotinaInicialesAutoRef.current) return prev;
+      const cur = prev.guillotina.hojas_iniciales.trim();
+      if (cur === String(brutas)) return prev;
       return {
         ...prev,
         guillotina: { ...prev.guillotina, hojas_iniciales: String(brutas) },
@@ -825,25 +964,32 @@ export function DespachoWizardDialog({
     });
   }, [form.num_hojas_brutas]);
 
-  /** Sincroniza salida guillotina → impresión brutas y formato. */
+  /** Sincroniza salida guillotina → impresión brutas y formato (con fallback compra). */
   useEffect(() => {
     const finales = procesoDatos.guillotina.hojas_finales.trim();
-    const formato = procesoDatos.guillotina.tamano_final.trim();
-    if (!finales && !formato) return;
+    const formatoGuill = procesoDatos.guillotina.tamano_final.trim();
+    const formatoCompra = form.tamano_hoja.trim();
+    const formatoTarget = formatoGuill || formatoCompra;
+    if (!finales && !formatoTarget) return;
     setProcesoDatos((prev) => {
       let changed = false;
       const imp = { ...prev.impresion };
-      if (finales && !imp.hojas_brutas.trim()) {
+      if (finales && impresionBrutasAutoRef.current && imp.hojas_brutas.trim() !== finales) {
         imp.hojas_brutas = finales;
         changed = true;
       }
-      if (formato && !imp.formato_hojas.trim()) {
-        imp.formato_hojas = formato;
+      if (
+        formatoTarget &&
+        impresionFormatoAutoRef.current &&
+        imp.formato_hojas.trim() !== formatoTarget
+      ) {
+        imp.formato_hojas = formatoTarget;
         changed = true;
       }
       return changed ? { ...prev, impresion: imp } : prev;
     });
   }, [
+    form.tamano_hoja,
     procesoDatos.guillotina.hojas_finales,
     procesoDatos.guillotina.tamano_final,
   ]);
@@ -1019,6 +1165,14 @@ export function DespachoWizardDialog({
         }
       }
 
+      const prepTroquel = parseOptionalDecimalInput(form.horas_troquel_preparacion);
+      const tirajeTroquel = parseOptionalDecimalInput(form.horas_troquel_tiraje);
+      const horasTroquelTotal =
+        prepTroquel != null && tirajeTroquel != null
+          ? prepTroquel + tirajeTroquel
+          : prepTroquel ?? tirajeTroquel ??
+            parseOptionalDecimalInput(form.horas_estimadas_troquelado);
+
       const dataToInsert = {
         ot_numero: selectedOt,
         tintas: form.tintas.trim() || null,
@@ -1029,9 +1183,7 @@ export function DespachoWizardDialog({
         num_hojas_netas: integerOrZeroForDespacho(form.num_hojas_netas),
         horas_entrada: numberOrZeroForDespacho(form.horas_entrada),
         horas_tiraje: numberOrZeroForDespacho(form.horas_tiraje),
-        horas_estimadas_troquelado: parseOptionalDecimalInput(
-          form.horas_estimadas_troquelado
-        ),
+        horas_estimadas_troquelado: horasTroquelTotal,
         horas_estimadas_engomado: parseOptionalDecimalInput(
           form.horas_estimadas_engomado
         ),
@@ -1100,6 +1252,10 @@ export function DespachoWizardDialog({
     setOtTipo("simple");
     setModoContenedor(false);
     setFormas([]);
+    setTroquelInfo(null);
+    guillotinaInicialesAutoRef.current = true;
+    impresionBrutasAutoRef.current = true;
+    impresionFormatoAutoRef.current = true;
     setWizardTab("cabecera");
     window.setTimeout(() => otInputRef.current?.focus(), 80);
   }, []);
@@ -1208,15 +1364,16 @@ export function DespachoWizardDialog({
                 className="h-8 text-xs"
                 type="number"
                 value={g.hojas_iniciales}
-                onChange={(e) =>
+                onChange={(e) => {
+                  guillotinaInicialesAutoRef.current = false;
                   setProcesoDatos((prev) => ({
                     ...prev,
                     guillotina: {
                       ...prev.guillotina,
                       hojas_iniciales: e.target.value,
                     },
-                  }))
-                }
+                  }));
+                }}
               />
             </div>
             <div className="grid gap-1">
@@ -1312,15 +1469,16 @@ export function DespachoWizardDialog({
                     : "ej: 1200"
                 }
                 value={imp.hojas_brutas}
-                onChange={(e) =>
+                onChange={(e) => {
+                  impresionBrutasAutoRef.current = false;
                   setProcesoDatos((prev) => ({
                     ...prev,
                     impresion: {
                       ...prev.impresion,
                       hojas_brutas: e.target.value,
                     },
-                  }))
-                }
+                  }));
+                }}
               />
             </div>
             <div className="grid gap-1">
@@ -1349,15 +1507,16 @@ export function DespachoWizardDialog({
                 className="h-8 text-xs"
                 placeholder="ej: 51×72 cm"
                 value={imp.formato_hojas}
-                onChange={(e) =>
+                onChange={(e) => {
+                  impresionFormatoAutoRef.current = false;
                   setProcesoDatos((prev) => ({
                     ...prev,
                     impresion: {
                       ...prev.impresion,
                       formato_hojas: e.target.value,
                     },
-                  }))
-                }
+                  }));
+                }}
               />
             </div>
             <div className="grid gap-1">
@@ -1395,6 +1554,20 @@ export function DespachoWizardDialog({
       );
     }
     if (PROCESO_EXTERNO_IDS.has(pid)) {
+      const ext = getExternoDatosWizard(procesoDatos, pid);
+      const setExt = (
+        patch: Partial<typeof ext>,
+      ) =>
+        setProcesoDatos((prev) => ({
+          ...prev,
+          externos: {
+            ...prev.externos,
+            [String(pid)]: {
+              ...getExternoDatosWizard(prev, pid),
+              ...patch,
+            },
+          },
+        }));
       return (
         <section
           key={slot.key}
@@ -1403,10 +1576,44 @@ export function DespachoWizardDialog({
           <h4 className="mb-2 text-sm font-semibold text-[#002147]">
             {slot.nombre}
           </h4>
-          <p className="text-xs text-slate-600">
-            Proveedor, hojas enviadas/recibidas y acabado se detallan en
-            ejecución y seguimiento externos.
+          <p className="mb-3 text-[11px] text-slate-600">
+            Acabado previsto para el proveedor. Hojas y recepción se detallan en
+            ejecución / seguimiento externos.
           </p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-1 sm:col-span-2 lg:col-span-3">
+              <Label className="text-xs">Acabado principal</Label>
+              <Input
+                className="h-8 text-xs"
+                list="wiz-acabado-suggestions"
+                placeholder="pp brillo, pp mate, soft-touch…"
+                value={ext.acabado_detalle}
+                onChange={(e) =>
+                  setExt({ acabado_detalle: e.target.value })
+                }
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label className="text-xs">Cara</Label>
+              <Input
+                className="h-8 text-xs"
+                list="wiz-acabado-suggestions"
+                placeholder="ej: pp brillo"
+                value={ext.acabado_cara}
+                onChange={(e) => setExt({ acabado_cara: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label className="text-xs">Dorso</Label>
+              <Input
+                className="h-8 text-xs"
+                list="wiz-acabado-suggestions"
+                placeholder="ej: pp mate o —"
+                value={ext.acabado_dorso}
+                onChange={(e) => setExt({ acabado_dorso: e.target.value })}
+              />
+            </div>
+          </div>
         </section>
       );
     }
@@ -1436,6 +1643,56 @@ export function DespachoWizardDialog({
                 }
               />
             </div>
+            {troquelInfo ? (
+              <div className="sm:col-span-2 rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-[10px] text-slate-600">
+                <p className="mb-1 font-semibold uppercase tracking-wide text-slate-500">
+                  Ficha troquel (informativo)
+                </p>
+                <div className="grid gap-x-4 gap-y-0.5 sm:grid-cols-2 lg:grid-cols-4">
+                  {troquelInfo.mides ? (
+                    <p>
+                      <span className="text-slate-400">Corte:</span>{" "}
+                      {troquelInfo.mides}
+                    </p>
+                  ) : null}
+                  {troquelInfo.num_figuras ? (
+                    <p>
+                      <span className="text-slate-400">Poses:</span>{" "}
+                      {troquelInfo.num_figuras}
+                    </p>
+                  ) : null}
+                  {troquelInfo.pinza ? (
+                    <p>
+                      <span className="text-slate-400">Pinza:</span>{" "}
+                      {troquelInfo.pinza} mm
+                    </p>
+                  ) : null}
+                  {troquelInfo.expulsion || troquelInfo.num_expulsion ? (
+                    <p>
+                      <span className="text-slate-400">Expulsor:</span>{" "}
+                      {[troquelInfo.expulsion, troquelInfo.num_expulsion]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  ) : null}
+                  {troquelInfo.maquina ? (
+                    <p>
+                      <span className="text-slate-400">Máquina:</span>{" "}
+                      {troquelInfo.maquina}
+                    </p>
+                  ) : null}
+                  {troquelInfo.caucho_acrilico ? (
+                    <p>
+                      <span className="text-slate-400">Caucho/acrílico:</span>{" "}
+                      {troquelInfo.caucho_acrilico}
+                    </p>
+                  ) : null}
+                </div>
+                {troquelInfo.notas ? (
+                  <p className="mt-1 text-slate-500">{troquelInfo.notas}</p>
+                ) : null}
+              </div>
+            ) : null}
             <div className="grid gap-1">
               <Label htmlFor="wiz-poses" className="text-xs">
                 Poses
@@ -1450,19 +1707,37 @@ export function DespachoWizardDialog({
               />
             </div>
             <div className="grid gap-1">
-              <Label htmlFor="wiz-horas-troquel" className="text-xs">
-                Horas troquelado estimadas
+              <Label htmlFor="wiz-horas-troquel-prep" className="text-xs">
+                Horas arreglo / entrada
               </Label>
               <Input
-                id="wiz-horas-troquel"
+                id="wiz-horas-troquel-prep"
                 className="h-8 text-xs"
                 type="number"
                 step="0.1"
-                value={form.horas_estimadas_troquelado}
+                value={form.horas_troquel_preparacion}
                 onChange={(e) =>
                   setForm((f) => ({
                     ...f,
-                    horas_estimadas_troquelado: e.target.value,
+                    horas_troquel_preparacion: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="wiz-horas-troquel-tiraje" className="text-xs">
+                Horas tiraje troquel
+              </Label>
+              <Input
+                id="wiz-horas-troquel-tiraje"
+                className="h-8 text-xs"
+                type="number"
+                step="0.1"
+                value={form.horas_troquel_tiraje}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    horas_troquel_tiraje: e.target.value,
                   }))
                 }
               />
@@ -1543,6 +1818,57 @@ export function DespachoWizardDialog({
                   setForm((f) => ({
                     ...f,
                     horas_estimadas_engomado: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-1 sm:col-span-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Embalaje
+              </p>
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="wiz-caja-embalaje" className="text-xs">
+                Caja embalaje
+              </Label>
+              <Input
+                id="wiz-caja-embalaje"
+                className="h-8 text-xs"
+                list="wiz-cajas-embalaje"
+                placeholder="ej: MN2L"
+                value={form.codigo_caja_embalaje}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    codigo_caja_embalaje: e.target.value,
+                  }))
+                }
+              />
+              <datalist id="wiz-cajas-embalaje">
+                {cajasEmbalaje.map((c) => (
+                  <option
+                    key={c.codigo}
+                    value={c.codigo}
+                    label={c.descripcion ?? undefined}
+                  />
+                ))}
+              </datalist>
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="wiz-uds-embalaje" className="text-xs">
+                Unidades por embalaje
+              </Label>
+              <Input
+                id="wiz-uds-embalaje"
+                className="h-8 text-xs"
+                type="number"
+                min={0}
+                placeholder="ej: 50"
+                value={form.unidades_por_embalaje}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    unidades_por_embalaje: e.target.value,
                   }))
                 }
               />
@@ -2564,6 +2890,39 @@ export function DespachoWizardDialog({
                           : ""}
                       </p>
                     ) : null}
+                    {form.codigo_caja_embalaje || form.unidades_por_embalaje ? (
+                      <p>
+                        <span className="text-slate-500">Embalaje:</span>{" "}
+                        {form.codigo_caja_embalaje || "—"}
+                        {form.unidades_por_embalaje
+                          ? ` · ${form.unidades_por_embalaje} uds/caja`
+                          : ""}
+                      </p>
+                    ) : null}
+                    {itinerarioSlots
+                      .filter((s) => PROCESO_EXTERNO_IDS.has(s.procesoId))
+                      .map((s) => {
+                        const ext = getExternoDatosWizard(
+                          procesoDatos,
+                          s.procesoId
+                        );
+                        const parts = [
+                          ext.acabado_detalle,
+                          ext.acabado_cara
+                            ? `cara ${ext.acabado_cara}`
+                            : "",
+                          ext.acabado_dorso
+                            ? `dorso ${ext.acabado_dorso}`
+                            : "",
+                        ].filter(Boolean);
+                        if (!parts.length) return null;
+                        return (
+                          <p key={s.key} className="sm:col-span-2">
+                            <span className="text-slate-500">{s.nombre}:</span>{" "}
+                            {parts.join(" · ")}
+                          </p>
+                        );
+                      })}
                   </div>
                   <Separator className="my-3" />
                   <p className="text-xs font-medium text-slate-700">

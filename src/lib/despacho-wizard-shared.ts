@@ -55,11 +55,15 @@ export type DespachoFormState = {
   horas_entrada: string;
   horas_tiraje: string;
   horas_estimadas_troquelado: string;
+  horas_troquel_preparacion: string;
+  horas_troquel_tiraje: string;
   horas_estimadas_engomado: string;
   tipo_engomado: string;
   troquel: string;
   poses: string;
   acabado_pral: string;
+  codigo_caja_embalaje: string;
+  unidades_por_embalaje: string;
   notas: string;
   referencia_id: string | null;
   referencia_codigo: string;
@@ -269,11 +273,15 @@ export function emptyDespachoForm(): DespachoFormState {
     horas_entrada: "",
     horas_tiraje: "",
     horas_estimadas_troquelado: "",
+    horas_troquel_preparacion: "",
+    horas_troquel_tiraje: "",
     horas_estimadas_engomado: "",
     tipo_engomado: "",
     troquel: "",
     poses: "",
     acabado_pral: "",
+    codigo_caja_embalaje: "",
+    unidades_por_embalaje: "",
     notas: "",
     referencia_id: null,
     referencia_codigo: "",
@@ -390,11 +398,37 @@ export type DespachoWizardImpresionDatos = {
   formato_hojas: string;
 };
 
+/** Datos de despacho para procesos externos (plastificado, stamping…). */
+export type DespachoWizardExternoDatos = {
+  acabado_detalle: string;
+  acabado_cara: string;
+  acabado_dorso: string;
+};
+
 export type DespachoWizardProcesoDatos = {
   guillotina: DespachoWizardGuillotinaDatos;
   impresion: DespachoWizardImpresionDatos;
   ctp: DespachoWizardCtpDatos;
+  /** Clave = proceso_id como string. */
+  externos: Record<string, DespachoWizardExternoDatos>;
 };
+
+export function emptyDespachoWizardExternoDatos(): DespachoWizardExternoDatos {
+  return {
+    acabado_detalle: "",
+    acabado_cara: "",
+    acabado_dorso: "",
+  };
+}
+
+export function getExternoDatosWizard(
+  procesoDatos: DespachoWizardProcesoDatos,
+  procesoId: number,
+): DespachoWizardExternoDatos {
+  return (
+    procesoDatos.externos[String(procesoId)] ?? emptyDespachoWizardExternoDatos()
+  );
+}
 
 export function emptyDespachoWizardProcesoDatos(): DespachoWizardProcesoDatos {
   return {
@@ -410,6 +444,7 @@ export function emptyDespachoWizardProcesoDatos(): DespachoWizardProcesoDatos {
       formato_hojas: "",
     },
     ctp: emptyDespachoWizardCtpDatos(),
+    externos: {},
   };
 }
 
@@ -524,6 +559,7 @@ export function buildDatosProcesoSeed(
       formato_hojas:
         imp.formato_hojas.trim() ||
         procesoDatos.guillotina.tamano_final.trim() ||
+        form.tamano_hoja.trim() ||
         null,
       horas_entrada_previsto: numberOrZeroForDespacho(form.horas_entrada) || null,
       horas_impresion_previsto: numberOrZeroForDespacho(form.horas_tiraje) || null,
@@ -535,12 +571,16 @@ export function buildDatosProcesoSeed(
       numOrNull(procesoDatos.impresion.hojas_brutas) ??
       numOrNull(procesoDatos.guillotina.hojas_finales);
     if (!form.troquel.trim() && !hojas) return null;
+    const prep =
+      parseOptionalDecimalInput(form.horas_troquel_preparacion) ??
+      parseOptionalDecimalInput(form.horas_estimadas_troquelado);
+    const tiraje = parseOptionalDecimalInput(form.horas_troquel_tiraje);
     return {
       troquel: form.troquel.trim() || null,
       num_figuras: integerOrZeroForDespacho(form.poses) || null,
       hojas_a_troquelar: hojas,
-      horas_preparacion_previsto:
-        parseOptionalDecimalInput(form.horas_estimadas_troquelado) ?? null,
+      horas_preparacion_previsto: prep ?? null,
+      horas_tiraje_previsto: tiraje ?? null,
     };
   }
   if (procesoId === PROCESO_CTP_ID) {
@@ -555,6 +595,21 @@ export function buildDatosProcesoSeed(
     const tiempo = parseOptionalDecimalInput(form.horas_estimadas_engomado);
     if (tiempo != null && tiempo > 0) payload.tiempo_previsto = tiempo;
     if (est != null && est.estuches > 0) payload.estuches_realizar = est.estuches;
+    const caja = form.codigo_caja_embalaje.trim();
+    if (caja) payload.codigo_caja_embalaje = caja;
+    const udsEmb = integerOrZeroForDespacho(form.unidades_por_embalaje);
+    if (udsEmb > 0) payload.unidades_por_paquete = udsEmb;
+    return Object.keys(payload).length > 0 ? payload : null;
+  }
+  if (PROCESO_EXTERNO_IDS.has(procesoId)) {
+    const ext = getExternoDatosWizard(procesoDatos, procesoId);
+    const payload: Record<string, unknown> = {};
+    const det = ext.acabado_detalle.trim();
+    const cara = ext.acabado_cara.trim();
+    const dorso = ext.acabado_dorso.trim();
+    if (det) payload.acabado_detalle = det;
+    if (cara) payload.acabado_cara = cara;
+    if (dorso) payload.acabado_dorso = dorso;
     return Object.keys(payload).length > 0 ? payload : null;
   }
   return null;
@@ -593,6 +648,13 @@ export function parseProcesoDatosFromPasos(
     }
     if (p.proceso_id === PROCESO_CTP_ID) {
       next.ctp = parseCtpWizardFromDatosProceso(d);
+    }
+    if (PROCESO_EXTERNO_IDS.has(p.proceso_id)) {
+      next.externos[String(p.proceso_id)] = {
+        acabado_detalle: String(d.acabado_detalle ?? ""),
+        acabado_cara: String(d.acabado_cara ?? ""),
+        acabado_dorso: String(d.acabado_dorso ?? ""),
+      };
     }
   }
   return next;
