@@ -61,6 +61,7 @@ import {
   emptyDespachoWizardProcesoDatos,
   emptyForma,
   estuchesEstimadosDespacho,
+  formatSupabaseErrorMessage,
   FORMAS_MAX_WARNING,
   formatFechaEntregaCorta,
   getExternoDatosWizard,
@@ -1402,15 +1403,18 @@ export function DespachoWizardDialog({
         buildCartelitaFromWizard(selectedOt, meta, form, itinerarioSlots),
       );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Error al despachar.");
+      toast.error(formatSupabaseErrorMessage(e));
     } finally {
       setSaving(false);
     }
   }, [
     despachoStatus,
     form,
+    formas,
+    itinerarioOverrides,
     itinerarioSlots,
     meta,
+    modoContenedor,
     onDespachado,
     procesoDatos,
     procesoIdsInRoute,
@@ -1990,6 +1994,30 @@ export function DespachoWizardDialog({
                 {estuchesEstimados.hojas.toLocaleString("es-ES")} hojas (
                 {hojasCadenaLabel}) × {estuchesEstimados.poses} poses
               </span>
+              {modoContenedor && formas.length > 0 ? (
+                <span className="mt-2 block space-y-1 text-[11px] font-normal text-orange-800">
+                  <span className="block font-medium">
+                    Por forma ({formas.length}) — no mezclar referencias:
+                  </span>
+                  {formas.map((forma, fi) => {
+                    const netas = integerOrZeroForDespacho(forma.hojas_netas);
+                    const refs = forma.componentes
+                      .filter((c) => c.referencia_codigo.trim())
+                      .map((c) => {
+                        const poses = integerOrZeroForDespacho(c.poses_en_forma);
+                        const uds = calcCantidadObjetivoComponente(forma, c);
+                        return `${c.referencia_codigo} (${poses}p → ${uds.toLocaleString("es-ES")} u)`;
+                      });
+                    return (
+                      <span key={forma.key} className="block">
+                        · {forma.descripcion.trim() || `Forma ${fi + 1}`} —{" "}
+                        {netas.toLocaleString("es-ES")} netas
+                        {refs.length > 0 ? `: ${refs.join(" · ")}` : ""}
+                      </span>
+                    );
+                  })}
+                </span>
+              ) : null}
             </p>
           ) : (
             <p className="text-xs text-slate-600">

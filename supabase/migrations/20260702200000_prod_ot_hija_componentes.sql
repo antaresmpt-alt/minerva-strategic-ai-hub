@@ -36,18 +36,29 @@ create index if not exists prod_ot_hija_componentes_hija_idx
 -- RLS: misma política que prod_ot_pasos (autenticados leen/escriben).
 alter table public.prod_ot_hija_componentes enable row level security;
 
+drop policy if exists "Authenticated users can read hija componentes"
+  on public.prod_ot_hija_componentes;
 create policy "Authenticated users can read hija componentes"
   on public.prod_ot_hija_componentes for select
   to authenticated using (true);
 
+drop policy if exists "Authenticated users can insert hija componentes"
+  on public.prod_ot_hija_componentes;
 create policy "Authenticated users can insert hija componentes"
   on public.prod_ot_hija_componentes for insert
   to authenticated with check (true);
 
+drop policy if exists "Authenticated users can update hija componentes"
+  on public.prod_ot_hija_componentes;
 create policy "Authenticated users can update hija componentes"
   on public.prod_ot_hija_componentes for update
   to authenticated using (true);
 
+drop policy if exists "Authenticated users can delete hija componentes"
+  on public.prod_ot_hija_componentes;
 create policy "Authenticated users can delete hija componentes"
   on public.prod_ot_hija_componentes for delete
   to authenticated using (true);
+
+grant select, insert, update, delete on public.prod_ot_hija_componentes to authenticated;
+grant select on public.prod_ot_hija_componentes to anon;

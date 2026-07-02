@@ -340,6 +340,19 @@ export function integerOrZeroForDespacho(s: string): number {
   return Math.trunc(numberOrZeroForDespacho(s));
 }
 
+/** Mensaje legible desde errores Supabase/PostgREST (no siempre instanceof Error). */
+export function formatSupabaseErrorMessage(
+  error: unknown,
+  fallback = "Error al despachar.",
+): string {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  if (error && typeof error === "object" && "message" in error) {
+    const msg = String((error as { message: unknown }).message ?? "").trim();
+    if (msg) return msg;
+  }
+  return fallback;
+}
+
 export function formatFechaEntregaCorta(
   value: string | null | undefined
 ): string {
