@@ -13,6 +13,10 @@ export const TABLE_OT_DESPACHADAS = "produccion_ot_despachadas";
 export const TABLE_OT_PASOS = "prod_ot_pasos";
 export const TABLE_OTS = "prod_ots_general";
 export const TABLE_COMPRA = "prod_compra_material";
+export const TABLE_HIJA_COMPONENTES = "prod_ot_hija_componentes";
+
+/** Número máximo de formas recomendado (Optimus parte en 2 pedidos si supera ~8). */
+export const FORMAS_MAX_WARNING = 8;
 
 export type DespachoSeleccion = { id: string; num_pedido: string };
 
@@ -65,12 +69,13 @@ export type DespachoFormState = {
 
 export type DespachoWizardTab =
   | "cabecera"
+  | "formas"
   | "material"
   | "itinerario"
   | "produccion"
   | "resumen";
 
-export const DESPACHO_WIZARD_TABS: {
+export const DESPACHO_WIZARD_TABS_SIMPLE: {
   id: DespachoWizardTab;
   label: string;
 }[] = [
@@ -80,6 +85,167 @@ export const DESPACHO_WIZARD_TABS: {
   { id: "produccion", label: "Producción" },
   { id: "resumen", label: "Resumen" },
 ];
+
+export const DESPACHO_WIZARD_TABS_CONTENEDOR: {
+  id: DespachoWizardTab;
+  label: string;
+}[] = [
+  { id: "cabecera", label: "Cabecera" },
+  { id: "formas", label: "Formas / Hijas" },
+  { id: "material", label: "Material padre" },
+  { id: "itinerario", label: "Itinerario" },
+  { id: "resumen", label: "Resumen" },
+];
+
+/** @deprecated Use DESPACHO_WIZARD_TABS_SIMPLE or DESPACHO_WIZARD_TABS_CONTENEDOR */
+export const DESPACHO_WIZARD_TABS = DESPACHO_WIZARD_TABS_SIMPLE;
+
+// ─── Tipos Formas / Hijas (Bloque 8.2) ────────────────────────────────────────
+
+/** Un componente/referencia dentro de una forma (una fila en prod_ot_hija_componentes). */
+export type DespachoComponenteState = {
+  key: string;
+  referencia_codigo: string;
+  referencia_descripcion: string;
+  poses_en_forma: string;
+};
+
+/** Una forma de imposición (una OT hija). */
+export type DespachoFormaState = {
+  key: string;
+  descripcion: string;
+  hojas_netas: string;
+  aumento: string;
+  componentes: DespachoComponenteState[];
+};
+
+export function emptyComponente(): DespachoComponenteState {
+  return {
+    key: crypto.randomUUID(),
+    referencia_codigo: "",
+    referencia_descripcion: "",
+    poses_en_forma: "",
+  };
+}
+
+export function emptyForma(index: number): DespachoFormaState {
+  return {
+    key: crypto.randomUUID(),
+    descripcion: `Forma ${index + 1}`,
+    hojas_netas: "",
+    aumento: "",
+    componentes: [emptyComponente()],
+  };
+}
+
+/** Hojas brutas de una forma: netas + aumento (si aumento > 0). */
+export function calcHojasBrutasForma(forma: DespachoFormaState): number {
+  const netas = integerOrZeroForDespacho(forma.hojas_netas);
+  const aumRaw = integerOrZeroForDespacho(forma.aumento);
+  return netas + (aumRaw > 0 ? aumRaw : 0);
+}
+
+/** Estuches calculados de un componente: hojas_netas_forma × poses_en_forma. */
+export function calcCantidadObjetivoComponente(
+  forma: DespachoFormaState,
+  comp: DespachoComponenteState
+): number {
+  const netas = integerOrZeroForDespacho(forma.hojas_netas);
+  const poses = integerOrZeroForDespacho(comp.poses_en_forma);
+  return netas * poses;
+}
+
+/** Total de poses de todos los componentes de una forma. */
+export function totalPosesForma(forma: DespachoFormaState): number {
+  return forma.componentes.reduce(
+    (acc, c) => acc + integerOrZeroForDespacho(c.poses_en_forma),
+    0
+  );
+}
+
+/** Total estuches de todas las formas. */
+export function totalEstuchesFormas(formas: DespachoFormaState[]): number {
+  return formas.reduce((acc, forma) => {
+    const netas = integerOrZeroForDespacho(forma.hojas_netas);
+    const poses = totalPosesForma(forma);
+    return acc + netas * poses;
+  }, 0);
+}
+
+/** Total hojas brutas de compra (suma de todas las hijas). */
+export function totalHojasBrutasFormas(formas: DespachoFormaState[]): number {
+  return formas.reduce((acc, f) => acc + calcHojasBrutasForma(f), 0);
+}
+
+export type ValidacionFormasResult = {
+  ok: boolean;
+  errores: string[];
+  warnings: string[];
+};
+
+/**
+ * Valida la coherencia de las formas antes de despachar.
+ * @param formas Lista de formas definidas.
+ * @param posesTotalTroquel Poses del troquel del contenedor (del campo `form.poses`).
+ * @param cantidadPedido Cantidad total pedida del contenedor.
+ */
+export function validarFormas(
+  formas: DespachoFormaState[],
+  posesTotalTroquel: number,
+  cantidadPedido: number
+): ValidacionFormasResult {
+  const errores: string[] = [];
+  const warnings: string[] = [];
+
+  if (formas.length === 0) {
+    errores.push("Define al menos una forma.");
+    return { ok: false, errores, warnings };
+  }
+
+  formas.forEach((forma, i) => {
+    const n = i + 1;
+    const netas = integerOrZeroForDespacho(forma.hojas_netas);
+    if (!netas) errores.push(`Forma ${n}: indica las hojas netas.`);
+    const posesForma = totalPosesForma(forma);
+    if (
+      posesTotalTroquel > 0 &&
+      posesForma > 0 &&
+      posesForma !== posesTotalTroquel
+    ) {
+      errores.push(
+        `Forma ${n}: suma de poses en chapa (${posesForma}) ≠ poses del troquel (${posesTotalTroquel}).`
+      );
+    }
+    forma.componentes.forEach((c, ci) => {
+      if (!c.referencia_codigo.trim())
+        errores.push(`Forma ${n}, ref ${ci + 1}: indica el código de referencia.`);
+      if (!integerOrZeroForDespacho(c.poses_en_forma))
+        errores.push(`Forma ${n}, ref ${ci + 1}: indica las poses.`);
+    });
+  });
+
+  if (formas.length > FORMAS_MAX_WARNING) {
+    warnings.push(
+      `Más de ${FORMAS_MAX_WARNING} formas: en Optimus suelen partirse en 2 pedidos.`
+    );
+  }
+
+  if (cantidadPedido > 0) {
+    const totalEst = totalEstuchesFormas(formas);
+    if (totalEst > 0 && totalEst !== cantidadPedido) {
+      warnings.push(
+        `Estuches calculados (${totalEst.toLocaleString("es-ES")}) ≠ cantidad pedida (${cantidadPedido.toLocaleString("es-ES")}).`
+      );
+    }
+  }
+
+  return { ok: errores.length === 0, errores, warnings };
+}
+
+/** Genera el num_pedido de una hija: padre + sufijo 2 dígitos (01, 02, …). */
+export function buildHijaNumPedido(padre: string, index: number): string {
+  return `${padre}-${String(index + 1).padStart(2, "0")}`;
+}
 
 export function emptyDespachoMeta(): DespachoMeta {
   return {

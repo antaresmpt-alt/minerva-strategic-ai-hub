@@ -1,11 +1,15 @@
 "use client";
 
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   ClipboardCheck,
+  GitFork,
   Loader2,
+  Plus,
   Printer,
+  Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -38,12 +42,19 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   applyClonePrefill,
   buildDatosProcesoSeed,
+  buildHijaNumPedido,
+  calcCantidadObjetivoComponente,
+  calcHojasBrutasForma,
   DESPACHO_CLONE_SELECT,
-  DESPACHO_WIZARD_TABS,
+  DESPACHO_WIZARD_TABS_CONTENEDOR,
+  DESPACHO_WIZARD_TABS_SIMPLE,
+  emptyComponente,
   emptyDespachoForm,
   emptyDespachoMeta,
   emptyDespachoWizardProcesoDatos,
+  emptyForma,
   estuchesEstimadosDespacho,
+  FORMAS_MAX_WARNING,
   formatFechaEntregaCorta,
   hojasBrutasCompraDespacho,
   hojasBrutasImpresionDespacho,
@@ -63,11 +74,18 @@ import {
   PROCESO_OFFSET_ID,
   PROCESO_TROQUEL_ID,
   TABLE_COMPRA,
+  TABLE_HIJA_COMPONENTES,
   TABLE_OT_DESPACHADAS,
   TABLE_OT_PASOS,
   TABLE_OTS,
+  totalEstuchesFormas,
+  totalHojasBrutasFormas,
+  totalPosesForma,
+  validarFormas,
   type DespachoCatalogItem,
+  type DespachoComponenteState,
   type DespachoFormState,
+  type DespachoFormaState,
   type DespachoMeta,
   type DespachoSeleccion,
   type DespachoWizardTab,
@@ -94,18 +112,19 @@ export type DespachoWizardDialogProps = {
   onDespachado?: (info: { ot: string; rowId: string }) => void;
 };
 
-function tabIndex(tab: DespachoWizardTab): number {
-  return DESPACHO_WIZARD_TABS.findIndex((t) => t.id === tab);
-}
-
-function nextTab(tab: DespachoWizardTab): DespachoWizardTab | null {
-  const i = tabIndex(tab);
-  return DESPACHO_WIZARD_TABS[i + 1]?.id ?? null;
-}
-
-function prevTab(tab: DespachoWizardTab): DespachoWizardTab | null {
-  const i = tabIndex(tab);
-  return i > 0 ? DESPACHO_WIZARD_TABS[i - 1]!.id : null;
+function makeTabHelpers(tabs: { id: DespachoWizardTab; label: string }[]) {
+  function tabIndex(tab: DespachoWizardTab): number {
+    return tabs.findIndex((t) => t.id === tab);
+  }
+  function nextTab(tab: DespachoWizardTab): DespachoWizardTab | null {
+    const i = tabIndex(tab);
+    return tabs[i + 1]?.id ?? null;
+  }
+  function prevTab(tab: DespachoWizardTab): DespachoWizardTab | null {
+    const i = tabIndex(tab);
+    return i > 0 ? tabs[i - 1]!.id : null;
+  }
+  return { tabIndex, nextTab, prevTab };
 }
 
 function buildCartelitaFromWizard(
@@ -166,6 +185,26 @@ export function DespachoWizardDialog({
   const [referenciaHistorialLoading, setReferenciaHistorialLoading] =
     useState(false);
 
+  // Bloque 8.2 — OT contenedor / hijas
+  const [otTipo, setOtTipo] = useState<"simple" | "contenedor" | "hija">(
+    "simple"
+  );
+  const [modoContenedor, setModoContenedor] = useState(false);
+  const [formas, setFormas] = useState<DespachoFormaState[]>([]);
+
+  const activeTabs = useMemo(
+    () =>
+      modoContenedor
+        ? DESPACHO_WIZARD_TABS_CONTENEDOR
+        : DESPACHO_WIZARD_TABS_SIMPLE,
+    [modoContenedor]
+  );
+
+  const { tabIndex, nextTab, prevTab } = useMemo(
+    () => makeTabHelpers(activeTabs),
+    [activeTabs]
+  );
+
   const resetWizard = useCallback(() => {
     setWizardTab("cabecera");
     setOtInput("");
@@ -173,6 +212,9 @@ export function DespachoWizardDialog({
     setMeta(emptyDespachoMeta());
     setYaDespachada(false);
     setCompraGenerada(false);
+    setOtTipo("simple");
+    setModoContenedor(false);
+    setFormas([]);
     setForm(emptyDespachoForm());
     setItinerarioSlots([]);
     setProcesoDatos(emptyDespachoWizardProcesoDatos());
@@ -192,7 +234,7 @@ export function DespachoWizardDialog({
         const { data: masterRow, error: masterErr } = await supabase
           .from(TABLE_OTS)
           .select(
-            "id, num_pedido, despachado, cliente, titulo, cantidad, pedido_cliente, fecha_entrega"
+            "id, num_pedido, despachado, cliente, titulo, cantidad, pedido_cliente, fecha_entrega, ot_tipo"
           )
           .eq("num_pedido", ot)
           .maybeSingle();
@@ -361,6 +403,105 @@ export function DespachoWizardDialog({
             parsedProceso.guillotina.tamano_final;
         }
         setProcesoDatos(parsedProceso);
+
+        // Bloque 8.2: detectar OT contenedor y cargar hijas existentes
+        const tipoOt = String(
+          (masterRow as { ot_tipo?: string | null }).ot_tipo ?? "simple"
+        ) as "simple" | "contenedor" | "hija";
+        setOtTipo(tipoOt);
+
+        if (tipoOt === "contenedor") {
+          setModoContenedor(true);
+          // Cargar hijas existentes con sus componentes
+          const { data: hijasRows } = await supabase
+            .from(TABLE_OTS)
+            .select(
+              "num_pedido, forma_descripcion, tipo_hija"
+            )
+            .eq("ot_padre_numero", sel.num_pedido)
+            .eq("ot_tipo", "hija")
+            .order("num_pedido", { ascending: true });
+
+          if (hijasRows && hijasRows.length > 0) {
+            const hijasNumeros = (
+              hijasRows as Array<{
+                num_pedido: string;
+                forma_descripcion: string | null;
+              }>
+            ).map((h) => h.num_pedido);
+
+            const { data: compRows } = await supabase
+              .from(TABLE_HIJA_COMPONENTES)
+              .select(
+                "ot_hija_numero, referencia_codigo, referencia_descripcion, poses_en_forma, cantidad_objetivo, orden"
+              )
+              .in("ot_hija_numero", hijasNumeros)
+              .order("orden", { ascending: true });
+
+            const compByHija = new Map<
+              string,
+              Array<{
+                referencia_codigo: string;
+                referencia_descripcion: string | null;
+                poses_en_forma: number;
+                cantidad_objetivo: number | null;
+                orden: number;
+              }>
+            >();
+            for (const c of (compRows ?? []) as Array<{
+              ot_hija_numero: string;
+              referencia_codigo: string;
+              referencia_descripcion: string | null;
+              poses_en_forma: number;
+              cantidad_objetivo: number | null;
+              orden: number;
+            }>) {
+              const existing = compByHija.get(c.ot_hija_numero) ?? [];
+              existing.push(c);
+              compByHija.set(c.ot_hija_numero, existing);
+            }
+
+            const hijasHydrated: DespachoFormaState[] = (
+              hijasRows as Array<{
+                num_pedido: string;
+                forma_descripcion: string | null;
+              }>
+            ).map((h) => {
+              const comps = compByHija.get(h.num_pedido) ?? [];
+              const cantidadTotal =
+                comps.reduce((a, c) => {
+                  const qty = c.cantidad_objetivo ?? 0;
+                  return a + qty;
+                }, 0) /
+                Math.max(
+                  comps.reduce(
+                    (a, c) => a + (c.poses_en_forma > 0 ? 1 : 0),
+                    0
+                  ),
+                  1
+                );
+              const primeraHoja = comps[0]?.cantidad_objetivo ?? 0;
+              const primerasPoses = comps[0]?.poses_en_forma ?? 1;
+              const hojasNetas = primerasPoses > 0 ? Math.round(primeraHoja / primerasPoses) : 0;
+              return {
+                key: crypto.randomUUID(),
+                descripcion: h.forma_descripcion ?? h.num_pedido,
+                hojas_netas: hojasNetas > 0 ? String(hojasNetas) : "",
+                aumento: "",
+                componentes:
+                  comps.length > 0
+                    ? comps.map((c) => ({
+                        key: crypto.randomUUID(),
+                        referencia_codigo: c.referencia_codigo,
+                        referencia_descripcion: c.referencia_descripcion ?? "",
+                        poses_en_forma: String(c.poses_en_forma),
+                      }))
+                    : [emptyComponente()],
+              };
+            });
+            setFormas(hijasHydrated);
+          }
+        }
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "No se pudo cargar la OT.");
       } finally {
@@ -707,10 +848,24 @@ export function DespachoWizardDialog({
     procesoDatos.guillotina.tamano_final,
   ]);
 
+  // Si el tab activo desaparece al cambiar modo, volver a cabecera
+  useEffect(() => {
+    const isValid = activeTabs.some((t) => t.id === wizardTab);
+    if (!isValid) setWizardTab("cabecera");
+  }, [activeTabs, wizardTab]);
+
+  const formasValidation = useMemo(() => {
+    if (!modoContenedor) return null;
+    const posesTotalTroquel = integerOrZeroForDespacho(form.poses);
+    const cantidadPedido = integerOrZeroForDespacho(meta.cantidad);
+    return validarFormas(formas, posesTotalTroquel, cantidadPedido);
+  }, [formas, form.poses, meta.cantidad, modoContenedor]);
+
   const canGoNext = useMemo(() => {
     if (wizardTab === "cabecera") return Boolean(seleccion);
+    if (wizardTab === "formas") return Boolean(formasValidation?.ok);
     return true;
-  }, [seleccion, wizardTab]);
+  }, [formasValidation, seleccion, wizardTab]);
 
   const submitDespacho = useCallback(async () => {
     if (!seleccion) return;
@@ -725,6 +880,75 @@ export function DespachoWizardDialog({
     const selectedOt = seleccion.num_pedido.trim();
     try {
       if (!selectedOt) throw new Error("OT inválida.");
+
+      // ── Bloque 8.2: guardar hijas del contenedor ──────────────────────────
+      if (modoContenedor && formas.length > 0) {
+        // Marcar padre como contenedor
+        const { error: errTipo } = await supabase
+          .from(TABLE_OTS)
+          .update({ ot_tipo: "contenedor" })
+          .eq("num_pedido", selectedOt);
+        if (errTipo) throw errTipo;
+
+        // Para cada forma, upsert la OT hija
+        for (let fi = 0; fi < formas.length; fi++) {
+          const forma = formas[fi]!;
+          const hijaNum = buildHijaNumPedido(selectedOt, fi);
+
+          // Upsert en prod_ots_general (hija hereda meta del padre)
+          const { error: errHija } = await supabase
+            .from(TABLE_OTS)
+            .upsert(
+              {
+                num_pedido: hijaNum,
+                ot_tipo: "hija",
+                ot_padre_numero: selectedOt,
+                tipo_hija: "forma",
+                forma_descripcion: forma.descripcion || `Forma ${fi + 1}`,
+                cliente: meta.cliente || null,
+                titulo: meta.trabajo || null,
+                cantidad:
+                  integerOrZeroForDespacho(forma.hojas_netas) *
+                    totalPosesForma(forma) || null,
+                pedido_cliente: meta.pedido_cliente || null,
+                fecha_entrega: meta.fecha_entrega || null,
+                despachado: false,
+              },
+              { onConflict: "num_pedido" }
+            );
+          if (errHija) throw errHija;
+
+          // Borrar componentes anteriores e insertar nuevos
+          const { error: errDelComps } = await supabase
+            .from(TABLE_HIJA_COMPONENTES)
+            .delete()
+            .eq("ot_hija_numero", hijaNum);
+          if (errDelComps) throw errDelComps;
+
+          const compRows = forma.componentes
+            .filter((c) => c.referencia_codigo.trim())
+            .map((c, ci) => {
+              const poses = integerOrZeroForDespacho(c.poses_en_forma);
+              const netas = integerOrZeroForDespacho(forma.hojas_netas);
+              return {
+                ot_hija_numero: hijaNum,
+                referencia_codigo: c.referencia_codigo.trim(),
+                referencia_descripcion:
+                  c.referencia_descripcion.trim() || null,
+                poses_en_forma: poses,
+                cantidad_objetivo: poses > 0 ? netas * poses : null,
+                orden: ci,
+              };
+            });
+          if (compRows.length > 0) {
+            const { error: errInsComps } = await supabase
+              .from(TABLE_HIJA_COMPONENTES)
+              .insert(compRows);
+            if (errInsComps) throw errInsComps;
+          }
+        }
+      }
+      // ── fin Bloque 8.2 ────────────────────────────────────────────────────
 
       if (itinerarioSlots.length > 0) {
         const { data: existingPasos, error: errLoadPasos } = await supabase
@@ -836,7 +1060,11 @@ export function DespachoWizardDialog({
         .eq("num_pedido", selectedOt);
       if (errMaster) throw errMaster;
 
-      toast.success("OT despachada correctamente");
+      toast.success(
+        modoContenedor && formas.length > 0
+          ? `OT contenedor despachada · ${formas.length} hijas creadas`
+          : "OT despachada correctamente"
+      );
       onDespachado?.({ ot: selectedOt, rowId: selectedRowId });
 
       setPostDespachoCartelita(
@@ -869,6 +1097,9 @@ export function DespachoWizardDialog({
     setOtInput("");
     setItinerarioSlots([]);
     setProcesoDatos(emptyDespachoWizardProcesoDatos());
+    setOtTipo("simple");
+    setModoContenedor(false);
+    setFormas([]);
     setWizardTab("cabecera");
     window.setTimeout(() => otInputRef.current?.focus(), 80);
   }, []);
@@ -885,7 +1116,12 @@ export function DespachoWizardDialog({
 
   function goNext() {
     if (!canGoNext) {
-      toast.error("Carga una OT válida antes de continuar.");
+      if (wizardTab === "formas") {
+        const errs = formasValidation?.errores ?? [];
+        toast.error(errs[0] ?? "Corrige los errores en las formas.");
+      } else {
+        toast.error("Carga una OT válida antes de continuar.");
+      }
       return;
     }
     const n = nextTab(wizardTab);
@@ -1367,7 +1603,7 @@ export function DespachoWizardDialog({
         >
           <div className="shrink-0 border-b border-slate-100 px-6 pt-2">
             <TabsList className="h-auto w-full justify-start gap-1 bg-transparent p-0">
-              {DESPACHO_WIZARD_TABS.map((t, i) => (
+              {activeTabs.map((t, i) => (
                 <TabsTrigger
                   key={t.id}
                   value={t.id}
@@ -1620,10 +1856,429 @@ export function DespachoWizardDialog({
                   ) : null}
                 </div>
 
-                <p className="text-xs text-slate-500">
-                  OT contenedor con formas múltiples: próximamente (Bloque 8.2
-                  v2).
-                </p>
+                <div className="mt-3 flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                  <GitFork className="size-4 shrink-0 text-slate-500" />
+                  <div className="flex-1">
+                    <p className="text-xs font-medium text-slate-700">
+                      {modoContenedor
+                        ? "OT en modo contenedor (con formas/hijas)"
+                        : "¿OT con formas / múltiples modelos en misma chapa?"}
+                    </p>
+                    {!modoContenedor && (
+                      <p className="mt-0.5 text-[11px] text-slate-500">
+                        Activa si hay ≥2 modelos de estuche en la misma
+                        tirada (ej. OT 36204: 4 ampollas, 2 formas).
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    variant={modoContenedor ? "destructive" : "secondary"}
+                    size="sm"
+                    className="shrink-0 text-xs"
+                    disabled={saving || !seleccion}
+                    onClick={() => {
+                      const next = !modoContenedor;
+                      setModoContenedor(next);
+                      if (next && formas.length === 0) {
+                        setFormas([emptyForma(0), emptyForma(1)]);
+                      }
+                      if (!next) setFormas([]);
+                      setWizardTab("cabecera");
+                    }}
+                  >
+                    {modoContenedor ? "Desactivar" : "Activar formas"}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {wizardTab === "formas" ? (
+              <div className="flex flex-col gap-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-[#002147]">
+                      Formas / Hijas — {seleccion?.num_pedido}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-slate-500">
+                      Cada forma = una OT hija (una chapa / itinerario). Define
+                      hojas netas, aumento y los componentes (refs con sus poses
+                      en la chapa).
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 gap-1.5 text-xs"
+                    disabled={
+                      saving || formas.length >= FORMAS_MAX_WARNING * 2
+                    }
+                    onClick={() =>
+                      setFormas((prev) => [...prev, emptyForma(prev.length)])
+                    }
+                  >
+                    <Plus className="size-3.5" />
+                    Añadir forma
+                  </Button>
+                </div>
+
+                {formas.length === 0 && (
+                  <p className="rounded-lg border border-dashed border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                    Sin formas. Pulsa «Añadir forma».
+                  </p>
+                )}
+
+                {formas.map((forma, fi) => {
+                  const hojasBrutas = calcHojasBrutasForma(forma);
+                  const netasNum = integerOrZeroForDespacho(forma.hojas_netas);
+                  return (
+                    <div
+                      key={forma.key}
+                      className="rounded-xl border border-slate-200 bg-white shadow-sm"
+                    >
+                      {/* Header forma */}
+                      <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50 px-4 py-2.5">
+                        <span className="flex size-6 items-center justify-center rounded-full bg-[#002147] text-[11px] font-bold text-white">
+                          {fi + 1}
+                        </span>
+                        <Input
+                          className="h-7 flex-1 border-none bg-transparent text-sm font-semibold shadow-none focus-visible:ring-0"
+                          placeholder={`Forma ${fi + 1}`}
+                          value={forma.descripcion}
+                          onChange={(e) =>
+                            setFormas((prev) =>
+                              prev.map((f, i) =>
+                                i === fi
+                                  ? { ...f, descripcion: e.target.value }
+                                  : f
+                              )
+                            )
+                          }
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 shrink-0 text-slate-400 hover:text-red-600"
+                          disabled={formas.length <= 1}
+                          onClick={() =>
+                            setFormas((prev) =>
+                              prev.filter((_, i) => i !== fi)
+                            )
+                          }
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+
+                      {/* Body forma */}
+                      <div className="grid gap-4 p-4 sm:grid-cols-2">
+                        {/* Hojas */}
+                        <div className="grid gap-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                            Hojas
+                          </p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="grid gap-1">
+                              <Label className="text-xs">Netas previstas</Label>
+                              <Input
+                                className="h-8 text-xs"
+                                type="number"
+                                min={0}
+                                placeholder="ej. 1000"
+                                value={forma.hojas_netas}
+                                onChange={(e) =>
+                                  setFormas((prev) =>
+                                    prev.map((f, i) =>
+                                      i === fi
+                                        ? { ...f, hojas_netas: e.target.value }
+                                        : f
+                                    )
+                                  )
+                                }
+                              />
+                            </div>
+                            <div className="grid gap-1">
+                              <Label className="text-xs">Aumento (hojas)</Label>
+                              <Input
+                                className="h-8 text-xs"
+                                type="number"
+                                min={0}
+                                placeholder="ej. 100"
+                                value={forma.aumento}
+                                onChange={(e) =>
+                                  setFormas((prev) =>
+                                    prev.map((f, i) =>
+                                      i === fi
+                                        ? { ...f, aumento: e.target.value }
+                                        : f
+                                    )
+                                  )
+                                }
+                              />
+                            </div>
+                          </div>
+                          {netasNum > 0 && (
+                            <p className="text-[11px] text-slate-500">
+                              Brutas a comprar:{" "}
+                              <span className="font-semibold text-slate-700">
+                                {hojasBrutas.toLocaleString("es-ES")}
+                              </span>{" "}
+                              {forma.aumento
+                                ? `(${netasNum} + ${integerOrZeroForDespacho(forma.aumento)} aumento)`
+                                : ""}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Componentes */}
+                        <div className="grid gap-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                              Componentes / referencias
+                            </p>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 gap-1 text-[11px] text-slate-500 hover:text-[#002147]"
+                              onClick={() =>
+                                setFormas((prev) =>
+                                  prev.map((f, i) =>
+                                    i === fi
+                                      ? {
+                                          ...f,
+                                          componentes: [
+                                            ...f.componentes,
+                                            emptyComponente(),
+                                          ],
+                                        }
+                                      : f
+                                  )
+                                )
+                              }
+                            >
+                              <Plus className="size-3" /> Ref.
+                            </Button>
+                          </div>
+                          {forma.componentes.map((comp, ci) => {
+                            const qty = calcCantidadObjetivoComponente(
+                              forma,
+                              comp
+                            );
+                            return (
+                              <div
+                                key={comp.key}
+                                className="grid grid-cols-[1fr_1fr_2rem] gap-1.5 rounded-md border border-slate-100 bg-slate-50 p-2"
+                              >
+                                <div className="grid gap-0.5">
+                                  <Label className="text-[10px] text-slate-500">
+                                    Cód. referencia
+                                  </Label>
+                                  <Input
+                                    className="h-7 text-xs"
+                                    placeholder="605212"
+                                    value={comp.referencia_codigo}
+                                    onChange={(e) =>
+                                      setFormas((prev) =>
+                                        prev.map((f, i) =>
+                                          i === fi
+                                            ? {
+                                                ...f,
+                                                componentes:
+                                                  f.componentes.map(
+                                                    (c, j) =>
+                                                      j === ci
+                                                        ? {
+                                                            ...c,
+                                                            referencia_codigo:
+                                                              e.target.value,
+                                                          }
+                                                        : c
+                                                  ),
+                                              }
+                                            : f
+                                        )
+                                      )
+                                    }
+                                  />
+                                </div>
+                                <div className="grid gap-0.5">
+                                  <Label className="text-[10px] text-slate-500">
+                                    Poses en chapa
+                                  </Label>
+                                  <div className="flex items-center gap-1">
+                                    <Input
+                                      className="h-7 text-xs"
+                                      type="number"
+                                      min={1}
+                                      placeholder="1"
+                                      value={comp.poses_en_forma}
+                                      onChange={(e) =>
+                                        setFormas((prev) =>
+                                          prev.map((f, i) =>
+                                            i === fi
+                                              ? {
+                                                  ...f,
+                                                  componentes:
+                                                    f.componentes.map(
+                                                      (c, j) =>
+                                                        j === ci
+                                                          ? {
+                                                              ...c,
+                                                              poses_en_forma:
+                                                                e.target.value,
+                                                            }
+                                                          : c
+                                                    ),
+                                                }
+                                              : f
+                                          )
+                                        )
+                                      }
+                                    />
+                                    {qty > 0 && netasNum > 0 && (
+                                      <span className="shrink-0 text-[10px] text-slate-500">
+                                        ={qty.toLocaleString("es-ES")} u
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="mt-4 size-7 text-slate-400 hover:text-red-600"
+                                  disabled={forma.componentes.length <= 1}
+                                  onClick={() =>
+                                    setFormas((prev) =>
+                                      prev.map((f, i) =>
+                                        i === fi
+                                          ? {
+                                              ...f,
+                                              componentes:
+                                                f.componentes.filter(
+                                                  (_, j) => j !== ci
+                                                ),
+                                            }
+                                          : f
+                                      )
+                                    )
+                                  }
+                                >
+                                  <Trash2 className="size-3" />
+                                </Button>
+                                {/* Descripción opcional */}
+                                <div className="col-span-2 grid gap-0.5">
+                                  <Input
+                                    className="h-6 text-[10px] text-slate-500"
+                                    placeholder="Descripción (opcional)"
+                                    value={comp.referencia_descripcion}
+                                    onChange={(e) =>
+                                      setFormas((prev) =>
+                                        prev.map((f, i) =>
+                                          i === fi
+                                            ? {
+                                                ...f,
+                                                componentes:
+                                                  f.componentes.map(
+                                                    (c, j) =>
+                                                      j === ci
+                                                        ? {
+                                                            ...c,
+                                                            referencia_descripcion:
+                                                              e.target.value,
+                                                          }
+                                                        : c
+                                                  ),
+                                              }
+                                            : f
+                                        )
+                                      )
+                                    }
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {netasNum > 0 && (
+                            <p className="mt-1 text-[11px] text-slate-500">
+                              Poses Σ:{" "}
+                              <span className="font-semibold text-slate-700">
+                                {totalPosesForma(forma)}
+                              </span>
+                              {form.poses &&
+                                integerOrZeroForDespacho(form.poses) > 0 &&
+                                totalPosesForma(forma) !==
+                                  integerOrZeroForDespacho(form.poses) && (
+                                  <span className="ml-1 text-amber-700">
+                                    ≠ {form.poses} poses troquel
+                                  </span>
+                                )}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Validaciones globales */}
+                {formasValidation && formas.length > 0 && (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      Resumen
+                    </p>
+                    <div className="grid gap-1 text-xs">
+                      <p>
+                        <span className="text-slate-500">Formas:</span>{" "}
+                        {formas.length}
+                      </p>
+                      <p>
+                        <span className="text-slate-500">
+                          Hojas brutas totales:
+                        </span>{" "}
+                        {totalHojasBrutasFormas(formas).toLocaleString("es-ES")}
+                      </p>
+                      <p>
+                        <span className="text-slate-500">Estuches Σ est.:</span>{" "}
+                        {totalEstuchesFormas(formas).toLocaleString("es-ES")}
+                        {meta.cantidad &&
+                          integerOrZeroForDespacho(meta.cantidad) > 0 && (
+                            <span className="ml-1 text-slate-400">
+                              / pedido:{" "}
+                              {integerOrZeroForDespacho(
+                                meta.cantidad
+                              ).toLocaleString("es-ES")}
+                            </span>
+                          )}
+                      </p>
+                    </div>
+                    {formasValidation.errores.length > 0 && (
+                      <ul className="mt-2 space-y-1">
+                        {formasValidation.errores.map((e, i) => (
+                          <li
+                            key={i}
+                            className="flex gap-1.5 text-xs text-red-700"
+                          >
+                            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                            {e}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {formasValidation.warnings.map((w, i) => (
+                      <p
+                        key={i}
+                        className="mt-1 flex gap-1.5 text-xs text-amber-700"
+                      >
+                        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                        {w}
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : null}
 
@@ -1922,6 +2577,64 @@ export function DespachoWizardDialog({
                     </ol>
                   )}
                 </div>
+
+                {modoContenedor && formas.length > 0 && (
+                  <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-4">
+                    <p className="mb-3 text-xs font-semibold text-[#002147]">
+                      Hijas a crear ({formas.length})
+                    </p>
+                    <div className="space-y-2">
+                      {formas.map((forma, fi) => {
+                        const hijaNum = buildHijaNumPedido(
+                          seleccion?.num_pedido ?? "—",
+                          fi
+                        );
+                        const netas = integerOrZeroForDespacho(forma.hojas_netas);
+                        const brutas = calcHojasBrutasForma(forma);
+                        return (
+                          <div
+                            key={forma.key}
+                            className="rounded-md border border-blue-100 bg-white px-3 py-2 text-xs"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-semibold text-[#002147]">
+                                {hijaNum}
+                              </span>
+                              <span className="text-slate-600">
+                                {forma.descripcion}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-[10px] text-slate-500">
+                              {netas.toLocaleString("es-ES")} hojas netas
+                              {brutas !== netas
+                                ? ` · ${brutas.toLocaleString("es-ES")} brutas`
+                                : ""}
+                              {" · "}
+                              {forma.componentes.length} ref
+                              {forma.componentes.length !== 1 ? "s" : ""}.:{" "}
+                              {forma.componentes
+                                .map(
+                                  (c) =>
+                                    `${c.referencia_codigo || "—"} (${c.poses_en_forma || "?"}p)`
+                                )
+                                .join(", ")}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="mt-3 text-[11px] text-slate-500">
+                      Total:{" "}
+                      <span className="font-semibold text-slate-700">
+                        {totalEstuchesFormas(formas).toLocaleString("es-ES")}{" "}
+                        estuches
+                      </span>{" "}
+                      ·{" "}
+                      {totalHojasBrutasFormas(formas).toLocaleString("es-ES")}{" "}
+                      hojas brutas Σ
+                    </p>
+                  </div>
+                )}
               </div>
             ) : null}
           </div>
