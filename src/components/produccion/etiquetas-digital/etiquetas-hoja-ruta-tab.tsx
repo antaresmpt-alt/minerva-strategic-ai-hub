@@ -511,15 +511,6 @@ export function EtiquetasHojaRutaTab() {
     return new Map(troqueles.map((troquel) => [troquel.id, troquel]));
   }, [troqueles]);
 
-  const exportOptions = useMemo(
-    () => ({
-      includeKpis: !compactMode,
-      kpis: exportKpis,
-      troquelesById,
-    }),
-    [compactMode, exportKpis, troquelesById]
-  );
-
   const exportHint = compactMode
     ? "Elegir selección de exportación (sin indicadores)"
     : "Elegir selección de exportación + indicadores en resumen";
@@ -544,6 +535,15 @@ export function EtiquetasHojaRutaTab() {
       metrosRange: { start, end },
     });
   }, [exportMode, exportRange.end, exportRange.start, kpis, rows]);
+
+  const exportOptions = useMemo(
+    () => ({
+      includeKpis: !compactMode,
+      kpis: exportKpis,
+      troquelesById,
+    }),
+    [compactMode, exportKpis, troquelesById]
+  );
 
   const exportDateFieldLabel = useMemo(
     () =>
