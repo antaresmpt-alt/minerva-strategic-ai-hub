@@ -45,7 +45,7 @@ import type {
   ProdStockPaletConOts,
   ProdStockPaletRow,
 } from "@/types/prod-stock";
-import { CartelaWizardDialog } from "./cartela-wizard-dialog";
+import { CartelaWizardDialog, type CartelaWizardCreatedInfo } from "./cartela-wizard-dialog";
 
 const supabase = createSupabaseBrowserClient();
 
@@ -114,13 +114,17 @@ export function CartelasPage() {
       const recepIds = receps.map((r) => r.id);
       const { data: stockCounts } = await supabase
         .from("prod_stock_palets")
-        .select("recepcion_id")
-        .in("recepcion_id", recepIds)
-        .eq("es_prueba", false);
+        .select("recepcion_id, es_prueba")
+        .in("recepcion_id", recepIds);
 
       const cartelasByRecepcion: Record<string, number> = {};
+      const cartelasPruebaByRecepcion: Record<string, number> = {};
       for (const sc of stockCounts ?? []) {
-        if (sc.recepcion_id) {
+        if (!sc.recepcion_id) continue;
+        if (sc.es_prueba) {
+          cartelasPruebaByRecepcion[sc.recepcion_id] =
+            (cartelasPruebaByRecepcion[sc.recepcion_id] ?? 0) + 1;
+        } else {
           cartelasByRecepcion[sc.recepcion_id] =
             (cartelasByRecepcion[sc.recepcion_id] ?? 0) + 1;
         }
@@ -159,6 +163,7 @@ export function CartelasPage() {
             hojas_recibidas_total: hojasRecibidas,
             recepciones: [],
             cartelas_existentes: cartelasByRecepcion[recepcionId] ?? 0,
+            cartelas_prueba_existentes: cartelasPruebaByRecepcion[recepcionId] ?? 0,
           });
         }
 
@@ -170,6 +175,8 @@ export function CartelasPage() {
         }
         group.hojas_recibidas_total += hojasRecibidas;
         group.cartelas_existentes += cartelasByRecepcion[recepcionId] ?? 0;
+        group.cartelas_prueba_existentes +=
+          cartelasPruebaByRecepcion[recepcionId] ?? 0;
 
         const line: AlbaranRecepcionLine = {
           recepcion_id: recepcionId,
@@ -313,6 +320,24 @@ export function CartelasPage() {
     );
   }, [cartelas, mostrarPruebas, search]);
 
+  const cartelasPruebaOcultas = useMemo(() => {
+    if (mostrarPruebas) return 0;
+    return cartelas.filter((c) => c.es_prueba).length;
+  }, [cartelas, mostrarPruebas]);
+
+  const busquedaCoincidePruebaOculta = useMemo(() => {
+    if (mostrarPruebas || !search.trim()) return false;
+    const q = search.toLowerCase();
+    return cartelas.some(
+      (c) =>
+        c.es_prueba &&
+        (c.id_stock.toString().includes(q) ||
+          c.material_nombre?.toLowerCase().includes(q) ||
+          c.nota_entrega?.toLowerCase().includes(q) ||
+          c.ots.some((o) => o.toLowerCase().includes(q))),
+    );
+  }, [cartelas, mostrarPruebas, search]);
+
   // ── Filtro bandeja pendientes ─────────────────────────────────────────
   const thirtyDaysAgo = useMemo(() => {
     const d = new Date();
@@ -364,9 +389,17 @@ export function CartelasPage() {
     setWizardOpen(true);
   }
 
-  function handleWizardCreated() {
+  function handleWizardCreated(created: CartelaWizardCreatedInfo[]) {
     loadPendientes();
-    if (tab === "cartelas") loadCartelas();
+    loadCartelas();
+    if (created.some((c) => c.es_prueba)) {
+      setMostrarPruebas(true);
+      setTab("cartelas");
+      const first = created[0];
+      if (first) setSearch(String(first.id_stock));
+    } else if (tab !== "cartelas") {
+      setTab("cartelas");
+    }
   }
 
   async function handlePrint(
@@ -612,7 +645,13 @@ export function CartelasPage() {
             <div className="text-center py-12 text-slate-400">
               <Package className="size-8 mx-auto mb-2" />
               <p>
-                {search ? "Sin resultados para esa búsqueda" : "No hay cartelas todavía"}
+                {search
+                  ? busquedaCoincidePruebaOculta
+                    ? "Hay cartelas de prueba que coinciden — activa «Mostrar pruebas»"
+                    : "Sin resultados para esa búsqueda"
+                  : cartelasPruebaOcultas > 0
+                    ? `${cartelasPruebaOcultas} cartela${cartelasPruebaOcultas !== 1 ? "s" : ""} de prueba oculta${cartelasPruebaOcultas !== 1 ? "s" : ""} — activa «Mostrar pruebas»`
+                    : "No hay cartelas todavía"}
               </p>
             </div>
           )}
@@ -656,6 +695,7 @@ function AlbaranCard({
   dimmed?: boolean;
 }) {
   const hasCartelas = grupo.cartelas_existentes > 0;
+  const hasPrueba = grupo.cartelas_prueba_existentes > 0;
   return (
     <Card className={dimmed ? "opacity-60" : ""}>
       <CardHeader className="pb-2">
@@ -681,6 +721,13 @@ function AlbaranCard({
                 {grupo.cartelas_existentes} cartela
                 {grupo.cartelas_existentes !== 1 ? "s" : ""} ya creada
                 {grupo.cartelas_existentes !== 1 ? "s" : ""}
+              </div>
+            )}
+            {!hasCartelas && hasPrueba && (
+              <div className="flex items-center gap-1 text-xs text-amber-800 bg-amber-50/80 border border-amber-300 rounded px-2 py-0.5">
+                <AlertCircle className="size-3" />
+                {grupo.cartelas_prueba_existentes} cartela
+                {grupo.cartelas_prueba_existentes !== 1 ? "s" : ""} de prueba
               </div>
             )}
             <Button size="sm" onClick={onCartelar} className="text-xs">

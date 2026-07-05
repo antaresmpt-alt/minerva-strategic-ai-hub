@@ -185,6 +185,8 @@ export type AlbaranPendienteGroup = {
   recepciones: AlbaranRecepcionLine[];
   /** Cuántas cartelas ya existen para este albarán (antiduplicado). */
   cartelas_existentes: number;
+  /** Cartelas sandbox (Id ≥ 99.000); no cuentan como producción. */
+  cartelas_prueba_existentes: number;
 };
 
 export type AlbaranRecepcionLine = {

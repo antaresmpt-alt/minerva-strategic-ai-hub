@@ -574,11 +574,11 @@ PDF compacto para acompañar la OT entre departamentos (sustituto papel de la ho
 ⏳ **Bloque 6 PENDIENTE**: Producidas/Histórico (`prod_ot_producidas`, snapshot híbrido) + lifecycle de cierre (pendiente_revision → producida) + recálculo maestro
 ⏳ **Bloque 7 PENDIENTE**: Expedición/Albarán (depende de Bloque 6 + decisión Odoo)
 🔄 **Bloque 8 EN CURSO** (17–18 jun 2026): **Fase FORMATO ✅** + **8.0 ✅** + **8.1 ✅** + **8.1.1 ✅**. Pendiente 8.2–8.4. Fuente de verdad: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
-📋 **Bloque 9 EN CURSO** (25 jun 2026): **9.0–9.1b ✅** + **9.4-preview ✅** (enlace documental cierre impresión → hoja de ruta/PDF). Pendiente: 9.2 Stock, 9.3 sobrantes, **9.4 operativo** (movimientos). `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §15.5.
+📋 **Bloque 9 EN CURSO** (5 jul 2026): **9.0–9.1b ✅** + **9.2 ✅** + **9.4-preview ✅** + **9.4 operativo ✅** + import Optimus + IA Stock MVP. Pendiente: 9.3 sobrantes, sync Optimus, 9.9 NL→SQL. `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §15.6.
 
 ---
 
-**Última actualización**: 25 de junio de 2026 — Bloque 9.4-preview cartela en cierre impresión; smoke OT 35858 + PDF hoja de ruta.
+**Última actualización**: 5 de julio de 2026 — Bloque 9.4 operativo consumo stock; import Optimus; impresión cartelas HTML; lote tintas; asistente IA Stock.
 
 ---
 
@@ -1056,6 +1056,30 @@ Pendiente: H1/H2 recuento global; lista OTs piloto con Emma/Ramón.
 
 ### Pendiente (9.4 operativo)
 
-- [ ] Al confirmar cierre: `INSERT prod_stock_movimientos` + actualizar `cantidad_actual`.
-- [ ] Restringir a OTs piloto (§13c Bloque 9).
+- [x] Al confirmar cierre: `INSERT prod_stock_movimientos` + actualizar `cantidad_actual` — ✅ **5 jul 2026** (`prod_stock_registrar_consumo`, §15.6.4).
+- [x] Aplicar a **todas las OTs** (producción; prueba operativa manual en 2–3 OTs).
+- [ ] Conectar déficit stock ↔ `material_status` (pool/mesa).
 - [ ] Cosmético PDF: línea “Horas OT” con espaciado/comilla errónea (preexistente).
+
+---
+
+## Bloque 9.4 operativo — Consumo stock ✅ **5 jul 2026**
+
+> Fuente: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §15.6.4.
+
+### Hecho
+
+- Al **Confirmar y finalizar** cierre impresión (proc. 1/2) con **hojas consumidas > 0**: RPC atómica descuenta `cantidad_actual`, inserta movimiento `consumo`, ajusta reservas ATP.
+- Si hay hojas pero ID Stock inválido → **bloquea** finalización.
+- Sin hojas → solo documental (comportamiento 9.4-preview).
+- **Lote tintas** en `densidades_tintas` (campo `lote` por color).
+- **Asistente IA Stock** (MVP): modal sobre listado filtrado.
+
+### Archivos clave
+
+| Pieza | Ruta |
+|-------|------|
+| Consumo | `src/lib/cartela-stock-consumo.ts` |
+| Ejecución | `planificacion-ots-ejecucion-tab.tsx` |
+| RPC | `supabase/migrations/20260705150000_bloque9_4_stock_consumo_rpc.sql` |
+| IA Stock | `stock-ai-dialog.tsx`, `/api/gemini/stock-analyze` |

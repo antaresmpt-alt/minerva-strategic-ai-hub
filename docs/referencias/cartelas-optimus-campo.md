@@ -17,7 +17,7 @@ Cartela impresa (ID Stock grande en el palet)
 Optimus RDC → Consumir material: Id stock → código artículo + descripción + cantidad hojas
 ```
 
-**Minerva hoy:** cartelado (9.0–9.1b) + **enlace documental al cerrar impresión (9.4-preview)**. **Siguiente:** consumo operativo con movimientos de stock (9.4).
+**Minerva hoy:** cartelado (9.0–9.1b) + **Stock ATP + import Optimus (9.2)** + **consumo operativo al cerrar impresión (9.4)** + lote tintas + asistente IA Stock MVP. **Siguiente:** sync Optimus inteligente, 9.3 sobrantes, 9.9 NL→SQL.
 
 ---
 
@@ -144,10 +144,12 @@ Confirmado en visita a planta (jun 2026):
 
 | Fase | Estado | Comportamiento |
 |------|--------|----------------|
-| **9.4-preview** | ✅ 25 jun 2026 | Cerrar proceso (impresión 1/2) → ID Stock + hojas en `datos_proceso` + hoja de ruta/PDF. Sin movimientos. |
-| **9.4 operativo** | ⏳ | Mismo punto de captura + `cantidad_actual` + `prod_stock_movimientos`. |
+| **9.4-preview** | ✅ 25 jun 2026 | Cerrar proceso (impresión 1/2) → ID Stock + hojas en `datos_proceso` + hoja de ruta/PDF. |
+| **9.4 operativo** | ✅ **5 jul 2026** | Mismo punto + RPC `prod_stock_registrar_consumo` → `cantidad_actual` + `prod_stock_movimientos`. **Todas las OTs.** |
 
-Archivos: `src/lib/cartela-ejecucion.ts`, `cartela-cierre-block.tsx`, `cerrar-proceso-dialog.tsx`, `hoja-ruta-formatters.ts`.
+**Impresión cartelas (5 jul):** `src/lib/cartela-print-html.ts` — popup HTML aislado; 2 copias (cartelas) / 1 copia (stock). Ver §15.6.3 Bloque 9.
+
+Archivos consumo: `src/lib/cartela-stock-consumo.ts`, `cartela-cierre-block.tsx`, `planificacion-ots-ejecucion-tab.tsx`, migración `20260705150000`.
 
 ---
 
@@ -263,4 +265,4 @@ No hace falta replicar la lógica de generación en Minerva: basta **lookup** o 
 
 ---
 
-*Última actualización: 25 jun 2026 — 9.4-preview cierre impresión (OT 35858); fuentes: fotos planta, albaranes, RDC David, reunión Ramón, export maestro Optimus (468 artículos).*
+*Última actualización: 5 jul 2026 — 9.4 operativo consumo stock; import Optimus; impresión HTML; lote tintas; IA Stock MVP. Fuentes: fotos planta, albaranes, RDC David, reunión Ramón, export maestro Optimus (468 artículos).*

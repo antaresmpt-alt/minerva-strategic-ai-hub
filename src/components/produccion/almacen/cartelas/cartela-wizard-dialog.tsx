@@ -56,11 +56,16 @@ import { UBICACIONES_FILA } from "@/types/prod-stock";
 
 type WizardTab = "albaran" | "palet" | "resumen";
 
+export type CartelaWizardCreatedInfo = {
+  id_stock: number;
+  es_prueba: boolean;
+};
+
 interface CartelaWizardDialogProps {
   open: boolean;
   grupo: AlbaranPendienteGroup | null;
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: (created: CartelaWizardCreatedInfo[]) => void;
   onPrintReady: (
     palets: ProdStockPaletConOts[],
     proveedorNombre?: string | null
@@ -463,7 +468,12 @@ export function CartelaWizardDialog({
       toast.success(
         `${created.length} cartela${created.length !== 1 ? "s" : ""} creada${created.length !== 1 ? "s" : ""} — ID Stock ${created.map((c) => c.id_stock).join(", ")}`
       );
-      onCreated();
+      onCreated(
+        created.map((c) => ({
+          id_stock: c.id_stock,
+          es_prueba: c.es_prueba,
+        })),
+      );
     } catch (e) {
       toast.error(
         `Error inesperado: ${e instanceof Error ? e.message : String(e)}`

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback, type ReactNode } from "react";
+import { useMemo, useState, useCallback, useEffect, type ReactNode } from "react";
 import {
   getCamposConfigByProcesoId,
   type CampoDefinicion,
@@ -135,6 +135,11 @@ export function DatosProcesoForm({
   excludeFieldIds,
 }: DatosProcesoFormProps) {
   const [datos, setDatos] = useState<DatosProcesoGenerico>(datosInicial);
+
+  // Sincroniza con el padre (p. ej. checkboxes CTP fuera de este formulario).
+  useEffect(() => {
+    setDatos(datosInicial);
+  }, [datosInicial]);
 
   const config = useMemo(() => getCamposConfigByProcesoId(procesoId), [procesoId]);
   const excludeSet = useMemo(

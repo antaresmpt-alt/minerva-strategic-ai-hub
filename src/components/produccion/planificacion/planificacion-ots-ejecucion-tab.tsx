@@ -286,6 +286,32 @@ function toFiniteNum(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Hojas plan de impresión: proceso anterior → netas plan → brutas plan → despacho. */
+function hojasEntradaImpresionEjecucion(
+  salidaAnterior: number | null | undefined,
+  datos: DatosProcesoGenerico,
+  despacho: DespachoInfo | null | undefined,
+): number | null {
+  if (
+    salidaAnterior != null &&
+    Number.isFinite(salidaAnterior) &&
+    salidaAnterior > 0
+  ) {
+    return Math.trunc(salidaAnterior);
+  }
+  const netasPlan =
+    toFiniteNum(datos.hojas_netas) ?? toFiniteNum(datos.hojas_impresas);
+  if (netasPlan != null && netasPlan > 0) return netasPlan;
+  const brutasPlan = toFiniteNum(datos.hojas_brutas);
+  if (brutasPlan != null && brutasPlan > 0) return brutasPlan;
+  const netasDespacho = despacho?.hojasNetas;
+  if (netasDespacho != null && netasDespacho > 0) return netasDespacho;
+  if (despacho?.hojasBrutas != null && despacho.hojasBrutas > 0) {
+    return despacho.hojasBrutas;
+  }
+  return null;
+}
+
 /**
  * Reparto en bultos/picos/palets para Engomado.
  * - bultos_completos = floor(estuches / estuches_por_bulto)
@@ -2089,7 +2115,23 @@ function ExecutionCard({
           {despacho.material ? <span><b>Mat:</b> {despacho.material} {despacho.gramaje ? `${despacho.gramaje}g` : ""}</span> : null}
           {despacho.tamanoHoja ? <span><b>Formato compra:</b> {despacho.tamanoHoja}</span> : null}
           {despacho.hojasBrutas != null ? <span><b>H.brutas:</b> {despacho.hojasBrutas.toLocaleString("es-ES")}</span> : null}
-          {despacho.hojasNetas != null ? <span><b>H.netas:</b> {despacho.hojasNetas.toLocaleString("es-ES")}</span> : null}
+          {(() => {
+            const isImp = row.procesoId === 1 || row.procesoId === 2;
+            const netas = isImp
+              ? hojasEntradaImpresionEjecucion(
+                  row.salidaProcesoAnterior,
+                  datosProcesoLocal,
+                  despacho,
+                )
+              : despacho.hojasNetas;
+            if (netas == null) return null;
+            return (
+              <span>
+                <b>H.netas{isImp && row.salidaProcesoAnterior == null ? " plan" : ""}:</b>{" "}
+                {netas.toLocaleString("es-ES")}
+              </span>
+            );
+          })()}
           {despacho.tintas ? <span><b>Tintas:</b> {despacho.tintas}</span> : null}
           {despacho.acabadoPral ? <span><b>Acabado:</b> {despacho.acabadoPral}</span> : null}
           {despacho.troquel ? <span><b>Troquel:</b> {despacho.troquel}</span> : null}
@@ -2186,7 +2228,11 @@ function ExecutionCard({
           despacho?.poses ??
           null;
         const salidaRaw = isImpresion
-          ? (row.salidaProcesoAnterior ?? despacho?.hojasNetas ?? null)
+          ? hojasEntradaImpresionEjecucion(
+              row.salidaProcesoAnterior,
+              datosProcesoLocal,
+              despacho,
+            )
           : row.salidaProcesoAnterior;
         if (salidaRaw == null) return null;
 

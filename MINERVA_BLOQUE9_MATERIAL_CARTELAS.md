@@ -4,9 +4,9 @@
 > Tema: recepción de material, cartelas de palet, stock libre y trazabilidad.
 > Complementa `MINERVA_HUB_CONTEXTO_MAESTRO.md`, `FASES_HOJA_RUTA_DIGITAL.md` y briefings Bloques 6 y 7.
 >
-> **Estado:** ✅ **9.0 + 9.1 + 9.1b + 9.4-preview + 9.2** (5 jul 2026) — cartelas en almacén + enlace documental al **cerrar impresión** (procesos 1 y 2) → hoja de ruta y PDF + **vista Stock con reservas ATP y valoración**. Smoke: cartelas #10310–#10320. **Pendiente:** 9.3 sobrantes, **9.4 operativo** (movimientos + descuento `cantidad_actual`), import Optimus.
+> **Estado:** ✅ **9.0 + 9.1 + 9.1b + 9.2 + 9.4-preview + 9.4 operativo (MVP)** (5 jul 2026) — cartelas, **vista Stock ATP**, **import Optimus**, **impresión HTML**, **consumo real al cerrar impresión**, **lote tintas** en densidades, **asistente IA Stock (MVP)**. Smoke inicial #10310–#10320; **stock real importado** (~281 palets Optimus jul 2026). **Pendiente:** 9.3 sobrantes, sync Optimus inteligente, 9.9 NL→SQL, déficit → `material_status`.
 > **Origen:** Optimus + cartelas CARPAPSA (15 jun 2026).
-> **Actualizado:** 5 jul 2026 — **9.2**: reservas parciales ATP (`cantidad_reservada` en `prod_stock_palet_ots`), `coste` por palet, vista `stock_palets_atp`, página `/produccion/almacen/stock`, MRP legacy retirado. Ver §4.x (modelo ATP), §12 y migración `20260705120000`.
+> **Actualizado:** 5 jul 2026 (tarde) — §15.6 sesión completa: import, sandbox, impresión, filtros Stock, 9.4 operativo, lote tintas, IA Stock. Migraciones `20260705120000`–`20260705150000`.
 > **PENDIENTE:** H1/H2 recuento global. Ubicación por filas de material (catálogo UI sin definir en planta). `codigo_articulo` en wizard. Ajuste impresión A6 física vs A4 PDF.
 
 **Relacionado:** sobrantes → Bloque 6 · expedición → Bloque 7 · material contenedor/hijas → Bloque 8 · FSC → maestro artículos.
@@ -733,8 +733,8 @@ Vista Stock: "OT 35851 — déficit 100h (pendiente reponer)"
 
 | Fase | Estado | Qué hace |
 |------|--------|----------|
-| **9.4-preview** | ✅ 25 jun 2026 | Al **Cerrar proceso** (impresión offset `1` / digital `2`): ID Stock + hojas opcionales → `datos_proceso` + vista hoja de ruta/PDF. **Sin** movimientos ni descuento. Aviso piloto en UI. |
-| **9.4 operativo** | ⏳ post-demo | Mismo punto de captura; además `INSERT prod_stock_movimientos` + bajar `cantidad_actual`. Solo OTs piloto (§13c). |
+| **9.4-preview** | ✅ 25 jun 2026 | Al **Cerrar proceso** (impresión offset `1` / digital `2`): ID Stock + hojas opcionales → `datos_proceso` + vista hoja de ruta/PDF. **Sin** movimientos ni descuento (sustituido por 9.4 operativo). |
+| **9.4 operativo** | ✅ **5 jul 2026** | Mismo punto de captura; **`prod_stock_registrar_consumo`** (RPC) → `INSERT prod_stock_movimientos` + bajar `cantidad_actual` + ajuste reservas duras OT. **Todas las OTs** (producción; no filtro piloto). Ver §15.6.4. |
 
 **Opción B — Registro al cerrar paso de impresión (elegida):**
 Al cerrar ejecución / tirada, el maquinista indica ID Stock + hojas usadas.
@@ -857,10 +857,10 @@ Objetivo: sustituir Optimus/papel en lo esencial — **qué hay en cada palet y 
 | **9.0** | SQL: `prod_stock_palets` + `prod_stock_movimientos` + `prod_stock_palet_ots`; ampliar `prod_recepciones_material` (`cantidad_peso`); secuencia `id_stock` desde **10.310** | ✅ **Hecho** |
 | **9.1** | UI **Almacén → Cartelas**: bandeja pendientes por albarán + cartelado 1 palet = 1 ID Stock + OT(s) + impresión (2 copias). Usuarios: **Emma/Ramón**. Antiduplicado albarán. | ✅ **Hecho** |
 | **9.1b** | Post smoke: filtros bandeja, wizard split, selector OTs + hijas barco, fallback cliente/trabajo (`prod_ots_general`), `ref_lote` Optimus, fix impresión, cartela print estilo scan | ✅ **Hecho** |
-| **9.2** | UI **Almacén → Stock** (`/produccion/almacen/stock`): tabla estilo Optimus + filtros **libre / reservado / parcial** + tipo_stock + buscador; **reservas parciales ATP** (`cantidad_reservada`), **valoración €** (`coste`), vista `stock_palets_atp`, detalle + reimpresión. MRP legacy retirado. Usuarios: Ramón/Emma/Juan. | ✅ **Hecho (5 jul)** |
+| **9.2** | UI **Almacén → Stock** (`/produccion/almacen/stock`): tabla estilo Optimus + filtros **Sin OT / Solo libre (ATP) / Solo reservado / Parcial** + tipo_stock + buscador; **reservas parciales ATP**, **valoración €**, vista `stock_palets_atp`, detalle + movimientos + reimpresión (1 copia) + **Import Optimus** + **Asistente IA (MVP)**. MRP legacy retirado. | ✅ **Hecho (5 jul)** |
 | **9.3** | Sobrantes — misma cartela muta; **sin** wizard auto “pasar a libre” multi-OT (§7.8) |
 | **9.4-preview** | ✅ Enlace documental ID Stock ↔ cierre impresión → `datos_proceso` + hoja de ruta/PDF (§15.5) |
-| **9.4 operativo** | **Consumo maquinista al cerrar tirada** + movimientos (piloto 10–20 OTs). Tras rodar: déficit → `material_status`. |
+| **9.4 operativo** | ✅ **5 jul 2026** — Consumo al cerrar impresión (proc. 1/2) vía RPC; **todas las OTs**. §15.6.4. Pendiente: déficit → `material_status`. |
 
 **Prerrequisitos ligeros:** audio/notas Emma; ir respondiendo §9 pendientes en paralelo.
 
@@ -874,7 +874,7 @@ No bloquean 9.0–9.4. Se encadenan cuando el flujo administrativo de cartelas f
 | **9.6** | Recepción **STOCK sin OC** y albarán **multi-línea** (varias OTs / líneas en un mismo envío) |
 | **9.7** | **Sugerencia desde foto** (Gemini Vision u OCR asistido): prefill proveedor, nº albarán, líneas, kilos — **siempre confirmación humana** (patrón import externos Optimus) |
 | **9.8** | Adjuntar/reenlazar fotos muelle en flujo de cartelado; menos papel físico circulando |
-| **9.9** | **Búsqueda inteligente de material (NL → cartelas)**: caja "describe lo que necesitas" en la vista Stock. El maquinista/Carlos pide *"necesito 1.800 h de folding, 65×92 o superior, 300 gr preferiblemente"* → LLM extrae criterios (tamaño, gramaje, cantidad) → consulta `stock_palets_atp` → lista de palets que cuadran (ID Stock, libre, gramaje, formato, ubicación). Patrón **LLM → SQL → listado** (datos siempre de BD, cero alucinación). Post-9.2 con datos reales. |
+| **9.9** | **Búsqueda inteligente de material (NL → cartelas)**: MVP **5 jul** = modal Asistente IA sobre listado filtrado (`/api/gemini/stock-analyze`). **Pendiente evolución:** LLM → criterios → SQL sobre `stock_palets_atp` (cero alucinación en IDs). |
 
 ```text
 [Fase A — primero]
@@ -991,6 +991,14 @@ Juan trabaja en Minerva; a partir de aquí solo movimientos
 | **2 — Ampliación** | Stock viejo / OTs restantes | Más OTs y familias de material |
 | **3 — Corte** | Solo consulta o histórico | Recuento global (§13b) → import → cartelas nuevas solo en Minerva |
 
+### Actualización operativa (5 jul 2026)
+
+- **Import Optimus** en Stock refresca ~281 palets como **espejo consulta** (reimport fin de jornada).
+- **9.4 operativo** activo para **todas las OTs** en Minerva (consumo al cerrar impresión); la “lista piloto” pasa a ser **operativa** (el responsable prueba 2–3 OTs/días, no un flag en código).
+- Conviven **dos cartelas** (Optimus + Minerva) en OTs de prueba — avisar al responsable.
+- **Optimus** sigue fuente de verdad global hasta **corte ~dic 2026** (§13b recuento final).
+- **Consumo Minerva** ya descuenta stock local; no sustituye automáticamente el consumo en Optimus.
+
 ### Reglas del piloto (evitar duplicados — lección A5)
 
 1. **Un albarán = un solo sistema:** si se cartela en Minerva (piloto), **no** volver a entrar en Optimus.
@@ -1023,7 +1031,7 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 | 23 jun 2026 | **§13 Extensibilidad** — patrón cartela como motor de stock; capas materia prima / semielaborado / producto terminado (Gabri) / consumibles. Campos `tipo_stock` + `unidad` en `prod_stock_palets` (MVP: `materia_prima` + `hojas`). Por qué el MRP legacy falló (agregado manual) y este no (derivado). **§13b** recuento físico "día 0" como prerrequisito: recuento con Optimus → Excel con columnas acordadas → import a cartelas cuando 9.1 esté listo. |
 | 24 jun 2026 | **§3g** — cuestionario Ramón respondido (`MINERVA_CUESTIONARIO_CARTELAS_RAMON.md`). **Modelo corregido:** 1 cartela = 1 palet = 1 ID Stock; varias OTs sin qty en cartela; Juan no cartela; consumo MVP obligatorio; I1 barco; **§13c** piloto paralelo 10–20 OTs; antiduplicado albarán; deprecado `palet_fisico_ref` / reparto N cartelas por palet. |
 | 24 jun 2026 | **§15 Implementación** — 9.0 SQL + 9.1 UI cartelas + 9.1b post smoke desplegados. Cartelas #10310–#10312 en prod. Archivos en `src/components/produccion/almacen/cartelas/`, migración `20260624183000_…`, helper `cartelas-ot-metadata.ts`. Muelle **no tocado**. |
-| 25 jun 2026 | **§15.5** — 9.4-preview: bloque cartela en `Cerrar proceso` (impresión 1/2), campos en `datos_proceso`, hoja de ruta + PDF. Wizard cartelas: 3 tabs, `codigo_articulo`, hijas barco. Smoke OT 35858 + PDF `hoja-ruta-35858.pdf`. |
+| 5 jul 2026 | **§15.6** — Sesión producción: import Optimus (281 palets), sandbox cartelas ≥99.000, impresión HTML aislada, filtros Stock (Sin OT), **9.4 operativo**, lote tintas, asistente IA Stock MVP. Commits `cb95fb9`, `9e2b997`, `1abb9fd`, `f93ccd3`. |
 
 ### Implementación (rellenar al avanzar)
 
@@ -1034,10 +1042,11 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 | 9.0 — SQL `prod_stock_palets` + movimientos | ✅ | Migración `20260624183000_bloque9_stock_palets_cartelas.sql`. Bridge `prod_stock_palet_ots` (decisión documentada en migración). Secuencia `prod_stock_id_stock_seq` desde **10310**. RLS: almacen, gerencia, produccion, etc. |
 | 9.1 — UI cartelas + impresión | ✅ | Ruta `/produccion/almacen/cartelas`. Nav en `produccion-shell.tsx`. Ver §15. |
 | 9.1b — Mejoras post smoke | ✅ | Filtros, wizard split, OTs checkboxes + hijas, fallback metadata, ref_lote Optimus, fix print 29→2 págs. Commit `c212e52` wizard ancho demo. |
-| 9.2 — Stock + entregas/traspasos | ⏳ | §7.6; déficit visible en Stock |
+| 9.2 — Stock + import Optimus + IA MVP | ✅ | §15.6; filtros Sin OT / Solo libre ATP; `stock-optimus-import.ts` |
 | 9.3 — Sobrantes al cerrar OT (Bloque 6) | ⏳ | Cartela muta, no nueva fila |
-| 9.4-preview — Enlace documental cierre impresión | ✅ | §15.5; procesos 1 y 2; sin stock |
-| 9.4 operativo — Consumos y movimientos en planta | ⏳ | Mismo UI; `prod_stock_movimientos` + `material_status` |
+| 9.4-preview — Enlace documental cierre impresión | ✅ | §15.5; procesos 1 y 2 |
+| 9.4 operativo — Consumos y movimientos en planta | ✅ | §15.6.4; RPC `prod_stock_registrar_consumo`; commit `f93ccd3` |
+| 9.9 — Asistente IA Stock | 🔄 MVP | Modal + `/api/gemini/stock-analyze`; evolución NL→SQL pendiente |
 
 **Fase B — mejoras (después)**
 
@@ -1073,7 +1082,7 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 | Página | `src/app/produccion/almacen/cartelas/page.tsx` |
 | Bandeja + listado | `src/components/produccion/almacen/cartelas/cartelas-page.tsx` |
 | Wizard cartelado | `src/components/produccion/almacen/cartelas/cartela-wizard-dialog.tsx` |
-| Impresión | `src/components/produccion/almacen/cartelas/cartela-print.tsx` |
+| Impresión | `src/lib/cartela-print-html.ts` (+ `cartela-print.tsx` referencia) |
 | Tipos | `src/types/prod-stock.ts` |
 | Fallback OT metadata | `src/lib/cartelas-ot-metadata.ts` — `cliente`/`titulo` desde `prod_ots_general` si compra vacía |
 | Referencia visual | `docs/referencias/cartela-optimus-ejemplo.pdf` |
@@ -1091,11 +1100,12 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 - OTs: checkboxes del albarán + hijas de contenedor (`prod_ots_general.ot_padre_numero`); input manual OT extra.
 - Al guardar: `ref_lote = "{primeraOT} - {trabajo}"` con fallback `prod_ots_general.titulo`.
 
-**Impresión**
-- 2 copias por palet (`copies={2}`) — requisito Ramón.
-- `CartelaPrint` fuera del Dialog; `window.print()` desde página padre (fix bug 29 páginas desde modal).
-- ID Stock dominante centrado; Ref. Lote estilo Optimus.
-- En PDF A4 las 2 copias A6 pueden verse apiladas en una hoja — comportamiento navegador, no bug de duplicado de palets.
+**Impresión (actualizado 5 jul 2026 — §15.6.3)**
+- 2 copias por palet desde **Cartelas creadas** / wizard; **1 copia** desde **Stock** reimprimir.
+- **`cartela-print-html.ts`**: ventana popup HTML aislada (no clona DOM de la app). Patrón `openCartelaPrintWindow` → fetch metadata OT → `writeCartelasToWindow`.
+- Título trabajo junto a OT en cartela (`otTitulosFromMetadata`, `truncateCartelaTitulo`).
+- Legacy React `cartela-print.tsx` conservado como referencia visual; impresión real vía HTML.
+- ~~`window.print()` desde página padre~~ / ~~react-to-print~~ — retirado (`cartela-print-runner.tsx` eliminado).
 
 ### 15.3 Smoke test (24 jun 2026)
 
@@ -1153,7 +1163,7 @@ Mesa ejecución → Cerrar proceso (OT en impresión offset o digital)
 
 - ID Stock **opcional** — se puede cerrar sin cartela.
 - Si el ID no existe en Minerva: aviso ámbar; se guarda el número igualmente.
-- Banner amarillo: *Piloto — sin descuento automático*.
+- ~~Banner piloto sin descuento~~ → **9.4 operativo (5 jul):** con hojas consumidas > 0 se descuenta stock vía RPC antes de finalizar.
 
 **Smoke test (25 jun 2026):**
 
@@ -1161,11 +1171,12 @@ Mesa ejecución → Cerrar proceso (OT en impresión offset o digital)
 |----|---------|----------|----------|
 | 35858 | Impresión offset | 10.310 / 10.313 (pruebas) | ✅ Diálogo cierre + `HojaRutaOtDialog` + PDF `hoja-ruta-35858.pdf` |
 
-**Siguiente (9.4 operativo):**
+**9.4 operativo — implementado 5 jul 2026 (§15.6.4):**
 
-1. En `confirmCerrarProceso`: si hay `id_stock_cartela` + hojas → `INSERT` movimiento `consumo` + `cantidad_actual -= hojas`.
-2. Flag o lista de OTs piloto (§13c) — no aplicar a todo el parque hasta validar.
-3. Tras rodar: conectar déficit stock ↔ `material_status` (pool/mesa).
+1. `patchExecution` → `aplicarConsumoCartelaSiCorresponde` si `estado_ejecucion = finalizada` y hay hojas > 0.
+2. RPC atómica `prod_stock_registrar_consumo` (movimiento + `cantidad_actual` + reservas duras).
+3. **Todas las OTs** — sin lista piloto (validación operativa: el responsable prueba 2–3 OTs; el sistema es producción).
+4. Pendiente: conectar déficit stock ↔ `material_status` (pool/mesa).
 
 **Wizard cartelas — mejoras demo (mismo sprint, commits previos):**
 
@@ -1186,3 +1197,102 @@ Mesa ejecución → Cerrar proceso (OT en impresión offset o digital)
 | `c212e52` | Wizard modal más ancho (demo) |
 | `e514e6c` | Ajustes wizard cartelas (tabs, codigo_articulo, hijas) |
 | `328e710` | 9.4-preview cierre impresión + docs |
+
+### 15.6 Sesión 5 jul 2026 — Stock producción, import, impresión, consumo
+
+> Rama `wizard-despacho`. Optimus sigue siendo **fuente de verdad del stock global** hasta corte ~dic 2026; Minerva es **espejo consulta + cartelas nuevas + consumo en ejecución**. Ver §15.6.7.
+
+#### 15.6.1 Import Excel Optimus → Stock
+
+| Pieza | Detalle |
+|-------|---------|
+| Parser | `src/lib/stock-optimus-import.ts` — **`raw: true`** en `sheet_to_json` (fix locale ES: `10.486` → Id 10486, no 10). |
+| UI | Stock → **Importar Optimus** — preview (filas leídas/válidas/omitidas, KPIs) + confirmación. |
+| Persistencia | `upsert` por `id_stock`; reemplaza OTs bridge; excluye Id ≥ **99.000** (sandbox). |
+| Smoke prod | **281 palets**, ~359k h libres, ~95k € valoración (`stocksoptimus03072026.xlsx`). |
+| Migraciones | `20260705120000` (ATP), `20260705130000` (import seq), `20260705140000` (sandbox). |
+| Commit | `cb95fb9` |
+
+**Comportamiento reimport (espejo diario):** actualiza palets presentes en Excel; **no borra** palets ausentes (posibles “fantasmas” si Optimus dejó de exportarlos). Roadmap: diff en preview + marcar agotados / `last_seen_in_optimus_import_at`.
+
+#### 15.6.2 Cartelas sandbox de prueba (Id ≥ 99.000)
+
+| Pieza | Detalle |
+|-------|---------|
+| Constante | `SANDBOX_ID_STOCK_MIN = 99000` (`src/lib/prod-stock-sandbox.ts`) |
+| Wizard | Checkbox **Cartela de prueba** → RPC `next_id_stock_sandbox()` |
+| Stock / Cartelas | Filtro **Mostrar pruebas**; ocultas por defecto |
+| Import | Nunca machaca Id ≥ 99.000 |
+
+#### 15.6.3 Impresión cartelas (fix definitivo)
+
+| Problema | `react-to-print` / `window.print` clonaba DOM de Stock (281 filas) → PDFs de 18–27 páginas. |
+| Solución | **`src/lib/cartela-print-html.ts`** — ventana popup HTML autocontenida (`@page 148×105 mm`); abrir **sincronamente** en el clic; fallback iframe. |
+| Copias | **Cartelas creadas / wizard:** 2 · **Stock reimprimir:** 1 |
+| Título OT | Metadata `prod_ots_general` / `ref_lote` en PDF (`cartelas-ot-metadata.ts`, `cartela-print-trigger.ts`) |
+| Eliminado | `cartela-print-runner.tsx` (react-to-print) |
+| Commits | `9e2b997` |
+
+#### 15.6.4 9.4 operativo — consumo de stock
+
+| Pieza | Archivo / artefacto |
+|-------|---------------------|
+| Lógica TS | `src/lib/cartela-stock-consumo.ts` — `aplicarConsumoCartelaSiCorresponde` |
+| Hook ejecución | `planificacion-ots-ejecucion-tab.tsx` → `patchExecution` al finalizar |
+| RPC SQL | `prod_stock_registrar_consumo(p_palet_id, p_cantidad, p_ot_numero, p_paso_id, p_notas)` |
+| Migración | `20260705150000_bloque9_4_stock_consumo_rpc.sql` (aplicada prod) |
+| UI | `cartela-cierre-block.tsx` — texto: descuento automático con hojas |
+
+**Reglas:**
+
+- Procesos **1 y 2** únicamente.
+- **Hojas > 0** → obligatorio palet resuelto; si no existe → **no finaliza** (error).
+- **Solo ID Stock sin hojas** → documental (hoja de ruta), sin movimiento.
+- Ajusta **reservas duras** de la OT en el palet (ATP).
+- **Todas las OTs** — sin filtro piloto en código.
+
+#### 15.6.5 Lote de tintas en cierre impresión
+
+| Pieza | Detalle |
+|-------|---------|
+| Tipo | `DensidadTinta.lote?: string` en `hoja-ruta-campos-config.ts` |
+| UI | Input **Lote** por fila en `datos-proceso-form.tsx` (`densidades_tintas`) |
+| Hoja de ruta / PDF | `formatDensidades` → `lot.{valor}` (`hoja-ruta-formatters.ts`) |
+| Commit | `f93ccd3` |
+
+#### 15.6.6 Asistente IA Stock (MVP — parcial 9.9)
+
+| Pieza | Detalle |
+|-------|---------|
+| UI | Stock → botón **Asistente IA** → `stock-ai-dialog.tsx` |
+| API | `POST /api/gemini/stock-analyze` — JSON del listado **filtrado** + pregunta |
+| Límite | Máx. 350 palets en contexto |
+| Evolución | 9.9 completo: LLM extrae criterios → query SQL → listado (sin alucinar IDs) |
+
+#### 15.6.7 Filtros Stock — “libre” vs Optimus
+
+| Filtro UI | Criterio | Equivalente Optimus |
+|-----------|----------|---------------------|
+| **Sin OT** | `ots.length === 0` | Etiqueta verde **libre** (sin OT) |
+| **Solo libre** | `cantidad_libre > 0` (ATP) | Puede tener OT de referencia sin reserva dura |
+| **Solo reservado** | `cantidad_reservada_total > 0` | Stock asignado |
+| **Parcial** | `estado_derivado = parcial` | Mix reservado + libre |
+
+Commit filtro Sin OT: `1abb9fd`.
+
+#### 15.6.8 Operativa piloto paralelo (jul–dic 2026)
+
+- **Optimus** sigue mandando stock global; **import Excel** fin de jornada refresca Minerva.
+- **Cartelas nuevas** solo en Minerva (wizard) → Id secuencia Minerva (10487+).
+- Pueden coexistir **dos etiquetas** (Optimus + Minerva) en OTs de prueba — avisar al responsable.
+- **Consumo Minerva** ya es real: cerrar impresión con hojas baja stock en Minerva (independiente de Optimus).
+- **Corte final (~dic):** recuento físico §13b → import apertura → solo Minerva.
+
+#### 15.6.9 Commits de referencia (5 jul 2026, `wizard-despacho`)
+
+| Commit | Descripción |
+|--------|-------------|
+| `cb95fb9` | Import Optimus fix + sandbox cartelas prueba |
+| `9e2b997` | Impresión HTML aislada + título OT en cartela |
+| `1abb9fd` | Filtro Stock **Sin OT** |
+| `f93ccd3` | 9.4 consumo + lote tintas + asistente IA Stock |
