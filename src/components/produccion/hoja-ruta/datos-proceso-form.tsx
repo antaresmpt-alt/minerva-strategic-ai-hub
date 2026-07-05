@@ -606,6 +606,7 @@ export function normalizeDensidades(raw: unknown): DensidadTinta[] {
           tinta,
           densidad: Number.isFinite(densidadNum) ? densidadNum : undefined,
           ref: obj.ref ? String(obj.ref) : undefined,
+          lote: obj.lote ? String(obj.lote).trim() || undefined : undefined,
         };
       }
       return null;
@@ -700,6 +701,16 @@ function CampoDensidades({ campo, material, value, onChange, readonly }: CampoDe
                     className="h-8 w-24"
                   />
                 )}
+
+                <Input
+                  type="text"
+                  value={item.lote ?? ""}
+                  onChange={(e) => update(index, { lote: e.target.value })}
+                  placeholder="Lote"
+                  disabled={readonly}
+                  className="h-8 w-28"
+                  aria-label="Lote tinta"
+                />
 
                 <Input
                   type="number"

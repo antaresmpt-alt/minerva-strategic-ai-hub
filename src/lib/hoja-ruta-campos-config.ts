@@ -51,6 +51,7 @@ export type DensidadTinta = {
   tinta: string;        // CYAN, MAGENTA, ... o PANTONE
   densidad?: number;    // 0.00 – 2.00
   ref?: string;         // Referencia Pantone cuando tinta === 'PANTONE'
+  lote?: string;        // Lote del bote / tinta en planta
 };
 
 export type ProcesoConfigCampos = {

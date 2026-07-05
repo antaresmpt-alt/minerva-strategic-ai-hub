@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/card";
 import { CerrarProcesoDialog } from "@/components/produccion/planificacion/cerrar-proceso-dialog";
 import { CtpEjecucionRequisitosBlock } from "@/components/produccion/planificacion/ctp-ejecucion-requisitos-block";
+import { aplicarConsumoCartelaSiCorresponde } from "@/lib/cartela-stock-consumo";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -1338,6 +1339,27 @@ export function PlanificacionOtsEjecucionTab({
           typeof authUser?.email === "string" && authUser.email.trim().length > 0
             ? authUser.email.trim()
             : null;
+
+        if (
+          nextPatch.estado_ejecucion === "finalizada" &&
+          datosProcesoUpdate
+        ) {
+          const { consumido, hojas } = await aplicarConsumoCartelaSiCorresponde(
+            supabase,
+            {
+              procesoId: row.procesoId,
+              otNumero: row.ot,
+              pasoId: row.otPasoId,
+              datos: datosProcesoUpdate,
+            }
+          );
+          if (consumido && hojas != null) {
+            toast.success(
+              `Stock descontado: ${hojas.toLocaleString("es-ES")} h del palet.`
+            );
+          }
+        }
+
         const { error } = await supabase
           .from(TABLE_EJECUCIONES)
           .update({

@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ChevronDown, Loader2, Package } from "lucide-react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -313,13 +312,10 @@ export function CartelaCierreBlock({ otNumero, datosDraft, onDatosChange }: Cart
         </p>
       ) : null}
 
-      <Alert className="border-amber-200/90 bg-amber-50/80 py-2">
-        <AlertTitle className="text-xs text-amber-900">Piloto — sin descuento automático</AlertTitle>
-        <AlertDescription className="text-[11px] text-amber-800">
-          Este enlace es documental (hoja de ruta). El consumo real de stock llegará en la fase
-          operativa 9.4.
-        </AlertDescription>
-      </Alert>
+      <p className="text-[11px] text-slate-500">
+        Al confirmar el cierre con hojas consumidas, el stock del palet se descuenta
+        automáticamente en Minerva.
+      </p>
     </div>
   );
 }

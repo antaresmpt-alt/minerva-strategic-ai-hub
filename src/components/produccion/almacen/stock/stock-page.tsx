@@ -9,6 +9,7 @@ import {
   Printer,
   RefreshCw,
   Search,
+  Sparkles,
   TriangleAlert,
   Upload,
 } from "lucide-react";
@@ -41,6 +42,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
+import { StockAiDialog } from "@/components/produccion/almacen/stock/stock-ai-dialog";
 import {
   openCartelaPrintWindow,
   printCartelasWindow,
@@ -169,6 +171,7 @@ export function StockPage() {
   const [importFileName, setImportFileName] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [mostrarPruebas, setMostrarPruebas] = useState(false);
+  const [stockAiOpen, setStockAiOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -418,6 +421,15 @@ export function StockPage() {
               e.target.value = "";
             }}
           />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setStockAiOpen(true)}
+            disabled={loading}
+          >
+            <Sparkles className="size-4 mr-2 text-[#C69C2B]" />
+            Asistente IA
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -773,6 +785,13 @@ export function StockPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <StockAiDialog
+        open={stockAiOpen}
+        onOpenChange={setStockAiOpen}
+        rows={filtered}
+        loadingStock={loading}
+      />
     </div>
   );
 }
@@ -947,7 +966,7 @@ function StockDetalleDialog({
               <Loader2 className="size-4 animate-spin text-slate-400" />
             ) : movs.length === 0 ? (
               <p className="text-xs text-slate-400">
-                Sin movimientos registrados (consumos en fase 9.4).
+                Sin movimientos registrados para este palet.
               </p>
             ) : (
               <div className="space-y-1">

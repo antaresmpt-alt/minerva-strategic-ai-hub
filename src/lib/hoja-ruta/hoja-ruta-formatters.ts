@@ -78,9 +78,11 @@ export function formatDensidades(value: unknown): string | null {
         if (!tintaRaw) return "";
         const tinta = TINTA_LABELS[tintaRaw] ?? tintaRaw;
         const ref = obj.ref ? String(obj.ref).trim() : "";
+        const lote = obj.lote ? String(obj.lote).trim() : "";
         const dens = Number(obj.densidad);
         const densStr = Number.isFinite(dens) ? dens.toFixed(2) : "";
-        return [tinta, ref, densStr].filter(Boolean).join(" ");
+        const loteStr = lote ? `lot.${lote}` : "";
+        return [tinta, ref, densStr, loteStr].filter(Boolean).join(" ");
       }
       return "";
     })
