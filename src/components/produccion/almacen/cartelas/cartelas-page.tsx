@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Search,
   SlidersHorizontal,
+  Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -402,6 +403,38 @@ export function CartelasPage() {
     }
   }
 
+  async function handleDeletePrueba(palet: ProdStockPaletConOts) {
+    if (!palet.es_prueba) return;
+    const ok = window.confirm(
+      `¿Borrar cartela de prueba #${palet.id_stock}? Solo válido en sandbox (sin movimientos).`,
+    );
+    if (!ok) return;
+    try {
+      const { count, error: movErr } = await supabase
+        .from("prod_stock_movimientos")
+        .select("id", { count: "exact", head: true })
+        .eq("palet_id", palet.id);
+      if (movErr) throw movErr;
+      if ((count ?? 0) > 0) {
+        toast.error("No se puede borrar: ya tiene movimientos de stock.");
+        return;
+      }
+      const { error } = await supabase
+        .from("prod_stock_palets")
+        .delete()
+        .eq("id", palet.id)
+        .eq("es_prueba", true);
+      if (error) throw error;
+      toast.success(`Cartela #${palet.id_stock} borrada`);
+      loadCartelas();
+      loadPendientes();
+    } catch (e) {
+      toast.error(
+        `Error al borrar: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+
   async function handlePrint(
     palet: ProdStockPaletConOts & { proveedor_nombre?: string | null }
   ) {
@@ -662,6 +695,9 @@ export function CartelasPage() {
                 key={palet.id}
                 palet={palet}
                 onPrint={() => handlePrint(palet)}
+                onDeletePrueba={
+                  palet.es_prueba ? () => handleDeletePrueba(palet) : undefined
+                }
               />
             ))}
           </div>
@@ -772,9 +808,11 @@ function AlbaranCard({
 function CartelaListRow({
   palet,
   onPrint,
+  onDeletePrueba,
 }: {
   palet: ProdStockPaletConOts;
   onPrint: () => void;
+  onDeletePrueba?: () => void;
 }) {
   const estadoClass = ESTADO_COLORS[palet.estado] ?? "";
   return (
@@ -836,16 +874,29 @@ function CartelaListRow({
         {palet.estado}
       </Badge>
 
-      {/* Imprimir */}
-      <Button
-        size="icon"
-        variant="ghost"
-        className="size-7 shrink-0"
-        onClick={onPrint}
-        title="Imprimir cartela (×2 copias)"
-      >
-        <Printer className="size-3.5" />
-      </Button>
+      {/* Imprimir / borrar prueba */}
+      <div className="flex shrink-0 items-center gap-0.5">
+        {onDeletePrueba ? (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-7 text-red-600 hover:text-red-700 hover:bg-red-50"
+            onClick={onDeletePrueba}
+            title="Borrar cartela de prueba"
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        ) : null}
+        <Button
+          size="icon"
+          variant="ghost"
+          className="size-7 shrink-0"
+          onClick={onPrint}
+          title="Imprimir cartela (×2 copias)"
+        >
+          <Printer className="size-3.5" />
+        </Button>
+      </div>
     </div>
   );
 }
