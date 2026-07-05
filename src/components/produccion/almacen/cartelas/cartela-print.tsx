@@ -1,7 +1,9 @@
 "use client";
 
-import { forwardRef } from "react";
-
+import {
+  tituloFromRefLote,
+  truncateCartelaTitulo,
+} from "@/lib/cartela-print-trigger";
 import type { ProdStockPaletConOts } from "@/types/prod-stock";
 
 interface CartelaPrintProps {
@@ -9,16 +11,30 @@ interface CartelaPrintProps {
   copies?: number;
   /** Nombre proveedor (estilo Optimus); no persistido en prod_stock_palets. */
   proveedorNombre?: string | null;
+  /** Título de trabajo por OT (prod_ots_general / compra). */
+  otTitulos?: Record<string, string>;
+}
+
+function resolveOtTitulo(
+  ot: string,
+  otTitulos: Record<string, string> | undefined,
+  refLote: string | null
+): string | null {
+  const fromMeta = otTitulos?.[ot]?.trim();
+  if (fromMeta) return fromMeta;
+  return tituloFromRefLote(refLote, ot);
 }
 
 /**
  * Cartela imprimible estilo Optimus (§7.4 + referencia scan).
  * ID Stock = elemento visual dominante. Layout A6 apaisado, `copies` copias (default 2).
  */
-export const CartelaPrint = forwardRef<HTMLDivElement, CartelaPrintProps>(
-  function CartelaPrint({ palet, copies = 2, proveedorNombre }, ref) {
-    const otsText = palet.ots.length > 0 ? palet.ots.join(" · ") : "(stock libre)";
-
+export function CartelaPrint({
+  palet,
+  copies = 2,
+  proveedorNombre,
+  otTitulos,
+}: CartelaPrintProps) {
     // Desglose ATP (9.2): reservas duras (con cantidad) vs libre calculado.
     const reservasDuras = (palet.otsReservas ?? []).filter(
       (r) => r.cantidad_reservada != null && r.cantidad_reservada > 0
@@ -30,6 +46,19 @@ export const CartelaPrint = forwardRef<HTMLDivElement, CartelaPrintProps>(
     const hayReservaDura = reservasDuras.length > 0;
     const libreCalc = Math.max(palet.cantidad_actual - reservadaTotal, 0);
 
+    const refLoteDisplay = palet.ref_lote ?? palet.ref_lote_proveedor ?? null;
+
+    /** Evita repetir OT + "→ N reservadas · OT X" + "→ 0 libres" cuando no aporta. */
+    const mostrarDesgloseAtp =
+      hayReservaDura &&
+      !(
+        palet.ots.length === 1 &&
+        reservasDuras.length === 1 &&
+        reservasDuras[0]!.cantidad_reservada === palet.cantidad_actual &&
+        libreCalc === 0
+      ) &&
+      !(libreCalc === 0 && reservasDuras.length <= 1 && palet.ots.length <= 1);
+
     const fecha = new Date(palet.created_at).toLocaleDateString("es-ES", {
       day: "2-digit",
       month: "2-digit",
@@ -40,28 +69,21 @@ export const CartelaPrint = forwardRef<HTMLDivElement, CartelaPrintProps>(
       minute: "2-digit",
     });
 
-    const refLoteDisplay = palet.ref_lote ?? palet.ref_lote_proveedor ?? null;
     const idStockFormatted = palet.id_stock.toLocaleString("es-ES");
 
     return (
-      <div ref={ref} className="cartela-print-root print:block hidden">
-        <style>{`
-          @media print {
-            @page { size: A6 landscape; margin: 5mm; }
-            body * { visibility: hidden; }
-            .cartela-print-root,
-            .cartela-print-root * { visibility: visible; }
-            .cartela-print-root { position: fixed; top: 0; left: 0; width: 100%; }
-            .cartela-box { page-break-after: always; }
-            .cartela-box:last-child { page-break-after: avoid; }
-          }
-        `}</style>
-
+      <div className="cartela-print-group">
         {Array.from({ length: copies }).map((_, i) => (
           <div
             key={i}
             className="cartela-box border-2 border-black font-mono flex flex-col"
-            style={{ width: "148mm", minHeight: "100mm", marginBottom: "4mm" }}
+            style={{
+              width: "148mm",
+              height: "100mm",
+              maxHeight: "100mm",
+              overflow: "hidden",
+              marginBottom: "4mm",
+            }}
           >
             {/* ID STOCK — dominante, centrado (estilo Optimus) */}
             <div className="text-center py-3 px-2 border-b-2 border-black bg-white">
@@ -90,10 +112,14 @@ export const CartelaPrint = forwardRef<HTMLDivElement, CartelaPrintProps>(
               )}
               <div className="flex gap-2 mt-1">
                 {palet.es_fsc && (
-                  <span className="text-xs border border-black px-1 font-bold">FSC</span>
+                  <span className="text-xs border border-black px-1 font-bold">
+                    FSC
+                  </span>
                 )}
                 {palet.es_pefc && (
-                  <span className="text-xs border border-black px-1 font-bold">PEFC</span>
+                  <span className="text-xs border border-black px-1 font-bold">
+                    PEFC
+                  </span>
                 )}
                 {palet.ubicacion_fila && (
                   <span className="text-xs border border-black px-1 font-bold ml-auto">
@@ -114,11 +140,36 @@ export const CartelaPrint = forwardRef<HTMLDivElement, CartelaPrintProps>(
               </div>
             </div>
 
-            {/* OT + desglose ATP (reservado/libre) si hay reservas duras */}
+            {/* OT(s) + título trabajo + desglose ATP si aporta */}
             <div className="px-3 py-1.5 border-b border-black text-sm">
-              <span className="font-bold text-xs uppercase">OT: </span>
-              {otsText}
-              {hayReservaDura && (
+              {palet.ots.length === 0 ? (
+                <div>
+                  <span className="font-bold text-xs uppercase">OT: </span>
+                  (stock libre)
+                </div>
+              ) : (
+                <div className="space-y-0.5">
+                  {palet.ots.map((ot) => {
+                    const titulo = resolveOtTitulo(
+                      ot,
+                      otTitulos,
+                      palet.ref_lote
+                    );
+                    return (
+                      <div key={ot} className="leading-snug">
+                        <span className="font-bold text-xs uppercase">OT: </span>
+                        <span className="font-semibold">{ot}</span>
+                        {titulo ? (
+                          <span className="text-[10px] text-gray-700 ml-1.5 font-normal">
+                            {truncateCartelaTitulo(titulo)}
+                          </span>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {mostrarDesgloseAtp && (
                 <div className="mt-1 space-y-0.5 text-xs">
                   {reservasDuras.map((r) => (
                     <div key={r.ot_numero}>
@@ -129,13 +180,15 @@ export const CartelaPrint = forwardRef<HTMLDivElement, CartelaPrintProps>(
                       reservadas · OT {r.ot_numero}
                     </div>
                   ))}
-                  <div>
-                    →{" "}
-                    <span className="font-bold">
-                      {libreCalc.toLocaleString("es-ES")}
-                    </span>{" "}
-                    libres
-                  </div>
+                  {libreCalc > 0 && (
+                    <div>
+                      →{" "}
+                      <span className="font-bold">
+                        {libreCalc.toLocaleString("es-ES")}
+                      </span>{" "}
+                      libres
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -182,5 +235,4 @@ export const CartelaPrint = forwardRef<HTMLDivElement, CartelaPrintProps>(
         ))}
       </div>
     );
-  }
-);
+}

@@ -72,6 +72,19 @@ export function buildRefLote(otNumero: string | null, trabajoTitulo: string | nu
   return otNumero;
 }
 
+/** Mapa ot → titulo para impresión de cartela. */
+export function otTitulosFromMetadata(
+  otNums: string[],
+  otMeta: OtMetadataMap
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const ot of otNums) {
+    const t = otMeta[ot]?.titulo?.trim();
+    if (t) out[ot] = t;
+  }
+  return out;
+}
+
 /** Texto "cliente · trabajo" para UI; "—" si ambos vacíos. */
 export function formatClienteTrabajo(
   cliente: string | null | undefined,

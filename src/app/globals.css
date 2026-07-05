@@ -283,4 +283,6 @@
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+
+  /** Cartelas de palet — ventana popup autocontenida (cartela-print-html.ts). */
 }

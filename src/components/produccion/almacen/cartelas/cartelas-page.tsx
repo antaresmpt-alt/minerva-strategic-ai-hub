@@ -27,9 +27,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  openCartelaPrintWindow,
+  printCartelasWindow,
+  writeCartelasToWindow,
+} from "@/lib/cartela-print-html";
+import {
   enrichRecepcionLine,
   fetchOtMetadataMap,
   formatClienteTrabajo,
+  otTitulosFromMetadata,
 } from "@/lib/cartelas-ot-metadata";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -39,7 +45,6 @@ import type {
   ProdStockPaletConOts,
   ProdStockPaletRow,
 } from "@/types/prod-stock";
-import { CartelaPrint } from "./cartela-print";
 import { CartelaWizardDialog } from "./cartela-wizard-dialog";
 
 const supabase = createSupabaseBrowserClient();
@@ -79,10 +84,6 @@ export function CartelasPage() {
 
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardGrupo, setWizardGrupo] = useState<AlbaranPendienteGroup | null>(null);
-  // P0: printPalet ahora puede ser un array (desde wizard) o null
-  const [printQueue, setPrintQueue] = useState<
-    { palet: ProdStockPaletConOts; proveedorNombre?: string | null }[]
-  >([]);
 
   // ── Carga bandeja pendientes ──────────────────────────────────────────
   const loadPendientes = useCallback(async () => {
@@ -368,24 +369,70 @@ export function CartelasPage() {
     if (tab === "cartelas") loadCartelas();
   }
 
-  function handlePrint(palet: ProdStockPaletConOts & { proveedor_nombre?: string | null }) {
-    setPrintQueue([
-      {
-        palet,
-        proveedorNombre: palet.proveedor_nombre ?? null,
-      },
-    ]);
-    setTimeout(() => window.print(), 150);
+  async function handlePrint(
+    palet: ProdStockPaletConOts & { proveedor_nombre?: string | null }
+  ) {
+    const printWin = openCartelaPrintWindow(`Cartela-${palet.id_stock}`);
+    try {
+      const otNums = palet.ots;
+      const meta =
+        otNums.length > 0
+          ? await fetchOtMetadataMap(supabase, otNums)
+          : {};
+      const jobs = [
+        {
+          palet,
+          copies: 2 as const,
+          proveedorNombre: palet.proveedor_nombre ?? null,
+          otTitulos: otTitulosFromMetadata(otNums, meta),
+        },
+      ];
+      if (printWin) {
+        writeCartelasToWindow(printWin, jobs);
+      } else if (!printCartelasWindow(jobs)) {
+        toast.error(
+          "No se pudo abrir la ventana de impresión. Permite ventanas emergentes."
+        );
+      }
+    } catch {
+      printWin?.close();
+      toast.error("Error al preparar la cartela para imprimir.");
+    }
   }
 
-  function handleWizardPrintReady(
+  async function handleWizardPrintReady(
     palets: ProdStockPaletConOts[],
     proveedorNombre?: string | null
   ) {
-    setPrintQueue(
-      palets.map((palet) => ({ palet, proveedorNombre: proveedorNombre ?? null }))
-    );
-    setTimeout(() => window.print(), 100);
+    const title =
+      palets.length === 1
+        ? `Cartela-${palets[0]!.id_stock}`
+        : "Cartelas-material";
+    const printWin = openCartelaPrintWindow(title);
+    try {
+      const otNums = [...new Set(palets.flatMap((p) => p.ots))];
+      const meta =
+        otNums.length > 0
+          ? await fetchOtMetadataMap(supabase, otNums)
+          : {};
+      const otTitulos = otTitulosFromMetadata(otNums, meta);
+      const jobs = palets.map((palet) => ({
+        palet,
+        copies: 2 as const,
+        proveedorNombre: proveedorNombre ?? null,
+        otTitulos,
+      }));
+      if (printWin) {
+        writeCartelasToWindow(printWin, jobs);
+      } else if (!printCartelasWindow(jobs)) {
+        toast.error(
+          "No se pudo abrir la ventana de impresión. Permite ventanas emergentes."
+        );
+      }
+    } catch {
+      printWin?.close();
+      toast.error("Error al preparar la cartela para imprimir.");
+    }
   }
 
   return (
@@ -593,16 +640,6 @@ export function CartelasPage() {
         onCreated={handleWizardCreated}
         onPrintReady={handleWizardPrintReady}
       />
-
-      {/* Área de impresión — fuera del Dialog, gestiona el print tanto desde Creadas como desde el wizard (P0 fix) */}
-      {printQueue.map((job) => (
-        <CartelaPrint
-          key={job.palet.id}
-          palet={job.palet}
-          copies={2}
-          proveedorNombre={job.proveedorNombre}
-        />
-      ))}
     </div>
   );
 }

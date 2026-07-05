@@ -42,6 +42,15 @@ import {
 } from "@/components/ui/table";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import {
+  openCartelaPrintWindow,
+  printCartelasWindow,
+  writeCartelasToWindow,
+} from "@/lib/cartela-print-html";
+import {
+  fetchOtMetadataMap,
+  otTitulosFromMetadata,
+} from "@/lib/cartelas-ot-metadata";
+import {
   executeStockOptimusImport,
   parseStockOptimusFile,
   type StockOptimusParseResult,
@@ -56,8 +65,6 @@ import type {
   StockPaletOtChip,
   StockTipo,
 } from "@/types/prod-stock";
-import { CartelaPrint } from "@/components/produccion/almacen/cartelas/cartela-print";
-
 const supabase = createSupabaseBrowserClient();
 
 type EstadoFiltro = "todos" | "libre" | "reservado" | "parcial";
@@ -155,7 +162,6 @@ export function StockPage() {
   const [tipoFiltro, setTipoFiltro] = useState<StockTipo | "todos">("todos");
 
   const [detalle, setDetalle] = useState<StockPaletAtpConOts | null>(null);
-  const [printQueue, setPrintQueue] = useState<ProdStockPaletConOts[]>([]);
   const [importOpen, setImportOpen] = useState(false);
   const [importPreview, setImportPreview] = useState<StockOptimusParseResult | null>(
     null
@@ -310,9 +316,33 @@ export function StockPage() {
     return { palets: filtered.length, libres, reservadas, valoracion };
   }, [filtered]);
 
-  function handlePrint(row: StockPaletAtpConOts) {
-    setPrintQueue([atpToPaletPrint(row)]);
-    setTimeout(() => window.print(), 120);
+  async function handlePrint(row: StockPaletAtpConOts) {
+    const printWin = openCartelaPrintWindow(`Cartela-${row.id_stock}`);
+    try {
+      const otNums = row.ots.map((o) => o.ot_numero);
+      const meta =
+        otNums.length > 0
+          ? await fetchOtMetadataMap(supabase, otNums)
+          : {};
+      const jobs = [
+        {
+          palet: atpToPaletPrint(row),
+          copies: 1 as const,
+          otTitulos: otTitulosFromMetadata(otNums, meta),
+          proveedorNombre: row.proveedor_nombre ?? null,
+        },
+      ];
+      if (printWin) {
+        writeCartelasToWindow(printWin, jobs);
+      } else if (!printCartelasWindow(jobs)) {
+        toast.error(
+          "No se pudo abrir la ventana de impresión. Permite ventanas emergentes."
+        );
+      }
+    } catch {
+      printWin?.close();
+      toast.error("Error al preparar la cartela para imprimir.");
+    }
   }
 
   async function handleImportFile(file: File) {
@@ -741,15 +771,6 @@ export function StockPage() {
           )}
         </DialogContent>
       </Dialog>
-
-      {printQueue.map((palet) => (
-        <CartelaPrint
-          key={palet.id}
-          palet={palet}
-          copies={1}
-          proveedorNombre={palet.proveedor_nombre}
-        />
-      ))}
     </div>
   );
 }
