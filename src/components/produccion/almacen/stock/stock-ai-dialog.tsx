@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useHubStore } from "@/lib/store";
+import { costeRemanentePalet } from "@/lib/stock-valoracion";
 import type { StockPaletAtpConOts } from "@/types/prod-stock";
 
 export function buildStockAsistentePayload(rows: StockPaletAtpConOts[]) {
@@ -36,7 +37,12 @@ export function buildStockAsistentePayload(rows: StockPaletAtpConOts[]) {
       .map((o) => ({ ot: o.ot_numero, h: o.cantidad_reservada })),
     estado: r.estado_derivado,
     ubicacion: r.ubicacion_fila,
-    coste_eur: r.coste,
+    coste_eur: costeRemanentePalet(
+      r.coste,
+      r.cantidad_inicial,
+      r.cantidad_fisica,
+    ),
+    coste_compra_eur: r.coste,
     albaran: r.nota_entrega,
     proveedor: r.proveedor_nombre,
   }));

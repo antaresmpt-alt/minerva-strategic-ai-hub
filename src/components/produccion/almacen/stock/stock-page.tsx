@@ -57,6 +57,7 @@ import {
   parseStockOptimusFile,
   type StockOptimusParseResult,
 } from "@/lib/stock-optimus-import";
+import { costeRemanentePalet } from "@/lib/stock-valoracion";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type {
   ProdStockMovimientoRow,
@@ -315,7 +316,12 @@ export function StockPage() {
     for (const r of filtered) {
       libres += r.cantidad_libre;
       reservadas += r.cantidad_reservada_total;
-      if (r.cantidad_fisica > 0 && r.coste != null) valoracion += r.coste;
+      const rem = costeRemanentePalet(
+        r.coste,
+        r.cantidad_inicial,
+        r.cantidad_fisica,
+      );
+      if (rem != null) valoracion += rem;
     }
     return { palets: filtered.length, libres, reservadas, valoracion };
   }, [filtered]);
@@ -479,7 +485,7 @@ export function StockPage() {
         />
         <KpiCard
           icon={<Coins className="size-4" />}
-          label="Valoración total"
+          label="Valoración remanente"
           value={eur(totales.valoracion)}
           accent="text-[#C69C2B]"
         />
@@ -596,7 +602,7 @@ export function StockPage() {
                 <TableHead className="text-right">Libre</TableHead>
                 <TableHead className="text-right">Reservado</TableHead>
                 <TableHead>Ud.</TableHead>
-                <TableHead className="text-right">Coste</TableHead>
+                <TableHead className="text-right">Valor.</TableHead>
                 <TableHead>OT(s)</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Albarán</TableHead>
@@ -645,7 +651,28 @@ export function StockPage() {
                     {r.unidad}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {eur(r.coste)}
+                    {(() => {
+                      const rem = costeRemanentePalet(
+                        r.coste,
+                        r.cantidad_inicial,
+                        r.cantidad_fisica,
+                      );
+                      if (rem == null) return "—";
+                      const parcial =
+                        r.coste != null &&
+                        r.cantidad_fisica < r.cantidad_inicial;
+                      return (
+                        <span
+                          title={
+                            parcial && r.coste != null
+                              ? `Compra original: ${eur(r.coste)} (${r.cantidad_inicial.toLocaleString("es-ES")} h)`
+                              : undefined
+                          }
+                        >
+                          {eur(rem)}
+                        </span>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell>
                     {r.ots.length === 0 ? (
@@ -922,7 +949,30 @@ function StockDetalleDialog({
           <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
             <Campo label="Ubicación" value={row.ubicacion_fila} />
             <Campo label="Unidad" value={row.unidad} />
-            <Campo label="Coste" value={eur(row.coste)} />
+            {(() => {
+              const rem = costeRemanentePalet(
+                row.coste,
+                row.cantidad_inicial,
+                row.cantidad_fisica,
+              );
+              const parcial =
+                row.cantidad_fisica > 0 &&
+                row.cantidad_fisica < row.cantidad_inicial;
+              return (
+                <>
+                  <Campo
+                    label={parcial ? "Valoración remanente" : "Coste"}
+                    value={eur(rem ?? row.coste)}
+                  />
+                  {parcial && row.coste != null ? (
+                    <Campo
+                      label="Coste compra (hist.)"
+                      value={eur(row.coste)}
+                    />
+                  ) : null}
+                </>
+              );
+            })()}
             <Campo label="Inicial" value={`${row.cantidad_inicial.toLocaleString("es-ES")} h`} />
             <Campo label="Albarán" value={row.nota_entrega} />
             <Campo label="Proveedor" value={row.proveedor_nombre ?? null} />

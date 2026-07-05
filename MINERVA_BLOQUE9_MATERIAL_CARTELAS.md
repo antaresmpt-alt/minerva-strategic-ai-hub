@@ -4,9 +4,9 @@
 > Tema: recepción de material, cartelas de palet, stock libre y trazabilidad.
 > Complementa `MINERVA_HUB_CONTEXTO_MAESTRO.md`, `FASES_HOJA_RUTA_DIGITAL.md` y briefings Bloques 6 y 7.
 >
-> **Estado:** ✅ **9.0 + 9.1 + 9.1b + 9.2 + 9.4-preview + 9.4 operativo (MVP)** (5 jul 2026) — cartelas, **vista Stock ATP**, **import Optimus**, **impresión HTML**, **consumo real al cerrar impresión**, **lote tintas** en densidades, **asistente IA Stock (MVP)**. Smoke inicial #10310–#10320; **stock real importado** (~281 palets Optimus jul 2026). **Pendiente:** 9.3 sobrantes, sync Optimus inteligente, 9.9 NL→SQL, déficit → `material_status`.
+> **Estado:** ✅ **9.0–9.4 operativo (MVP)** (5 jul 2026) — cartelas, Stock ATP, import Optimus, impresión HTML, consumo al cerrar impresión, **reimpresión remanente libre**, **valoración remanente**, lote tintas, asistente IA Stock. **Pendiente cartelas:** 9.3 sobrantes, sync Optimus, 9.9 NL→SQL. **Pendiente OT/hoja de ruta:** semilla artículos maestro desde despacho, histórico OTs.
 > **Origen:** Optimus + cartelas CARPAPSA (15 jun 2026).
-> **Actualizado:** 5 jul 2026 (tarde) — §15.6 sesión completa: import, sandbox, impresión, filtros Stock, 9.4 operativo, lote tintas, IA Stock. Migraciones `20260705120000`–`20260705150000`.
+> **Actualizado:** 5 jul 2026 (noche) — §15.7 reimpresión libre + valoración remanente; prueba planta OT 99905 / #99002.
 > **PENDIENTE:** H1/H2 recuento global. Ubicación por filas de material (catálogo UI sin definir en planta). `codigo_articulo` en wizard. Ajuste impresión A6 física vs A4 PDF.
 
 **Relacionado:** sobrantes → Bloque 6 · expedición → Bloque 7 · material contenedor/hijas → Bloque 8 · FSC → maestro artículos.
@@ -479,7 +479,7 @@ Minerva lo modela con **reservas con cantidad** (patrón *Available-To-Promise*,
 ### Valoración de existencias (9.2)
 
 - Campo **`prod_stock_palets.coste`** `numeric(10,2)` NULL: **coste total del palet** en € (mismo concepto que el campo Coste de Optimus, **no** €/hoja). Opcional en el wizard.
-- La vista Stock suma **VALORACIÓN TOTAL €** (palets con `cantidad_fisica > 0`) para dirección (Albert).
+- La vista Stock suma **VALORACIÓN REMANENTE €** (prorrateo `coste × actual/inicial` por palet) para dirección (Albert). El campo `coste` en BD sigue siendo el **total de compra** (histórico, estilo Optimus).
 - **No** se gestionan precios en compras; el coste se captura al cartelar o (futuro) en el import Optimus.
 
 ### Tabla nueva `prod_stock_palets` (las cartelas) — **corazón del Bloque 9**
@@ -1296,3 +1296,15 @@ Commit filtro Sin OT: `1abb9fd`.
 | `9e2b997` | Impresión HTML aislada + título OT en cartela |
 | `1abb9fd` | Filtro Stock **Sin OT** |
 | `f93ccd3` | 9.4 consumo + lote tintas + asistente IA Stock |
+
+#### 15.7 Reimpresión remanente libre + valoración prorrateada (5 jul 2026, noche)
+
+> Validado en planta: OT **99905**, cartela **#99002** — 2000 h carteladas, 1800 reservadas OT, consumo 1800 al cerrar impresión → **200 h libres**.
+
+| Pieza | Detalle |
+|-------|---------|
+| **Reimpresión cartela** | `src/lib/cartela-print-html.ts` + `esCartelaRemanenteLibre()` en `stock-valoracion.ts`. Si **no hay reservas duras** y queda físico → etiqueta **(stock libre)** + `→ N h libres`; oculta ref. lote OT y líneas OT (refs blandas en BD se mantienen para trazabilidad). |
+| **Valoración remanente** | `costeRemanentePalet(coste, inicial, actual)` = `coste × actual / inicial`. KPI Stock, columna **Valor.** y detalle palet. **No muta** `coste` en BD (histórico compra). |
+| **Prueba planta** | CTP checkboxes, proyección impresión (H.netas plan), cartelas sandbox, borrar prueba, consumo 9.4 — ver commits `2e0e926`, `64f7c3d`. |
+
+**Pendiente Bloque OT / hoja de ruta (no cartelas):** semilla **artículos maestro** desde despacho; tabla **histórico OTs**; revisar artículo “raro” creado al despachar.

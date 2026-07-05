@@ -2,6 +2,9 @@ import {
   tituloFromRefLote,
   truncateCartelaTitulo,
 } from "@/lib/cartela-print-trigger";
+import {
+  esCartelaRemanenteLibre,
+} from "@/lib/stock-valoracion";
 import type { ProdStockPaletConOts } from "@/types/prod-stock";
 
 export type CartelaPrintJob = {
@@ -43,7 +46,14 @@ function renderCartelaBoxHtml(
   );
   const hayReservaDura = reservasDuras.length > 0;
   const libreCalc = Math.max(palet.cantidad_actual - reservadaTotal, 0);
-  const refLoteDisplay = palet.ref_lote ?? palet.ref_lote_proveedor ?? null;
+  const remanenteLibre = esCartelaRemanenteLibre(
+    palet.cantidad_actual,
+    palet.otsReservas,
+  );
+  const refLoteDisplay =
+    remanenteLibre && palet.ots.length > 0
+      ? null
+      : palet.ref_lote ?? palet.ref_lote_proveedor ?? null;
 
   const mostrarDesgloseAtp =
     hayReservaDura &&
@@ -84,7 +94,10 @@ function renderCartelaBoxHtml(
   }
 
   let otBlock: string;
-  if (palet.ots.length === 0) {
+  if (remanenteLibre) {
+    otBlock =
+      '<div><span class="lbl">OT: </span><strong>(stock libre)</strong></div>';
+  } else if (palet.ots.length === 0) {
     otBlock = '<div><span class="lbl">OT: </span>(stock libre)</div>';
   } else {
     const lines = palet.ots
@@ -100,7 +113,9 @@ function renderCartelaBoxHtml(
   }
 
   let atpBlock = "";
-  if (mostrarDesgloseAtp) {
+  if (remanenteLibre && libreCalc > 0) {
+    atpBlock = `<div class="atp atp-libre"><div>→ <strong>${libreCalc.toLocaleString("es-ES")}</strong> h libres</div></div>`;
+  } else if (mostrarDesgloseAtp) {
     const rows = reservasDuras
       .map(
         (r) =>
@@ -215,6 +230,7 @@ const CARTELA_PRINT_CSS = `
   .ot-num { font-weight: 600; }
   .ot-titulo { font-size: 10px; color: #444; margin-left: 6px; font-weight: 400; }
   .atp { margin-top: 4px; font-size: 11px; }
+  .atp-libre { font-size: 13px; font-weight: 700; color: #166534; }
   .section-lbl {
     font-size: 10px; font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.04em; color: #666;
