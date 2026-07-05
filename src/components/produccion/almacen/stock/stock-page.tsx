@@ -67,7 +67,7 @@ import type {
 } from "@/types/prod-stock";
 const supabase = createSupabaseBrowserClient();
 
-type EstadoFiltro = "todos" | "libre" | "reservado" | "parcial";
+type EstadoFiltro = "todos" | "sin_ot" | "libre" | "reservado" | "parcial";
 
 const ESTADO_BADGE: Record<StockEstadoDerivado, string> = {
   disponible: "bg-emerald-100 text-emerald-800 border-emerald-200",
@@ -275,6 +275,7 @@ export function StockPage() {
 
     if (estadoFiltro !== "todos") {
       list = list.filter((r) => {
+        if (estadoFiltro === "sin_ot") return r.ots.length === 0;
         if (estadoFiltro === "libre") return r.cantidad_libre > 0;
         if (estadoFiltro === "reservado")
           return r.cantidad_reservada_total > 0;
@@ -488,6 +489,7 @@ export function StockPage() {
           {(
             [
               ["todos", "Todos"],
+              ["sin_ot", "Sin OT"],
               ["libre", "Solo libre"],
               ["reservado", "Solo reservado"],
               ["parcial", "Parcial"],
