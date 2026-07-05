@@ -10,8 +10,9 @@ import {
   RefreshCw,
   Search,
   TriangleAlert,
+  Upload,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +40,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
+import {
+  executeStockOptimusImport,
+  parseStockOptimusFile,
+  type StockOptimusParseResult,
+} from "@/lib/stock-optimus-import";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type {
   ProdStockMovimientoRow,
@@ -92,6 +98,13 @@ function eur(n: number | null | undefined): string {
   return n.toLocaleString("es-ES", { style: "currency", currency: "EUR" });
 }
 
+/** Proveedor desde notas de import Optimus (sin recepción muelle). */
+function proveedorFromNotas(notas: string | null | undefined): string | null {
+  if (!notas) return null;
+  const m = notas.match(/Proveedor:\s*(.+?)(?:\s*·|$)/i);
+  return m?.[1]?.trim() ?? null;
+}
+
 /** Mapea una fila de la vista ATP a ProdStockPaletConOts para reimprimir la cartela. */
 function atpToPaletPrint(row: StockPaletAtpConOts): ProdStockPaletConOts {
   return {
@@ -141,6 +154,13 @@ export function StockPage() {
 
   const [detalle, setDetalle] = useState<StockPaletAtpConOts | null>(null);
   const [printQueue, setPrintQueue] = useState<ProdStockPaletConOts[]>([]);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importPreview, setImportPreview] = useState<StockOptimusParseResult | null>(
+    null
+  );
+  const [importFileName, setImportFileName] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -149,7 +169,7 @@ export function StockPage() {
         .from("stock_palets_atp")
         .select("*")
         .order("id_stock", { ascending: false })
-        .limit(500);
+        .limit(600);
 
       if (error) throw error;
       if (!view || view.length === 0) {
@@ -158,6 +178,16 @@ export function StockPage() {
       }
 
       const paletIds = view.map((v: StockPaletAtpRow) => v.id);
+
+      const { data: notasRows } = await supabase
+        .from("prod_stock_palets")
+        .select("id, notas")
+        .in("id", paletIds);
+      const notasById: Record<string, string | null> = {};
+      for (const n of notasRows ?? []) {
+        notasById[n.id as string] =
+          typeof n.notas === "string" ? n.notas : null;
+      }
 
       // OTs con reserva (chips)
       const { data: otsRows } = await supabase
@@ -197,13 +227,17 @@ export function StockPage() {
       }
 
       const enriched: StockPaletAtpConOts[] = view.map(
-        (v: StockPaletAtpRow) => ({
-          ...v,
-          ots: otsByPalet[v.id] ?? [],
-          proveedor_nombre: v.recepcion_id
+        (v: StockPaletAtpRow) => {
+          const provRecep = v.recepcion_id
             ? (proveedorByRecep[v.recepcion_id] ?? null)
-            : null,
-        })
+            : null;
+          const provNotas = proveedorFromNotas(notasById[v.id]);
+          return {
+            ...v,
+            ots: otsByPalet[v.id] ?? [],
+            proveedor_nombre: provRecep ?? provNotas,
+          };
+        }
       );
       setRows(enriched);
     } catch (e) {
@@ -274,6 +308,57 @@ export function StockPage() {
     setTimeout(() => window.print(), 120);
   }
 
+  async function handleImportFile(file: File) {
+    const lower = file.name.toLowerCase();
+    if (!lower.endsWith(".xlsx") && !lower.endsWith(".xls")) {
+      toast.error("Solo se admiten archivos Excel (.xlsx).");
+      return;
+    }
+    setImporting(true);
+    try {
+      const parsed = await parseStockOptimusFile(file);
+      if (parsed.parseWarnings.length > 0) {
+        toast.info(parsed.parseWarnings.slice(0, 3).join(" · "));
+      }
+      if (parsed.rows.length === 0) {
+        toast.error("No hay filas válidas para importar.");
+        return;
+      }
+      setImportPreview(parsed);
+      setImportFileName(file.name);
+      setImportOpen(true);
+    } catch (e) {
+      toast.error(
+        `Error al leer Excel: ${e instanceof Error ? e.message : String(e)}`
+      );
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function confirmImport() {
+    if (!importPreview?.rows.length) return;
+    setImporting(true);
+    try {
+      const result = await executeStockOptimusImport(supabase, importPreview.rows, {
+        deletePilotFirst: true,
+      });
+      toast.success(
+        `Import OK: ${result.paletsInsertados} palets · ${result.otsInsertadas} OTs · ${result.pilotEliminados} piloto eliminadas`
+      );
+      setImportOpen(false);
+      setImportPreview(null);
+      setImportFileName(null);
+      await load();
+    } catch (e) {
+      toast.error(
+        `Error al importar: ${e instanceof Error ? e.message : String(e)}`
+      );
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -283,18 +368,44 @@ export function StockPage() {
             Almacén · consulta por palet (ATP) · Ramón / Emma / Juan
           </p>
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={load}
-          disabled={loading}
-        >
-          {loading ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <RefreshCw className="size-4" />
-          )}
-        </Button>
+        <div className="flex items-center gap-2">
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void handleImportFile(f);
+              e.target.value = "";
+            }}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={importing}
+            onClick={() => importInputRef.current?.click()}
+          >
+            {importing ? (
+              <Loader2 className="size-4 mr-2 animate-spin" />
+            ) : (
+              <Upload className="size-4 mr-2" />
+            )}
+            Importar Optimus
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={load}
+            disabled={loading}
+          >
+            {loading ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <RefreshCw className="size-4" />
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Cabecera de totales */}
@@ -544,6 +655,70 @@ export function StockPage() {
         onClose={() => setDetalle(null)}
         onPrint={handlePrint}
       />
+
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Importar stock Optimus</DialogTitle>
+          </DialogHeader>
+          {importPreview && (
+            <div className="space-y-4 text-sm">
+              <p className="text-slate-600">
+                Archivo:{" "}
+                <span className="font-mono text-xs">{importFileName}</span>
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded border px-3 py-2">
+                  <div className="text-xs text-slate-500">Palets</div>
+                  <div className="font-bold text-lg">
+                    {importPreview.totales.palets}
+                  </div>
+                </div>
+                <div className="rounded border px-3 py-2">
+                  <div className="text-xs text-slate-500">Valoración</div>
+                  <div className="font-bold text-lg text-[#C69C2B]">
+                    {eur(importPreview.totales.valoracion)}
+                  </div>
+                </div>
+                <div className="rounded border px-3 py-2">
+                  <div className="text-xs text-slate-500">Hojas libres</div>
+                  <div className="font-bold text-emerald-700">
+                    {importPreview.totales.hojasLibres.toLocaleString("es-ES")}
+                  </div>
+                </div>
+                <div className="rounded border px-3 py-2">
+                  <div className="text-xs text-slate-500">Hojas reservadas</div>
+                  <div className="font-bold text-blue-700">
+                    {importPreview.totales.hojasReservadas.toLocaleString(
+                      "es-ES"
+                    )}
+                  </div>
+                </div>
+              </div>
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                Se eliminarán las cartelas piloto (#10310–#10320) y se
+                importarán/actualizarán {importPreview.totales.palets} palets
+                con reservas ATP (asignado = dura, no asignado = libre).
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setImportOpen(false)}
+                  disabled={importing}
+                >
+                  Cancelar
+                </Button>
+                <Button onClick={() => void confirmImport()} disabled={importing}>
+                  {importing && (
+                    <Loader2 className="size-4 mr-2 animate-spin" />
+                  )}
+                  Confirmar import
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {printQueue.map((palet) => (
         <CartelaPrint
