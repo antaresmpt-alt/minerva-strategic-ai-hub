@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 23 jun 2026 (Bloque 8.1.2 agrupación maestro/despachadas; Bloque 10 presupuestos diseño; reunión jueves)
+> Última actualización: 5 jul 2026 (Bloque 9: reimpresión remanente libre, valoración prorrateada, prueba planta OT 99905)
 
 ---
 
@@ -247,7 +247,7 @@ src/components/produccion/planificacion/
 | 6 | Producidas/Histórico + cierre OT | ⏳ Pendiente (PRÓXIMO GRANDE) |
 | 7 | Expedición/Albarán | ⏳ Pendiente (depende B6 + Odoo) |
 | 8 | Formatos de hoja + formas + componentes (OT contenedor/hijas) | 🔄 En curso — **FORMATO ✅** + **8.0 ✅** + **8.1 ✅** + **8.1.1 ✅**; 8.2–8.4 pendiente — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` |
-| 9 | Material, cartelas de palet y stock libre | 🔄 **9.0–9.2 ✅** + **9.4 operativo ✅** (5 jul) — import Optimus, consumo cierre impresión, IA Stock MVP — ver `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §15.6 |
+| 9 | Material, cartelas de palet y stock libre | 🔄 **9.0–9.4 operativo ✅** (5 jul) — import Optimus, consumo cierre impresión, reimpresión remanente libre, valoración remanente, IA Stock — ver `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §15.7 |
 
 ---
 
@@ -303,7 +303,7 @@ src/components/produccion/planificacion/
 
 11. **Encadenado formato de pliego (17 jun 2026, Fase FORMATO ✅)**: por **orden de itinerario** (`prod_ot_pasos.orden`), no por tipo de proceso global. `tamano_hoja` en despacho = **Formato compra** (solo referencia de compra). Guillotina: `tamano_inicial` ← anterior, `tamano_final` → siguiente. Impresión/externos hojas: `formato_hojas`. Troquelado: `tamano_corte` es el troquel (independiente); banner muestra pliego de entrada. Módulo: `hoja-ruta-formato-encadenado.ts`. Probado OT 98009 (commit `aadad81`).
 
-12. **Bloque 9 — Cartelas y stock (5 jul 2026)**: **9.0–9.2 + 9.4 operativo** — SQL cartelas, UI cartelas/stock, **import Optimus** (~281 palets), impresión HTML, **consumo real al cerrar impresión**, lote tintas, asistente IA Stock MVP. Piloto paralelo Optimus hasta ~dic 2026. Briefing + §15.6: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`.
+12. **Bloque 9 — Cartelas y stock (5 jul 2026)**: **9.0–9.4 operativo** — SQL cartelas, UI cartelas/stock, **import Optimus** (~281 palets), impresión HTML, **consumo real al cerrar impresión**, **reimpresión remanente libre** (etiqueta stock libre tras consumo parcial), **valoración remanente** prorrateada en Stock, lote tintas, asistente IA Stock MVP. Prueba planta OT **99905** / cartela **#99002** (2000 h → consumo 1800 → 200 libres). Piloto paralelo Optimus hasta ~dic 2026. **Pendiente OT/hoja de ruta:** semilla artículos maestro desde despacho, histórico OTs. Briefing + §15.7: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`.
 
 13. **Higiene operativa (18 jun 2026)**: `bultos_por_palet_default` de Gabri versionado en migración seed (`20260618143200`). Plantillas offset: **Desbroce** insertado entre Troquelado y Engomado en 5 rutas (`20260618143000`). Rol usuario CTP = **`ctp`** (no `preimpresion`); permisos `produccion` + `produccion_ejecucion` en BD y `permissions.ts`. Marc/Gemma: usuarios aún no creados en Supabase.
 
