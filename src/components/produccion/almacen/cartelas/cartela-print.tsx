@@ -19,6 +19,17 @@ export const CartelaPrint = forwardRef<HTMLDivElement, CartelaPrintProps>(
   function CartelaPrint({ palet, copies = 2, proveedorNombre }, ref) {
     const otsText = palet.ots.length > 0 ? palet.ots.join(" · ") : "(stock libre)";
 
+    // Desglose ATP (9.2): reservas duras (con cantidad) vs libre calculado.
+    const reservasDuras = (palet.otsReservas ?? []).filter(
+      (r) => r.cantidad_reservada != null && r.cantidad_reservada > 0
+    );
+    const reservadaTotal = reservasDuras.reduce(
+      (acc, r) => acc + (r.cantidad_reservada ?? 0),
+      0
+    );
+    const hayReservaDura = reservasDuras.length > 0;
+    const libreCalc = Math.max(palet.cantidad_actual - reservadaTotal, 0);
+
     const fecha = new Date(palet.created_at).toLocaleDateString("es-ES", {
       day: "2-digit",
       month: "2-digit",
@@ -103,10 +114,30 @@ export const CartelaPrint = forwardRef<HTMLDivElement, CartelaPrintProps>(
               </div>
             </div>
 
-            {/* OT */}
+            {/* OT + desglose ATP (reservado/libre) si hay reservas duras */}
             <div className="px-3 py-1.5 border-b border-black text-sm">
               <span className="font-bold text-xs uppercase">OT: </span>
               {otsText}
+              {hayReservaDura && (
+                <div className="mt-1 space-y-0.5 text-xs">
+                  {reservasDuras.map((r) => (
+                    <div key={r.ot_numero}>
+                      →{" "}
+                      <span className="font-bold">
+                        {(r.cantidad_reservada ?? 0).toLocaleString("es-ES")}
+                      </span>{" "}
+                      reservadas · OT {r.ot_numero}
+                    </div>
+                  ))}
+                  <div>
+                    →{" "}
+                    <span className="font-bold">
+                      {libreCalc.toLocaleString("es-ES")}
+                    </span>{" "}
+                    libres
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Ref. Lote estilo Optimus */}

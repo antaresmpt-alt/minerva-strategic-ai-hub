@@ -73,13 +73,58 @@ const EMPTY_PALET: WizardPaletInput = {
   cantidad_inicial: "",
   codigo_articulo: "",
   ots_referencia: [],
+  reservas: {},
   stock_libre: false,
   ubicacion_fila: "",
   ref_lote_proveedor: "",
+  coste: "",
   es_fsc: false,
   es_pefc: false,
   notas: "",
 };
+
+// Modelo ATP (Bloque 9.2): un palet físico = UNA cartela. Las reservas (dura/
+// blanda) son lógicas y viven en prod_stock_palet_ots.cantidad_reservada. NO se
+// crea una segunda cartela para separar reservado de libre (ej. 1.600 OT + 200
+// libres van en la MISMA cartela). Cartela nueva SOLO si el material se separa
+// físicamente (split de palet — fase 9.3, con movimiento de traspaso).
+
+/** Reserva dura por OT del palet: solo valores numéricos > 0. NULL/vacío = blanda. */
+function parseReservaDura(raw: string | undefined): number | null {
+  if (raw == null) return null;
+  const t = raw.trim();
+  if (t === "") return null;
+  const n = parseInt(t, 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Suma de reservas duras del palet (hojas comprometidas a OTs con cantidad). */
+function reservadaDuraTotal(p: WizardPaletInput): number {
+  return p.ots_referencia.reduce((acc, ot) => {
+    const dura = parseReservaDura(p.reservas[ot]);
+    return acc + (dura ?? 0);
+  }, 0);
+}
+
+/** Foto ATP del palet en el wizard (misma lógica que la vista stock_palets_atp). */
+function atpDesglose(p: WizardPaletInput): {
+  fisica: number;
+  reservada: number;
+  libre: number;
+  hayReservaDura: boolean;
+  excede: boolean;
+} {
+  const fisica = parseInt(p.cantidad_inicial, 10) || 0;
+  const reservada = reservadaDuraTotal(p);
+  const libre = Math.max(fisica - reservada, 0);
+  return {
+    fisica,
+    reservada,
+    libre,
+    hayReservaDura: reservada > 0,
+    excede: reservada > fisica && fisica > 0,
+  };
+}
 
 function buildInitialPalets(g: AlbaranPendienteGroup | null): WizardPaletInput[] {
   if (!g) return [{ ...EMPTY_PALET }];
@@ -198,12 +243,33 @@ export function CartelaWizardDialog({
     });
   }
 
+  function setReserva(paletIdx: number, ot: string, value: string) {
+    setPalets((prev) => {
+      const next = [...prev];
+      const reservas = { ...next[paletIdx].reservas };
+      if (value.trim() === "") {
+        delete reservas[ot];
+      } else {
+        reservas[ot] = value;
+      }
+      next[paletIdx] = { ...next[paletIdx], reservas };
+      return next;
+    });
+  }
+
   function toggleOt(paletIdx: number, ot: string) {
     const current = palets[paletIdx].ots_referencia;
-    const next = current.includes(ot)
+    const isRemoving = current.includes(ot);
+    const next = isRemoving
       ? current.filter((o) => o !== ot)
       : [...current, ot];
-    updatePalet(paletIdx, "ots_referencia", next);
+    setPalets((prev) => {
+      const arr = [...prev];
+      const reservas = { ...arr[paletIdx].reservas };
+      if (isRemoving) delete reservas[ot];
+      arr[paletIdx] = { ...arr[paletIdx], ots_referencia: next, reservas };
+      return arr;
+    });
   }
 
   function addOtManual(paletIdx: number) {
@@ -223,11 +289,17 @@ export function CartelaWizardDialog({
   }
 
   function removeOt(paletIdx: number, ot: string) {
-    updatePalet(
-      paletIdx,
-      "ots_referencia",
-      palets[paletIdx].ots_referencia.filter((o) => o !== ot)
-    );
+    setPalets((prev) => {
+      const next = [...prev];
+      const reservas = { ...next[paletIdx].reservas };
+      delete reservas[ot];
+      next[paletIdx] = {
+        ...next[paletIdx],
+        ots_referencia: next[paletIdx].ots_referencia.filter((o) => o !== ot),
+        reservas,
+      };
+      return next;
+    });
   }
 
   function prefillPaletFromLine(paletIdx: number, line: AlbaranRecepcionLine) {
@@ -274,6 +346,18 @@ export function CartelaWizardDialog({
       for (let i = 0; i < palets.length; i++) {
         const p = palets[i];
         const cantidad = parseInt(p.cantidad_inicial) || 0;
+        // Estado legacy coherente con la vista ATP (la UI 9.2 usa estado_derivado).
+        const reservadaDura = p.stock_libre ? 0 : reservadaDuraTotal(p);
+        const libreCalc = Math.max(cantidad - reservadaDura, 0);
+        const estadoCoherente: string =
+          cantidad <= 0
+            ? "consumido"
+            : reservadaDura <= 0
+              ? "disponible"
+              : libreCalc <= 0
+                ? "reservado"
+                : "parcial";
+        const costeNum = p.coste.trim() ? Number(p.coste.replace(",", ".")) : null;
         const primeraOt = p.ots_referencia[0] ?? null;
         const recepcionLine =
           grupo.recepciones.find((r) => r.ot_numero === primeraOt) ??
@@ -303,9 +387,10 @@ export function CartelaWizardDialog({
             formato: p.formato || null,
             cantidad_inicial: cantidad,
             cantidad_actual: cantidad,
+            coste: costeNum,
             ot_destino_numero:
               p.ots_referencia.length === 1 ? p.ots_referencia[0] : null,
-            estado: p.stock_libre ? "disponible" : "reservado",
+            estado: p.stock_libre ? "disponible" : estadoCoherente,
             ubicacion_fila: p.ubicacion_fila || null,
             nota_entrega: grupo.albaran_proveedor,
             ref_lote_proveedor: p.ref_lote_proveedor || null,
@@ -328,6 +413,7 @@ export function CartelaWizardDialog({
           const otsRows = p.ots_referencia.map((ot) => ({
             palet_id: paletRow.id,
             ot_numero: ot,
+            cantidad_reservada: parseReservaDura(p.reservas[ot]),
           }));
           const { error: otsErr } = await supabase
             .from("prod_stock_palet_ots")
@@ -341,7 +427,13 @@ export function CartelaWizardDialog({
           }
         }
 
-        created.push({ ...paletRow, ots: p.ots_referencia });
+        const otsReservas = p.stock_libre
+          ? []
+          : p.ots_referencia.map((ot) => ({
+              ot_numero: ot,
+              cantidad_reservada: parseReservaDura(p.reservas[ot]),
+            }));
+        created.push({ ...paletRow, ots: p.ots_referencia, otsReservas });
       }
 
       setSavedPalets(created);
@@ -458,7 +550,7 @@ export function CartelaWizardDialog({
               </SelectContent>
             </Select>
           </div>
-          <div className="sm:col-span-2 lg:col-span-1">
+          <div>
             <Label className="text-xs">Lote proveedor</Label>
             <Input
               value={p.ref_lote_proveedor}
@@ -466,6 +558,18 @@ export function CartelaWizardDialog({
                 updatePalet(idx, "ref_lote_proveedor", e.target.value)
               }
               placeholder="Ej: 3238711"
+              className="h-9 text-sm"
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Coste (€)</Label>
+            <Input
+              value={p.coste}
+              onChange={(e) => updatePalet(idx, "coste", e.target.value)}
+              placeholder="Total palet · opcional"
+              type="number"
+              step="0.01"
+              min="0"
               className="h-9 text-sm"
             />
           </div>
@@ -499,7 +603,55 @@ export function CartelaWizardDialog({
               ))}
             </div>
           )}
-          {p.ots_referencia.length > 0 && (
+          {p.ots_referencia.length > 0 && !p.stock_libre && (
+            <div className="space-y-1.5 mb-2">
+              <p className="text-[11px] text-slate-400">
+                Hojas reservadas por OT (vacío = todas / reserva blanda)
+              </p>
+              {p.ots_referencia.map((ot) => (
+                <div key={ot} className="flex items-center gap-2">
+                  <Badge
+                    variant="secondary"
+                    className="gap-1 cursor-pointer shrink-0 font-mono"
+                    onClick={() => removeOt(idx, ot)}
+                    title="Quitar OT"
+                  >
+                    {ot} <X className="size-2.5" />
+                  </Badge>
+                  <Input
+                    value={p.reservas[ot] ?? ""}
+                    onChange={(e) => setReserva(idx, ot, e.target.value)}
+                    placeholder="todas"
+                    type="number"
+                    min="0"
+                    className="h-8 text-sm w-28"
+                  />
+                  <span className="text-xs text-slate-400">h reservadas</span>
+                </div>
+              ))}
+              {(() => {
+                const d = atpDesglose(p);
+                if (!d.hayReservaDura) return null;
+                return (
+                  <p
+                    className={`text-xs ${d.excede ? "text-amber-600" : "text-slate-600"}`}
+                  >
+                    {d.fisica.toLocaleString("es-ES")} h ·{" "}
+                    {d.reservada.toLocaleString("es-ES")} reservadas ·{" "}
+                    <span className="font-semibold text-emerald-700">
+                      {d.libre.toLocaleString("es-ES")} libres
+                    </span>
+                    {d.excede && (
+                      <span className="ml-1 font-medium">
+                        ⚠ las reservas superan las hojas del palet
+                      </span>
+                    )}
+                  </p>
+                );
+              })()}
+            </div>
+          )}
+          {p.ots_referencia.length > 0 && p.stock_libre && (
             <div className="flex gap-1 flex-wrap mb-2">
               {p.ots_referencia.map((ot) => (
                 <Badge
@@ -833,6 +985,9 @@ export function CartelaWizardDialog({
                       {p.codigo_articulo
                         ? ` · Cód. ${p.codigo_articulo}`
                         : ""}
+                      {p.coste.trim()
+                        ? ` · ${Number(p.coste.replace(",", ".")).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}`
+                        : ""}
                     </div>
                     <div className="font-mono text-xs text-slate-500">
                       OT:{" "}
@@ -842,6 +997,32 @@ export function CartelaWizardDialog({
                           ? p.ots_referencia.join(" · ")
                           : "—"}
                     </div>
+                    {!p.stock_libre &&
+                      (() => {
+                        const d = atpDesglose(p);
+                        if (!d.hayReservaDura) return null;
+                        const detalles = p.ots_referencia
+                          .map((ot) => {
+                            const dura = parseReservaDura(p.reservas[ot]);
+                            return dura != null
+                              ? `${dura.toLocaleString("es-ES")} → OT ${ot}`
+                              : null;
+                          })
+                          .filter(Boolean)
+                          .join(" · ");
+                        return (
+                          <div className="text-xs text-slate-600 bg-slate-50 rounded px-2 py-1 mt-0.5">
+                            {d.fisica.toLocaleString("es-ES")} h ·{" "}
+                            <span className="text-blue-700">
+                              {d.reservada.toLocaleString("es-ES")} reservadas
+                            </span>
+                            {detalles ? ` (${detalles})` : ""} ·{" "}
+                            <span className="font-semibold text-emerald-700">
+                              {d.libre.toLocaleString("es-ES")} libres
+                            </span>
+                          </div>
+                        );
+                      })()}
                     {p.ubicacion_fila && (
                       <div className="text-xs text-slate-500">
                         Fila: {p.ubicacion_fila}

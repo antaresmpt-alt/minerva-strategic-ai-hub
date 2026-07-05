@@ -238,13 +238,22 @@ export function CartelasPage() {
       const ids = palets.map((p: ProdStockPaletRow) => p.id);
       const { data: otsRows } = await supabase
         .from("prod_stock_palet_ots")
-        .select("palet_id, ot_numero")
+        .select("palet_id, ot_numero, cantidad_reservada")
         .in("palet_id", ids);
 
       const otsByPalet: Record<string, string[]> = {};
+      const reservasByPalet: Record<
+        string,
+        { ot_numero: string; cantidad_reservada: number | null }[]
+      > = {};
       for (const row of otsRows ?? []) {
         if (!otsByPalet[row.palet_id]) otsByPalet[row.palet_id] = [];
         otsByPalet[row.palet_id].push(row.ot_numero);
+        if (!reservasByPalet[row.palet_id]) reservasByPalet[row.palet_id] = [];
+        reservasByPalet[row.palet_id].push({
+          ot_numero: row.ot_numero,
+          cantidad_reservada: row.cantidad_reservada ?? null,
+        });
       }
 
       const enriched: ProdStockPaletConOts[] = palets.map(
@@ -262,6 +271,7 @@ export function CartelasPage() {
             ots:
               otsByPalet[p.id] ??
               (p.ot_destino_numero ? [p.ot_destino_numero] : []),
+            otsReservas: reservasByPalet[p.id] ?? [],
             proveedor_nombre: proveedorNombre,
           };
         }

@@ -4,9 +4,9 @@
 > Tema: recepción de material, cartelas de palet, stock libre y trazabilidad.
 > Complementa `MINERVA_HUB_CONTEXTO_MAESTRO.md`, `FASES_HOJA_RUTA_DIGITAL.md` y briefings Bloques 6 y 7.
 >
-> **Estado:** ✅ **9.0 + 9.1 + 9.1b + 9.4-preview** (25 jun 2026) — cartelas en almacén + enlace documental al **cerrar impresión** (procesos 1 y 2) → hoja de ruta y PDF. Smoke: cartelas #10310–#10313; cierre OT **35858** con ID Stock en HR. **Pendiente:** 9.2 Stock, 9.3 sobrantes, **9.4 operativo** (movimientos + descuento `cantidad_actual`).
+> **Estado:** ✅ **9.0 + 9.1 + 9.1b + 9.4-preview + 9.2** (5 jul 2026) — cartelas en almacén + enlace documental al **cerrar impresión** (procesos 1 y 2) → hoja de ruta y PDF + **vista Stock con reservas ATP y valoración**. Smoke: cartelas #10310–#10320. **Pendiente:** 9.3 sobrantes, **9.4 operativo** (movimientos + descuento `cantidad_actual`), import Optimus.
 > **Origen:** Optimus + cartelas CARPAPSA (15 jun 2026).
-> **Actualizado:** 25 jun 2026 — 9.4-preview en mesa ejecución; wizard 3 tabs (Albarán · Palet · Resumen); ver §15.5 y `docs/referencias/cartelas-optimus-campo.md`.
+> **Actualizado:** 5 jul 2026 — **9.2**: reservas parciales ATP (`cantidad_reservada` en `prod_stock_palet_ots`), `coste` por palet, vista `stock_palets_atp`, página `/produccion/almacen/stock`, MRP legacy retirado. Ver §4.x (modelo ATP), §12 y migración `20260705120000`.
 > **PENDIENTE:** H1/H2 recuento global. Ubicación por filas de material (catálogo UI sin definir en planta). `codigo_articulo` en wizard. Ajuste impresión A6 física vs A4 PDF.
 
 **Relacionado:** sobrantes → Bloque 6 · expedición → Bloque 7 · material contenedor/hijas → Bloque 8 · FSC → maestro artículos.
@@ -456,6 +456,32 @@ Esto simplifica el modelo: `prod_ot` → `prod_compra_material` es 1:N, sin tabl
 - ~~N cartelas por palet con `palet_fisico_ref`~~ — **deprecado** en favor de 1:1 palet/cartela.
 - Impresión: opción **“2 copias”** de la misma cartela para pegar en el palet (C1).
 
+### Reservas parciales — patrón ATP (9.2, 5 jul 2026)
+
+**Caso real (palet block):** se pide palet block al proveedor de 1.800 hojas; la OT necesita 1.600. En muelle Juan recibe **1.800** (verdad física, aunque la OC diga 1.600). → **1.600 reservadas** a la OT + **200 libres**, en el **mismo palet y la misma cartela**.
+
+Minerva lo modela con **reservas con cantidad** (patrón *Available-To-Promise*, el de SAP/Odoo/Dynamics), no con dos columnas como Optimus:
+
+| Concepto | Cómo |
+|----------|------|
+| `cantidad_fisica` | `prod_stock_palets.cantidad_actual` (hojas encima del palet) |
+| Reserva **dura** | `prod_stock_palet_ots.cantidad_reservada` = **N** (hojas comprometidas a esa OT) |
+| Reserva **blanda** | `prod_stock_palet_ots.cantidad_reservada` = **NULL** (palet “para esa OT” sin cantidad — caso Ramón D1) |
+| `cantidad_libre` | `fisica − SUM(reservas duras)` — **calculado, nunca almacenado** |
+| `estado_derivado` | `agotado` / `reservado` / `parcial` / `disponible` — **calculado** |
+
+- Vista **`stock_palets_atp`** (migración `20260705120000`, `security_invoker=on`) es la **fuente única** de la vista Stock. `cantidad_libre` y `estado_derivado` siempre se calculan → **el estado nunca miente** porque nadie lo escribe a mano.
+- La columna `prod_stock_palets.estado` queda **legacy** (se escribe coherente al crear, pero la UI 9.2+ usa `estado_derivado`).
+- **NO se crea una segunda cartela** para separar reservado de libre. La cartela sigue al **palet físico** (patrón LPN de un WMS). Cartela nueva **solo** si el material se separa físicamente (**split de palet → fase 9.3**, con movimiento de traspaso).
+- La cartela impresa y el resumen del wizard **muestran el desglose** cuando hay reservas duras: `1.800 h → 1.600 reservadas OT 36204 → 200 libres`.
+- Aviso `sobre_reservado`: si las reservas duras superan el físico (p. ej. tras consumir sin ajustar), la vista lo marca (no bloquea).
+
+### Valoración de existencias (9.2)
+
+- Campo **`prod_stock_palets.coste`** `numeric(10,2)` NULL: **coste total del palet** en € (mismo concepto que el campo Coste de Optimus, **no** €/hoja). Opcional en el wizard.
+- La vista Stock suma **VALORACIÓN TOTAL €** (palets con `cantidad_fisica > 0`) para dirección (Albert).
+- **No** se gestionan precios en compras; el coste se captura al cartelar o (futuro) en el import Optimus.
+
 ### Tabla nueva `prod_stock_palets` (las cartelas) — **corazón del Bloque 9**
 Cada fila = 1 palet identificado con un ID Stock.
 
@@ -831,7 +857,7 @@ Objetivo: sustituir Optimus/papel en lo esencial — **qué hay en cada palet y 
 | **9.0** | SQL: `prod_stock_palets` + `prod_stock_movimientos` + `prod_stock_palet_ots`; ampliar `prod_recepciones_material` (`cantidad_peso`); secuencia `id_stock` desde **10.310** | ✅ **Hecho** |
 | **9.1** | UI **Almacén → Cartelas**: bandeja pendientes por albarán + cartelado 1 palet = 1 ID Stock + OT(s) + impresión (2 copias). Usuarios: **Emma/Ramón**. Antiduplicado albarán. | ✅ **Hecho** |
 | **9.1b** | Post smoke: filtros bandeja, wizard split, selector OTs + hijas barco, fallback cliente/trabajo (`prod_ots_general`), `ref_lote` Optimus, fix impresión, cartela print estilo scan | ✅ **Hecho** |
-| **9.2** | UI **Almacén → Stock** + filtros **libre vs reservado** (prioridad I3) + entregar desde libre + reasignar reserva (§7.6). | ⏳ |
+| **9.2** | UI **Almacén → Stock** (`/produccion/almacen/stock`): tabla estilo Optimus + filtros **libre / reservado / parcial** + tipo_stock + buscador; **reservas parciales ATP** (`cantidad_reservada`), **valoración €** (`coste`), vista `stock_palets_atp`, detalle + reimpresión. MRP legacy retirado. Usuarios: Ramón/Emma/Juan. | ✅ **Hecho (5 jul)** |
 | **9.3** | Sobrantes — misma cartela muta; **sin** wizard auto “pasar a libre” multi-OT (§7.8) |
 | **9.4-preview** | ✅ Enlace documental ID Stock ↔ cierre impresión → `datos_proceso` + hoja de ruta/PDF (§15.5) |
 | **9.4 operativo** | **Consumo maquinista al cerrar tirada** + movimientos (piloto 10–20 OTs). Tras rodar: déficit → `material_status`. |
@@ -848,6 +874,7 @@ No bloquean 9.0–9.4. Se encadenan cuando el flujo administrativo de cartelas f
 | **9.6** | Recepción **STOCK sin OC** y albarán **multi-línea** (varias OTs / líneas en un mismo envío) |
 | **9.7** | **Sugerencia desde foto** (Gemini Vision u OCR asistido): prefill proveedor, nº albarán, líneas, kilos — **siempre confirmación humana** (patrón import externos Optimus) |
 | **9.8** | Adjuntar/reenlazar fotos muelle en flujo de cartelado; menos papel físico circulando |
+| **9.9** | **Búsqueda inteligente de material (NL → cartelas)**: caja "describe lo que necesitas" en la vista Stock. El maquinista/Carlos pide *"necesito 1.800 h de folding, 65×92 o superior, 300 gr preferiblemente"* → LLM extrae criterios (tamaño, gramaje, cantidad) → consulta `stock_palets_atp` → lista de palets que cuadran (ID Stock, libre, gramaje, formato, ubicación). Patrón **LLM → SQL → listado** (datos siempre de BD, cero alucinación). Post-9.2 con datos reales. |
 
 ```text
 [Fase A — primero]
@@ -859,15 +886,15 @@ No bloquean 9.0–9.4. Se encadenan cuando el flujo administrativo de cartelas f
 
 ---
 
-## 12. Nota sobre el MRP actual de Minerva
+## 12. Nota sobre el MRP actual de Minerva — RETIRADO (5 jul 2026)
 
-Hay un primer intento de **Almacén MRP** en la app (`src/components/produccion/almacen/almacen-mrp-page.tsx`)
-sobre `almacen_materiales` + vista `almacen_control_inteligente` (stock agregado por material, no por palet).
+Hubo un primer intento de **Almacén MRP** (`almacen-mrp-page.tsx` sobre `almacen_materiales` + vista `almacen_control_inteligente`, stock agregado por material). Era una idea provisional que **nunca se usó en producción** (el stock se descuadra si no se alimenta a diario).
 
-**No se usa en producción** porque el stock se descuadra si no se alimenta a diario.
+**Retirado en 9.2:** se eliminó el **código** (ruta MRP → redirect a `/produccion/almacen/stock`, `almacen-mrp-page.tsx`, `almacen-import.ts`, `types/almacen-mrp.ts`, entrada de menú "Almacén MRP"). El stock real es el **Bloque 9 por palet/cartela** (`prod_stock_palets` + vista `stock_palets_atp`).
 
-**Decisión pendiente:** Bloque 9 debe **reemplazar** el modelo MRP legacy — no convivir sin fuente de verdad.
-El nuevo modelo es **por palet/cartela** (`prod_stock_palets`).
+**Tablas BD legacy — NO borradas (huérfanas):** `almacen_materiales` (33 filas de un import antiguo de Ramón), `almacen_reservas` (46), `almacen_pedidos_transito` (0), vista `almacen_control_inteligente`. Se conservan por prudencia; borrado futuro en migración aparte tras confirmar que no se necesitan. Documentado en la migración `20260705120000`.
+
+**Impacto verificado (nada más dependía del MRP):** Gestión Externos usa `prod_compra_material` (semáforo M), no `almacen_materiales`; cartelas, muelle y ejecución usan Bloque 9. Grep confirmó que ningún otro archivo importaba los componentes borrados.
 
 **Por qué el MRP legacy falló y este no:** el MRP guardaba un **número agregado por material** que alguien tenía que mantener a mano → se descuadraba en cuanto se dejaba un día. En el modelo cartela, el agregado es **derivado** (suma de `cantidad_actual` de las cartelas + movimientos), no un dato que se mantiene. El "stock de Zenith 295" deja de ser un campo y pasa a ser una **vista calculada**. Por eso construir cartelas primero **no** es hacer la casa por el tejado: es poner los cimientos. La vista agregada por material (con mínimos/reposición) se monta **encima** como evolución (ver §14).
 
