@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 
 import { cellNum, cellStr, pick } from "@/lib/sales-parse-rows";
+import { SANDBOX_ID_STOCK_MIN } from "@/lib/prod-stock-sandbox";
 import type { StockEstado } from "@/types/prod-stock";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -219,12 +220,13 @@ export async function parseStockOptimusFile(
   const ws = wb.Sheets[sheetName]!;
   const jsonRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, {
     defval: null,
-    raw: false,
+    raw: true,
   });
 
   const parseWarnings: string[] = [];
   const rows: StockOptimusParsedRow[] = [];
   let filasOmitidas = 0;
+  let filasSandbox = 0;
 
   for (const raw of jsonRows) {
     const parsed = parseOptimusRecord(raw);
@@ -232,7 +234,23 @@ export async function parseStockOptimusFile(
       filasOmitidas++;
       continue;
     }
+    if (parsed.id_stock >= SANDBOX_ID_STOCK_MIN) {
+      filasSandbox++;
+      continue;
+    }
     rows.push(parsed);
+  }
+
+  if (filasSandbox > 0) {
+    parseWarnings.push(
+      `Se omitieron ${filasSandbox} filas con Id ≥ ${SANDBOX_ID_STOCK_MIN} (rango sandbox).`
+    );
+  }
+
+  if (filasOmitidas > 0) {
+    parseWarnings.push(
+      `Se omitieron ${filasOmitidas} filas sin Id válido o sin stock > 0.`
+    );
   }
 
   if (rows.length === 0) {
@@ -314,7 +332,10 @@ export async function executeStockOptimusImport(
   let otsInsertadas = 0;
 
   for (const chunk of chunkArray(rows, 40)) {
-    const paletPayloads = chunk.map((r) => ({
+    const importRows = chunk.filter((r) => r.id_stock < SANDBOX_ID_STOCK_MIN);
+    if (importRows.length === 0) continue;
+
+    const paletPayloads = importRows.map((r) => ({
       id_stock: r.id_stock,
       tipo_stock: "materia_prima" as const,
       unidad: r.unidad,
@@ -337,6 +358,7 @@ export async function executeStockOptimusImport(
         : "Import Optimus 03/07/2026",
       es_fsc: false,
       es_pefc: false,
+      es_prueba: false,
       created_by: user?.id ?? null,
     }));
 
@@ -367,7 +389,7 @@ export async function executeStockOptimusImport(
       cantidad_reservada: number | null;
     }[] = [];
 
-    for (const row of chunk) {
+    for (const row of importRows) {
       const paletId = idByStock.get(row.id_stock);
       if (!paletId || row.ots.length === 0) continue;
       for (const ot of row.ots) {

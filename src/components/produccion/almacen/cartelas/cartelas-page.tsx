@@ -16,6 +16,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
@@ -69,6 +70,7 @@ export function CartelasPage() {
   const [pendientes, setPendientes] = useState<AlbaranPendienteGroup[]>([]);
   const [cartelas, setCartelas] = useState<ProdStockPaletConOts[]>([]);
   const [search, setSearch] = useState("");
+  const [mostrarPruebas, setMostrarPruebas] = useState(false);
 
   // Filtros bandeja pendientes
   const [searchPendientes, setSearchPendientes] = useState("");
@@ -112,7 +114,8 @@ export function CartelasPage() {
       const { data: stockCounts } = await supabase
         .from("prod_stock_palets")
         .select("recepcion_id")
-        .in("recepcion_id", recepIds);
+        .in("recepcion_id", recepIds)
+        .eq("es_prueba", false);
 
       const cartelasByRecepcion: Record<string, number> = {};
       for (const sc of stockCounts ?? []) {
@@ -294,16 +297,20 @@ export function CartelasPage() {
 
   // ── Filtro búsqueda cartelas creadas ─────────────────────────────────
   const filteredCartelas = useMemo(() => {
-    if (!search.trim()) return cartelas;
+    let list = cartelas;
+    if (!mostrarPruebas) {
+      list = list.filter((c) => !c.es_prueba);
+    }
+    if (!search.trim()) return list;
     const q = search.toLowerCase();
-    return cartelas.filter(
+    return list.filter(
       (c) =>
         c.id_stock.toString().includes(q) ||
         c.material_nombre?.toLowerCase().includes(q) ||
         c.nota_entrega?.toLowerCase().includes(q) ||
         c.ots.some((o) => o.toLowerCase().includes(q))
     );
-  }, [cartelas, search]);
+  }, [cartelas, mostrarPruebas, search]);
 
   // ── Filtro bandeja pendientes ─────────────────────────────────────────
   const thirtyDaysAgo = useMemo(() => {
@@ -520,13 +527,20 @@ export function CartelasPage() {
 
         {/* ── Tab: Cartelas creadas ────────────────────────── */}
         <TabsContent value="cartelas" className="space-y-3 mt-4">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Input
               placeholder="Buscar por ID Stock, material, albarán, OT…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="max-w-sm h-8 text-sm"
             />
+            <label className="inline-flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+              <Checkbox
+                checked={mostrarPruebas}
+                onCheckedChange={(v) => setMostrarPruebas(v === true)}
+              />
+              Mostrar pruebas
+            </label>
             <Button
               size="sm"
               variant="outline"
@@ -685,6 +699,14 @@ function CartelaListRow({
       <span className="font-black text-xl text-[#002147] w-20 shrink-0 tabular-nums">
         #{palet.id_stock}
       </span>
+      {palet.es_prueba ? (
+        <Badge
+          variant="outline"
+          className="shrink-0 text-[10px] border-amber-300 text-amber-800 bg-amber-50"
+        >
+          prueba
+        </Badge>
+      ) : null}
 
       {/* Material */}
       <div className="flex-1 min-w-0">

@@ -17,6 +17,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -136,6 +137,7 @@ function atpToPaletPrint(row: StockPaletAtpConOts): ProdStockPaletConOts {
     fsc_certificado_proveedor: null,
     pefc_certificado_proveedor: null,
     notas: null,
+    es_prueba: row.es_prueba,
     created_by: null,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -160,6 +162,7 @@ export function StockPage() {
   );
   const [importFileName, setImportFileName] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [mostrarPruebas, setMostrarPruebas] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -260,6 +263,10 @@ export function StockPage() {
   const filtered = useMemo(() => {
     let list = rows;
 
+    if (!mostrarPruebas) {
+      list = list.filter((r) => !r.es_prueba);
+    }
+
     if (estadoFiltro !== "todos") {
       list = list.filter((r) => {
         if (estadoFiltro === "libre") return r.cantidad_libre > 0;
@@ -289,7 +296,7 @@ export function StockPage() {
     }
 
     return list;
-  }, [rows, estadoFiltro, tipoFiltro, search]);
+  }, [rows, mostrarPruebas, estadoFiltro, tipoFiltro, search]);
 
   const totales = useMemo(() => {
     let libres = 0;
@@ -500,6 +507,14 @@ export function StockPage() {
             ))}
           </SelectContent>
         </Select>
+
+        <label className="inline-flex items-center gap-2 text-xs text-slate-600 cursor-pointer whitespace-nowrap">
+          <Checkbox
+            checked={mostrarPruebas}
+            onCheckedChange={(v) => setMostrarPruebas(v === true)}
+          />
+          Mostrar pruebas (≥99.000)
+        </label>
       </div>
 
       <p className="text-xs text-slate-400">
@@ -667,6 +682,13 @@ export function StockPage() {
                 Archivo:{" "}
                 <span className="font-mono text-xs">{importFileName}</span>
               </p>
+              <p className="text-xs text-slate-500">
+                {importPreview.filasLeidas} filas leídas ·{" "}
+                {importPreview.totales.palets} palets válidos
+                {importPreview.filasOmitidas > 0
+                  ? ` · ${importPreview.filasOmitidas} omitidas`
+                  : ""}
+              </p>
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded border px-3 py-2">
                   <div className="text-xs text-slate-500">Palets</div>
@@ -698,7 +720,7 @@ export function StockPage() {
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
                 Se eliminarán las cartelas piloto (#10310–#10320) y se
                 importarán/actualizarán {importPreview.totales.palets} palets
-                con reservas ATP (asignado = dura, no asignado = libre).
+                Optimus (Id &lt; 99.000). Las cartelas de prueba no se tocan.
               </p>
               <div className="flex justify-end gap-2">
                 <Button

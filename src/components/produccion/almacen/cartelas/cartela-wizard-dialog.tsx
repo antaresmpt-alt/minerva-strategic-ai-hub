@@ -45,6 +45,7 @@ import {
   resolveTrabajoTitulo,
 } from "@/lib/cartelas-ot-metadata";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { SANDBOX_ID_STOCK_MIN } from "@/lib/prod-stock-sandbox";
 import type {
   AlbaranPendienteGroup,
   AlbaranRecepcionLine,
@@ -163,6 +164,7 @@ export function CartelaWizardDialog({
   const [otMetadata, setOtMetadata] = useState<OtMetadataMap>({});
   const [wizardTab, setWizardTab] = useState<WizardTab>("albaran");
   const [activePaletIdx, setActivePaletIdx] = useState(0);
+  const [cartelaPrueba, setCartelaPrueba] = useState(false);
 
   useEffect(() => {
     if (open && grupo) {
@@ -175,6 +177,7 @@ export function CartelaWizardDialog({
       setOtMetadata({});
       setWizardTab("albaran");
       setActivePaletIdx(0);
+      setCartelaPrueba(false);
       void loadOtContext(grupo.recepciones);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -374,9 +377,25 @@ export function CartelaWizardDialog({
           : null;
         const refLoteCalculado = buildRefLote(primeraOt, trabajoTitulo);
 
+        let idStockExplicito: number | undefined;
+        if (cartelaPrueba) {
+          const { data: sandboxId, error: sandboxErr } = await supabase.rpc(
+            "next_id_stock_sandbox"
+          );
+          if (sandboxErr || sandboxId == null) {
+            toast.error(
+              `No se pudo reservar Id de prueba: ${sandboxErr?.message ?? "sin respuesta"}`
+            );
+            setSaving(false);
+            return;
+          }
+          idStockExplicito = Number(sandboxId);
+        }
+
         const { data: paletRow, error: paletErr } = await supabase
           .from("prod_stock_palets")
           .insert({
+            ...(idStockExplicito != null ? { id_stock: idStockExplicito } : {}),
             tipo_stock: "materia_prima",
             unidad: "hojas",
             recepcion_id: recepcionLine?.recepcion_id ?? null,
@@ -397,7 +416,10 @@ export function CartelaWizardDialog({
             ref_lote: refLoteCalculado,
             es_fsc: p.es_fsc,
             es_pefc: p.es_pefc,
-            notas: p.notas || null,
+            es_prueba: cartelaPrueba,
+            notas: cartelaPrueba
+              ? [p.notas, "Cartela de prueba (sandbox)"].filter(Boolean).join(" · ")
+              : p.notas || null,
             created_by: user?.id ?? null,
           })
           .select()
@@ -1035,7 +1057,29 @@ export function CartelaWizardDialog({
           </TabsContent>
         </Tabs>
 
-        <DialogFooter className="gap-2 shrink-0 px-6 py-4 border-t bg-slate-50/50">
+        <DialogFooter className="gap-2 shrink-0 px-6 py-4 border-t bg-slate-50/50 flex-col sm:flex-row sm:items-center sm:justify-between">
+          {savedPalets.length === 0 && wizardTab !== "albaran" ? (
+            <label className="flex items-start gap-2 text-sm text-slate-600 cursor-pointer sm:max-w-[55%]">
+              <Checkbox
+                checked={cartelaPrueba}
+                onCheckedChange={(v) => setCartelaPrueba(v === true)}
+                disabled={saving}
+                className="mt-0.5"
+              />
+              <span>
+                <span className="font-medium text-amber-800">
+                  Cartela de prueba
+                </span>
+                <span className="block text-xs text-slate-500">
+                  Id ≥ {SANDBOX_ID_STOCK_MIN.toLocaleString("es-ES")} — no usar
+                  en planta; no la machaca el import Optimus.
+                </span>
+              </span>
+            </label>
+          ) : (
+            <div />
+          )}
+          <div className="flex flex-wrap gap-2 justify-end w-full sm:w-auto">
           {savedPalets.length > 0 ? (
             <>
               <Button variant="outline" onClick={onClose}>
@@ -1092,6 +1136,7 @@ export function CartelaWizardDialog({
               </Button>
             </>
           )}
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

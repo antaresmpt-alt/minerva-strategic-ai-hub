@@ -65,6 +65,8 @@ export type ProdStockPaletRow = {
   fsc_certificado_proveedor: string | null;
   pefc_certificado_proveedor: string | null;
   notas: string | null;
+  /** true = cartela sandbox (Id ≥ 99000); no usar en planta. */
+  es_prueba: boolean;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -127,6 +129,8 @@ export type StockPaletAtpRow = {
   /** true si las reservas duras superan el físico (descuadre a revisar). */
   sobre_reservado: boolean;
   estado_derivado: StockEstadoDerivado;
+  /** true = cartela sandbox (Id ≥ 99000). */
+  es_prueba: boolean;
 };
 
 /** OT referenciada de un palet, con su cantidad reservada (para chips y detalle). */
