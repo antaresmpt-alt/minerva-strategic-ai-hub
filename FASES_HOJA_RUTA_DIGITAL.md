@@ -574,7 +574,7 @@ PDF compacto para acompañar la OT entre departamentos (sustituto papel de la ho
 ⏳ **Bloque 6 PENDIENTE**: Producidas/Histórico (`prod_ot_producidas`, snapshot híbrido) + lifecycle de cierre (pendiente_revision → producida) + recálculo maestro
 ⏳ **Bloque 7 PENDIENTE**: Expedición/Albarán (depende de Bloque 6 + decisión Odoo)
 🔄 **Bloque 8 EN CURSO** (17–18 jun 2026): **Fase FORMATO ✅** + **8.0 ✅** + **8.1 ✅** + **8.1.1 ✅**. Pendiente 8.2–8.4. Fuente de verdad: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
-📋 **Bloque 9 EN CURSO** (5 jul 2026): **9.0–9.4 operativo ✅** + reimpresión remanente libre + valoración prorrateada. Pendiente cartelas: 9.3, sync Optimus, 9.9. Pendiente OT: semilla artículos maestro, histórico OTs. `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §15.7.
+📋 **Bloque 9 EN CURSO** (7 jul 2026): **9.0–9.6c operativo ✅** + reimpresión remanente + valoración + **9.9 IA Stock NL→SQL**. Pendiente cartelas: 9.3, sync Optimus. Pendiente OT: semilla artículos maestro, histórico OTs. `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §15.6.6.
 
 ---
 

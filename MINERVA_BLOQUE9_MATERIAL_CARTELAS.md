@@ -4,7 +4,7 @@
 > Tema: recepción de material, cartelas de palet, stock libre y trazabilidad.
 > Complementa `MINERVA_HUB_CONTEXTO_MAESTRO.md`, `FASES_HOJA_RUTA_DIGITAL.md` y briefings Bloques 6 y 7.
 >
-> **Estado:** ✅ **9.0–9.6b operativo (MVP)** (7 jul 2026) — cartelas, Stock ATP, import Optimus, impresión HTML, consumo al cerrar impresión, **reimpresión remanente libre**, **valoración remanente**, lote tintas, asistente IA Stock. **9.5 ✅** puente muelle→cartelas (fotos + notas). **9.6a ✅** recepción STOCK sin OC. **9.6b ✅** aviso albarán duplicado en muelle (híbrido C). **9.6c ✅** wizard multi-OT mismo albarán (suma hojas + reservas blandas). **Pendiente cartelas:** 9.3 sobrantes, sync Optimus, 9.9 NL→SQL, muelle multi-línea completo (opción B). **Pendiente OT/hoja de ruta:** semilla artículos maestro desde despacho, histórico OTs.
+> **Estado:** ✅ **9.0–9.6c operativo (MVP)** (7 jul 2026) — cartelas, Stock ATP, import Optimus, impresión HTML, consumo al cerrar impresión, **reimpresión remanente libre**, **valoración remanente**, lote tintas, **asistente IA Stock NL→SQL (9.9)**. **9.5 ✅** puente muelle→cartelas (fotos + notas). **9.6a ✅** recepción STOCK sin OC. **9.6b ✅** aviso albarán duplicado en muelle (híbrido C). **9.6c ✅** wizard multi-OT mismo albarán (suma hojas + reservas blandas). **Pendiente cartelas:** 9.3 sobrantes, sync Optimus, muelle multi-línea completo (opción B). **Pendiente OT/hoja de ruta:** semilla artículos maestro desde despacho, histórico OTs.
 > **Origen:** Optimus + cartelas CARPAPSA (15 jun 2026).
 > **Actualizado:** 7 jul 2026 — §15.8 sesión muelle→cartelas + prueba Torraspapel 410864843; fix multi-OT «todas».
 > **PENDIENTE:** H1/H2 recuento global. Ubicación por filas de material (catálogo UI sin definir en planta). `codigo_articulo` en wizard. Ajuste impresión A6 física vs A4 PDF.
@@ -874,7 +874,7 @@ No bloquean 9.0–9.4. Se encadenan cuando el flujo administrativo de cartelas f
 | **9.6** | Recepción **STOCK sin OC** y albarán **multi-línea** (varias OTs / líneas en un mismo envío) | ✅ **9.6a+b+c 7 jul** — STOCK: `RecepcionStockDialog` + migración `20260707160000`; multi-línea: agrupación bandeja + aviso muelle (opción C) + wizard suma OTs (§15.8). Muelle «por albarán» completo (opción B) → backlog |
 | **9.7** | **Sugerencia desde foto** (Gemini Vision u OCR asistido): prefill proveedor, nº albarán, líneas, kilos — **siempre confirmación humana** (patrón import externos Optimus) |
 | **9.8** | Adjuntar/reenlazar fotos muelle en flujo de cartelado; menos papel físico circulando |
-| **9.9** | **Búsqueda inteligente de material (NL → cartelas)**: MVP **5 jul** = modal Asistente IA sobre listado filtrado (`/api/gemini/stock-analyze`). **Pendiente evolución:** LLM → criterios → SQL sobre `stock_palets_atp` (cero alucinación en IDs). |
+| **9.9** | **Búsqueda inteligente de material (NL → cartelas)**: ✅ **7 jul 2026** — LLM extrae criterios → query sobre `stock_palets_atp` → tabla + resumen con IDs reales (sin alucinación). API `POST /api/gemini/stock-analyze`. |
 
 ```text
 [Fase A — primero]
@@ -1047,7 +1047,7 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 | 9.3 — Sobrantes al cerrar OT (Bloque 6) | ⏳ | Cartela muta, no nueva fila |
 | 9.4-preview — Enlace documental cierre impresión | ✅ | §15.5; procesos 1 y 2 |
 | 9.4 operativo — Consumos y movimientos en planta | ✅ | §15.6.4; RPC `prod_stock_registrar_consumo`; commit `f93ccd3` |
-| 9.9 — Asistente IA Stock | 🔄 MVP | Modal + `/api/gemini/stock-analyze`; evolución NL→SQL pendiente |
+| 9.9 — Asistente IA Stock | ✅ | NL→criterios→`stock_palets_atp` (`stock-query-filters.ts`, `stock-atp-query.ts`) |
 
 **Fase B — mejoras (después)**
 
@@ -1262,14 +1262,16 @@ Mesa ejecución → Cerrar proceso (OT en impresión offset o digital)
 | Hoja de ruta / PDF | `formatDensidades` → `lot.{valor}` (`hoja-ruta-formatters.ts`) |
 | Commit | `f93ccd3` |
 
-#### 15.6.6 Asistente IA Stock (MVP — parcial 9.9)
+#### 15.6.6 Asistente IA Stock (9.9 — jul 2026)
 
 | Pieza | Detalle |
 |-------|---------|
-| UI | Stock → botón **Asistente IA** → `stock-ai-dialog.tsx` |
-| API | `POST /api/gemini/stock-analyze` — JSON del listado **filtrado** + pregunta |
-| Límite | Máx. 350 palets en contexto |
-| Evolución | 9.9 completo: LLM extrae criterios → query SQL → listado (sin alucinar IDs) |
+| UI | Stock → **Asistente IA** → `stock-ai-dialog.tsx` |
+| API | `POST /api/gemini/stock-analyze` |
+| Flujo | 1) LLM (JSON) extrae criterios · 2) query PostgREST sobre `stock_palets_atp` · 3) resumen Markdown determinista + tabla con **id_stock reales** |
+| Lib | `src/lib/stock-query-filters.ts`, `src/lib/stock-atp-query.ts` |
+| Límites | Listado máx. 50 filas (120 si el LLM lo pide); agregaciones hasta 2.000 palets |
+| Contexto UI | `contextHint` opcional (filtros visibles en pantalla) — la consulta va contra **todo** el stock ATP |
 
 #### 15.6.7 Filtros Stock — “libre” vs Optimus
 
@@ -1389,5 +1391,5 @@ Al marcar las 3 OTs y escribir «todas» en reservas, la cartela quedó en **100
 | Re-cartelar 410864843 tras deploy | Alta | Validar 3450 h + 3 OTs en impresión |
 | Merge `wizard-despacho` → `main` | Alta | Deploy Vercel |
 | Muelle multi-línea completo (opción B) | Baja | Solo si Juan lo pide; hoy opción C basta |
-| 9.3 sobrantes / sync Optimus / 9.9 NL→SQL | Media | Roadmap Fase B |
+| 9.3 sobrantes / sync Optimus | Media | Roadmap Fase B |
 | Suma palets en bandeja (4450 vs 3450) | Baja | Investigar si hay duplicado en BD |

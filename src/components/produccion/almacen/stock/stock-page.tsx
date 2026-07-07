@@ -309,6 +309,16 @@ export function StockPage() {
     return list;
   }, [rows, mostrarPruebas, estadoFiltro, tipoFiltro, search]);
 
+  const stockAiContextHint = useMemo(() => {
+    const parts: string[] = [];
+    if (search.trim()) parts.push(`búsqueda texto: «${search.trim()}»`);
+    if (estadoFiltro !== "todos") parts.push(`filtro estado: ${estadoFiltro}`);
+    if (tipoFiltro !== "todos") parts.push(`tipo stock: ${tipoFiltro}`);
+    if (mostrarPruebas) parts.push("incluye cartelas de prueba");
+    parts.push(`${filtered.length} palets visibles en pantalla`);
+    return parts.join(" · ");
+  }, [search, estadoFiltro, tipoFiltro, mostrarPruebas, filtered.length]);
+
   const totales = useMemo(() => {
     let libres = 0;
     let reservadas = 0;
@@ -816,7 +826,7 @@ export function StockPage() {
       <StockAiDialog
         open={stockAiOpen}
         onOpenChange={setStockAiOpen}
-        rows={filtered}
+        contextHint={stockAiContextHint}
         loadingStock={loading}
       />
     </div>
