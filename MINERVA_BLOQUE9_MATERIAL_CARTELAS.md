@@ -4,9 +4,9 @@
 > Tema: recepción de material, cartelas de palet, stock libre y trazabilidad.
 > Complementa `MINERVA_HUB_CONTEXTO_MAESTRO.md`, `FASES_HOJA_RUTA_DIGITAL.md` y briefings Bloques 6 y 7.
 >
-> **Estado:** ✅ **9.0–9.4 operativo (MVP)** (5 jul 2026) — cartelas, Stock ATP, import Optimus, impresión HTML, consumo al cerrar impresión, **reimpresión remanente libre**, **valoración remanente**, lote tintas, asistente IA Stock. **9.5 ✅** puente muelle→cartelas (fotos + notas). **9.6a ✅** recepción STOCK sin OC. **9.6b ✅** aviso albarán duplicado en muelle (híbrido). **Pendiente cartelas:** 9.3 sobrantes, sync Optimus, 9.9 NL→SQL. **Pendiente OT/hoja de ruta:** semilla artículos maestro desde despacho, histórico OTs.
+> **Estado:** ✅ **9.0–9.6b operativo (MVP)** (7 jul 2026) — cartelas, Stock ATP, import Optimus, impresión HTML, consumo al cerrar impresión, **reimpresión remanente libre**, **valoración remanente**, lote tintas, asistente IA Stock. **9.5 ✅** puente muelle→cartelas (fotos + notas). **9.6a ✅** recepción STOCK sin OC. **9.6b ✅** aviso albarán duplicado en muelle (híbrido C). **9.6c ✅** wizard multi-OT mismo albarán (suma hojas + reservas blandas). **Pendiente cartelas:** 9.3 sobrantes, sync Optimus, 9.9 NL→SQL, muelle multi-línea completo (opción B). **Pendiente OT/hoja de ruta:** semilla artículos maestro desde despacho, histórico OTs.
 > **Origen:** Optimus + cartelas CARPAPSA (15 jun 2026).
-> **Actualizado:** 5 jul 2026 (noche) — §15.7 reimpresión libre + valoración remanente; prueba planta OT 99905 / #99002.
+> **Actualizado:** 7 jul 2026 — §15.8 sesión muelle→cartelas + prueba Torraspapel 410864843; fix multi-OT «todas».
 > **PENDIENTE:** H1/H2 recuento global. Ubicación por filas de material (catálogo UI sin definir en planta). `codigo_articulo` en wizard. Ajuste impresión A6 física vs A4 PDF.
 
 **Relacionado:** sobrantes → Bloque 6 · expedición → Bloque 7 · material contenedor/hijas → Bloque 8 · FSC → maestro artículos.
@@ -871,7 +871,7 @@ No bloquean 9.0–9.4. Se encadenan cuando el flujo administrativo de cartelas f
 | Fase | Entregable |
 |------|------------|
 | **9.5** | **Puente muelle → administración**: bandeja «Recepciones en muelle pendientes de cartelar» (foto + datos del muelle ya guardados) | ✅ **7 jul 2026** — `RecepcionFotosPanel` en bandeja + wizard; `fetchFotosByRecepcionIds`; hojas/notas muelle por línea |
-| **9.6** | Recepción **STOCK sin OC** y albarán **multi-línea** (varias OTs / líneas en un mismo envío) | 🟡 **9.6a+b 7 jul** — STOCK: `RecepcionStockDialog` + migración `20260707160000`; multi-línea: agrupación bandeja + aviso muelle albarán duplicado (opción C). Muelle «por albarán» completo → backlog |
+| **9.6** | Recepción **STOCK sin OC** y albarán **multi-línea** (varias OTs / líneas en un mismo envío) | ✅ **9.6a+b+c 7 jul** — STOCK: `RecepcionStockDialog` + migración `20260707160000`; multi-línea: agrupación bandeja + aviso muelle (opción C) + wizard suma OTs (§15.8). Muelle «por albarán» completo (opción B) → backlog |
 | **9.7** | **Sugerencia desde foto** (Gemini Vision u OCR asistido): prefill proveedor, nº albarán, líneas, kilos — **siempre confirmación humana** (patrón import externos Optimus) |
 | **9.8** | Adjuntar/reenlazar fotos muelle en flujo de cartelado; menos papel físico circulando |
 | **9.9** | **Búsqueda inteligente de material (NL → cartelas)**: MVP **5 jul** = modal Asistente IA sobre listado filtrado (`/api/gemini/stock-analyze`). **Pendiente evolución:** LLM → criterios → SQL sobre `stock_palets_atp` (cero alucinación en IDs). |
@@ -1032,6 +1032,7 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 | 24 jun 2026 | **§3g** — cuestionario Ramón respondido (`MINERVA_CUESTIONARIO_CARTELAS_RAMON.md`). **Modelo corregido:** 1 cartela = 1 palet = 1 ID Stock; varias OTs sin qty en cartela; Juan no cartela; consumo MVP obligatorio; I1 barco; **§13c** piloto paralelo 10–20 OTs; antiduplicado albarán; deprecado `palet_fisico_ref` / reparto N cartelas por palet. |
 | 24 jun 2026 | **§15 Implementación** — 9.0 SQL + 9.1 UI cartelas + 9.1b post smoke desplegados. Cartelas #10310–#10312 en prod. Archivos en `src/components/produccion/almacen/cartelas/`, migración `20260624183000_…`, helper `cartelas-ot-metadata.ts`. Muelle **no tocado**. |
 | 5 jul 2026 | **§15.6** — Sesión producción: import Optimus (281 palets), sandbox cartelas ≥99.000, impresión HTML aislada, filtros Stock (Sin OT), **9.4 operativo**, lote tintas, asistente IA Stock MVP. Commits `cb95fb9`, `9e2b997`, `1abb9fd`, `f93ccd3`. |
+| 7 jul 2026 | **§15.8** — Sesión muelle→cartelas: 9.5 fotos, 9.6a STOCK sin OC, 9.6b aviso albarán duplicado, prueba Torraspapel 410864843, fix wizard multi-OT. Commits `dbf3860`, fix multi-OT. |
 
 ### Implementación (rellenar al avanzar)
 
@@ -1053,7 +1054,7 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 | Fase | Estado | Notas |
 |------|--------|-------|
 | 9.5 — Puente muelle → cartelar | ✅ | Fotos + notas en Cartelas (7 jul 2026) |
-| 9.6 — STOCK sin OC + multi-línea | 🟡 | 9.6a STOCK + 9.6b aviso albarán; muelle multi-línea completo pendiente |
+| 9.6 — STOCK sin OC + multi-línea | ✅ | 9.6a STOCK + 9.6b aviso albarán + 9.6c wizard multi-OT (7 jul). Muelle multi-línea completo → backlog |
 | 9.7 — Sugerencia desde foto (IA) | ⏳ | Confirmación humana obligatoria |
 | 9.8 — Fotos/adjuntos en flujo cartelas | ⏳ | |
 
@@ -1098,6 +1099,7 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 - Panel izquierdo sticky: proveedor, albarán, líneas OC (clic **usar** → prefill **solo esa OT**).
 - Panel derecho: form palet(s); por defecto **1 palet** (no forzar N del muelle).
 - OTs: checkboxes del albarán + hijas de contenedor (`prod_ots_general.ot_padre_numero`); input manual OT extra.
+- **Albarán multi-OT** (≥2 líneas OC mismo albarán): prefill **suma `hojas_recibidas_total`** + todas las OTs marcadas; banner azul «1 palet físico compartido»; reservas vacías o «todas» = blandas (§15.8).
 - Al guardar: `ref_lote = "{primeraOT} - {trabajo}"` con fallback `prod_ots_general.titulo`.
 
 **Impresión (actualizado 5 jul 2026 — §15.6.3)**
@@ -1308,3 +1310,84 @@ Commit filtro Sin OT: `1abb9fd`.
 | **Prueba planta** | CTP checkboxes, proyección impresión (H.netas plan), cartelas sandbox, borrar prueba, consumo 9.4 — ver commits `2e0e926`, `64f7c3d`. |
 
 **Pendiente Bloque OT / hoja de ruta (no cartelas):** semilla **artículos maestro** desde despacho; tabla **histórico OTs**; revisar artículo “raro” creado al despachar.
+
+### 15.8 Sesión 7 jul 2026 — Muelle → cartelas, STOCK sin OC, Torraspapel multi-OT
+
+> Rama `wizard-despacho`. Primera prueba real de punta a punta: **Juan en muelle** (3 taps, mismo albarán) → **Emma en cartelas** (agrupado) → cartela de prueba. Validado el flujo híbrido acordado con planta (opción C en muelle; no hace falta aún la variante «un albarán, varias OTs de golpe»).
+
+#### 15.8.1 Bloque 9.5 — Puente muelle → cartelas (fotos + notas)
+
+| Pieza | Archivo / detalle |
+|-------|-------------------|
+| Fetch fotos por recepción | `src/lib/recepcion-fotos-fetch.ts` — `fetchFotosByRecepcionIds` |
+| Upload (reutilizable) | `src/lib/recepcion-fotos-upload.ts` |
+| Panel UI | `src/components/produccion/recepcion/recepcion-fotos-panel.tsx` |
+| Bandeja cartelas | `cartelas-page.tsx` — thumbnails + «Ver fotos (N)» por albarán agrupado |
+| Wizard cartelas | `cartela-wizard-dialog.tsx` — pestaña Albarán: fotos del grupo |
+| Tipos | `src/types/prod-stock.ts` — `foto_urls` en `AlbaranPendienteGroup` |
+
+**Comportamiento:** las fotos que Juan sube en muelle aparecen en la bandeja «Pendientes de cartelar» y en el wizard sin volver a subirlas.
+
+#### 15.8.2 Bloque 9.6a — Recepción STOCK sin OC
+
+| Pieza | Detalle |
+|-------|---------|
+| Migración | `supabase/migrations/20260707160000_bloque9_6a_stock_recepcion.sql` — `compra_id` nullable, `tipo_recepcion`, snapshot material en recepción |
+| UI | `recepcion-stock-dialog.tsx` — botón **+ Recepción STOCK** en cartelas |
+| Bandeja | `LEFT JOIN` compras — incluye recepciones sin OC (`tipo_recepcion = stock_libre`) |
+| Estado | Migración **aplicada en Supabase prod** (proyecto `minerva-rag`) |
+
+#### 15.8.3 Bloque 9.6b — Aviso albarán duplicado en muelle (opción C)
+
+| Pieza | Detalle |
+|-------|-------------------|
+| UI | `muelle-recepcion-page.tsx` — al guardar, si `albaran_proveedor` ya existe en otra OT → diálogo **«Mismo albarán en otro pedido»** |
+| Acciones | **Sí, mismo envío — guardar** / **No — corregir nº de albarán** |
+| Decisión planta | Juan sigue entrando **1 tap por OC** (entrada sencilla). La variante «un formulario, varias OTs» queda en backlog para valorar con Juan otro día. |
+
+#### 15.8.4 Prueba real — TORRAS PAPEL albarán 410864843
+
+| Campo | Valor |
+|-------|-------|
+| Proveedor | TORRAS PAPEL |
+| Albarán | **410864843** |
+| Material | DARK NEGRO LISO 350g · 72×102 |
+| OTs | **36083** (1000 h), **36086** (1000 h), **36087** (1450 h) |
+| Modelo negocio | **1 palet físico** = **1 cartela** con **varias OTs referenciadas** (reserva blanda); no 3 cartelas separadas |
+
+**Flujo validado ✅**
+
+1. Muelle: 3 recepciones con mismo albarán → aviso duplicado en 2.ª y 3.ª (36083 → 36087 → 36086).
+2. Cartelas bandeja: **3 líneas agrupadas** bajo «TORRAS PAPEL · Albarán 410864843» — feedback muy positivo en planta.
+3. Wizard: cartela de prueba **#99004** (sandbox ≥ 99.000).
+
+**Incidencia detectada y corregida (9.6c)**
+
+Al marcar las 3 OTs y escribir «todas» en reservas, la cartela quedó en **1000 h** y la impresión mostró **«stock libre»** en lugar de listar las OTs. Tres causas:
+
+| # | Causa | Fix |
+|---|-------|-----|
+| 1 | `buildInitialPalets` pre-rellenaba solo la **1.ª línea** (1000 h) | Multi-OT → `cantidad_inicial = hojas_recibidas_total` (3450 h) + todas las OTs pre-marcadas |
+| 2 | «todas» no se parseaba como reserva blanda | `parseReservaDura`: acepta `todas` / `all` / `*` → `null` (blanda) |
+| 3 | Impresión: `esCartelaRemanenteLibre` con OTs blandas → etiqueta «stock libre» | Solo «stock libre» si `palet.ots.length === 0`; con OTs → listado en cartela |
+
+**Re-test pendiente en planta:** borrar/ignorar #99004; re-cartelar 410864843 → esperar **3450 h**, 3 OTs en etiqueta, FSC si aplica.
+
+**Nota menor:** el encabezado del grupo mostró en algún momento **4450 h / 4 palets** (posible suma duplicada o recepción extra). Con 3 recepciones de 1 palet debería ser **3 palets · 3450 h** — vigilar en siguiente prueba.
+
+#### 15.8.5 Commits de referencia (7 jul 2026, `wizard-despacho`)
+
+| Commit | Descripción |
+|--------|-------------|
+| `dbf3860` | **9.5 + 9.6a + 9.6b** — fotos muelle, STOCK sin OC, aviso albarán duplicado |
+| *(este commit)* | **9.6c** — fix wizard multi-OT + impresión OTs con reservas blandas + doc §15.8 |
+
+#### 15.8.6 Backlog inmediato (post-sesión)
+
+| Ítem | Prioridad | Notas |
+|------|-----------|-------|
+| Re-cartelar 410864843 tras deploy | Alta | Validar 3450 h + 3 OTs en impresión |
+| Merge `wizard-despacho` → `main` | Alta | Deploy Vercel |
+| Muelle multi-línea completo (opción B) | Baja | Solo si Juan lo pide; hoy opción C basta |
+| 9.3 sobrantes / sync Optimus / 9.9 NL→SQL | Media | Roadmap Fase B |
+| Suma palets en bandeja (4450 vs 3450) | Baja | Investigar si hay duplicado en BD |

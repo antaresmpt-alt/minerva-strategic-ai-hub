@@ -46,14 +46,10 @@ function renderCartelaBoxHtml(
   );
   const hayReservaDura = reservasDuras.length > 0;
   const libreCalc = Math.max(palet.cantidad_actual - reservadaTotal, 0);
-  const remanenteLibre = esCartelaRemanenteLibre(
-    palet.cantidad_actual,
-    palet.otsReservas,
-  );
-  const refLoteDisplay =
-    remanenteLibre && palet.ots.length > 0
-      ? null
-      : palet.ref_lote ?? palet.ref_lote_proveedor ?? null;
+  const remanenteLibre =
+    palet.ots.length === 0 &&
+    esCartelaRemanenteLibre(palet.cantidad_actual, palet.otsReservas);
+  const refLoteDisplay = palet.ref_lote ?? palet.ref_lote_proveedor ?? null;
 
   const mostrarDesgloseAtp =
     hayReservaDura &&
@@ -94,10 +90,7 @@ function renderCartelaBoxHtml(
   }
 
   let otBlock: string;
-  if (remanenteLibre) {
-    otBlock =
-      '<div><span class="lbl">OT: </span><strong>(stock libre)</strong></div>';
-  } else if (palet.ots.length === 0) {
+  if (palet.ots.length === 0) {
     otBlock = '<div><span class="lbl">OT: </span>(stock libre)</div>';
   } else {
     const lines = palet.ots

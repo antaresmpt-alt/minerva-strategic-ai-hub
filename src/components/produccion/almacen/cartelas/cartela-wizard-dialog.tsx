@@ -101,6 +101,7 @@ function parseReservaDura(raw: string | undefined): number | null {
   if (raw == null) return null;
   const t = raw.trim();
   if (t === "") return null;
+  if (/^(todas?|all|\*)$/i.test(t)) return null;
   const n = parseInt(t, 10);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
@@ -135,24 +136,27 @@ function atpDesglose(p: WizardPaletInput): {
 
 function buildInitialPalets(g: AlbaranPendienteGroup | null): WizardPaletInput[] {
   if (!g) return [{ ...EMPTY_PALET }];
-  const firstLine = g.recepciones[0];
+  const linesOc = g.recepciones.filter((r) => r.tipo_recepcion !== "stock_libre");
+  const firstLine = linesOc[0] ?? g.recepciones[0];
   const esStock = firstLine?.tipo_recepcion === "stock_libre";
-  const hojas =
+  const allOts = [...new Set(linesOc.map((r) => r.ot_numero).filter(Boolean))];
+  const multiOtAlbaran = allOts.length > 1;
+  const hojasLinea =
     firstLine?.hojas_recibidas_muelle?.toString() ??
     firstLine?.num_hojas_brutas?.toString() ??
     "";
+  const hojasTotal =
+    multiOtAlbaran && g.hojas_recibidas_total > 0
+      ? String(g.hojas_recibidas_total)
+      : hojasLinea;
   return [
     {
       ...EMPTY_PALET,
       material_nombre: firstLine?.material ?? "",
       gramaje: firstLine?.gramaje?.toString() ?? "",
       formato: firstLine?.tamano_hoja ?? "",
-      cantidad_inicial: hojas,
-      ots_referencia: esStock
-        ? []
-        : firstLine?.ot_numero
-          ? [firstLine.ot_numero]
-          : [],
+      cantidad_inicial: hojasTotal,
+      ots_referencia: esStock ? [] : multiOtAlbaran ? allOts : firstLine?.ot_numero ? [firstLine.ot_numero] : [],
       stock_libre: esStock,
       es_fsc: false,
     },
@@ -659,10 +663,21 @@ export function CartelaWizardDialog({
               ))}
             </div>
           )}
+          {grupo && grupo.recepciones.filter((r) => r.ot_numero).length > 1 && (
+            <p className="text-xs text-blue-800 bg-blue-50 border border-blue-200 rounded-md px-3 py-2 mb-3">
+              Albarán con {grupo.recepciones.length} OTs — cantidad por defecto:{" "}
+              <strong>
+                {grupo.hojas_recibidas_total.toLocaleString("es-ES")} h
+              </strong>{" "}
+              (suma muelle). Si es <strong>1 palet físico</strong> compartido, deja
+              esa cantidad total y marca las OTs; reservas vacías = blandas.
+            </p>
+          )}
+
           {p.ots_referencia.length > 0 && !p.stock_libre && (
             <div className="space-y-1.5 mb-2">
               <p className="text-[11px] text-slate-400">
-                Hojas reservadas por OT (vacío = todas / reserva blanda)
+                Hojas reservadas por OT (vacío o «todas» = reserva blanda)
               </p>
               {p.ots_referencia.map((ot) => (
                 <div key={ot} className="flex items-center gap-2">
