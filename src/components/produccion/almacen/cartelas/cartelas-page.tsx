@@ -6,6 +6,7 @@ import {
   ClipboardList,
   Loader2,
   Package,
+  Plus,
   Printer,
   RefreshCw,
   Search,
@@ -39,14 +40,18 @@ import {
   otTitulosFromMetadata,
 } from "@/lib/cartelas-ot-metadata";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
+import { fetchFotosByRecepcionIds, mergeFotoUrls } from "@/lib/recepcion-fotos-fetch";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type {
   AlbaranPendienteGroup,
   AlbaranRecepcionLine,
   ProdStockPaletConOts,
   ProdStockPaletRow,
+  RecepcionTipo,
 } from "@/types/prod-stock";
 import { CartelaWizardDialog, type CartelaWizardCreatedInfo } from "./cartela-wizard-dialog";
+import { RecepcionStockDialog } from "./recepcion-stock-dialog";
+import { RecepcionFotosPanel } from "@/components/produccion/recepcion/recepcion-fotos-panel";
 
 const supabase = createSupabaseBrowserClient();
 
@@ -85,18 +90,19 @@ export function CartelasPage() {
 
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardGrupo, setWizardGrupo] = useState<AlbaranPendienteGroup | null>(null);
+  const [stockDialogOpen, setStockDialogOpen] = useState(false);
 
   // ── Carga bandeja pendientes ──────────────────────────────────────────
   const loadPendientes = useCallback(async () => {
     setLoadingPendientes(true);
     try {
-      // recepciones con su compra y proveedor
       const { data: receps, error } = await supabase
         .from("prod_recepciones_material")
         .select(
-          `id, albaran_proveedor, fecha_recepcion, palets_recibidos, hojas_recibidas,
-           compra_id,
-           prod_compra_material!inner(
+          `id, albaran_proveedor, fecha_recepcion, palets_recibidos, hojas_recibidas, notas,
+           compra_id, tipo_recepcion, material_nombre, gramaje, formato,
+           prod_proveedores(nombre),
+           prod_compra_material(
              id, ot_numero, material, gramaje, tamano_hoja, num_hojas_brutas,
              cliente_nombre, trabajo_titulo,
              prod_proveedores(nombre)
@@ -111,8 +117,9 @@ export function CartelasPage() {
         return;
       }
 
-      // cuántas cartelas tiene cada recepcion (antiduplicado)
-      const recepIds = receps.map((r) => r.id);
+      const recepIds = receps.map((r) => String(r.id ?? ""));
+      const fotosByRecepcion = await fetchFotosByRecepcionIds(supabase, recepIds);
+
       const { data: stockCounts } = await supabase
         .from("prod_stock_palets")
         .select("recepcion_id, es_prueba")
@@ -131,21 +138,27 @@ export function CartelasPage() {
         }
       }
 
-      // agrupar por albaran_proveedor
       const byAlbaran = new Map<string, AlbaranPendienteGroup>();
       for (const raw of receps as Record<string, unknown>[]) {
         const r = raw;
+        const tipoRecepcion = (String(r.tipo_recepcion ?? "oc") as RecepcionTipo) || "oc";
+        const esStock = tipoRecepcion === "stock_libre";
         const compra = unwrapJoinRow(r.prod_compra_material);
-        const proveedorRow = compra
+        const proveedorRecepcion = unwrapJoinRow(r.prod_proveedores);
+        const proveedorCompra = compra
           ? unwrapJoinRow(compra.prod_proveedores)
           : null;
         const proveedor =
-          typeof proveedorRow?.nombre === "string"
-            ? proveedorRow.nombre
-            : null;
+          (typeof proveedorRecepcion?.nombre === "string"
+            ? proveedorRecepcion.nombre
+            : null) ??
+          (typeof proveedorCompra?.nombre === "string"
+            ? proveedorCompra.nombre
+            : null);
+
         const key =
           typeof r.albaran_proveedor === "string" && r.albaran_proveedor.trim()
-            ? r.albaran_proveedor
+            ? r.albaran_proveedor.trim()
             : "(sin albarán)";
 
         const recepcionId = String(r.id ?? "");
@@ -154,6 +167,9 @@ export function CartelasPage() {
           typeof r.palets_recibidos === "number" ? r.palets_recibidos : null;
         const hojasRecibidas =
           typeof r.hojas_recibidas === "number" ? r.hojas_recibidas : 0;
+        const notasMuelle =
+          typeof r.notas === "string" && r.notas.trim() ? r.notas.trim() : null;
+        const lineFotos = fotosByRecepcion[recepcionId] ?? [];
 
         if (!byAlbaran.has(key)) {
           byAlbaran.set(key, {
@@ -162,6 +178,7 @@ export function CartelasPage() {
             fecha_recepcion: fechaRecepcion,
             palets_recibidos: paletsRecibidos,
             hojas_recibidas_total: hojasRecibidas,
+            foto_urls: [...lineFotos],
             recepciones: [],
             cartelas_existentes: cartelasByRecepcion[recepcionId] ?? 0,
             cartelas_prueba_existentes: cartelasPruebaByRecepcion[recepcionId] ?? 0,
@@ -169,26 +186,51 @@ export function CartelasPage() {
         }
 
         const group = byAlbaran.get(key)!;
-        if (
-          new Date(fechaRecepcion) > new Date(group.fecha_recepcion)
-        ) {
+        if (new Date(fechaRecepcion) > new Date(group.fecha_recepcion)) {
           group.fecha_recepcion = fechaRecepcion;
         }
+        if (!group.proveedor_nombre && proveedor) {
+          group.proveedor_nombre = proveedor;
+        }
         group.hojas_recibidas_total += hojasRecibidas;
+        if (paletsRecibidos != null) {
+          group.palets_recibidos =
+            (group.palets_recibidos ?? 0) + paletsRecibidos;
+        }
+        group.foto_urls = mergeFotoUrls(group.foto_urls, lineFotos);
         group.cartelas_existentes += cartelasByRecepcion[recepcionId] ?? 0;
         group.cartelas_prueba_existentes +=
           cartelasPruebaByRecepcion[recepcionId] ?? 0;
 
         const line: AlbaranRecepcionLine = {
           recepcion_id: recepcionId,
-          compra_id: String(r.compra_id ?? compra?.id ?? ""),
-          ot_numero: String(compra?.ot_numero ?? ""),
-          material:
-            typeof compra?.material === "string" ? compra.material : null,
-          gramaje:
-            typeof compra?.gramaje === "number" ? compra.gramaje : null,
-          tamano_hoja:
-            typeof compra?.tamano_hoja === "string" ? compra.tamano_hoja : null,
+          compra_id: r.compra_id ? String(r.compra_id) : compra?.id ? String(compra.id) : null,
+          tipo_recepcion: esStock ? "stock_libre" : "oc",
+          ot_numero: esStock ? "" : String(compra?.ot_numero ?? ""),
+          material: esStock
+            ? typeof r.material_nombre === "string"
+              ? r.material_nombre
+              : null
+            : typeof compra?.material === "string"
+              ? compra.material
+              : null,
+          gramaje: esStock
+            ? typeof r.gramaje === "number"
+              ? r.gramaje
+              : null
+            : typeof compra?.gramaje === "number"
+              ? compra.gramaje
+              : null,
+          tamano_hoja: esStock
+            ? typeof r.formato === "string"
+              ? r.formato
+              : null
+            : typeof compra?.tamano_hoja === "string"
+              ? compra.tamano_hoja
+              : null,
+          hojas_recibidas_muelle: hojasRecibidas,
+          palets_recibidos_muelle: paletsRecibidos,
+          notas_muelle: notasMuelle,
           num_hojas_brutas:
             typeof compra?.num_hojas_brutas === "number"
               ? compra.num_hojas_brutas
@@ -202,22 +244,30 @@ export function CartelasPage() {
               ? compra.trabajo_titulo
               : null,
           proveedor_nombre: proveedor ?? null,
+          foto_urls: lineFotos,
         };
         group.recepciones.push(line);
       }
 
-      // Fallback cliente/trabajo desde prod_ots_general si compra viene vacía
       const allOtNums = Array.from(byAlbaran.values()).flatMap((g) =>
-        g.recepciones.map((r) => r.ot_numero)
+        g.recepciones.map((r) => r.ot_numero).filter(Boolean)
       );
       const otMeta = await fetchOtMetadataMap(supabase, allOtNums);
       for (const group of byAlbaran.values()) {
         group.recepciones = group.recepciones.map((line) =>
-          enrichRecepcionLine(line, otMeta)
+          line.tipo_recepcion === "stock_libre"
+            ? line
+            : enrichRecepcionLine(line, otMeta)
         );
       }
 
-      setPendientes(Array.from(byAlbaran.values()));
+      setPendientes(
+        Array.from(byAlbaran.values()).sort(
+          (a, b) =>
+            new Date(b.fecha_recepcion).getTime() -
+            new Date(a.fecha_recepcion).getTime()
+        )
+      );
     } catch (e) {
       toast.error(`Error al cargar pendientes: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -234,6 +284,7 @@ export function CartelasPage() {
         .select(
           `*,
            prod_recepciones_material(
+             prod_proveedores(nombre),
              prod_compra_material(prod_proveedores(nombre))
            )`
         )
@@ -275,9 +326,11 @@ export function CartelasPage() {
           const compra = recep
             ? unwrapJoinRow(recep.prod_compra_material)
             : null;
+          const provRecep = recep ? unwrapJoinRow(recep.prod_proveedores) : null;
           const prov = compra ? unwrapJoinRow(compra.prod_proveedores) : null;
           const proveedorNombre =
-            typeof prov?.nombre === "string" ? prov.nombre : null;
+            (typeof provRecep?.nombre === "string" ? provRecep.nombre : null) ??
+            (typeof prov?.nombre === "string" ? prov.nombre : null);
           return {
             ...p,
             ots:
@@ -373,6 +426,7 @@ export function CartelasPage() {
           g.recepciones.some(
             (r) =>
               r.ot_numero.toLowerCase().includes(q) ||
+              (r.tipo_recepcion === "stock_libre" && q.includes("stock")) ||
               (r.cliente_nombre?.toLowerCase().includes(q) ?? false) ||
               (r.material?.toLowerCase().includes(q) ?? false) ||
               (r.trabajo_titulo?.toLowerCase().includes(q) ?? false)
@@ -388,6 +442,11 @@ export function CartelasPage() {
   function openWizard(grupo: AlbaranPendienteGroup) {
     setWizardGrupo(grupo);
     setWizardOpen(true);
+  }
+
+  function handleStockRecepcionCreated(grupo: AlbaranPendienteGroup) {
+    void loadPendientes();
+    openWizard(grupo);
   }
 
   function handleWizardCreated(created: CartelaWizardCreatedInfo[]) {
@@ -581,6 +640,14 @@ export function CartelasPage() {
                 <RefreshCw className="size-4" />
               )}
             </Button>
+            <Button
+              size="sm"
+              onClick={() => setStockDialogOpen(true)}
+              className="gap-1.5"
+            >
+              <Plus className="size-4" />
+              Recepción STOCK
+            </Button>
           </div>
 
           <p className="text-xs text-slate-400 flex items-center gap-1">
@@ -715,6 +782,12 @@ export function CartelasPage() {
         onCreated={handleWizardCreated}
         onPrintReady={handleWizardPrintReady}
       />
+
+      <RecepcionStockDialog
+        open={stockDialogOpen}
+        onClose={() => setStockDialogOpen(false)}
+        onCreated={handleStockRecepcionCreated}
+      />
     </div>
   );
 }
@@ -772,31 +845,72 @@ function AlbaranCard({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="pt-0">
+      <CardContent className="pt-0 space-y-3">
+        {grupo.foto_urls.length > 0 ? (
+          <RecepcionFotosPanel
+            urls={grupo.foto_urls}
+            subtitle={`${grupo.proveedor_nombre ?? "Proveedor"} · ${grupo.albaran_proveedor}`}
+            variant="inline"
+          />
+        ) : null}
+        {grupo.recepciones.length > 1 ? (
+          <p className="text-xs text-slate-500">
+            {grupo.recepciones.length} líneas en este albarán (mismo envío)
+          </p>
+        ) : null}
         <div className="space-y-1.5">
           {grupo.recepciones.map((line) => (
             <div
-              key={`${line.recepcion_id}-${line.ot_numero}`}
+              key={`${line.recepcion_id}-${line.ot_numero || "stock"}`}
               className="flex items-start gap-2 text-xs text-slate-600"
             >
-              <span className="font-mono font-semibold text-slate-800 w-20 shrink-0 pt-0.5">
-                OT {line.ot_numero}
-              </span>
+              {line.tipo_recepcion === "stock_libre" ? (
+                <Badge
+                  variant="outline"
+                  className="shrink-0 text-[10px] border-emerald-300 text-emerald-800 bg-emerald-50"
+                >
+                  STOCK
+                </Badge>
+              ) : (
+                <span className="font-mono font-semibold text-slate-800 w-20 shrink-0 pt-0.5">
+                  OT {line.ot_numero}
+                </span>
+              )}
               <div className="flex-1 min-w-0">
-                <div className="text-slate-500 truncate">
-                  {formatClienteTrabajo(line.cliente_nombre, line.trabajo_titulo)}
-                </div>
+                {line.tipo_recepcion !== "stock_libre" ? (
+                  <div className="text-slate-500 truncate">
+                    {formatClienteTrabajo(line.cliente_nombre, line.trabajo_titulo)}
+                  </div>
+                ) : null}
                 <div className="truncate">
                   {line.material}
                   {line.gramaje ? ` ${line.gramaje}gr` : ""}
                   {line.tamano_hoja ? ` · ${line.tamano_hoja}` : ""}
                 </div>
+                {line.notas_muelle ? (
+                  <p className="text-[10px] text-amber-700 mt-0.5 truncate" title={line.notas_muelle}>
+                    Muelle: {line.notas_muelle}
+                  </p>
+                ) : null}
               </div>
-              {line.num_hojas_brutas && (
-                <span className="text-slate-400 shrink-0">
-                  {line.num_hojas_brutas.toLocaleString("es-ES")} h
-                </span>
-              )}
+              <div className="text-right shrink-0">
+                {line.hojas_recibidas_muelle != null ? (
+                  <span className="text-slate-600 block">
+                    {line.hojas_recibidas_muelle.toLocaleString("es-ES")} h
+                  </span>
+                ) : null}
+                {line.num_hojas_brutas != null &&
+                line.hojas_recibidas_muelle != null &&
+                line.num_hojas_brutas !== line.hojas_recibidas_muelle ? (
+                  <span className="text-slate-400 text-[10px]">
+                    OC {line.num_hojas_brutas.toLocaleString("es-ES")} h
+                  </span>
+                ) : line.num_hojas_brutas && !line.hojas_recibidas_muelle ? (
+                  <span className="text-slate-400">
+                    {line.num_hojas_brutas.toLocaleString("es-ES")} h
+                  </span>
+                ) : null}
+              </div>
             </div>
           ))}
         </div>

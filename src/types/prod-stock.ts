@@ -176,6 +176,8 @@ export type ProdStockPaletConOts = ProdStockPaletRow & {
  * Agrupación de recepciones pendientes de cartelar por albarán.
  * Construida en la UI a partir de `prod_recepciones_material` JOIN `prod_compra_material`.
  */
+export type RecepcionTipo = "oc" | "stock_libre";
+
 export type AlbaranPendienteGroup = {
   albaran_proveedor: string;
   proveedor_nombre: string | null;
@@ -183,6 +185,8 @@ export type AlbaranPendienteGroup = {
   palets_recibidos: number | null;
   hojas_recibidas_total: number;
   recepciones: AlbaranRecepcionLine[];
+  /** URLs públicas de fotos del muelle (todas las recepciones del grupo). */
+  foto_urls: string[];
   /** Cuántas cartelas ya existen para este albarán (antiduplicado). */
   cartelas_existentes: number;
   /** Cartelas sandbox (Id ≥ 99.000); no cuentan como producción. */
@@ -191,15 +195,21 @@ export type AlbaranPendienteGroup = {
 
 export type AlbaranRecepcionLine = {
   recepcion_id: string;
-  compra_id: string;
+  compra_id: string | null;
+  tipo_recepcion: RecepcionTipo;
   ot_numero: string;
   material: string | null;
   gramaje: number | null;
   tamano_hoja: string | null;
+  /** Hojas que Juan registró en muelle (verdad física). */
+  hojas_recibidas_muelle: number | null;
+  palets_recibidos_muelle: number | null;
+  notas_muelle: string | null;
   num_hojas_brutas: number | null;
   cliente_nombre: string | null;
   trabajo_titulo: string | null;
   proveedor_nombre: string | null;
+  foto_urls: string[];
 };
 
 /** Datos que el wizard de cartelado necesita para cada palet. */

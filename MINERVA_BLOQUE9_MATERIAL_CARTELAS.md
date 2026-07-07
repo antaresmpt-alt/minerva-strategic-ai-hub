@@ -4,7 +4,7 @@
 > Tema: recepción de material, cartelas de palet, stock libre y trazabilidad.
 > Complementa `MINERVA_HUB_CONTEXTO_MAESTRO.md`, `FASES_HOJA_RUTA_DIGITAL.md` y briefings Bloques 6 y 7.
 >
-> **Estado:** ✅ **9.0–9.4 operativo (MVP)** (5 jul 2026) — cartelas, Stock ATP, import Optimus, impresión HTML, consumo al cerrar impresión, **reimpresión remanente libre**, **valoración remanente**, lote tintas, asistente IA Stock. **Pendiente cartelas:** 9.3 sobrantes, sync Optimus, 9.9 NL→SQL. **Pendiente OT/hoja de ruta:** semilla artículos maestro desde despacho, histórico OTs.
+> **Estado:** ✅ **9.0–9.4 operativo (MVP)** (5 jul 2026) — cartelas, Stock ATP, import Optimus, impresión HTML, consumo al cerrar impresión, **reimpresión remanente libre**, **valoración remanente**, lote tintas, asistente IA Stock. **9.5 ✅** puente muelle→cartelas (fotos + notas). **9.6a ✅** recepción STOCK sin OC. **9.6b ✅** aviso albarán duplicado en muelle (híbrido). **Pendiente cartelas:** 9.3 sobrantes, sync Optimus, 9.9 NL→SQL. **Pendiente OT/hoja de ruta:** semilla artículos maestro desde despacho, histórico OTs.
 > **Origen:** Optimus + cartelas CARPAPSA (15 jun 2026).
 > **Actualizado:** 5 jul 2026 (noche) — §15.7 reimpresión libre + valoración remanente; prueba planta OT 99905 / #99002.
 > **PENDIENTE:** H1/H2 recuento global. Ubicación por filas de material (catálogo UI sin definir en planta). `codigo_articulo` en wizard. Ajuste impresión A6 física vs A4 PDF.
@@ -870,8 +870,8 @@ No bloquean 9.0–9.4. Se encadenan cuando el flujo administrativo de cartelas f
 
 | Fase | Entregable |
 |------|------------|
-| **9.5** | **Puente muelle → administración**: bandeja «Recepciones en muelle pendientes de cartelar» (foto + datos del muelle ya guardados) |
-| **9.6** | Recepción **STOCK sin OC** y albarán **multi-línea** (varias OTs / líneas en un mismo envío) |
+| **9.5** | **Puente muelle → administración**: bandeja «Recepciones en muelle pendientes de cartelar» (foto + datos del muelle ya guardados) | ✅ **7 jul 2026** — `RecepcionFotosPanel` en bandeja + wizard; `fetchFotosByRecepcionIds`; hojas/notas muelle por línea |
+| **9.6** | Recepción **STOCK sin OC** y albarán **multi-línea** (varias OTs / líneas en un mismo envío) | 🟡 **9.6a+b 7 jul** — STOCK: `RecepcionStockDialog` + migración `20260707160000`; multi-línea: agrupación bandeja + aviso muelle albarán duplicado (opción C). Muelle «por albarán» completo → backlog |
 | **9.7** | **Sugerencia desde foto** (Gemini Vision u OCR asistido): prefill proveedor, nº albarán, líneas, kilos — **siempre confirmación humana** (patrón import externos Optimus) |
 | **9.8** | Adjuntar/reenlazar fotos muelle en flujo de cartelado; menos papel físico circulando |
 | **9.9** | **Búsqueda inteligente de material (NL → cartelas)**: MVP **5 jul** = modal Asistente IA sobre listado filtrado (`/api/gemini/stock-analyze`). **Pendiente evolución:** LLM → criterios → SQL sobre `stock_palets_atp` (cero alucinación en IDs). |
@@ -1052,8 +1052,8 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 
 | Fase | Estado | Notas |
 |------|--------|-------|
-| 9.5 — Puente muelle → cartelar | ⏳ | Bandeja + fotos existentes |
-| 9.6 — STOCK sin OC + multi-línea | ⏳ | |
+| 9.5 — Puente muelle → cartelar | ✅ | Fotos + notas en Cartelas (7 jul 2026) |
+| 9.6 — STOCK sin OC + multi-línea | 🟡 | 9.6a STOCK + 9.6b aviso albarán; muelle multi-línea completo pendiente |
 | 9.7 — Sugerencia desde foto (IA) | ⏳ | Confirmación humana obligatoria |
 | 9.8 — Fotos/adjuntos en flujo cartelas | ⏳ | |
 

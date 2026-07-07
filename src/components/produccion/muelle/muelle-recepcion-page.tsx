@@ -259,6 +259,10 @@ export function MuelleRecepcionPage() {
   const [notas, setNotas] = useState("");
   const [fotoFiles, setFotoFiles] = useState<File[]>([]);
   const [fotoPreviews, setFotoPreviews] = useState<string[]>([]);
+  const [albaranDupPending, setAlbaranDupPending] = useState<{
+    modo: "total" | "parcial";
+    existingOts: string[];
+  } | null>(null);
 
   const loadRows = useCallback(async () => {
     setLoading(true);
@@ -621,6 +625,49 @@ export function MuelleRecepcionPage() {
       );
       return;
     }
+
+    if (alb) {
+      try {
+        const { data: existing, error: dupErr } = await supabase
+          .from(TABLE_RECEPCION)
+          .select(
+            `compra_id, prod_compra_material(ot_numero)`
+          )
+          .eq("albaran_proveedor", alb);
+        if (dupErr) throw dupErr;
+
+        const otherOts = new Set<string>();
+        for (const row of existing ?? []) {
+          const raw = row as {
+            compra_id?: string | null;
+            prod_compra_material?: { ot_numero?: string | null } | { ot_numero?: string | null }[] | null;
+          };
+          if (raw.compra_id === activeMaterial.id) continue;
+          const compra = Array.isArray(raw.prod_compra_material)
+            ? raw.prod_compra_material[0]
+            : raw.prod_compra_material;
+          const ot = String(compra?.ot_numero ?? "").trim();
+          if (ot) otherOts.add(ot);
+        }
+
+        if (otherOts.size > 0) {
+          setAlbaranDupPending({
+            modo,
+            existingOts: [...otherOts],
+          });
+          return;
+        }
+      } catch (e) {
+        console.warn("[Muelle] aviso albarán duplicado", e);
+      }
+    }
+
+    await ejecutarGuardarRecepcion(modo);
+  };
+
+  const ejecutarGuardarRecepcion = async (modo: "total" | "parcial") => {
+    if (!activeMaterial) return;
+    const alb = albaran.trim();
     setSaving(true);
     try {
       const {
@@ -1453,6 +1500,68 @@ export function MuelleRecepcionPage() {
               </DialogFooter>
             </>
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={albaranDupPending != null}
+        onOpenChange={(open) => {
+          if (!open) setAlbaranDupPending(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-[#002147]">
+              Mismo albarán en otro pedido
+            </DialogTitle>
+            <DialogDescription className="sr-only">
+              Confirmación de albarán duplicado en otro pedido
+            </DialogDescription>
+            <div className="space-y-2 text-sm text-slate-600">
+              <p>
+                El albarán{" "}
+                <span className="font-mono font-semibold text-[#002147]">
+                  {albaran.trim()}
+                </span>{" "}
+                ya está registrado para{" "}
+                {albaranDupPending?.existingOts.length === 1
+                  ? "la OT"
+                  : "las OTs"}
+                :{" "}
+                <span className="font-mono">
+                  {albaranDupPending?.existingOts.join(", ")}
+                </span>
+                .
+              </p>
+              <p>
+                ¿Es el <strong>mismo camión / mismo envío</strong> que la OT{" "}
+                <span className="font-mono">{activeMaterial?.ot_numero}</span>?
+                Si es así, guarda igual — Emma verá todas las líneas agrupadas
+                al cartelar.
+              </p>
+            </div>
+          </DialogHeader>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button
+              type="button"
+              className="w-full"
+              onClick={() => {
+                const modo = albaranDupPending?.modo;
+                setAlbaranDupPending(null);
+                if (modo) void ejecutarGuardarRecepcion(modo);
+              }}
+            >
+              Sí, mismo envío — guardar
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={() => setAlbaranDupPending(null)}
+            >
+              No — corregir nº de albarán
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

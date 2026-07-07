@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RecepcionFotosPanel } from "@/components/produccion/recepcion/recepcion-fotos-panel";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import {
   buildRefLote,
@@ -135,14 +136,24 @@ function atpDesglose(p: WizardPaletInput): {
 function buildInitialPalets(g: AlbaranPendienteGroup | null): WizardPaletInput[] {
   if (!g) return [{ ...EMPTY_PALET }];
   const firstLine = g.recepciones[0];
+  const esStock = firstLine?.tipo_recepcion === "stock_libre";
+  const hojas =
+    firstLine?.hojas_recibidas_muelle?.toString() ??
+    firstLine?.num_hojas_brutas?.toString() ??
+    "";
   return [
     {
       ...EMPTY_PALET,
       material_nombre: firstLine?.material ?? "",
       gramaje: firstLine?.gramaje?.toString() ?? "",
       formato: firstLine?.tamano_hoja ?? "",
-      cantidad_inicial: firstLine?.num_hojas_brutas?.toString() ?? "",
-      ots_referencia: firstLine?.ot_numero ? [firstLine.ot_numero] : [],
+      cantidad_inicial: hojas,
+      ots_referencia: esStock
+        ? []
+        : firstLine?.ot_numero
+          ? [firstLine.ot_numero]
+          : [],
+      stock_libre: esStock,
       es_fsc: false,
     },
   ];
@@ -311,6 +322,11 @@ export function CartelaWizardDialog({
   }
 
   function prefillPaletFromLine(paletIdx: number, line: AlbaranRecepcionLine) {
+    const esStock = line.tipo_recepcion === "stock_libre";
+    const hojas =
+      line.hojas_recibidas_muelle?.toString() ??
+      line.num_hojas_brutas?.toString() ??
+      "";
     setPalets((prev) => {
       const next = [...prev];
       next[paletIdx] = {
@@ -318,9 +334,13 @@ export function CartelaWizardDialog({
         material_nombre: line.material ?? next[paletIdx].material_nombre,
         gramaje: line.gramaje?.toString() ?? next[paletIdx].gramaje,
         formato: line.tamano_hoja ?? next[paletIdx].formato,
-        cantidad_inicial:
-          line.num_hojas_brutas?.toString() ?? next[paletIdx].cantidad_inicial,
-        ots_referencia: line.ot_numero ? [line.ot_numero] : [],
+        cantidad_inicial: hojas || next[paletIdx].cantidad_inicial,
+        ots_referencia: esStock
+          ? []
+          : line.ot_numero
+            ? [line.ot_numero]
+            : [],
+        stock_libre: esStock,
       };
       return next;
     });
@@ -503,7 +523,11 @@ export function CartelaWizardDialog({
   }, [otsAlbaran, hijasOts, contenedorPadres]);
 
   const lineasEnriquecidas = grupo
-    ? grupo.recepciones.map((line) => enrichRecepcionLine(line, otMetadata))
+    ? grupo.recepciones.map((line) =>
+        line.tipo_recepcion === "stock_libre"
+          ? line
+          : enrichRecepcionLine(line, otMetadata)
+      )
     : [];
 
   const activeIdx = Math.min(activePaletIdx, palets.length - 1);
@@ -841,6 +865,14 @@ export function CartelaWizardDialog({
                   </div>
                 </div>
 
+                {grupo.foto_urls.length > 0 ? (
+                  <RecepcionFotosPanel
+                    urls={grupo.foto_urls}
+                    subtitle={`${grupo.proveedor_nombre ?? "Proveedor"} · ${grupo.albaran_proveedor}`}
+                    variant="inline"
+                  />
+                ) : null}
+
                 <Separator />
 
                 <div>
@@ -849,7 +881,8 @@ export function CartelaWizardDialog({
                   </p>
                   <p className="text-xs text-slate-500 mt-0.5 mb-3">
                     Toca una línea para copiarla al palet activo y pasar al
-                    formulario.
+                    formulario. Las hojas mostradas son las que Juan registró en
+                    muelle.
                   </p>
                   <div className="space-y-2">
                     {lineasEnriquecidas.map((line) => (
@@ -863,28 +896,58 @@ export function CartelaWizardDialog({
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
-                            <span className="block text-sm font-mono font-semibold text-[#002147]">
-                              OT {line.ot_numero}
-                            </span>
-                            <span className="block text-sm text-slate-700 mt-1">
-                              {formatClienteTrabajo(
-                                line.cliente_nombre,
-                                line.trabajo_titulo
-                              )}
-                            </span>
+                            {line.tipo_recepcion === "stock_libre" ? (
+                              <Badge
+                                variant="outline"
+                                className="mb-1 text-[10px] border-emerald-300 text-emerald-800 bg-emerald-50"
+                              >
+                                STOCK libre
+                              </Badge>
+                            ) : (
+                              <span className="block text-sm font-mono font-semibold text-[#002147]">
+                                OT {line.ot_numero}
+                              </span>
+                            )}
+                            {line.tipo_recepcion !== "stock_libre" ? (
+                              <span className="block text-sm text-slate-700 mt-1">
+                                {formatClienteTrabajo(
+                                  line.cliente_nombre,
+                                  line.trabajo_titulo
+                                )}
+                              </span>
+                            ) : null}
                             <span className="block text-sm text-slate-500 mt-0.5">
                               {line.material}
                               {line.gramaje ? ` ${line.gramaje}gr` : ""}
                               {line.tamano_hoja ? ` · ${line.tamano_hoja}` : ""}
-                              {line.num_hojas_brutas
-                                ? ` · ${line.num_hojas_brutas.toLocaleString("es-ES")} h`
+                              {line.hojas_recibidas_muelle != null
+                                ? ` · ${line.hojas_recibidas_muelle.toLocaleString("es-ES")} h (muelle)`
+                                : line.num_hojas_brutas
+                                  ? ` · ${line.num_hojas_brutas.toLocaleString("es-ES")} h`
+                                  : ""}
+                              {line.palets_recibidos_muelle != null
+                                ? ` · ${line.palets_recibidos_muelle} palet${line.palets_recibidos_muelle !== 1 ? "s" : ""}`
                                 : ""}
                             </span>
+                            {line.notas_muelle ? (
+                              <span className="block text-xs text-amber-700 mt-1">
+                                Muelle: {line.notas_muelle}
+                              </span>
+                            ) : null}
                           </div>
                           <span className="inline-flex items-center gap-1 text-xs text-blue-600 shrink-0 mt-1">
                             <ClipboardCopy className="size-3" /> usar
                           </span>
                         </div>
+                        {line.foto_urls.length > 0 ? (
+                          <div className="mt-2 pt-2 border-t border-slate-100">
+                            <RecepcionFotosPanel
+                              urls={line.foto_urls}
+                              subtitle={`OT ${line.ot_numero || "STOCK"}`}
+                              variant="compact"
+                            />
+                          </div>
+                        ) : null}
                       </button>
                     ))}
                   </div>
