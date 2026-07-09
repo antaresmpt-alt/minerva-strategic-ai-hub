@@ -13,6 +13,7 @@ import { toast } from "sonner";
 
 import { OtNumeroSemaforoBadge } from "@/components/produccion/ots/ot-numero-semaforo-badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
@@ -22,6 +23,13 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -112,6 +120,13 @@ type MuelleExternoCardRow = {
   fecha_prevista: string | null;
   f_entrega_ot: string | null;
   notas_logistica: string | null;
+};
+
+type MultiRecepcionDraft = {
+  compraId: string;
+  modo: "total" | "parcial";
+  hojas: string;
+  palets: string;
 };
 
 function otDisplayFromSeguimientoRaw(raw: Record<string, unknown>): string {
@@ -226,6 +241,7 @@ export function MuelleRecepcionPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const { umbrales: umbralesOtsCompras } = useSysParametrosOtsCompras();
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const multiCameraInputRef = useRef<HTMLInputElement>(null);
 
   const [rows, setRows] = useState<MuelleCardRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -263,6 +279,17 @@ export function MuelleRecepcionPage() {
     modo: "total" | "parcial";
     existingOts: string[];
   } | null>(null);
+  const [multiOpen, setMultiOpen] = useState(false);
+  const [multiSaving, setMultiSaving] = useState(false);
+  const [multiSearch, setMultiSearch] = useState("");
+  const [multiAlbaran, setMultiAlbaran] = useState("");
+  const [multiNotas, setMultiNotas] = useState("");
+  const [multiSelected, setMultiSelected] = useState<Record<string, boolean>>({});
+  const [multiDrafts, setMultiDrafts] = useState<Record<string, MultiRecepcionDraft>>(
+    {}
+  );
+  const [multiFotoFiles, setMultiFotoFiles] = useState<File[]>([]);
+  const [multiFotoPreviews, setMultiFotoPreviews] = useState<string[]>([]);
 
   const loadRows = useCallback(async () => {
     setLoading(true);
@@ -490,6 +517,23 @@ export function MuelleRecepcionPage() {
     clearFotos();
   }, [clearFotos]);
 
+  const clearMultiFotos = useCallback(() => {
+    setMultiFotoPreviews((prev) => {
+      for (const u of prev) URL.revokeObjectURL(u);
+      return [];
+    });
+    setMultiFotoFiles([]);
+  }, []);
+
+  const resetMultiForm = useCallback(() => {
+    setMultiSearch("");
+    setMultiAlbaran("");
+    setMultiNotas("");
+    setMultiSelected({});
+    setMultiDrafts({});
+    clearMultiFotos();
+  }, [clearMultiFotos]);
+
   const openMaterialSheet = (row: MuelleCardRow) => {
     clearForm();
     setExternoAlbaran("");
@@ -508,6 +552,25 @@ export function MuelleRecepcionPage() {
     setActiveExterno(row);
     setActiveMaterial(null);
     setSheetKind("externo");
+  };
+
+  const openMultiDialog = () => {
+    const initDrafts: Record<string, MultiRecepcionDraft> = {};
+    for (const r of rows) {
+      initDrafts[r.id] = {
+        compraId: r.id,
+        modo: "total",
+        hojas:
+          r.num_hojas_brutas != null && Number.isFinite(r.num_hojas_brutas)
+            ? String(Math.max(0, Math.trunc(r.num_hojas_brutas)))
+            : "",
+        palets: "1",
+      };
+    }
+    setMultiDrafts(initDrafts);
+    setMultiSelected({});
+    setMultiSearch("");
+    setMultiOpen(true);
   };
 
   const onSheetOpenChange = (open: boolean) => {
@@ -606,6 +669,136 @@ export function MuelleRecepcionPage() {
     });
   };
 
+  const onPickMultiFotos = (files: FileList | null) => {
+    if (!files?.length) return;
+    const next: File[] = [...multiFotoFiles];
+    const urls: string[] = [...multiFotoPreviews];
+    for (let i = 0; i < files.length; i++) {
+      const f = files.item(i);
+      if (!f || !f.type.startsWith("image/")) continue;
+      next.push(f);
+      urls.push(URL.createObjectURL(f));
+    }
+    setMultiFotoFiles(next);
+    setMultiFotoPreviews(urls);
+  };
+
+  const removeMultiFotoAt = (idx: number) => {
+    setMultiFotoFiles((prev) => prev.filter((_, i) => i !== idx));
+    setMultiFotoPreviews((prev) => {
+      const u = prev[idx];
+      if (u) URL.revokeObjectURL(u);
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
+
+  async function uploadRecepcionFotos(recepcionId: string, files: File[]) {
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i]!;
+      const path = `${recepcionId}/${crypto.randomUUID()}.${extFromFile(f)}`;
+      const { error: uErr } = await supabase.storage.from(BUCKET_FOTOS).upload(path, f, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: f.type || "image/jpeg",
+      });
+      if (uErr) throw uErr;
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from(BUCKET_FOTOS).getPublicUrl(path);
+      const { error: fErr } = await supabase.from(TABLE_RECEPCION_FOTOS).insert({
+        recepcion_id: recepcionId,
+        foto_url: publicUrl,
+      });
+      if (fErr) throw fErr;
+    }
+  }
+
+  async function guardarRecepcionMaterialLinea(params: {
+    row: MuelleCardRow;
+    modo: "total" | "parcial";
+    albaran: string;
+    hojasRecibidas: number;
+    paletsRecibidos: number;
+    notas: string;
+    fotos: File[];
+  }) {
+    const { row, modo } = params;
+    const alb = params.albaran.trim();
+    const hojasInt = Math.trunc(Number(params.hojasRecibidas));
+    const paletsInt = Math.max(0, Math.trunc(Number(params.paletsRecibidos)));
+    const ahora = new Date().toISOString();
+    const estadoRecepcion = modo === "total" ? "Total" : "Parcial";
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const recepcionadoPorUuid =
+      typeof user?.id === "string" && /^[0-9a-f-]{36}$/i.test(user.id.trim())
+        ? user.id.trim()
+        : null;
+    const recepcionadoPorEmail =
+      typeof user?.email === "string" && user.email.trim().length > 0
+        ? user.email.trim()
+        : null;
+    const recepcionadoPorNombre =
+      typeof user?.user_metadata?.full_name === "string" &&
+      user.user_metadata.full_name.trim().length > 0
+        ? user.user_metadata.full_name.trim()
+        : typeof user?.user_metadata?.name === "string" &&
+            user.user_metadata.name.trim().length > 0
+          ? user.user_metadata.name.trim()
+          : null;
+    const cerrandoDesdeParcial =
+      modo === "total" && normalizeCompraEstado(row.estado) === "recibido parcial";
+    const rawNotas = params.notas.trim();
+    const notasPayload =
+      modo === "total" && cerrandoDesdeParcial
+        ? rawNotas
+          ? `[Cierre final]: ${rawNotas}`
+          : "[Cierre final]: "
+        : rawNotas || null;
+
+    const insertRow = {
+      compra_id: row.id,
+      fecha_recepcion: ahora,
+      albaran_proveedor: alb || null,
+      hojas_recibidas: hojasInt,
+      palets_recibidos: paletsInt,
+      estado_recepcion: estadoRecepcion,
+      notas: notasPayload,
+      recepcionado_por: recepcionadoPorUuid,
+      recepcionado_por_email: recepcionadoPorEmail,
+      recepcionado_por_nombre: recepcionadoPorNombre,
+    };
+    const { data: recepIns, error: rErr } = await supabase
+      .from(TABLE_RECEPCION)
+      .insert(insertRow)
+      .select("id")
+      .single();
+    if (rErr) throw rErr;
+    const recepcionId = String((recepIns as { id: string }).id);
+    await uploadRecepcionFotos(recepcionId, params.fotos);
+    if (modo === "total") {
+      const { error: upErr } = await supabase
+        .from(TABLE_COMPRA)
+        .update({
+          estado: "Recibido",
+          albaran_proveedor: alb || null,
+          fecha_recepcion: ahora,
+        })
+        .eq("id", row.id);
+      if (upErr) throw upErr;
+    } else {
+      const { error: upErr } = await supabase
+        .from(TABLE_COMPRA)
+        .update({
+          estado: "Recibido Parcial",
+          albaran_proveedor: alb || null,
+        })
+        .eq("id", row.id);
+      if (upErr) throw upErr;
+    }
+  }
+
   const guardarRecepcion = async (modo: "total" | "parcial") => {
     if (!activeMaterial) return;
     const alb = albaran.trim();
@@ -667,112 +860,18 @@ export function MuelleRecepcionPage() {
 
   const ejecutarGuardarRecepcion = async (modo: "total" | "parcial") => {
     if (!activeMaterial) return;
-    const alb = albaran.trim();
+    const material = activeMaterial;
     setSaving(true);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      const recepcionadoPorUuid =
-        typeof user?.id === "string" && /^[0-9a-f-]{36}$/i.test(user.id.trim())
-          ? user.id.trim()
-          : null;
-      const recepcionadoPorEmail =
-        typeof user?.email === "string" && user.email.trim().length > 0
-          ? user.email.trim()
-          : null;
-      const recepcionadoPorNombre =
-        typeof user?.user_metadata?.full_name === "string" &&
-        user.user_metadata.full_name.trim().length > 0
-          ? user.user_metadata.full_name.trim()
-          : typeof user?.user_metadata?.name === "string" &&
-              user.user_metadata.name.trim().length > 0
-            ? user.user_metadata.name.trim()
-            : null;
-
-      const hojasInt = Math.trunc(Number(hojasRecNum));
-      const paletsInt = Math.trunc(Number(paletsNum));
-
-      const ahora = new Date().toISOString();
-      const estadoRecepcion = modo === "total" ? "Total" : "Parcial";
-
-      const cerrandoMaterialDesdeParcial =
-        modo === "total" &&
-        normalizeCompraEstado(activeMaterial.estado) === "recibido parcial";
-      const rawNotas = notas.trim();
-      const notasPayload =
-        modo === "total" && cerrandoMaterialDesdeParcial
-          ? rawNotas
-            ? `[Cierre final]: ${rawNotas}`
-            : "[Cierre final]: "
-          : rawNotas || null;
-
-      const insertRow = {
-        compra_id: activeMaterial.id,
-        fecha_recepcion: ahora,
-        albaran_proveedor: alb || null,
-        hojas_recibidas: hojasInt,
-        palets_recibidos: paletsInt,
-        estado_recepcion: estadoRecepcion,
-        notas: notasPayload,
-        recepcionado_por: recepcionadoPorUuid,
-        recepcionado_por_email: recepcionadoPorEmail,
-        recepcionado_por_nombre: recepcionadoPorNombre,
-      };
-
-      // 1) Insertar fila de recepción (obtiene `recepcion_id` para fotos).
-      const { data: recepIns, error: rErr } = await supabase
-        .from(TABLE_RECEPCION)
-        .insert(insertRow)
-        .select("id")
-        .single();
-      if (rErr) throw rErr;
-      const recepcionId = String((recepIns as { id: string }).id);
-
-      // 2) Subir fotos e insertar en `prod_recepciones_fotos`.
-      for (let i = 0; i < fotoFiles.length; i++) {
-        const f = fotoFiles[i]!;
-        const path = `${recepcionId}/${crypto.randomUUID()}.${extFromFile(f)}`;
-        const { error: uErr } = await supabase.storage
-          .from(BUCKET_FOTOS)
-          .upload(path, f, {
-            cacheControl: "3600",
-            upsert: false,
-            contentType: f.type || "image/jpeg",
-          });
-        if (uErr) throw uErr;
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from(BUCKET_FOTOS).getPublicUrl(path);
-        const { error: fErr } = await supabase.from(TABLE_RECEPCION_FOTOS).insert({
-          recepcion_id: recepcionId,
-          foto_url: publicUrl,
-        });
-        if (fErr) throw fErr;
-      }
-
-      // 3) Actualizar `prod_compra_material` solo después de persistir la recepción (y fotos).
-      if (modo === "total") {
-        const { error: upErr } = await supabase
-          .from(TABLE_COMPRA)
-          .update({
-            estado: "Recibido",
-            albaran_proveedor: alb || null,
-            fecha_recepcion: ahora,
-          })
-          .eq("id", activeMaterial.id);
-        if (upErr) throw upErr;
-      } else {
-        const { error: upErr } = await supabase
-          .from(TABLE_COMPRA)
-          .update({
-            estado: "Recibido Parcial",
-            albaran_proveedor: alb || null,
-          })
-          .eq("id", activeMaterial.id);
-        if (upErr) throw upErr;
-      }
+      await guardarRecepcionMaterialLinea({
+        row: material,
+        modo,
+        albaran: albaran.trim(),
+        hojasRecibidas: Math.trunc(Number(hojasRecNum)),
+        paletsRecibidos: Math.trunc(Number(paletsNum)),
+        notas,
+        fotos: fotoFiles,
+      });
 
       toast.success(
         modo === "total"
@@ -912,6 +1011,162 @@ export function MuelleRecepcionPage() {
   });
 
   const materialesFilteredRows = materialesTable.getRowModel().rows;
+  const multiCandidates = useMemo(() => {
+    const q = multiSearch.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => {
+      const parts = [
+        r.ot_numero,
+        r.proveedor_nombre,
+        r.material,
+        r.cliente_nombre,
+        r.num_compra,
+      ].map((x) => String(x ?? "").toLowerCase());
+      return parts.some((s) => s.includes(q));
+    });
+  }, [rows, multiSearch]);
+  const multiSelectedRows = useMemo(
+    () => rows.filter((r) => multiSelected[r.id]),
+    [rows, multiSelected]
+  );
+
+  const setMultiDraft = useCallback(
+    (rowId: string, patch: Partial<MultiRecepcionDraft>) => {
+      setMultiDrafts((prev) => {
+        const curr = prev[rowId];
+        if (!curr) return prev;
+        return { ...prev, [rowId]: { ...curr, ...patch } };
+      });
+    },
+    []
+  );
+
+  const toggleMultiSelected = useCallback((rowId: string, checked: boolean) => {
+    setMultiSelected((prev) => ({ ...prev, [rowId]: checked }));
+  }, []);
+
+  const seleccionarTodasFiltradasMulti = useCallback(() => {
+    const allSelected =
+      multiCandidates.length > 0 &&
+      multiCandidates.every((r) => multiSelected[r.id]);
+    setMultiSelected((prev) => {
+      const next = { ...prev };
+      for (const r of multiCandidates) next[r.id] = !allSelected;
+      return next;
+    });
+  }, [multiCandidates, multiSelected]);
+
+  const guardarRecepcionMulti = useCallback(async () => {
+    if (multiSelectedRows.length === 0) {
+      toast.error("Selecciona al menos una línea para la recepción múltiple.");
+      return;
+    }
+    const alb = multiAlbaran.trim();
+    const payload = multiSelectedRows.map((r) => ({
+      row: r,
+      draft: multiDrafts[r.id],
+    }));
+    for (const p of payload) {
+      if (!p.draft) {
+        toast.error(`Falta configuración en OT ${p.row.ot_numero}.`);
+        return;
+      }
+      const hojas = Math.trunc(Number(p.draft.hojas.trim()));
+      if (!Number.isFinite(hojas) || hojas < 0) {
+        toast.error(`OT ${p.row.ot_numero}: hojas inválidas.`);
+        return;
+      }
+      if (p.draft.modo === "parcial") {
+        if (hojas <= 0) {
+          toast.error(`OT ${p.row.ot_numero}: parcial requiere hojas > 0.`);
+          return;
+        }
+        if (p.row.num_hojas_brutas != null && hojas >= p.row.num_hojas_brutas) {
+          toast.error(
+            `OT ${p.row.ot_numero}: parcial debe ser menor que esperado (${p.row.num_hojas_brutas}).`
+          );
+          return;
+        }
+      }
+    }
+
+    setMultiSaving(true);
+    try {
+      if (alb) {
+        try {
+          const { data: existing, error: dupErr } = await supabase
+            .from(TABLE_RECEPCION)
+            .select("compra_id, prod_compra_material(ot_numero)")
+            .eq("albaran_proveedor", alb);
+          if (dupErr) throw dupErr;
+          const selectedIds = new Set(multiSelectedRows.map((r) => r.id));
+          const otherOts = new Set<string>();
+          for (const row of existing ?? []) {
+            const raw = row as {
+              compra_id?: string | null;
+              prod_compra_material?:
+                | { ot_numero?: string | null }
+                | { ot_numero?: string | null }[]
+                | null;
+            };
+            if (raw.compra_id && selectedIds.has(raw.compra_id)) continue;
+            const compra = Array.isArray(raw.prod_compra_material)
+              ? raw.prod_compra_material[0]
+              : raw.prod_compra_material;
+            const ot = String(compra?.ot_numero ?? "").trim();
+            if (ot) otherOts.add(ot);
+          }
+          if (otherOts.size > 0) {
+            toast.info(
+              `Albarán ya usado en OTs ${[...otherOts].join(
+                ", "
+              )}. Se guarda igual (mismo envío).`
+            );
+          }
+        } catch (e) {
+          console.warn("[Muelle multi] aviso albarán duplicado", e);
+        }
+      }
+
+      for (const p of payload) {
+        const d = p.draft!;
+        await guardarRecepcionMaterialLinea({
+          row: p.row,
+          modo: d.modo,
+          albaran: alb,
+          hojasRecibidas: Math.trunc(Number(d.hojas.trim() || "0")),
+          paletsRecibidos: Math.trunc(Number(d.palets.trim() || "0")),
+          notas: multiNotas,
+          fotos: multiFotoFiles,
+        });
+      }
+
+      toast.success(
+        `Recepción múltiple guardada: ${payload.length} línea${
+          payload.length !== 1 ? "s" : ""
+        }.`
+      );
+      setMultiOpen(false);
+      resetMultiForm();
+      await loadRows();
+    } catch (e) {
+      logGuardarRecepcionError("guardarRecepcionMulti", e);
+      toast.error(
+        e instanceof Error ? e.message : "No se pudo guardar la recepción múltiple."
+      );
+    } finally {
+      setMultiSaving(false);
+    }
+  }, [
+    loadRows,
+    multiAlbaran,
+    multiDrafts,
+    multiFotoFiles,
+    multiNotas,
+    multiSelectedRows,
+    resetMultiForm,
+    supabase,
+  ]);
 
   const externoRowsFiltered = useMemo(() => {
     const q = globalSearchTerm.trim().toLowerCase();
@@ -944,6 +1199,8 @@ export function MuelleRecepcionPage() {
           if (v === "materiales" || v === "externos") {
             setMuelleTab(v);
             onSheetOpenChange(false);
+            setMultiOpen(false);
+            resetMultiForm();
           }
         }}
         className="w-full space-y-4"
@@ -969,12 +1226,32 @@ export function MuelleRecepcionPage() {
             </div>
           ) : (
             <>
+              <input
+                ref={multiCameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                multiple
+                className="hidden"
+                onChange={(e) => onPickMultiFotos(e.currentTarget.files)}
+              />
               <MuelleSearchField
                 id="muelle-materiales-buscar"
                 value={materialesGlobalFilter}
                 onChange={setMaterialesGlobalFilter}
                 placeholder="Buscar por OT, proveedor, material o cliente…"
               />
+              <div className="mb-4 flex justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={openMultiDialog}
+                  disabled={rows.length === 0}
+                >
+                  Recepción multi-línea
+                </Button>
+              </div>
               {materialesFilteredRows.length === 0 ? (
                 <div className="rounded-xl border border-slate-200/90 bg-white p-8 text-center text-sm text-muted-foreground shadow-sm">
                   Ningún resultado coincide con la búsqueda. Prueba con otro
@@ -1188,6 +1465,215 @@ export function MuelleRecepcionPage() {
           e.target.value = "";
         }}
       />
+
+      <Dialog
+        open={multiOpen}
+        onOpenChange={(open) => {
+          setMultiOpen(open);
+          if (!open && !multiSaving) resetMultiForm();
+        }}
+      >
+        <DialogContent className="max-h-[92vh] w-[calc(100%-1.5rem)] overflow-y-auto rounded-xl sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg text-[#002147]">
+              Recepción múltiple · Materiales
+            </DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
+              Un solo albarán/fotos para varias OTs. Convive con la entrada rápida
+              actual (1 tarjeta = 1 recepción).
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Nº albarán proveedor (común)</Label>
+              <Input
+                value={multiAlbaran}
+                onChange={(e) => setMultiAlbaran(e.target.value)}
+                placeholder="Ej: 410864843"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Buscar líneas</Label>
+              <Input
+                value={multiSearch}
+                onChange={(e) => setMultiSearch(e.target.value)}
+                placeholder="OT, proveedor, material, cliente…"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Notas (comunes)</Label>
+            <Textarea
+              value={multiNotas}
+              onChange={(e) => setMultiNotas(e.target.value)}
+              placeholder="Incidencias comunes del envío (opcional)"
+              className="min-h-[70px]"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Fotos (comunes para todas las líneas)</Label>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => multiCameraInputRef.current?.click()}
+            >
+              <Camera className="size-4 mr-2" />
+              Añadir foto
+            </Button>
+            {multiFotoPreviews.length > 0 && (
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                {multiFotoPreviews.map((src, i) => (
+                  <div key={`${src}-${i}`} className="group relative overflow-hidden rounded-lg border bg-slate-50">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={src}
+                      alt={`Foto multi ${i + 1}`}
+                      className="aspect-square w-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-1 top-1 rounded bg-white/90 px-1.5 py-0.5 text-[11px] shadow-sm"
+                      onClick={() => removeMultiFotoAt(i)}
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-md border border-slate-200">
+            <div className="flex items-center justify-between border-b bg-slate-50 px-3 py-2">
+              <p className="text-xs text-slate-600">
+                {multiCandidates.length} línea{multiCandidates.length !== 1 ? "s" : ""} filtrada
+                {multiCandidates.length !== 1 ? "s" : ""}
+              </p>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={seleccionarTodasFiltradasMulti}
+                className="h-7 px-2 text-xs"
+              >
+                Marcar / desmarcar filtradas
+              </Button>
+            </div>
+            <div className="max-h-[38vh] overflow-y-auto divide-y">
+              {multiCandidates.map((r) => {
+                const d = multiDrafts[r.id];
+                const checked = !!multiSelected[r.id];
+                return (
+                  <div key={r.id} className="px-3 py-2.5">
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(v) => toggleMultiSelected(r.id, v === true)}
+                        className="mt-0.5"
+                      />
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                          <span className="font-mono font-semibold text-[#002147]">
+                            OT {r.ot_numero}
+                          </span>
+                          <span className="text-slate-500">· {r.num_compra || "—"}</span>
+                          <span className="text-slate-500 truncate">
+                            {r.proveedor_nombre || "Sin proveedor"}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 truncate">
+                          {r.material || "Material sin descripción"}
+                        </p>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-[11px] text-slate-500">Modo</Label>
+                            <Select
+                              value={d?.modo ?? "total"}
+                              onValueChange={(v) =>
+                                setMultiDraft(r.id, {
+                                  modo: v === "parcial" ? "parcial" : "total",
+                                })
+                              }
+                            >
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue placeholder="Modo" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="total">Total</SelectItem>
+                                <SelectItem value="parcial">Parcial</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[11px] text-slate-500">Hojas recibidas</Label>
+                            <Input
+                              className="h-8 text-xs"
+                              value={d?.hojas ?? ""}
+                              onChange={(e) =>
+                                setMultiDraft(r.id, { hojas: e.target.value })
+                              }
+                              placeholder={
+                                r.num_hojas_brutas != null
+                                  ? String(r.num_hojas_brutas)
+                                  : "0"
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[11px] text-slate-500">Palets</Label>
+                            <Input
+                              className="h-8 text-xs"
+                              value={d?.palets ?? "0"}
+                              onChange={(e) =>
+                                setMultiDraft(r.id, { palets: e.target.value })
+                              }
+                              placeholder="1"
+                            />
+                          </div>
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          Esperadas:{" "}
+                          {r.num_hojas_brutas != null
+                            ? r.num_hojas_brutas.toLocaleString("es-ES")
+                            : "—"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {multiCandidates.length === 0 && (
+                <p className="p-4 text-center text-sm text-slate-500">
+                  No hay líneas para el filtro actual.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setMultiOpen(false)}
+              disabled={multiSaving}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void guardarRecepcionMulti()}
+              disabled={multiSaving || multiSelectedRows.length === 0}
+            >
+              {multiSaving && <Loader2 className="size-4 mr-2 animate-spin" />}
+              Guardar {multiSelectedRows.length} línea
+              {multiSelectedRows.length !== 1 ? "s" : ""}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={sheetOpen} onOpenChange={onSheetOpenChange}>
         <DialogContent
