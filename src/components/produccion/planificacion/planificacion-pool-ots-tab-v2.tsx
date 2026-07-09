@@ -154,6 +154,11 @@ type CompraRow = {
   estado: string | null;
 };
 type RecepRow = { compra_id: string; hojas_recibidas: number | null };
+type StockOtRow = {
+  ot_numero: string;
+  cantidad_reservada: number | null;
+  prod_stock_palets: { cantidad_actual: number; es_prueba: boolean | null } | null;
+};
 type PoolPersisted = {
   id: string;
   ot_numero: string;
@@ -172,6 +177,8 @@ type PoolRow = {
   fechaEntrega: string | null;
   hojasObjetivo: number;
   hojasRecibidasTotal: number;
+  /** Hojas disponibles en cartelas (ATP Bloque 9) asignadas a esta OT. 0 si no hay cartela. */
+  hojasStockCartelado: number;
   numCompra: string | null;
   compraEstado: string;
   compraProveedor: string | null;
@@ -652,6 +659,7 @@ export function PlanificacionPoolOtsTab() {
             fechaEntrega: null,
             hojasObjetivo: hojasObj,
             hojasRecibidasTotal: 0,
+            hojasStockCartelado: 0,
             numCompra: null,
             compraEstado: "Sin compra",
             compraProveedor: null,
@@ -885,6 +893,35 @@ export function PlanificacionPoolOtsTab() {
         }
       }
 
+      // Stock cartelado (ATP Bloque 9): hojas asignadas a cada OT en prod_stock_palet_ots.
+      // Verde = cartelado ≥ objetivo. Amarillo = algo cartelado o en muelle. Rojo = nada.
+      const stockCarteladoByOt = new Map<string, number>();
+      if (ots.length > 0) {
+        const stockOtData = await fetchAllInChunks(ots, 100, async (chunk) => {
+          const { data, error } = await supabase
+            .from("prod_stock_palet_ots")
+            .select(
+              "ot_numero, cantidad_reservada, prod_stock_palets!palet_id(cantidad_actual, es_prueba)",
+            )
+            .in("ot_numero", chunk);
+          if (error) throw error;
+          return (data ?? []) as unknown as StockOtRow[];
+        });
+        for (const r of stockOtData) {
+          const ot = String(r.ot_numero ?? "").trim();
+          if (!ot) continue;
+          const palet = r.prod_stock_palets;
+          if (!palet || palet.es_prueba) continue;
+          if (palet.cantidad_actual <= 0) continue;
+          // Reserva dura si la hay; si es blanda (null) → cuenta todo el físico del palet.
+          const hojas =
+            r.cantidad_reservada != null ? r.cantidad_reservada : palet.cantidad_actual;
+          if (hojas > 0) {
+            stockCarteladoByOt.set(ot, (stockCarteladoByOt.get(ot) ?? 0) + hojas);
+          }
+        }
+      }
+
       const troquelNeedles = [
         ...new Set([...byOt.values()].map((r) => r.troquelLabel.trim()).filter(Boolean)),
       ];
@@ -974,9 +1011,21 @@ export function PlanificacionPoolOtsTab() {
         row.hojasRecibidasTotal = Math.trunc(
           cids.reduce((acc, id) => acc + (recepByCompra.get(id) ?? 0), 0)
         );
-        if (cids.length === 0 || row.hojasRecibidasTotal <= 0) row.materialStatus = "rojo";
-        else if (row.hojasRecibidasTotal < row.hojasObjetivo) row.materialStatus = "amarillo";
-        else row.materialStatus = "verde";
+        const hojasCarteladas = stockCarteladoByOt.get(ot) ?? 0;
+        row.hojasStockCartelado = hojasCarteladas;
+        // Semáforo material (Bloque 9.4):
+        //   Verde    = cartelado ≥ objetivo (material identificado y suficiente en almacén)
+        //   Amarillo = algo cartelado pero insuficiente, O solo recepción en muelle sin cartelar
+        //   Rojo     = sin material en cartelas ni en muelle
+        if (hojasCarteladas > 0 && row.hojasObjetivo > 0 && hojasCarteladas >= row.hojasObjetivo) {
+          row.materialStatus = "verde";
+        } else if (hojasCarteladas > 0) {
+          row.materialStatus = "amarillo";
+        } else if (row.hojasRecibidasTotal > 0) {
+          row.materialStatus = "amarillo";
+        } else {
+          row.materialStatus = "rojo";
+        }
 
         const pp = poolByOt.get(ot);
         if (pp && String(pp.estado_pool ?? "").trim().toLowerCase() === "cerrada") {
@@ -1259,6 +1308,7 @@ export function PlanificacionPoolOtsTab() {
               fechaEntrega: h.fechaEntrega ?? null,
               hojasObjetivo,
               hojasRecibidasTotal: 0,
+              hojasStockCartelado: 0,
               numCompra: null,
               compraEstado: "Sin compra",
               compraProveedor: null,
@@ -2227,8 +2277,17 @@ export function PlanificacionPoolOtsTab() {
                             {r.materialViaBarcoLabel}
                           </p>
                         ) : null}
+                        {r.hojasStockCartelado > 0 ? (
+                          <p
+                            className="text-[11px] font-medium text-emerald-700"
+                            title="Hojas carteladas (ID Stock) asignadas a esta OT"
+                          >
+                            {r.hojasStockCartelado.toLocaleString("es-ES")} h en cartela
+                          </p>
+                        ) : null}
                         <p className="text-[11px] text-slate-600">
-                          {r.hojasRecibidasTotal}/{r.hojasObjetivo} hojas
+                          {r.hojasRecibidasTotal.toLocaleString("es-ES")}/
+                          {r.hojasObjetivo.toLocaleString("es-ES")} h muelle
                         </p>
                         {r.numCompra ? (
                           <p className="text-[11px] text-slate-500">
