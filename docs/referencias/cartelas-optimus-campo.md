@@ -17,7 +17,7 @@ Cartela impresa (ID Stock grande en el palet)
 Optimus RDC → Consumir material: Id stock → código artículo + descripción + cantidad hojas
 ```
 
-**Minerva hoy:** cartelado (9.0–9.1b) + **Stock ATP + import Optimus (9.2)** + **consumo operativo al cerrar impresión (9.4)** + lote tintas + asistente IA Stock MVP. **Siguiente:** sync Optimus inteligente, 9.3 sobrantes, 9.9 NL→SQL.
+**Minerva hoy:** cartelado (9.0–9.1b) + **Stock ATP + import Optimus con diff (9.2)** + **consumo operativo al cerrar impresión (9.4)** + **semáforo pool ATP** + **9.3 ajuste/split palet** + muelle→cartelas (9.5) + STOCK sin OC + multi-línea (9.6a–d) + pool «Ver cartelas» + lote tintas + asistente IA Stock MVP (9.9). **Siguiente:** cierre OT sobrantes (Bloque 6), sync marcar agotados, 9.7 OCR.
 
 ---
 

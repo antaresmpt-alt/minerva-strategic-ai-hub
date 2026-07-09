@@ -4,9 +4,9 @@
 > Tema: recepción de material, cartelas de palet, stock libre y trazabilidad.
 > Complementa `MINERVA_HUB_CONTEXTO_MAESTRO.md`, `FASES_HOJA_RUTA_DIGITAL.md` y briefings Bloques 6 y 7.
 >
-> **Estado:** ✅ **9.0–9.6c operativo (MVP)** (7 jul 2026) — cartelas, Stock ATP, import Optimus, impresión HTML, consumo al cerrar impresión, **reimpresión remanente libre**, **valoración remanente**, lote tintas, **asistente IA Stock NL→SQL (9.9)**. **9.5 ✅** puente muelle→cartelas (fotos + notas). **9.6a ✅** recepción STOCK sin OC. **9.6b ✅** aviso albarán duplicado en muelle (híbrido C). **9.6c ✅** wizard multi-OT mismo albarán (suma hojas + reservas blandas). **Pendiente cartelas:** 9.3 sobrantes, sync Optimus, muelle multi-línea completo (opción B). **Pendiente OT/hoja de ruta:** semilla artículos maestro desde despacho, histórico OTs.
+> **Estado:** ✅ **9.0–9.6d operativo (MVP)** (9 jul 2026) — cartelas, Stock ATP, import Optimus (diff + `last_seen`), impresión HTML, consumo al cerrar impresión, **semáforo pool con ATP cartelado (9.4)**, **reimpresión remanente libre**, **valoración remanente**, lote tintas, **asistente IA Stock NL→SQL (9.9)**. **9.3 ✅** ajuste manual + split palet. **9.5 ✅** puente muelle→cartelas. **9.6a ✅** STOCK sin OC. **9.6b ✅** aviso albarán duplicado (opción C). **9.6c ✅** wizard multi-OT. **9.6d ✅** muelle recepción multi-línea (opción B). **Pendiente:** cierre OT sobrantes (Bloque 6), sync Optimus marcar agotados, 9.7 OCR. **Pendiente OT/hoja de ruta:** semilla artículos maestro, histórico OTs.
 > **Origen:** Optimus + cartelas CARPAPSA (15 jun 2026).
-> **Actualizado:** 7 jul 2026 — §15.8 sesión muelle→cartelas + prueba Torraspapel 410864843; fix multi-OT «todas».
+> **Actualizado:** 9 jul 2026 — §15.9 sesión operativa: 9.3 sobrantes, 9.4 semáforo pool, sync Optimus diff, pool «Ver cartelas», muelle multi-línea.
 > **PENDIENTE:** H1/H2 recuento global. Ubicación por filas de material (catálogo UI sin definir en planta). `codigo_articulo` en wizard. Ajuste impresión A6 física vs A4 PDF.
 
 **Relacionado:** sobrantes → Bloque 6 · expedición → Bloque 7 · material contenedor/hijas → Bloque 8 · FSC → maestro artículos.
@@ -858,9 +858,9 @@ Objetivo: sustituir Optimus/papel en lo esencial — **qué hay en cada palet y 
 | **9.1** | UI **Almacén → Cartelas**: bandeja pendientes por albarán + cartelado 1 palet = 1 ID Stock + OT(s) + impresión (2 copias). Usuarios: **Emma/Ramón**. Antiduplicado albarán. | ✅ **Hecho** |
 | **9.1b** | Post smoke: filtros bandeja, wizard split, selector OTs + hijas barco, fallback cliente/trabajo (`prod_ots_general`), `ref_lote` Optimus, fix impresión, cartela print estilo scan | ✅ **Hecho** |
 | **9.2** | UI **Almacén → Stock** (`/produccion/almacen/stock`): tabla estilo Optimus + filtros **Sin OT / Solo libre (ATP) / Solo reservado / Parcial** + tipo_stock + buscador; **reservas parciales ATP**, **valoración €**, vista `stock_palets_atp`, detalle + movimientos + reimpresión (1 copia) + **Import Optimus** + **Asistente IA (MVP)**. MRP legacy retirado. | ✅ **Hecho (5 jul)** |
-| **9.3** | Sobrantes — misma cartela muta; **sin** wizard auto “pasar a libre” multi-OT (§7.8) |
+| **9.3** | Sobrantes — ajuste manual + split palet (§15.9.2) | ✅ **9 jul 2026** — RPC `prod_stock_ajustar_cantidad` + `prod_stock_split_palet`; UI Stock detalle. Pendiente: popup cierre OT (Bloque 6) |
 | **9.4-preview** | ✅ Enlace documental ID Stock ↔ cierre impresión → `datos_proceso` + hoja de ruta/PDF (§15.5) |
-| **9.4 operativo** | ✅ **5 jul 2026** — Consumo al cerrar impresión (proc. 1/2) vía RPC; **todas las OTs**. §15.6.4. Pendiente: déficit → `material_status`. |
+| **9.4 operativo** | ✅ **5 jul + 9 jul 2026** — Consumo al cerrar impresión (proc. 1/2) vía RPC; **semáforo pool** con ATP cartelado (§15.9.1). Pendiente: déficit → `material_status` en mesa |
 
 **Prerrequisitos ligeros:** audio/notas Emma; ir respondiendo §9 pendientes en paralelo.
 
@@ -871,7 +871,7 @@ No bloquean 9.0–9.4. Se encadenan cuando el flujo administrativo de cartelas f
 | Fase | Entregable |
 |------|------------|
 | **9.5** | **Puente muelle → administración**: bandeja «Recepciones en muelle pendientes de cartelar» (foto + datos del muelle ya guardados) | ✅ **7 jul 2026** — `RecepcionFotosPanel` en bandeja + wizard; `fetchFotosByRecepcionIds`; hojas/notas muelle por línea |
-| **9.6** | Recepción **STOCK sin OC** y albarán **multi-línea** (varias OTs / líneas en un mismo envío) | ✅ **9.6a+b+c 7 jul** — STOCK: `RecepcionStockDialog` + migración `20260707160000`; multi-línea: agrupación bandeja + aviso muelle (opción C) + wizard suma OTs (§15.8). Muelle «por albarán» completo (opción B) → backlog |
+| **9.6** | Recepción **STOCK sin OC** y albarán **multi-línea** (varias OTs / líneas en un mismo envío) | ✅ **9.6a–d 9 jul** — STOCK: `RecepcionStockDialog`; opción C: aviso muelle + wizard suma OTs; **opción B: recepción multi-línea en muelle** (§15.9.4) |
 | **9.7** | **Sugerencia desde foto** (Gemini Vision u OCR asistido): prefill proveedor, nº albarán, líneas, kilos — **siempre confirmación humana** (patrón import externos Optimus) |
 | **9.8** | Adjuntar/reenlazar fotos muelle en flujo de cartelado; menos papel físico circulando |
 | **9.9** | **Búsqueda inteligente de material (NL → cartelas)**: ✅ **7 jul 2026** — LLM extrae criterios → query sobre `stock_palets_atp` → tabla + resumen con IDs reales (sin alucinación). API `POST /api/gemini/stock-analyze`. |
@@ -1032,7 +1032,8 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 | 24 jun 2026 | **§3g** — cuestionario Ramón respondido (`MINERVA_CUESTIONARIO_CARTELAS_RAMON.md`). **Modelo corregido:** 1 cartela = 1 palet = 1 ID Stock; varias OTs sin qty en cartela; Juan no cartela; consumo MVP obligatorio; I1 barco; **§13c** piloto paralelo 10–20 OTs; antiduplicado albarán; deprecado `palet_fisico_ref` / reparto N cartelas por palet. |
 | 24 jun 2026 | **§15 Implementación** — 9.0 SQL + 9.1 UI cartelas + 9.1b post smoke desplegados. Cartelas #10310–#10312 en prod. Archivos en `src/components/produccion/almacen/cartelas/`, migración `20260624183000_…`, helper `cartelas-ot-metadata.ts`. Muelle **no tocado**. |
 | 5 jul 2026 | **§15.6** — Sesión producción: import Optimus (281 palets), sandbox cartelas ≥99.000, impresión HTML aislada, filtros Stock (Sin OT), **9.4 operativo**, lote tintas, asistente IA Stock MVP. Commits `cb95fb9`, `9e2b997`, `1abb9fd`, `f93ccd3`. |
-| 7 jul 2026 | **§15.8** — Sesión muelle→cartelas: 9.5 fotos, 9.6a STOCK sin OC, 9.6b aviso albarán duplicado, prueba Torraspapel 410864843, fix wizard multi-OT. Commits `dbf3860`, fix multi-OT. |
+| 7 jul 2026 | **§15.8** — Sesión muelle→cartelas: 9.5 fotos, 9.6a STOCK sin OC, 9.6b aviso albarán duplicado, prueba Torraspapel 410864843, fix wizard multi-OT. Commits `dbf3860`, `814d427`. |
+| 9 jul 2026 | **§15.9** — Sesión operativa: 9.4 semáforo pool ATP, sync Optimus diff, pool «Ver cartelas», 9.3 sobrantes, 9.6d muelle multi-línea. Commits `414825c`, `f609d66`, `021f1ea`, `5b9ac5f`, `80f8fc7`. |
 
 ### Implementación (rellenar al avanzar)
 
@@ -1044,9 +1045,9 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 | 9.1 — UI cartelas + impresión | ✅ | Ruta `/produccion/almacen/cartelas`. Nav en `produccion-shell.tsx`. Ver §15. |
 | 9.1b — Mejoras post smoke | ✅ | Filtros, wizard split, OTs checkboxes + hijas, fallback metadata, ref_lote Optimus, fix print 29→2 págs. Commit `c212e52` wizard ancho demo. |
 | 9.2 — Stock + import Optimus + IA MVP | ✅ | §15.6; filtros Sin OT / Solo libre ATP; `stock-optimus-import.ts` |
-| 9.3 — Sobrantes al cerrar OT (Bloque 6) | ⏳ | Cartela muta, no nueva fila |
+| 9.3 — Sobrantes (ajuste + split) | ✅ | §15.9.2; migración `20260709173000`. Pendiente cierre OT Bloque 6 |
 | 9.4-preview — Enlace documental cierre impresión | ✅ | §15.5; procesos 1 y 2 |
-| 9.4 operativo — Consumos y movimientos en planta | ✅ | §15.6.4; RPC `prod_stock_registrar_consumo`; commit `f93ccd3` |
+| 9.4 operativo — Consumos + semáforo pool | ✅ | §15.6.4 + §15.9.1; RPC `prod_stock_registrar_consumo` |
 | 9.9 — Asistente IA Stock | ✅ | NL→criterios→`stock_palets_atp` (`stock-query-filters.ts`, `stock-atp-query.ts`) |
 
 **Fase B — mejoras (después)**
@@ -1054,7 +1055,9 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 | Fase | Estado | Notas |
 |------|--------|-------|
 | 9.5 — Puente muelle → cartelar | ✅ | Fotos + notas en Cartelas (7 jul 2026) |
-| 9.6 — STOCK sin OC + multi-línea | ✅ | 9.6a STOCK + 9.6b aviso albarán + 9.6c wizard multi-OT (7 jul). Muelle multi-línea completo → backlog |
+| 9.6 — STOCK sin OC + multi-línea | ✅ | 9.6a STOCK + 9.6b aviso + 9.6c wizard + **9.6d muelle multi-línea** (9 jul) |
+| Sync Optimus v2 | ✅ | Diff nuevos/actualizados/no en Excel + `last_seen_in_optimus_import_at` (§15.9.3) |
+| Pool «Ver cartelas» | ✅ | Diálogo lazy con `#ID Stock` por OT (§15.9.5) |
 | 9.7 — Sugerencia desde foto (IA) | ⏳ | Confirmación humana obligatoria |
 | 9.8 — Fotos/adjuntos en flujo cartelas | ⏳ | |
 
@@ -1384,12 +1387,122 @@ Al marcar las 3 OTs y escribir «todas» en reservas, la cartela quedó en **100
 | `dbf3860` | **9.5 + 9.6a + 9.6b** — fotos muelle, STOCK sin OC, aviso albarán duplicado |
 | *(este commit)* | **9.6c** — fix wizard multi-OT + impresión OTs con reservas blandas + doc §15.8 |
 
-#### 15.8.6 Backlog inmediato (post-sesión)
+#### 15.8.6 Backlog inmediato (post-sesión 7 jul)
+
+| Ítem | Prioridad | Estado |
+|------|-----------|--------|
+| Re-cartelar 410864843 tras deploy | Alta | Pendiente validación planta |
+| Merge `wizard-despacho` → `main` | Alta | Pendiente |
+| Suma palets en bandeja (4450 vs 3450) | Baja | Investigar si hay duplicado en BD |
+
+#### 15.9 Sesión 9 jul 2026 — Operativa planta (pool, stock, muelle)
+
+> Rama `wizard-despacho`. Pruebas reales: import `stocksoptimus09072026.xlsx` (264 palets), OT 35534 → cartela **#9480**, muelle multi-línea.
+
+#### 15.9.1 9.4 — Semáforo material en Pool OTs (ATP cartelado)
+
+| Pieza | Detalle |
+|-------|---------|
+| Lógica anterior | Solo muelle: `hojas_recibidas` vs `hojasObjetivo` |
+| Lógica nueva | Consulta `prod_stock_palet_ots` + `prod_stock_palets` por OT |
+| **Verde** | Hojas carteladas ≥ objetivo OT |
+| **Amarillo** | Algo cartelado pero insuficiente, O recibido en muelle sin cartelar |
+| **Rojo** | Sin cartela ni recepción en muelle |
+| UI pool | Línea «N h en cartela» + «N/M h muelle» |
+| Archivo | `planificacion-pool-ots-tab-v2.tsx` |
+| Commit | `414825c` |
+
+**Pendiente:** conectar déficit stock ↔ `material_status` en **mesa** (pool ya actualizado).
+
+#### 15.9.2 9.3 — Sobrantes: ajuste manual + split palet
+
+| Pieza | Detalle |
+|-------|---------|
+| **Ajustar cantidad** | Botón en detalle Stock → nueva cantidad + nota → RPC atómica |
+| RPC | `prod_stock_ajustar_cantidad(p_palet_id, p_nueva_cantidad, p_notas)` |
+| Movimiento | `tipo = ajuste` en `prod_stock_movimientos` |
+| **Partir palet** | Separa cantidad a **nueva cartela** (`id_stock` nuevo) |
+| RPC | `prod_stock_split_palet(p_palet_id, p_cantidad_split, p_notas)` |
+| Restricción v1 | **Bloqueado si hay reservas duras** (`cantidad_reservada > 0`) |
+| OTs en split | Copia referencias OT en **reserva blanda** (NULL) al palet nuevo |
+| Migración | `20260709173000_bloque9_3_sobrantes_ajuste_split.sql` |
+| UI | `stock-page.tsx` → `StockDetalleDialog` |
+| Commit | `5b9ac5f` |
+
+**No incluido en 9.3 v1:** popup automático «pasar a stock libre» al cerrar OT (Bloque 6 / §7.8).
+
+#### 15.9.3 Sync Optimus v2 — diff en preview + `last_seen`
+
+| Pieza | Detalle |
+|-------|---------|
+| Columna nueva | `prod_stock_palets.last_seen_in_optimus_import_at` |
+| Migración | `20260709120000_bloque9_sync_optimus_last_seen.sql` |
+| Preview import | 3 columnas: **nuevos** / **actualizarán** / **no en Excel** |
+| Al confirmar | Marca `last_seen` en cada palet del Excel |
+| Palets «fantasma» | Los que no aparecen en Excel **no se borran** (aviso informativo) |
+| Notas import | Fecha dinámica (`Import Optimus DD/MM/YYYY`) |
+| Archivos | `stock-optimus-import.ts`, `stock-page.tsx` |
+| Commit | `f609d66` |
+
+**Prueba 09/07:** 264 palets Excel → 15 nuevos, 249 actualizarán, 38 no en Excel.
+
+#### 15.9.4 9.6d — Muelle recepción multi-línea (opción B)
+
+Convive con la operativa actual (opción C: 1 tarjeta = 1 recepción + aviso «mismo camión»).
+
+| Variante | Cuándo | Flujo |
+|----------|--------|-------|
+| **A (actual)** | 1 OC rápida | Tap tarjeta → formulario → aviso si albarán duplicado |
+| **B (nueva)** | Mismo camión, varias OTs | Botón «Recepción multi-línea» → seleccionar líneas → guardar batch |
+
+**Formulario multi-línea:**
+- Albarán común
+- Notas comunes
+- Fotos comunes (se adjuntan a cada recepción)
+- Por línea: checkbox, modo Total/Parcial, hojas, palets
+- Búsqueda y «marcar/desmarcar filtradas»
+
+**Validaciones:**
+- Parcial: hojas > 0 y < esperadas
+- Si albarán ya usado en otras OTs → toast informativo (mismo envío, guardar igual)
+- Reutiliza `guardarRecepcionMaterialLinea()` (misma persistencia que variante A)
+
+| Archivo | `muelle-recepcion-page.tsx` |
+|---------|------------------------------|
+| Commit | `80f8fc7` |
+
+Emma/Carlos ven las líneas agrupadas en Cartelas por `albaran_proveedor` (sin cambio).
+
+#### 15.9.5 Pool — «Ver cartelas» por OT (Carlos → Juan)
+
+| Pieza | Detalle |
+|-------|---------|
+| Ubicación | Columna Material en Pool OTs |
+| Trigger | Enlace «Ver cartela(s)» si hay material cartelado/compra |
+| Carga | Lazy al clic (`fetchCartelasForOt`) |
+| Muestra | `#ID Stock` grande + material + hojas + enlace Stock |
+| Archivo | `pool-ot-cartelas-dialog.tsx` |
+| Commit | `021f1ea` |
+
+**Caso validado:** OT 35534 → **#9480**, 800 h.
+
+#### 15.9.6 Commits de referencia (9 jul 2026, `wizard-despacho`)
+
+| Commit | Descripción |
+|--------|-------------|
+| `414825c` | 9.4 semáforo pool con ATP cartelado |
+| `f609d66` | Sync Optimus diff + `last_seen` |
+| `021f1ea` | Pool «Ver cartelas» por OT |
+| `5b9ac5f` | 9.3 ajuste manual + split palet |
+| `80f8fc7` | 9.6d muelle recepción multi-línea |
+
+#### 15.9.7 Backlog post-sesión 9 jul
 
 | Ítem | Prioridad | Notas |
 |------|-----------|-------|
-| Re-cartelar 410864843 tras deploy | Alta | Validar 3450 h + 3 OTs en impresión |
-| Merge `wizard-despacho` → `main` | Alta | Deploy Vercel |
-| Muelle multi-línea completo (opción B) | Baja | Solo si Juan lo pide; hoy opción C basta |
-| 9.3 sobrantes / sync Optimus | Media | Roadmap Fase B |
-| Suma palets en bandeja (4450 vs 3450) | Baja | Investigar si hay duplicado en BD |
+| Validar muelle multi-línea en planta | Alta | Mismo albarán, 3+ OTs Torraspapel |
+| Validar 9.3 split con palet real | Media | Reservas duras bloquean split (v1) |
+| Sync: marcar agotados palets no vistos | Media | Filtro `last_seen` antiguo en Stock |
+| 9.4 déficit → `material_status` mesa | Media | Pool ya hecho |
+| 9.7 OCR albarán | Baja | Último paso, acordado |
+| Cierre OT sobrantes (Bloque 6) | Baja | Sin popup auto multi-OT |
