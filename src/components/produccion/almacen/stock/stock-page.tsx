@@ -770,6 +770,7 @@ export function StockPage() {
         row={detalle}
         onClose={() => setDetalle(null)}
         onPrint={handlePrint}
+        onChanged={load}
       />
 
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
@@ -912,13 +913,22 @@ function StockDetalleDialog({
   row,
   onClose,
   onPrint,
+  onChanged,
 }: {
   row: StockPaletAtpConOts | null;
   onClose: () => void;
   onPrint: (row: StockPaletAtpConOts) => void;
+  onChanged: () => Promise<void> | void;
 }) {
   const [movs, setMovs] = useState<ProdStockMovimientoRow[]>([]);
   const [loadingMovs, setLoadingMovs] = useState(false);
+  const [ajusteOpen, setAjusteOpen] = useState(false);
+  const [splitOpen, setSplitOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [ajusteCantidad, setAjusteCantidad] = useState("");
+  const [ajusteNotas, setAjusteNotas] = useState("");
+  const [splitCantidad, setSplitCantidad] = useState("");
+  const [splitNotas, setSplitNotas] = useState("");
 
   useEffect(() => {
     if (!row) {
@@ -944,7 +954,102 @@ function StockDetalleDialog({
     };
   }, [row]);
 
+  useEffect(() => {
+    if (!row) return;
+    setAjusteCantidad(String(row.cantidad_fisica));
+    setAjusteNotas("");
+    setSplitCantidad("");
+    setSplitNotas("");
+  }, [row]);
+
   if (!row) return null;
+
+  const splitBloqueadoPorReservaDura = row.cantidad_reservada_total > 0;
+
+  async function submitAjuste() {
+    if (!row) return;
+    const current = row;
+    const nueva = Math.trunc(Number(ajusteCantidad));
+    if (!Number.isFinite(nueva) || nueva < 0) {
+      toast.error("La nueva cantidad debe ser un entero >= 0.");
+      return;
+    }
+    if (nueva === current.cantidad_fisica) {
+      toast.info("La cantidad no cambió.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.rpc("prod_stock_ajustar_cantidad", {
+        p_palet_id: current.id,
+        p_nueva_cantidad: nueva,
+        p_notas: ajusteNotas.trim() || null,
+      });
+      if (error) throw error;
+      toast.success(
+        `Ajuste aplicado en #${current.id_stock}: ${current.cantidad_fisica.toLocaleString(
+          "es-ES"
+        )} → ${nueva.toLocaleString("es-ES")} h`
+      );
+      setAjusteOpen(false);
+      onClose();
+      await onChanged();
+    } catch (e) {
+      toast.error(
+        `No se pudo ajustar: ${e instanceof Error ? e.message : String(e)}`
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submitSplit() {
+    if (!row) return;
+    const current = row;
+    const cant = Math.trunc(Number(splitCantidad));
+    if (!Number.isFinite(cant) || cant <= 0) {
+      toast.error("La cantidad a separar debe ser un entero > 0.");
+      return;
+    }
+    if (cant >= current.cantidad_fisica) {
+      toast.error("La cantidad a separar debe ser menor que la cantidad física.");
+      return;
+    }
+    if (splitBloqueadoPorReservaDura) {
+      toast.error(
+        "Este palet tiene reservas duras. Quita/ajusta reservas antes de partir."
+      );
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const { data, error } = await supabase.rpc("prod_stock_split_palet", {
+        p_palet_id: current.id,
+        p_cantidad_split: cant,
+        p_notas: splitNotas.trim() || null,
+      });
+      if (error) throw error;
+      const first = Array.isArray(data) ? data[0] : null;
+      const newIdStock =
+        first && typeof first.new_id_stock === "number"
+          ? first.new_id_stock
+          : null;
+      toast.success(
+        newIdStock != null
+          ? `Split OK: nueva cartela #${newIdStock}.`
+          : "Split OK: nueva cartela creada."
+      );
+      setSplitOpen(false);
+      onClose();
+      await onChanged();
+    } catch (e) {
+      toast.error(
+        `No se pudo partir el palet: ${e instanceof Error ? e.message : String(e)}`
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <Dialog open={!!row} onOpenChange={(o) => !o && onClose()}>
@@ -1102,6 +1207,44 @@ function StockDetalleDialog({
             )}
           </div>
 
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-2.5">
+            <p className="text-xs font-medium text-[#002147] mb-1.5">
+              Sobrantes (9.3)
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setAjusteOpen(true)}
+              >
+                Ajustar cantidad
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSplitOpen(true)}
+                disabled={splitBloqueadoPorReservaDura || row.cantidad_fisica <= 1}
+                title={
+                  splitBloqueadoPorReservaDura
+                    ? "No se puede partir con reservas duras"
+                    : undefined
+                }
+              >
+                Partir palet
+              </Button>
+            </div>
+            {splitBloqueadoPorReservaDura ? (
+              <p className="text-[11px] text-amber-700 mt-1.5">
+                Este palet tiene reservas duras. Para partirlo, primero ajusta o
+                libera reservas.
+              </p>
+            ) : (
+              <p className="text-[11px] text-slate-500 mt-1.5">
+                Partir palet crea una cartela nueva con parte de las hojas.
+              </p>
+            )}
+          </div>
+
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={onClose}>
               Cerrar
@@ -1113,6 +1256,111 @@ function StockDetalleDialog({
           </div>
         </div>
       </DialogContent>
+
+      <Dialog open={ajusteOpen} onOpenChange={setAjusteOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Ajustar cantidad · #{row.id_stock}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-slate-500">
+              Cantidad actual:{" "}
+              <strong>{row.cantidad_fisica.toLocaleString("es-ES")} h</strong>
+            </p>
+            <div className="space-y-1.5">
+              <label className="text-xs text-slate-500">Nueva cantidad (h)</label>
+              <Input
+                type="number"
+                min={0}
+                step={1}
+                value={ajusteCantidad}
+                onChange={(e) => setAjusteCantidad(e.target.value)}
+                placeholder="Ej: 500"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs text-slate-500">Nota (opcional)</label>
+              <Input
+                value={ajusteNotas}
+                onChange={(e) => setAjusteNotas(e.target.value)}
+                placeholder="Motivo del ajuste"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button
+                variant="outline"
+                onClick={() => setAjusteOpen(false)}
+                disabled={submitting}
+              >
+                Cancelar
+              </Button>
+              <Button onClick={() => void submitAjuste()} disabled={submitting}>
+                {submitting && <Loader2 className="size-4 mr-2 animate-spin" />}
+                Guardar ajuste
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={splitOpen} onOpenChange={setSplitOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Partir palet · #{row.id_stock}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-slate-500">
+              Físico actual:{" "}
+              <strong>{row.cantidad_fisica.toLocaleString("es-ES")} h</strong>.
+              Indica cuántas hojas pasan a la nueva cartela.
+            </p>
+            <div className="space-y-1.5">
+              <label className="text-xs text-slate-500">
+                Cantidad a separar (h)
+              </label>
+              <Input
+                type="number"
+                min={1}
+                step={1}
+                value={splitCantidad}
+                onChange={(e) => setSplitCantidad(e.target.value)}
+                placeholder="Ej: 500"
+                disabled={splitBloqueadoPorReservaDura}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs text-slate-500">Nota (opcional)</label>
+              <Input
+                value={splitNotas}
+                onChange={(e) => setSplitNotas(e.target.value)}
+                placeholder="Motivo del split"
+                disabled={splitBloqueadoPorReservaDura}
+              />
+            </div>
+            {splitBloqueadoPorReservaDura && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-2">
+                No se puede partir con reservas duras en esta versión 9.3.
+              </p>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
+              <Button
+                variant="outline"
+                onClick={() => setSplitOpen(false)}
+                disabled={submitting}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={() => void submitSplit()}
+                disabled={submitting || splitBloqueadoPorReservaDura}
+              >
+                {submitting && <Loader2 className="size-4 mr-2 animate-spin" />}
+                Crear nueva cartela
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }
