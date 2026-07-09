@@ -91,6 +91,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { getSupabaseErrorMessage } from "@/lib/supabase-error-message";
 import { fetchAllInChunks } from "@/lib/supabase-query-chunks";
 import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
+import { PoolOtCartelasDialog } from "@/components/produccion/planificacion/pool-ot-cartelas-dialog";
 import { compareOtNumerosEs } from "@/lib/ots-contenedor-display";
 import type { ProdOtTipo, ProdOtTipoHija } from "@/types/prod-ots";
 
@@ -2285,6 +2286,19 @@ export function PlanificacionPoolOtsTab() {
                             {r.hojasStockCartelado.toLocaleString("es-ES")} h en cartela
                           </p>
                         ) : null}
+                        {(r.hojasStockCartelado > 0 ||
+                          r.hojasRecibidasTotal > 0 ||
+                          r.hasCompraGenerada) && (
+                          <PoolOtCartelasDialog
+                            otNumero={r.ot}
+                            cliente={r.cliente}
+                            hojasCarteladas={
+                              r.hojasStockCartelado > 0
+                                ? r.hojasStockCartelado
+                                : undefined
+                            }
+                          />
+                        )}
                         <p className="text-[11px] text-slate-600">
                           {r.hojasRecibidasTotal.toLocaleString("es-ES")}/
                           {r.hojasObjetivo.toLocaleString("es-ES")} h muelle
