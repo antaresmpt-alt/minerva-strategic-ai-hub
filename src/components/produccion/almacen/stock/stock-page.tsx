@@ -53,8 +53,10 @@ import {
   otTitulosFromMetadata,
 } from "@/lib/cartelas-ot-metadata";
 import {
+  computeStockOptimusDiff,
   executeStockOptimusImport,
   parseStockOptimusFile,
+  type StockOptimusDiff,
   type StockOptimusParseResult,
 } from "@/lib/stock-optimus-import";
 import { costeRemanentePalet } from "@/lib/stock-valoracion";
@@ -169,8 +171,10 @@ export function StockPage() {
   const [importPreview, setImportPreview] = useState<StockOptimusParseResult | null>(
     null
   );
+  const [importDiff, setImportDiff] = useState<StockOptimusDiff | null>(null);
   const [importFileName, setImportFileName] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [loadingDiff, setLoadingDiff] = useState(false);
   const [mostrarPruebas, setMostrarPruebas] = useState(false);
   const [stockAiOpen, setStockAiOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -372,6 +376,7 @@ export function StockPage() {
       return;
     }
     setImporting(true);
+    setImportDiff(null);
     try {
       const parsed = await parseStockOptimusFile(file);
       if (parsed.parseWarnings.length > 0) {
@@ -384,6 +389,16 @@ export function StockPage() {
       setImportPreview(parsed);
       setImportFileName(file.name);
       setImportOpen(true);
+      // Calcular diff en paralelo (no bloquea el diálogo)
+      setLoadingDiff(true);
+      try {
+        const diff = await computeStockOptimusDiff(supabase, parsed.rows);
+        setImportDiff(diff);
+      } catch {
+        // El diff es informativo; si falla, no bloqueamos el import
+      } finally {
+        setLoadingDiff(false);
+      }
     } catch (e) {
       toast.error(
         `Error al leer Excel: ${e instanceof Error ? e.message : String(e)}`
@@ -399,12 +414,17 @@ export function StockPage() {
     try {
       const result = await executeStockOptimusImport(supabase, importPreview.rows, {
         deletePilotFirst: true,
+        diff: importDiff ?? undefined,
       });
-      toast.success(
-        `Import OK: ${result.paletsInsertados} palets · ${result.otsInsertadas} OTs · ${result.pilotEliminados} piloto eliminadas`
-      );
+      const parts: string[] = [];
+      if (result.paletsNuevos > 0) parts.push(`${result.paletsNuevos} nuevos`);
+      if (result.paletsActualizados > 0) parts.push(`${result.paletsActualizados} actualizados`);
+      if (result.desaparecidosCount > 0) parts.push(`${result.desaparecidosCount} no vistos en Excel`);
+      if (result.pilotEliminados > 0) parts.push(`${result.pilotEliminados} piloto eliminados`);
+      toast.success(`Import OK · ${parts.join(" · ")}`);
       setImportOpen(false);
       setImportPreview(null);
+      setImportDiff(null);
       setImportFileName(null);
       await load();
     } catch (e) {
@@ -772,7 +792,7 @@ export function StockPage() {
               </p>
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded border px-3 py-2">
-                  <div className="text-xs text-slate-500">Palets</div>
+                  <div className="text-xs text-slate-500">Palets en Excel</div>
                   <div className="font-bold text-lg">
                     {importPreview.totales.palets}
                   </div>
@@ -798,6 +818,37 @@ export function StockPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Diff vs Minerva actual */}
+              {loadingDiff ? (
+                <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                  <Loader2 className="size-3 animate-spin" /> Calculando diff con Minerva…
+                </p>
+              ) : importDiff ? (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-slate-600">Comparación con Minerva:</p>
+                  <div className="grid grid-cols-3 gap-1.5 text-center text-xs">
+                    <div className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5">
+                      <div className="text-emerald-700 font-bold text-base">{importDiff.nuevos}</div>
+                      <div className="text-emerald-600">nuevos</div>
+                    </div>
+                    <div className="rounded border border-blue-200 bg-blue-50 px-2 py-1.5">
+                      <div className="text-blue-700 font-bold text-base">{importDiff.actualizados}</div>
+                      <div className="text-blue-600">actualizarán</div>
+                    </div>
+                    <div className={`rounded border px-2 py-1.5 ${importDiff.noEnExcel > 0 ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-slate-50"}`}>
+                      <div className={`font-bold text-base ${importDiff.noEnExcel > 0 ? "text-amber-700" : "text-slate-400"}`}>{importDiff.noEnExcel}</div>
+                      <div className={importDiff.noEnExcel > 0 ? "text-amber-600" : "text-slate-400"}>no en Excel</div>
+                    </div>
+                  </div>
+                  {importDiff.noEnExcel > 0 && (
+                    <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">
+                      {importDiff.noEnExcel} palet{importDiff.noEnExcel !== 1 ? "s" : ""} de Optimus no aparece{importDiff.noEnExcel !== 1 ? "n" : ""} en este Excel — puede que se hayan consumido o corregido en Optimus. No se eliminan automáticamente.
+                    </p>
+                  )}
+                </div>
+              ) : null}
+
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
                 Se eliminarán las cartelas piloto (#10310–#10320) y se
                 importarán/actualizarán {importPreview.totales.palets} palets

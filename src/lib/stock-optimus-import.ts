@@ -47,8 +47,22 @@ export type StockOptimusParseResult = {
 
 export type StockOptimusImportResult = {
   paletsInsertados: number;
+  paletsNuevos: number;
+  paletsActualizados: number;
   otsInsertadas: number;
   pilotEliminados: number;
+  /** IDs en Minerva (Optimus origin) que NO aparecen en este Excel. */
+  desaparecidosCount: number;
+};
+
+/** Resultado del diff previo al import (para mostrar en preview antes de confirmar). */
+export type StockOptimusDiff = {
+  /** IDs del Excel que ya existen en Minerva → se actualizarán. */
+  actualizados: number;
+  /** IDs del Excel que NO existen en Minerva → se crearán. */
+  nuevos: number;
+  /** IDs en Minerva (de Optimus) que NO están en este Excel → podrían haber desaparecido. */
+  noEnExcel: number;
 };
 
 const PILOT_ID_STOCK_MIN = 10310;
@@ -299,6 +313,46 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
+/**
+ * Compara los IDs del Excel con los palets Optimus que ya hay en Minerva.
+ * Llámalo durante el preview, antes de confirmar el import.
+ *
+ * "Optimus en Minerva" = es_prueba=false + (last_seen_in_optimus_import_at IS NOT NULL
+ *   OR id_stock < PILOT_ID_STOCK_MIN OR notas LIKE '%Import Optimus%').
+ * En la práctica, tras el primer import con last_seen, bastará con NOT NULL.
+ */
+export async function computeStockOptimusDiff(
+  supabase: SupabaseClient,
+  excelRows: StockOptimusParsedRow[]
+): Promise<StockOptimusDiff> {
+  const excelIds = new Set(excelRows.map((r) => r.id_stock));
+
+  const { data, error } = await supabase
+    .from("prod_stock_palets")
+    .select("id_stock")
+    .eq("es_prueba", false)
+    .lt("id_stock", SANDBOX_ID_STOCK_MIN)
+    .or(
+      "last_seen_in_optimus_import_at.not.is.null,id_stock.lt." + PILOT_ID_STOCK_MIN + ",notas.ilike.%Import Optimus%"
+    );
+  if (error) throw error;
+
+  const dbIds = new Set((data ?? []).map((r) => Number(r.id_stock)));
+
+  let actualizados = 0;
+  let nuevos = 0;
+  for (const id of excelIds) {
+    if (dbIds.has(id)) actualizados++;
+    else nuevos++;
+  }
+  let noEnExcel = 0;
+  for (const id of dbIds) {
+    if (!excelIds.has(id)) noEnExcel++;
+  }
+
+  return { actualizados, nuevos, noEnExcel };
+}
+
 /** Elimina cartelas piloto (#10310–#10320). */
 export async function deletePilotStockCartelas(
   supabase: SupabaseClient
@@ -317,7 +371,7 @@ export async function deletePilotStockCartelas(
 export async function executeStockOptimusImport(
   supabase: SupabaseClient,
   rows: StockOptimusParsedRow[],
-  options: { deletePilotFirst?: boolean } = {}
+  options: { deletePilotFirst?: boolean; diff?: StockOptimusDiff } = {}
 ): Promise<StockOptimusImportResult> {
   let pilotEliminados = 0;
   if (options.deletePilotFirst !== false) {
@@ -327,6 +381,13 @@ export async function executeStockOptimusImport(
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  const now = new Date();
+  const fechaLabel = now.toLocaleDateString("es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 
   let paletsInsertados = 0;
   let otsInsertadas = 0;
@@ -354,8 +415,9 @@ export async function executeStockOptimusImport(
       nota_entrega: r.nota_entrega,
       ref_lote: r.ref_lote,
       notas: r.proveedor_source
-        ? `Import Optimus 03/07/2026 · Proveedor: ${r.proveedor_source}`
-        : "Import Optimus 03/07/2026",
+        ? `Import Optimus ${fechaLabel} · Proveedor: ${r.proveedor_source}`
+        : `Import Optimus ${fechaLabel}`,
+      last_seen_in_optimus_import_at: now.toISOString(),
       es_fsc: false,
       es_pefc: false,
       es_prueba: false,
@@ -417,5 +479,12 @@ export async function executeStockOptimusImport(
     console.warn("No se pudo sincronizar secuencia id_stock:", seqErr.message);
   }
 
-  return { paletsInsertados, otsInsertadas, pilotEliminados };
+  return {
+    paletsInsertados,
+    paletsNuevos: options.diff?.nuevos ?? 0,
+    paletsActualizados: options.diff?.actualizados ?? 0,
+    otsInsertadas,
+    pilotEliminados,
+    desaparecidosCount: options.diff?.noEnExcel ?? 0,
+  };
 }
