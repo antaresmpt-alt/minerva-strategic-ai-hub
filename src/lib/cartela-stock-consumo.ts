@@ -4,7 +4,9 @@ import {
   CARTELA_DATOS_KEYS,
   fetchPaletByIdStock,
   normalizeIdStockInput,
+  notaConsumoCartelaPorProceso,
   procesoUsaCartela,
+  type PasoItinerarioConsumo,
 } from "@/lib/cartela-ejecucion";
 import type { DatosProcesoGenerico } from "@/lib/hoja-ruta-campos-config";
 
@@ -40,9 +42,10 @@ export function parseCartelaConsumoFromDatos(
 /** True si hay hojas declaradas y debe intentarse descontar stock. */
 export function debeRegistrarConsumoCartela(
   procesoId: number | null,
-  datos: DatosProcesoGenerico
+  datos: DatosProcesoGenerico,
+  pasosItinerario?: PasoItinerarioConsumo[] | null,
 ): boolean {
-  if (!procesoUsaCartela(procesoId)) return false;
+  if (!procesoUsaCartela(procesoId, pasosItinerario)) return false;
   const { hojas } = parseCartelaConsumoFromDatos(datos);
   return hojas != null && hojas > 0;
 }
@@ -57,6 +60,7 @@ export async function registrarConsumoCartelaEjecucion(
     hojas: number;
     otNumero: string;
     pasoId?: string | null;
+    procesoId?: number | null;
   }
 ): Promise<void> {
   const { error } = await supabase.rpc("prod_stock_registrar_consumo", {
@@ -64,7 +68,7 @@ export async function registrarConsumoCartelaEjecucion(
     p_cantidad: params.hojas,
     p_ot_numero: params.otNumero,
     p_paso_id: params.pasoId ?? null,
-    p_notas: "Consumo cierre impresión (9.4)",
+    p_notas: notaConsumoCartelaPorProceso(params.procesoId ?? null),
   });
   if (error) throw error;
 }
@@ -89,9 +93,10 @@ export async function aplicarConsumoCartelaSiCorresponde(
     otNumero: string;
     pasoId?: string | null;
     datos: DatosProcesoGenerico;
+    pasosItinerario?: PasoItinerarioConsumo[] | null;
   }
 ): Promise<{ consumido: boolean; hojas: number | null }> {
-  if (!debeRegistrarConsumoCartela(params.procesoId, params.datos)) {
+  if (!debeRegistrarConsumoCartela(params.procesoId, params.datos, params.pasosItinerario)) {
     return { consumido: false, hojas: null };
   }
 
@@ -110,6 +115,7 @@ export async function aplicarConsumoCartelaSiCorresponde(
     hojas,
     otNumero: params.otNumero,
     pasoId: params.pasoId,
+    procesoId: params.procesoId,
   });
 
   return { consumido: true, hojas };

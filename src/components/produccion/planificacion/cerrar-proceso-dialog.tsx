@@ -14,7 +14,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CartelaCierreBlock } from "@/components/produccion/planificacion/cartela-cierre-block";
-import { procesoUsaCartela } from "@/lib/cartela-ejecucion";
+import {
+  nombreProcesoConsumoMaterial,
+  procesoEsCandidatoConsumoMaterial,
+  procesoUsaCartela,
+  resolvePrimerProcesoConsumoMaterial,
+  type PasoItinerarioConsumo,
+} from "@/lib/cartela-ejecucion";
 import type { DatosProcesoGenerico } from "@/lib/hoja-ruta-campos-config";
 import {
   formatHorasEjecucionLabel,
@@ -29,6 +35,7 @@ type CerrarProcesoDialogProps = {
   otNumero: string;
   procesoNombre: string | null;
   procesoId: number | null;
+  pasosItinerario?: PasoItinerarioConsumo[] | null;
   horasMesa: number | null;
   minutosPausa: number;
   datosDraft: DatosProcesoGenerico;
@@ -44,6 +51,7 @@ export function CerrarProcesoDialog({
   otNumero,
   procesoNombre,
   procesoId,
+  pasosItinerario,
   horasMesa,
   minutosPausa,
   datosDraft,
@@ -54,6 +62,13 @@ export function CerrarProcesoDialog({
 }: CerrarProcesoDialogProps) {
   const fields = getCerrarProcesoHourFields(procesoId);
   const declaradas = sumHorasDeclaradasDatosProceso(procesoId, datosDraft);
+  const muestraCartela = procesoUsaCartela(procesoId, pasosItinerario);
+  const primerConsumoId = resolvePrimerProcesoConsumoMaterial(pasosItinerario ?? []);
+  const esCandidatoSinConsumo =
+    procesoEsCandidatoConsumoMaterial(procesoId) &&
+    !muestraCartela &&
+    primerConsumoId != null &&
+    primerConsumoId !== procesoId;
 
   const updateField = (fieldId: string, raw: string) => {
     const parsed = Number(raw.replace(",", "."));
@@ -138,10 +153,21 @@ export function CerrarProcesoDialog({
           ) : null}
         </div>
 
-        {procesoUsaCartela(procesoId) ? (
+        {esCandidatoSinConsumo ? (
+          <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            El consumo de material se registra al cerrar{" "}
+            <span className="font-semibold text-slate-800">
+              {nombreProcesoConsumoMaterial(primerConsumoId)}
+            </span>
+            . No repitas cartela en este paso.
+          </p>
+        ) : null}
+
+        {muestraCartela ? (
           <CartelaCierreBlock
             key={open ? "open" : "closed"}
             otNumero={otNumero}
+            procesoId={procesoId}
             datosDraft={datosDraft}
             onDatosChange={onDatosChange}
           />

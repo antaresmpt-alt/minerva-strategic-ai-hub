@@ -1250,11 +1250,22 @@ Mesa ejecución → Cerrar proceso (OT en impresión offset o digital)
 
 **Reglas:**
 
-- Procesos **1 y 2** únicamente.
+- **Primer consumidor** por itinerario entre procesos **17 → 1/2 → 10** (guillotina, impresión, troquelado). Un solo descuento por OT.
+- Ejemplos: guillotina + digital → consumo en **17**; impresión + troquel → consumo en **1/2**; solo troquel → **10**.
 - **Hojas > 0** → obligatorio palet resuelto; si no existe → **no finaliza** (error).
 - **Solo ID Stock sin hojas** → documental (hoja de ruta), sin movimiento.
 - Ajusta **reservas duras** de la OT en el palet (ATP).
 - **Todas las OTs** — sin filtro piloto en código.
+- **Externos (21)** — pendiente fase C (consumo al marcar Enviado).
+
+#### 15.6.10 Consumo guillotina y troquelado (9.4 A/B — jul 2026)
+
+| Pieza | Detalle |
+|-------|---------|
+| Lógica itinerario | `src/lib/cartela-ejecucion.ts` — `resolvePrimerProcesoConsumoMaterial`, `procesoUsaCartela(procesoId, pasosItinerario)` |
+| UI cierre | `cerrar-proceso-dialog.tsx` — bloque cartela en guillotina/troquel si es primer consumidor; aviso si el consumo fue en paso anterior |
+| Prefill hojas | Guillotina: `hojas_finales` / `hojas_iniciales`; troquel: `hojas_troqueladas`; impresión: `hojas_impresas` / brutas |
+| RPC notas | Dinámicas por proceso (`notaConsumoCartelaPorProceso`) |
 
 #### 15.6.5 Lote de tintas en cierre impresión
 

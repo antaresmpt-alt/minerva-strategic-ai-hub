@@ -138,6 +138,7 @@ function mapExecution(
     id: row.id,
     mesaTrabajoId: row.mesa_trabajo_id,
     otPasoId: row.ot_paso_id,
+    otId: null,
     procesoId: null,
     datosProcesoJson: null,
     procesoAnteriorId: null,

@@ -27,6 +27,7 @@ import {
 import { CerrarProcesoDialog } from "@/components/produccion/planificacion/cerrar-proceso-dialog";
 import { CtpEjecucionRequisitosBlock } from "@/components/produccion/planificacion/ctp-ejecucion-requisitos-block";
 import { aplicarConsumoCartelaSiCorresponde } from "@/lib/cartela-stock-consumo";
+import type { PasoItinerarioConsumo } from "@/lib/cartela-ejecucion";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -572,6 +573,10 @@ function salidaAnteriorKey(otId: string, procesoId: number | null | undefined): 
   return `${otId}::${procesoId}`;
 }
 
+function pasosItinerarioParaConsumo(pasos: PasoItinerarioFormato[]): PasoItinerarioConsumo[] {
+  return pasos.map((p) => ({ procesoId: p.procesoId, orden: p.orden }));
+}
+
 function mapRow(
   r: EjecucionRow,
   pausesByExecutionId: Map<string, MesaEjecucionPausa[]>,
@@ -591,6 +596,7 @@ function mapRow(
     id: r.id,
     mesaTrabajoId: r.mesa_trabajo_id,
     otPasoId: r.ot_paso_id,
+    otId: otId || null,
     procesoId: typeof pid === "number" && Number.isFinite(pid) ? pid : null,
     datosProcesoJson: pasoJoin?.datos_proceso ?? null,
     procesoAnteriorId: salidaAnterior?.procesoAnteriorId ?? null,
@@ -665,6 +671,9 @@ export function PlanificacionOtsEjecucionTab({
   const [savingId, setSavingId] = useState<string | null>(null);
   const [planificacionRole, setPlanificacionRole] = useState<string | null>(null);
   const [hojaRutaOt, setHojaRutaOt] = useState<string | null>(null);
+  const [pasosItinerarioPorOtId, setPasosItinerarioPorOtId] = useState<
+    Map<string, PasoItinerarioFormato[]>
+  >(new Map());
 
   const etiquetaAmbitoEjecucion = useMemo(
     () => etiquetaAmbitoPlanificacion(getPlanificacionTipoMaquinaFilter(planificacionRole)),
@@ -1155,6 +1164,7 @@ export function PlanificacionOtsEjecucionTab({
       // Cargar salidas del paso anterior para el encadenado (Bloque 2.5)
       const salidaAnteriorByPasoKey = new Map<string, SalidaAnteriorInfo>();
       const formatoAnteriorByOtPasoId = new Map<string, { formato: string; origenNombre: string }>();
+      const pasosItinerarioPorOtId = new Map<string, PasoItinerarioFormato[]>();
       const otIds = [
         ...new Set(
           execRows
@@ -1171,7 +1181,6 @@ export function PlanificacionOtsEjecucionTab({
           .order("orden", { ascending: true });
         if (pasosItinerarioErr) throw pasosItinerarioErr;
 
-        const pasosItinerarioPorOtId = new Map<string, PasoItinerarioFormato[]>();
         for (const p of (pasosItinerarioData ?? []) as Array<{
           id: string;
           ot_id: string;
@@ -1273,6 +1282,7 @@ export function PlanificacionOtsEjecucionTab({
       setDespachoByOt(despachoMap);
       setOtMetaByOt(otMetaMap);
       setHijaComponentesByOt(hijaComponentesMap);
+      setPasosItinerarioPorOtId(pasosItinerarioPorOtId);
       setRows(execRows.map((r) => mapRow(r, pauseMap, salidaAnteriorByPasoKey, formatoAnteriorByOtPasoId)));
       setMotivosPausa(motivos);
       setCajasEmbalaje(cajas);
@@ -1370,6 +1380,10 @@ export function PlanificacionOtsEjecucionTab({
           nextPatch.estado_ejecucion === "finalizada" &&
           datosProcesoUpdate
         ) {
+          const pasosRaw = row.otId ? pasosItinerarioPorOtId.get(row.otId) : undefined;
+          const pasosItinerario = pasosRaw
+            ? pasosItinerarioParaConsumo(pasosRaw)
+            : undefined;
           const { consumido, hojas } = await aplicarConsumoCartelaSiCorresponde(
             supabase,
             {
@@ -1377,6 +1391,7 @@ export function PlanificacionOtsEjecucionTab({
               otNumero: row.ot,
               pasoId: row.otPasoId,
               datos: datosProcesoUpdate,
+              pasosItinerario,
             }
           );
           if (consumido && hojas != null) {
@@ -1421,7 +1436,7 @@ export function PlanificacionOtsEjecucionTab({
         setSavingId(null);
       }
     },
-    [supabase, loadData, pausesByExecutionId],
+    [supabase, loadData, pausesByExecutionId, pasosItinerarioPorOtId],
   );
 
   const beginExecution = useCallback(
@@ -1719,6 +1734,11 @@ export function PlanificacionOtsEjecucionTab({
                       margenesSobreproduccion={margenesSobreproduccion}
                       desviacion={desviacion}
                       saving={savingId === row.id}
+                      pasosItinerario={
+                        row.otId
+                          ? pasosItinerarioParaConsumo(pasosItinerarioPorOtId.get(row.otId) ?? [])
+                          : []
+                      }
                       onPatch={(patch, dp) => void patchExecution(row, patch, dp)}
                       onBegin={(patch, dp) => void beginExecution(row, patch, dp)}
                       onPause={(motivo, patch, dp) => void pauseExecution(row, motivo, patch, dp)}
@@ -1749,6 +1769,7 @@ function ExecutionCard({
   margenesSobreproduccion,
   desviacion,
   saving,
+  pasosItinerario,
   onPatch,
   onBegin,
   onPause,
@@ -1766,6 +1787,7 @@ function ExecutionCard({
   margenesSobreproduccion: SobreproduccionMargenesParametros;
   desviacion: number | null;
   saving: boolean;
+  pasosItinerario: PasoItinerarioConsumo[];
   onPatch: (patch: Record<string, unknown>, datosProcesoUpdate?: DatosProcesoGenerico | null) => void;
   onBegin: (patch: Record<string, unknown>, datosProcesoUpdate?: DatosProcesoGenerico | null) => void;
   onPause: (
@@ -2608,6 +2630,7 @@ function ExecutionCard({
             : null
         }
         procesoId={row.procesoId}
+        pasosItinerario={pasosItinerario}
         horasMesa={horasMesaSnapshot}
         minutosPausa={row.minutosPausadaAcum}
         datosDraft={cerrarDatosDraft}

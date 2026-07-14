@@ -20,6 +20,7 @@ import {
   fetchPaletByIdStock,
   formatIdStockDisplay,
   normalizeIdStockInput,
+  suggestHojasConsumoCartela,
   type CartelaOption,
 } from "@/lib/cartela-ejecucion";
 import type { DatosProcesoGenerico } from "@/lib/hoja-ruta-campos-config";
@@ -30,6 +31,7 @@ type LookupState = "idle" | "loading" | "found" | "not_found" | "error";
 
 type CartelaCierreBlockProps = {
   otNumero: string;
+  procesoId: number | null;
   datosDraft: DatosProcesoGenerico;
   onDatosChange: (datos: DatosProcesoGenerico) => void;
 };
@@ -47,7 +49,12 @@ function readHojasFromDatos(datos: DatosProcesoGenerico): number | null {
   return null;
 }
 
-export function CartelaCierreBlock({ otNumero, datosDraft, onDatosChange }: CartelaCierreBlockProps) {
+export function CartelaCierreBlock({
+  otNumero,
+  procesoId,
+  datosDraft,
+  onDatosChange,
+}: CartelaCierreBlockProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const datosRef = useRef(datosDraft);
   datosRef.current = datosDraft;
@@ -66,6 +73,15 @@ export function CartelaCierreBlock({ otNumero, datosDraft, onDatosChange }: Cart
   );
   const [lookupState, setLookupState] = useState<LookupState>(initialId != null ? "loading" : "idle");
   const [paletPreview, setPaletPreview] = useState<ProdStockPaletRow | null>(null);
+  const hojasPrefilledRef = useRef(false);
+
+  useEffect(() => {
+    if (hojasPrefilledRef.current || initialHojas != null) return;
+    const suggested = suggestHojasConsumoCartela(procesoId, datosDraft);
+    if (suggested == null) return;
+    hojasPrefilledRef.current = true;
+    setHojasInput(String(suggested));
+  }, [procesoId, datosDraft, initialHojas]);
 
   // Cargar cartelas asignadas a esta OT
   useEffect(() => {
