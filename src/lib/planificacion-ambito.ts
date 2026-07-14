@@ -211,7 +211,7 @@ export async function fetchProximoPasoDisponiblePorOt(
     const { data, error } = await supabase
       .from("prod_ot_pasos")
       .select(
-        "ot_id, orden, estado, prod_procesos_cat(nombre, seccion_slug, tipo_planificacion)",
+        "ot_id, orden, estado, prod_procesos_cat(nombre, seccion_slug, tipo_planificacion, es_externo)",
       )
       .in("ot_id", chunk)
       .eq("estado", "disponible")
@@ -226,6 +226,7 @@ export async function fetchProximoPasoDisponiblePorOt(
       nombre?: string | null;
       seccion_slug?: string | null;
       tipo_planificacion?: string | null;
+      es_externo?: boolean | null;
     } | null;
   };
 
@@ -253,9 +254,11 @@ export async function fetchProximoPasoDisponiblePorOt(
       String(cat.tipo_planificacion).trim().length > 0
         ? String(cat.tipo_planificacion).trim().toLowerCase()
         : null;
-    const tipoMaquina =
-      parsePlanificacionTipoMaquina(tipoFromDb) ??
-      inferPlanificacionTipoFromProceso(slug, nombre);
+    const esExterno = cat?.es_externo === true;
+    const tipoMaquina = esExterno
+      ? null
+      : parsePlanificacionTipoMaquina(tipoFromDb) ??
+        inferPlanificacionTipoFromProceso(slug, nombre);
     out.set(num, {
       nombre,
       seccionSlug: slug,

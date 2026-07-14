@@ -1274,6 +1274,51 @@ Mesa ejecución → Cerrar proceso (OT en impresión offset o digital)
 | UI | `gestion-externos-page.tsx` — al pasar a **Enviado** (lista o edición); diálogo `cartela-externo-enviado-dialog.tsx` si falta ID Stock |
 | Hojas | `hojas_enviadas` del seguimiento o `numero_hojas` en `datos_proceso`; persiste cartela en `prod_ot_pasos` |
 
+#### 15.6.12 Pendiente — Derivar OT a impresión externa (post-despacho)
+
+> **Contexto planta (jul 2026):** Muchas OTs se despachan para **producción en casa** (CTP → guillotina → offset/digital…). Con carga alta, Ramón puede decidir **a mitad de ruta** enviar la OT a **imprimir fuera**. Hoy eso **no** está soportado: hay que replantear itinerario a mano o crear OT de prueba con **21** desde el despacho. **9.4 C** (consumo al **Enviado**) solo aplica a proceso **21** y solo si es el **primer consumidor** de material (17→1/2→10→21).
+
+**Estado actual (referencia):**
+
+| Capacidad | Dónde | Límite |
+|-----------|--------|--------|
+| Editar itinerario completo | OTs Despachadas → editar | Solo si **todos** los pasos están `pendiente` o `disponible` (`itinerarioPasosPermitenReemplazo`) |
+| Cola externo desde itinerario | Externos → OTs con paso externo | El **siguiente paso disponible** debe ser `es_externo` en catálogo (p. ej. Plastificado **3**, Impresión EXTERNA **21**) |
+| Consumo cartela externo | Gestión Externos → **Enviado** | Solo **21**; no plastificado ni otros externos |
+
+**Problema:** Si la OT ya pasó CTP/guillotina o está en pool/mesa de **impresión interna (1/2)**, no hay acción única «mandar a imprimir fuera» que sustituya 1/2 por 21 y abra seguimiento externo.
+
+**Opciones de diseño (evaluar en reunión):**
+
+| Opción | Idea | Pros | Contras / reglas |
+|--------|------|------|------------------|
+| **A — Acción Pool/Mesa** | Botón «Derivar a impresión externa» en Pool OTs (y/o mesa) cuando el **próximo paso** es 1 o 2 | UX clara; operación habitual | Sustituir paso 1/2 por 21; cancelar/liberar slot mesa si planificado; crear fila Externos con `ot_paso_id`; aviso si material ya consumido en 17 |
+| **B — Editar itinerario acotado** | Permitir cambio de itinerario **solo** si no hay paso `en_marcha`/`finalizado` **posterior** al punto de corte, y el cambio afecta solo tramo **antes de impresión** (sustituir 1/2 → 21) | Reutiliza editor despachadas | Más difícil de explicar; validar troquel/plastificado downstream |
+| **C — Insertar 21 sin borrar 1/2** | Marcar 1/2 como `saltado` / `cancelado` y activar 21 como siguiente | Trazabilidad histórica | Riesgo doble planificación; hay que definir estados nuevos |
+| **D — Solo pre-despacho** | Documentar que impresión externa debe ir en wizard inicial | Cero dev | No resuelve el caso real de carga |
+
+**Reglas cartela acordadas (cuando se implemente A/B):**
+
+- Si **no** hubo consumo en 17/1/2/10 → consumo en **21** al **Enviado** (como 9.4 C).
+- Si **ya** consumió en guillotina (17) → **21** no repite cartela; plastificado/otros externos tampoco.
+- Prefill hojas en Enviado: `hojas_enviadas` del seguimiento o salida del último paso interno completado (guillotina → `hojas_finales` o `hojas_iniciales` según acuerdo — ver fix prefill guillotina).
+
+**Prueba cartela 9.4 C (jul 2026):** OT **98013** (maestro clon **35842**) — despachar con itinerario **Impresión EXTERNA (21)** desde el inicio; compra → muelle → cartela → Externos → Enviado.
+
+**Bug corregido (14 jul 2026):** proceso **21** tenía `es_externo = false` en `prod_procesos_cat` → no entraba en cola Externos y sí en mesa offset (`tipo_planificacion = impresion`). Migración `20260714210000_proceso_21_impresion_externa_es_externo.sql` + `planificacion-ambito.ts` (pasos `es_externo` → `planificacionTipoPaso = null`).
+
+**Pendiente wizard Impresión EXTERNA (despacho paso 4) — hecho 14 jul 2026:**
+
+| Tema | Detalle |
+|------|---------|
+| Hojas brutas / netas | Campos en wizard paso Producción (21): **brutas a enviar** + **netas a recibir** → `datos_proceso` (`hojas_brutas`, `hojas_netas`, `numero_hojas`) y `produccion_ot_despachadas.num_hojas_netas` |
+| Acabados | Combo unifica catálogo `acabado_pral` (barniz…) + `prod_cat_acabados`; cara incluye **IMPRESIÓN** |
+| Estuches resumen | `hojasNetasParaEstuchesDespacho` usa netas del paso 21 |
+
+**Bug corregido cartelas (14 jul 2026):** bandeja pendientes duplicaba palets/hojas al agrupar por albarán (1 palet → mostraba 2; 550 h → 1100). Fix en `cartelas-page.tsx`.
+
+**Piezas probables:** `despacho-wizard-dialog.tsx`, `despacho-wizard-shared.ts`, `planificacion-pool-ots-tab-v2.tsx`, `prod-ot-itinerario-client.ts`, `externos-itinerario-queue.ts`, migración estados paso opcional, § doc Bloque 8/Externos.
+
 #### 15.6.5 Lote de tintas en cierre impresión
 
 | Pieza | Detalle |

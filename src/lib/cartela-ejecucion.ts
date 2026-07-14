@@ -133,8 +133,12 @@ export function suggestHojasConsumoCartela(
   }
 
   if (procesoId === PROCESO_IMPRESION_EXTERNA_ID) {
+    const brutas = toFiniteNum(datos.hojas_brutas);
+    if (brutas != null && brutas > 0) return Math.round(brutas);
     const numeroHojas = toFiniteNum(datos.numero_hojas);
     if (numeroHojas != null && numeroHojas > 0) return Math.round(numeroHojas);
+    const netas = toFiniteNum(datos.hojas_netas);
+    if (netas != null && netas > 0) return Math.round(netas);
     return null;
   }
 

@@ -68,7 +68,10 @@ import {
   getExternoDatosWizard,
   hojasBrutasCompraDespacho,
   hojasBrutasImpresionDespacho,
+  hojasBrutasImpresionExternaDespacho,
+  hojasNetasImpresionExternaDespacho,
   integerOrZeroForDespacho,
+  numHojasNetasDespachoGuardar,
   numberOrZeroForDespacho,
   parseDescripcionReferenciaFromTitulo,
   parseOptionalDecimalInput,
@@ -80,6 +83,7 @@ import {
   PROCESO_ENGOMADO_ID,
   PROCESO_EXTERNO_IDS,
   PROCESO_GUILLOTINA_ID,
+  PROCESO_IMPRESION_EXTERNA_ID,
   PROCESO_MANIPULADOS_ID,
   PROCESO_OFFSET_ID,
   PROCESO_TROQUEL_ID,
@@ -268,6 +272,7 @@ export function DespachoWizardDialog({
   const otInputRef = useRef<HTMLInputElement | null>(null);
   const guillotinaInicialesAutoRef = useRef(true);
   const impresionBrutasAutoRef = useRef(true);
+  const impresionExternaBrutasAutoRef = useRef(true);
   const impresionFormatoAutoRef = useRef(true);
 
   const [wizardTab, setWizardTab] = useState<DespachoWizardTab>("cabecera");
@@ -337,6 +342,7 @@ export function DespachoWizardDialog({
     setItinerarioOverrides({});
     guillotinaInicialesAutoRef.current = true;
     impresionBrutasAutoRef.current = true;
+    impresionExternaBrutasAutoRef.current = true;
     impresionFormatoAutoRef.current = true;
     setForm(emptyDespachoForm());
     setItinerarioSlots([]);
@@ -438,6 +444,7 @@ export function DespachoWizardDialog({
 
         guillotinaInicialesAutoRef.current = true;
         impresionBrutasAutoRef.current = true;
+        impresionExternaBrutasAutoRef.current = true;
         impresionFormatoAutoRef.current = true;
 
         const pasosList = (pasosRows ?? []) as Array<{
@@ -574,6 +581,10 @@ export function DespachoWizardDialog({
           } else if (tamanoCompra) {
             parsedProceso.impresion.formato_hojas = tamanoCompra;
           }
+        }
+        const extImp = parsedProceso.externos[String(PROCESO_IMPRESION_EXTERNA_ID)];
+        if (extImp && !extImp.hojas_brutas && hojasBrutasCompra) {
+          extImp.hojas_brutas = hojasBrutasCompra;
         }
         setProcesoDatos(parsedProceso);
 
@@ -1101,6 +1112,28 @@ export function DespachoWizardDialog({
     () => catalog.filter((x) => x.tipo === "acabado_pral").map((x) => x.label),
     [catalog]
   );
+  /** Impresión externa: acabados offset (barniz…) + catálogo plastificado/externos. */
+  const acabadosImpresionExterna = useMemo(() => {
+    const seen = new Set<string>();
+    const merged: Array<{ id: string; nombre: string }> = [];
+    for (const label of acabadoSuggestions) {
+      const n = label.trim();
+      if (!n) continue;
+      const key = n.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push({ id: `pral-${key}`, nombre: n });
+    }
+    for (const a of acabadosPlastificado) {
+      const n = a.nombre.trim();
+      if (!n) continue;
+      const key = n.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(a);
+    }
+    return merged;
+  }, [acabadoSuggestions, acabadosPlastificado]);
   const engomadoSuggestions = useMemo(
     () =>
       catalog.filter((x) => x.tipo === "tipo_engomado").map((x) => x.label),
@@ -1127,6 +1160,9 @@ export function DespachoWizardDialog({
         ? `netas impresión (${fmt})`
         : "netas impresión (post guillotina)";
     }
+    if (procesoIdsInRoute.has(PROCESO_IMPRESION_EXTERNA_ID)) {
+      return "netas impresión externa";
+    }
     if (procesoIdsInRoute.has(PROCESO_GUILLOTINA_ID)) {
       const hf = integerOrZeroForDespacho(procesoDatos.guillotina.hojas_finales);
       if (hf > 0) {
@@ -1142,6 +1178,31 @@ export function DespachoWizardDialog({
     () => hojasBrutasImpresionDespacho(form, procesoDatos, procesoIdsInRoute),
     [form, procesoDatos, procesoIdsInRoute]
   );
+
+  const hojasBrutasImpresionExterna = useMemo(
+    () => hojasBrutasImpresionExternaDespacho(form, procesoDatos),
+    [form, procesoDatos]
+  );
+
+  /** Sincroniza hojas brutas compra → impresión externa (auto hasta edición manual). */
+  useEffect(() => {
+    if (!procesoIdsInRoute.has(PROCESO_IMPRESION_EXTERNA_ID)) return;
+    const brutas = hojasBrutasCompraDespacho(form);
+    if (!brutas) return;
+    setProcesoDatos((prev) => {
+      if (!impresionExternaBrutasAutoRef.current) return prev;
+      const key = String(PROCESO_IMPRESION_EXTERNA_ID);
+      const ext = getExternoDatosWizard(prev, PROCESO_IMPRESION_EXTERNA_ID);
+      if (ext.hojas_brutas.trim() === String(brutas)) return prev;
+      return {
+        ...prev,
+        externos: {
+          ...prev.externos,
+          [key]: { ...ext, hojas_brutas: String(brutas) },
+        },
+      };
+    });
+  }, [form.num_hojas_brutas, procesoIdsInRoute]);
 
   /** Sincroniza hojas brutas compra → guillotina iniciales (auto hasta edición manual). */
   useEffect(() => {
@@ -1442,7 +1503,11 @@ export function DespachoWizardDialog({
         tamano_hoja: form.tamano_hoja.trim() || null,
         gramaje: parseOptionalDecimalInput(form.gramaje),
         num_hojas_brutas: integerOrZeroForDespacho(form.num_hojas_brutas),
-        num_hojas_netas: integerOrZeroForDespacho(form.num_hojas_netas),
+        num_hojas_netas: numHojasNetasDespachoGuardar(
+          form,
+          procesoDatos,
+          procesoIdsInRoute,
+        ),
         horas_entrada: numberOrZeroForDespacho(form.horas_entrada),
         horas_tiraje: numberOrZeroForDespacho(form.horas_tiraje),
         horas_estimadas_troquelado: horasTroquelTotal,
@@ -1538,6 +1603,7 @@ export function DespachoWizardDialog({
     setTroquelInfo(null);
     guillotinaInicialesAutoRef.current = true;
     impresionBrutasAutoRef.current = true;
+    impresionExternaBrutasAutoRef.current = true;
     impresionFormatoAutoRef.current = true;
     setWizardTab("cabecera");
     window.setTimeout(() => otInputRef.current?.focus(), 80);
@@ -1851,6 +1917,10 @@ export function DespachoWizardDialog({
             },
           },
         }));
+      const acabadosOpciones =
+        pid === PROCESO_IMPRESION_EXTERNA_ID
+          ? acabadosImpresionExterna
+          : acabadosPlastificado;
       return (
         <section
           key={slot.key}
@@ -1860,10 +1930,42 @@ export function DespachoWizardDialog({
             {slot.nombre}
           </h4>
           <p className="mb-3 text-[11px] text-slate-600">
-            Acabado previsto para el proveedor. Hojas y recepción se detallan en
-            ejecución / seguimiento externos.
+            {pid === PROCESO_IMPRESION_EXTERNA_ID
+              ? "Hojas a enviar/recibir y acabado previsto para el proveedor. El seguimiento en Externos detalla envío y recepción."
+              : "Acabado previsto para el proveedor. Hojas y recepción se detallan en ejecución / seguimiento externos."}
           </p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {pid === PROCESO_IMPRESION_EXTERNA_ID ? (
+              <>
+                <div className="grid gap-1">
+                  <Label className="text-xs">Hojas brutas a enviar</Label>
+                  <Input
+                    className="h-8 text-xs"
+                    type="number"
+                    placeholder={
+                      hojasBrutasImpresionExterna > 0
+                        ? String(hojasBrutasImpresionExterna)
+                        : "ej: 550"
+                    }
+                    value={ext.hojas_brutas}
+                    onChange={(e) => {
+                      impresionExternaBrutasAutoRef.current = false;
+                      setExt({ hojas_brutas: e.target.value });
+                    }}
+                  />
+                </div>
+                <div className="grid gap-1">
+                  <Label className="text-xs">Hojas netas a recibir</Label>
+                  <Input
+                    className="h-8 text-xs"
+                    type="number"
+                    placeholder="ej: 300 (brutas − merma)"
+                    value={ext.hojas_netas}
+                    onChange={(e) => setExt({ hojas_netas: e.target.value })}
+                  />
+                </div>
+              </>
+            ) : null}
             <div className="grid gap-1 sm:col-span-2 lg:col-span-3">
               <Label className="text-xs">Acabado principal</Label>
               <Select
@@ -1874,12 +1976,12 @@ export function DespachoWizardDialog({
                   <SelectValue placeholder="Selecciona acabado…" />
                 </SelectTrigger>
                 <SelectContent>
-                  {acabadosPlastificado.length === 0 ? (
+                  {acabadosOpciones.length === 0 ? (
                     <SelectItem value="__loading__" disabled>
                       Cargando acabados…
                     </SelectItem>
                   ) : (
-                    acabadosPlastificado.map((a) => (
+                    acabadosOpciones.map((a) => (
                       <SelectItem key={a.id} value={a.nombre}>
                         {a.nombre}
                       </SelectItem>
@@ -1898,15 +2000,18 @@ export function DespachoWizardDialog({
                   <SelectValue placeholder="Selecciona…" />
                 </SelectTrigger>
                 <SelectContent>
-                  {acabadosPlastificado.length === 0 ? (
+                  {acabadosOpciones.length === 0 ? (
                     <SelectItem value="__loading__" disabled>
                       Cargando…
                     </SelectItem>
                   ) : (
                     <>
+                      {pid === PROCESO_IMPRESION_EXTERNA_ID ? (
+                        <SelectItem value="IMPRESIÓN">IMPRESIÓN</SelectItem>
+                      ) : null}
                       <SelectItem value="—">— (sin acabado cara)</SelectItem>
-                      {acabadosPlastificado.map((a) => (
-                        <SelectItem key={a.id} value={a.nombre}>
+                      {acabadosOpciones.map((a) => (
+                        <SelectItem key={`cara-${a.id}`} value={a.nombre}>
                           {a.nombre}
                         </SelectItem>
                       ))}
@@ -1925,15 +2030,15 @@ export function DespachoWizardDialog({
                   <SelectValue placeholder="Selecciona…" />
                 </SelectTrigger>
                 <SelectContent>
-                  {acabadosPlastificado.length === 0 ? (
+                  {acabadosOpciones.length === 0 ? (
                     <SelectItem value="__loading__" disabled>
                       Cargando…
                     </SelectItem>
                   ) : (
                     <>
                       <SelectItem value="—">— (sin acabado dorso)</SelectItem>
-                      {acabadosPlastificado.map((a) => (
-                        <SelectItem key={a.id} value={a.nombre}>
+                      {acabadosOpciones.map((a) => (
+                        <SelectItem key={`dorso-${a.id}`} value={a.nombre}>
                           {a.nombre}
                         </SelectItem>
                       ))}
@@ -3327,6 +3432,28 @@ export function DespachoWizardDialog({
                           : ""}
                       </p>
                     ) : null}
+                    {procesoIdsInRoute.has(PROCESO_IMPRESION_EXTERNA_ID) &&
+                    !procesoIdsInRoute.has(PROCESO_OFFSET_ID) &&
+                    !procesoIdsInRoute.has(PROCESO_DIGITAL_ID) ? (
+                      (() => {
+                        const extImp = getExternoDatosWizard(
+                          procesoDatos,
+                          PROCESO_IMPRESION_EXTERNA_ID,
+                        );
+                        if (!extImp.hojas_brutas && !extImp.hojas_netas) return null;
+                        return (
+                          <p>
+                            <span className="text-slate-500">
+                              Impresión externa:
+                            </span>{" "}
+                            {extImp.hojas_brutas || "—"} brutas a enviar
+                            {extImp.hojas_netas
+                              ? ` · ${extImp.hojas_netas} netas a recibir`
+                              : ""}
+                          </p>
+                        );
+                      })()
+                    ) : null}
                     {estuchesEstimados ? (
                       <p>
                         <span className="text-slate-500">Estuches est.:</span>{" "}
@@ -3378,6 +3505,14 @@ export function DespachoWizardDialog({
                             : "",
                           ext.acabado_dorso
                             ? `dorso ${ext.acabado_dorso}`
+                            : "",
+                          s.procesoId === PROCESO_IMPRESION_EXTERNA_ID &&
+                          ext.hojas_brutas
+                            ? `${ext.hojas_brutas} brutas`
+                            : "",
+                          s.procesoId === PROCESO_IMPRESION_EXTERNA_ID &&
+                          ext.hojas_netas
+                            ? `${ext.hojas_netas} netas`
                             : "",
                         ].filter(Boolean);
                         if (!parts.length) return null;

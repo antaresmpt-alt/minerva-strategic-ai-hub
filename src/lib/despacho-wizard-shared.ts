@@ -394,6 +394,7 @@ export const PROCESO_TROQUEL_ID = 10;
 export const PROCESO_ENGOMADO_ID = 12;
 export const PROCESO_MANIPULADOS_ID = 15;
 export const PROCESO_DESBROCE_ID = 22;
+export const PROCESO_IMPRESION_EXTERNA_ID = 21;
 
 /** Datos de proceso capturados en el wizard (se siembran en prod_ot_pasos.datos_proceso). */
 export type DespachoWizardGuillotinaDatos = {
@@ -416,6 +417,10 @@ export type DespachoWizardExternoDatos = {
   acabado_detalle: string;
   acabado_cara: string;
   acabado_dorso: string;
+  /** Impresión externa (21): brutas a enviar al proveedor. */
+  hojas_brutas: string;
+  /** Impresión externa (21): netas previstas al recibir. */
+  hojas_netas: string;
 };
 
 export type DespachoWizardProcesoDatos = {
@@ -431,6 +436,8 @@ export function emptyDespachoWizardExternoDatos(): DespachoWizardExternoDatos {
     acabado_detalle: "",
     acabado_cara: "",
     acabado_dorso: "",
+    hojas_brutas: "",
+    hojas_netas: "",
   };
 }
 
@@ -485,6 +492,47 @@ function tieneImpresionEnRuta(procesoIdsInRoute: Set<number>): boolean {
   );
 }
 
+function tieneImpresionExternaEnRuta(procesoIdsInRoute: Set<number>): boolean {
+  return procesoIdsInRoute.has(PROCESO_IMPRESION_EXTERNA_ID);
+}
+
+export function hojasBrutasImpresionExternaDespacho(
+  form: DespachoFormState,
+  procesoDatos: DespachoWizardProcesoDatos,
+): number {
+  const ext = getExternoDatosWizard(procesoDatos, PROCESO_IMPRESION_EXTERNA_ID);
+  const brutas = integerOrZeroForDespacho(ext.hojas_brutas);
+  if (brutas > 0) return brutas;
+  return hojasBrutasCompraDespacho(form) || hojasCompraDespacho(form);
+}
+
+export function hojasNetasImpresionExternaDespacho(
+  procesoDatos: DespachoWizardProcesoDatos,
+): number {
+  return integerOrZeroForDespacho(
+    getExternoDatosWizard(procesoDatos, PROCESO_IMPRESION_EXTERNA_ID).hojas_netas,
+  );
+}
+
+/** Netas a persistir en produccion_ot_despachadas (impresión interna, externa o compra). */
+export function numHojasNetasDespachoGuardar(
+  form: DespachoFormState,
+  procesoDatos: DespachoWizardProcesoDatos,
+  procesoIdsInRoute: Set<number>,
+): number {
+  if (tieneImpresionEnRuta(procesoIdsInRoute)) {
+    const netas = integerOrZeroForDespacho(procesoDatos.impresion.hojas_netas);
+    if (netas > 0) return netas;
+  }
+  if (tieneImpresionExternaEnRuta(procesoIdsInRoute)) {
+    const netas = hojasNetasImpresionExternaDespacho(procesoDatos);
+    if (netas > 0) return netas;
+  }
+  const netasCompra = hojasNetasCompraDespacho(form);
+  if (netasCompra > 0) return netasCompra;
+  return integerOrZeroForDespacho(form.num_hojas_netas);
+}
+
 /** Brutas de entrada a impresión (post guillotina / paso anterior). */
 export function hojasBrutasImpresionDespacho(
   form: DespachoFormState,
@@ -512,6 +560,10 @@ export function hojasNetasParaEstuchesDespacho(
 ): number {
   if (tieneImpresionEnRuta(procesoIdsInRoute)) {
     return integerOrZeroForDespacho(procesoDatos.impresion.hojas_netas);
+  }
+  if (tieneImpresionExternaEnRuta(procesoIdsInRoute)) {
+    const netas = hojasNetasImpresionExternaDespacho(procesoDatos);
+    if (netas > 0) return netas;
   }
   if (procesoIdsInRoute.has(PROCESO_GUILLOTINA_ID)) {
     return integerOrZeroForDespacho(procesoDatos.guillotina.hojas_finales);
@@ -623,6 +675,16 @@ export function buildDatosProcesoSeed(
     if (det) payload.acabado_detalle = det;
     if (cara) payload.acabado_cara = cara;
     if (dorso) payload.acabado_dorso = dorso;
+    if (procesoId === PROCESO_IMPRESION_EXTERNA_ID) {
+      const hojasBrutas =
+        numOrNull(ext.hojas_brutas) ?? (hojasBrutasCompraDespacho(form) || null);
+      const hojasNetas = numOrNull(ext.hojas_netas);
+      if (hojasBrutas) payload.hojas_brutas = hojasBrutas;
+      if (hojasNetas) {
+        payload.hojas_netas = hojasNetas;
+        payload.numero_hojas = hojasNetas;
+      }
+    }
     return Object.keys(payload).length > 0 ? payload : null;
   }
   return null;
@@ -737,6 +799,14 @@ export function parseProcesoDatosFromPasos(
         acabado_detalle: String(d.acabado_detalle ?? ""),
         acabado_cara: String(d.acabado_cara ?? ""),
         acabado_dorso: String(d.acabado_dorso ?? ""),
+        hojas_brutas:
+          d.hojas_brutas == null ? "" : String(d.hojas_brutas),
+        hojas_netas:
+          d.hojas_netas == null
+            ? d.numero_hojas == null
+              ? ""
+              : String(d.numero_hojas)
+            : String(d.hojas_netas),
       };
     }
   }
