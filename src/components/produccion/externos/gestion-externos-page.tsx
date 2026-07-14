@@ -56,6 +56,7 @@ import {
   type ExternosWeeklyBoardRow,
 } from "@/components/produccion/externos/externos-weekly-board";
 import { ImportacionOptimusTab } from "@/components/produccion/externos/importacion-optimus-tab";
+import { CartelaExternoEnviadoDialog } from "@/components/produccion/externos/cartela-externo-enviado-dialog";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -129,6 +130,12 @@ import {
   type EmailPlantillaBloques,
 } from "@/lib/email-plantillas-produccion";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
+import {
+  ejecutarConsumoExternoEnviado,
+  prepararConsumoExternoAlMarcarEnviado,
+  type ConsumoExternoEnviadoContext,
+} from "@/lib/cartela-consumo-externos";
+import type { DatosProcesoGenerico } from "@/lib/hoja-ruta-campos-config";
 import { useHubStore } from "@/lib/store";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
@@ -964,6 +971,14 @@ export function GestionExternosPage() {
   const [editSegEstado, setEditSegEstado] = useState("");
   const [editSegCliente, setEditSegCliente] = useState("");
   const [editSegTrabajo, setEditSegTrabajo] = useState("");
+
+  const [cartelaEnviadoOpen, setCartelaEnviadoOpen] = useState(false);
+  const [cartelaEnviadoDatos, setCartelaEnviadoDatos] = useState<DatosProcesoGenerico>({});
+  const [cartelaEnviadoPending, setCartelaEnviadoPending] = useState<{
+    context: ConsumoExternoEnviadoContext;
+    otNumero: string;
+    afterConsumo: () => Promise<void>;
+  } | null>(null);
 
   const [analistaOpen, setAnalistaOpen] = useState(false);
   const [analistaLoading, setAnalistaLoading] = useState(false);
@@ -2295,6 +2310,79 @@ export function GestionExternosPage() {
     toast.success("Excel descargado (vista filtrada actual).");
   }, [seguimientosFiltrados, proveedorNombreById, acabadoNombreById]);
 
+  async function runConsumoCartelaAlMarcarEnviado(
+    row: SeguimientoRow,
+    hojasEnviadas?: number | null,
+  ): Promise<
+    | { ok: true; consumido?: boolean; hojas?: number | null }
+    | {
+        ok: false;
+        needsDialog: true;
+        context: ConsumoExternoEnviadoContext;
+        datosDraft: DatosProcesoGenerico;
+      }
+    | { ok: false; needsDialog: false }
+  > {
+    try {
+      const evalResult = await prepararConsumoExternoAlMarcarEnviado(supabase, {
+        otPasoId: row.ot_paso_id,
+        otNumero: getOtDisplay(row),
+        hojasEnviadas,
+      });
+      if (evalResult.kind === "skip") return { ok: true };
+      if (evalResult.kind === "needs_cartela") {
+        return {
+          ok: false,
+          needsDialog: true,
+          context: evalResult.context,
+          datosDraft: evalResult.datosDraft,
+        };
+      }
+      const { consumido, hojas } = await ejecutarConsumoExternoEnviado(
+        supabase,
+        evalResult.context,
+        evalResult.datos,
+      );
+      if (consumido && hojas != null) {
+        toast.success(
+          `Stock descontado: ${hojas.toLocaleString("es-ES")} h del palet.`,
+        );
+      }
+      return { ok: true, consumido, hojas };
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "No se pudo descontar el stock.",
+      );
+      return { ok: false, needsDialog: false };
+    }
+  }
+
+  async function confirmCartelaExternoEnviado() {
+    if (!cartelaEnviadoPending) return;
+    setSaving(true);
+    try {
+      const { consumido, hojas } = await ejecutarConsumoExternoEnviado(
+        supabase,
+        cartelaEnviadoPending.context,
+        cartelaEnviadoDatos,
+      );
+      if (consumido && hojas != null) {
+        toast.success(
+          `Stock descontado: ${hojas.toLocaleString("es-ES")} h del palet.`,
+        );
+      }
+      await cartelaEnviadoPending.afterConsumo();
+      setCartelaEnviadoOpen(false);
+      setCartelaEnviadoPending(null);
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "No se pudo descontar el stock.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function updateEstado(row: SeguimientoRow, nuevo: string) {
     const now = new Date().toISOString();
     const patch: Record<string, string> = {
@@ -2303,6 +2391,29 @@ export function GestionExternosPage() {
     };
     if (nuevo === "Enviado" && row.estado !== "Enviado") {
       patch.fecha_envio = now;
+      const consumo = await runConsumoCartelaAlMarcarEnviado(row, row.hojas_enviadas);
+      if (!consumo.ok) {
+        if (consumo.needsDialog) {
+          setCartelaEnviadoPending({
+            context: consumo.context,
+            otNumero: getOtDisplay(row),
+            afterConsumo: async () => {
+              setSaving(true);
+              const { error } = await supabase
+                .from("prod_seguimiento_externos")
+                .update(patch)
+                .eq("id", row.id);
+              setSaving(false);
+              if (error) throw new Error(error.message);
+              toast.success("Estado actualizado.");
+              void loadCore();
+            },
+          });
+          setCartelaEnviadoDatos(consumo.datosDraft);
+          setCartelaEnviadoOpen(true);
+        }
+        return;
+      }
     }
     setSaving(true);
     const { error } = await supabase
@@ -2548,6 +2659,41 @@ export function GestionExternosPage() {
           : null,
       updated_at: now,
     };
+    if (
+      editSegEstado === "Enviado" &&
+      seguimientoEditing.estado !== "Enviado"
+    ) {
+      const hojasEnvNum = hojasEnvStr ? Number(hojasEnvStr) : NaN;
+      const consumo = await runConsumoCartelaAlMarcarEnviado(
+        seguimientoEditing,
+        Number.isFinite(hojasEnvNum) ? Math.trunc(hojasEnvNum) : null,
+      );
+      if (!consumo.ok) {
+        if (consumo.needsDialog) {
+          const rowId = seguimientoEditing.id;
+          setCartelaEnviadoPending({
+            context: consumo.context,
+            otNumero: getOtDisplay(seguimientoEditing),
+            afterConsumo: async () => {
+              setSaving(true);
+              const { error } = await supabase
+                .from("prod_seguimiento_externos")
+                .update(patch)
+                .eq("id", rowId);
+              setSaving(false);
+              if (error) throw new Error(error.message);
+              toast.success("Envío actualizado correctamente.");
+              setSeguimientoSheetOpen(false);
+              setSeguimientoEditing(null);
+              void loadCore();
+            },
+          });
+          setCartelaEnviadoDatos(consumo.datosDraft);
+          setCartelaEnviadoOpen(true);
+        }
+        return;
+      }
+    }
     setSaving(true);
     const { error } = await supabase
       .from("prod_seguimiento_externos")
@@ -5821,6 +5967,19 @@ export function GestionExternosPage() {
           </Card>
         </div>
       ) : null}
+      <CartelaExternoEnviadoDialog
+        open={cartelaEnviadoOpen}
+        onOpenChange={(open) => {
+          setCartelaEnviadoOpen(open);
+          if (!open) setCartelaEnviadoPending(null);
+        }}
+        otNumero={cartelaEnviadoPending?.otNumero ?? ""}
+        context={cartelaEnviadoPending?.context ?? null}
+        datosDraft={cartelaEnviadoDatos}
+        onDatosChange={setCartelaEnviadoDatos}
+        onConfirm={() => void confirmCartelaExternoEnviado()}
+        saving={saving}
+      />
     </div>
     </TooltipProvider>
   );

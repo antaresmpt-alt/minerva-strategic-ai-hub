@@ -14,9 +14,10 @@ export const PROCESOS_IMPRESION_CARTELA = [1, 2] as const;
 
 export const PROCESO_GUILLOTINA_ID = 17;
 export const PROCESO_TROQUELADO_ID = 10;
+export const PROCESO_IMPRESION_EXTERNA_ID = 21;
 
 /** Orden de prioridad para el único punto de consumo de material bruto por OT. */
-export const PROCESOS_CONSUMO_MATERIAL_ORDEN = [17, 1, 2, 10] as const;
+export const PROCESOS_CONSUMO_MATERIAL_ORDEN = [17, 1, 2, 10, 21] as const;
 
 export type PasoItinerarioConsumo = {
   procesoId: number | null;
@@ -91,6 +92,8 @@ export function notaConsumoCartelaPorProceso(procesoId: number | null): string {
       return "Consumo cierre impresión digital (9.4)";
     case PROCESO_TROQUELADO_ID:
       return "Consumo cierre troquelado (9.4)";
+    case PROCESO_IMPRESION_EXTERNA_ID:
+      return "Consumo envío impresión externa (9.4)";
     default:
       return "Consumo cierre proceso (9.4)";
   }
@@ -126,6 +129,12 @@ export function suggestHojasConsumoCartela(
     if (brutas != null && brutas > 0) return Math.round(brutas);
     const netas = toFiniteNum(datos.hojas_netas);
     if (netas != null && netas > 0) return Math.round(netas);
+    return null;
+  }
+
+  if (procesoId === PROCESO_IMPRESION_EXTERNA_ID) {
+    const numeroHojas = toFiniteNum(datos.numero_hojas);
+    if (numeroHojas != null && numeroHojas > 0) return Math.round(numeroHojas);
     return null;
   }
 
