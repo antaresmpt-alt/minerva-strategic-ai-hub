@@ -4,9 +4,9 @@
 > Tema: recepción de material, cartelas de palet, stock libre y trazabilidad.
 > Complementa `MINERVA_HUB_CONTEXTO_MAESTRO.md`, `FASES_HOJA_RUTA_DIGITAL.md` y briefings Bloques 6 y 7.
 >
-> **Estado:** ✅ **9.0–9.6d operativo (MVP)** (9 jul 2026) — cartelas, Stock ATP, import Optimus (diff + `last_seen`), impresión HTML, consumo al cerrar impresión, **semáforo pool con ATP cartelado (9.4)**, **reimpresión remanente libre**, **valoración remanente**, lote tintas, **asistente IA Stock NL→SQL (9.9)**. **9.3 ✅** ajuste manual + split palet. **9.5 ✅** puente muelle→cartelas. **9.6a ✅** STOCK sin OC. **9.6b ✅** aviso albarán duplicado (opción C). **9.6c ✅** wizard multi-OT. **9.6d ✅** muelle recepción multi-línea (opción B). **Pendiente:** cierre OT sobrantes (Bloque 6), sync Optimus marcar agotados, 9.7 OCR. **Pendiente OT/hoja de ruta:** semilla artículos maestro, histórico OTs.
+> **Estado:** ✅ **9.0–9.6d operativo (MVP)** + **9.4 A/B/C consumo cartela** (14 jul 2026) — cartelas, Stock ATP, import Optimus (diff + `last_seen`), impresión HTML, consumo al cerrar **guillotina (17) / impresión (1/2) / troquel (10) / imp. externa (21)**, **semáforo pool ATP**, reimpresión remanente libre, valoración remanente, lote tintas, asistente IA Stock. **9.3–9.6d ✅** (ver §11). **Validado E2E:** OT **98013** impresión externa → troquel → engomado (§15.10). **Pendiente:** derivar OT a imp. externa post-despacho (§15.6.12), plan engomado desde salida troquel, mejoras hoja de ruta PDF, cierre OT sobrantes (Bloque 6), sync Optimus marcar agotados, 9.7 OCR.
 > **Origen:** Optimus + cartelas CARPAPSA (15 jun 2026).
-> **Actualizado:** 9 jul 2026 — §15.9 sesión operativa: 9.3 sobrantes, 9.4 semáforo pool, sync Optimus diff, pool «Ver cartelas», muelle multi-línea.
+> **Actualizado:** 14 jul 2026 — §15.10 sesión: prueba OT 98013, fixes proceso 21 / cartelas / wizard / modal externos, revisión PDF hoja de ruta.
 > **PENDIENTE:** H1/H2 recuento global. Ubicación por filas de material (catálogo UI sin definir en planta). `codigo_articulo` en wizard. Ajuste impresión A6 física vs A4 PDF.
 
 **Relacionado:** sobrantes → Bloque 6 · expedición → Bloque 7 · material contenedor/hijas → Bloque 8 · FSC → maestro artículos.
@@ -1034,6 +1034,7 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 | 5 jul 2026 | **§15.6** — Sesión producción: import Optimus (281 palets), sandbox cartelas ≥99.000, impresión HTML aislada, filtros Stock (Sin OT), **9.4 operativo**, lote tintas, asistente IA Stock MVP. Commits `cb95fb9`, `9e2b997`, `1abb9fd`, `f93ccd3`. |
 | 7 jul 2026 | **§15.8** — Sesión muelle→cartelas: 9.5 fotos, 9.6a STOCK sin OC, 9.6b aviso albarán duplicado, prueba Torraspapel 410864843, fix wizard multi-OT. Commits `dbf3860`, `814d427`. |
 | 9 jul 2026 | **§15.9** — Sesión operativa: 9.4 semáforo pool ATP, sync Optimus diff, pool «Ver cartelas», 9.3 sobrantes, 9.6d muelle multi-línea. Commits `414825c`, `f609d66`, `021f1ea`, `5b9ac5f`, `80f8fc7`. |
+| 14 jul 2026 | **§15.10** — 9.4 A/B/C validado E2E (OT 98013); fixes proceso 21, cola Externos, wizard hojas brutas/netas, doble conteo cartelas, modal Enviado. Revisión PDF hoja de ruta. Backlog §15.10.7. Commits `34eba91`, `22944f3`, `d5f2cbd`, `27e24fa`. |
 
 ### Implementación (rellenar al avanzar)
 
@@ -1048,6 +1049,8 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 | 9.3 — Sobrantes (ajuste + split) | ✅ | §15.9.2; migración `20260709173000`. Pendiente cierre OT Bloque 6 |
 | 9.4-preview — Enlace documental cierre impresión | ✅ | §15.5; procesos 1 y 2 |
 | 9.4 operativo — Consumos + semáforo pool | ✅ | §15.6.4 + §15.9.1; RPC `prod_stock_registrar_consumo` |
+| 9.4 A/B — Consumo guillotina + troquel | ✅ | §15.6.10; commit `34eba91` |
+| 9.4 C — Consumo imp. externa al Enviado | ✅ | §15.6.11 + §15.10; commits `22944f3`, `d5f2cbd`, `27e24fa` |
 | 9.9 — Asistente IA Stock | ✅ | NL→criterios→`stock_palets_atp` (`stock-query-filters.ts`, `stock-atp-query.ts`) |
 
 **Fase B — mejoras (después)**
@@ -1317,6 +1320,26 @@ Mesa ejecución → Cerrar proceso (OT en impresión offset o digital)
 
 **Bug corregido cartelas (14 jul 2026):** bandeja pendientes duplicaba palets/hojas al agrupar por albarán (1 palet → mostraba 2; 550 h → 1100). Fix en `cartelas-page.tsx`.
 
+**Dónde colocarlo en UI (recomendación tras prueba 98013 — jul 2026):**
+
+| Ubicación | Acción | Cuándo mostrar | Notas |
+|-----------|--------|----------------|-------|
+| **Pool OTs** (`planificacion-pool-ots-tab-v2.tsx`) | Botón / menú **«Derivar a impresión externa»** | Próximo paso = **1** o **2**; paso aún `pendiente`/`disponible` | Caso habitual de Ramón con carga alta; no sustituye wizard pre-despacho |
+| **Mesa ejecución** (opcional fase 2) | Misma acción en fila OT si ya está en mesa impresión | Slot planificado pero no iniciado | Liberar slot + sustituir paso |
+| **OTs Despachadas** | Mantener editor itinerario completo | Solo pasos no iniciados (regla actual) | Reserva para replanificación total |
+| **Externos → Seguimiento** | **No** añadir botón «Cartelar» aparte | Consumo cartela = modal al pasar **Pendiente → Enviado** | «Preparar envío → Gmail» no cartela; hay que **Crear en seguimiento** desde cola itinerario |
+
+**Flujo Externos impresión (21) — recordatorio operativo:**
+
+```text
+Despacho con paso 21 en itinerario
+  → Compra → Muelle (Juan) → Cartelas (#ID Stock)
+  → Externos: cola «OTs con paso externo» → Crear en seguimiento
+  → Seguimiento: Pendiente → [modal cartela] → Enviado (descuenta stock)
+  → Recepción externo (hojas netas recibidas)
+  → Troquelado / siguiente paso (encadenado desde recepción)
+```
+
 **Piezas probables:** `despacho-wizard-dialog.tsx`, `despacho-wizard-shared.ts`, `planificacion-pool-ots-tab-v2.tsx`, `prod-ot-itinerario-client.ts`, `externos-itinerario-queue.ts`, migración estados paso opcional, § doc Bloque 8/Externos.
 
 #### 15.6.5 Lote de tintas en cierre impresión
@@ -1569,3 +1592,84 @@ Emma/Carlos ven las líneas agrupadas en Cartelas por `albaran_proveedor` (sin c
 | 9.4 déficit → `material_status` mesa | Media | Pool ya hecho |
 | 9.7 OCR albarán | Baja | Último paso, acordado |
 | Cierre OT sobrantes (Bloque 6) | Baja | Sin popup auto multi-OT |
+
+#### 15.10 Sesión 14 jul 2026 — Prueba E2E OT 98013 (impresión externa + cartela)
+
+> Rama `feature/bloque9-4abc-consumo-material`. OT **98013** (clon maestro **35842**). Itinerario: **Impresión EXTERNA (21) → Troquelado (10) → Engomado (12)**. Material: Folding blanco zenith 295g · 51×72 · troquel TAG00527 (8 poses) · pedido 2000 estuches.
+
+##### 15.10.1 Flujo validado en planta ✅
+
+| Paso | Acción | Resultado |
+|------|--------|-----------|
+| Despacho | Wizard con paso 21; hojas **550 brutas / 300 netas** | OK |
+| Compra → Muelle | Recepción; cartela **#10621** (550 h) | OK |
+| Externos | Cola itinerario → Crear seguimiento → **Enviado** | Modal cartela: 550 h consumidas |
+| Recepción externo | **300 h** netas recibidas (albarán proveedor) | OK — encadenado a troquelado |
+| Troquelado | Mesa: plan 300, cierre **260 buenas + 40 merma** | OK |
+| Engomado | Badge entrada **260 × 8 = 2080**; cierre **2050** estuches | OK en general |
+| Hoja de ruta PDF | `hoja-ruta-98013.pdf` | **Bastante bien** — ver §15.10.4 |
+
+**Feedback planta:** flujo externo + modal cartela «mucho mejor»; ciclo completo usable para piloto.
+
+##### 15.10.2 Fixes aplicados (commits)
+
+| Commit | Descripción |
+|--------|-------------|
+| `34eba91` | **9.4 A/B** — consumo cartela al cerrar guillotina (17) y troquelado (10) |
+| `22944f3` | **9.4 C** — consumo cartela impresión externa al marcar **Enviado** |
+| `d5f2cbd` | Wizard imp. externa: hojas brutas/netas + acabados; `es_externo=true` proceso 21; excluir pasos externos de mesa offset; fix doble conteo cartelas pendientes |
+| `27e24fa` | Fix bucle infinito React #185 en modal cartela al Enviado (`cartela-cierre-block.tsx`) |
+
+| Bug | Causa | Fix |
+|-----|-------|-----|
+| OT en mesa offset, no en Externos | Proceso **21** con `es_externo=false` | Migración `20260714210000_proceso_21_impresion_externa_es_externo.sql` + `planificacion-ambito.ts` |
+| 1 palet → 2 / 550→1100 en bandeja cartelas | Doble conteo al agrupar por albarán | `cartelas-page.tsx` |
+| Modal cartela no aparecía al Enviado | `hojas_enviadas=0`, sin hojas en `datos_proceso` paso 21 | Seed manual prod: netas 300, brutas 550 (wizard ahora las persiste) |
+| Crash Externos (React #185) | Bucle `onDatosChange` en `CartelaCierreBlock` | Memoización + simplificar `cartela-externo-enviado-dialog.tsx` |
+| Wizard sin hojas netas/brutas imp. externa | Solo acabados plastificado | `despacho-wizard-shared.ts` + `despacho-wizard-dialog.tsx` |
+
+##### 15.10.3 Comportamiento cartela externos (documentado)
+
+- **No hay pantalla «Cartelar»** separada — el consumo es el **modal al pasar Pendiente → Enviado** en Seguimiento.
+- Requiere: `ot_paso_id` en seguimiento, proceso **21** como primer consumidor del itinerario, hojas > 0.
+- **Preparar envío → Gmail → Confirmar** no cartela (solo logística correo).
+- Seguimiento debe crearse desde **Externos → OTs con paso externo → Crear en seguimiento** (no desde email).
+- Primer consumidor (17→1/2→10→21): si ya consumió en paso anterior, **21** no repite cartela.
+
+##### 15.10.4 Revisión hoja de ruta PDF (98013)
+
+**Bien:** cabecera OT, itinerario 3 pasos, cartela #10621 + 550 h consumidas, externo Recibido/GALILEO, troquel 300→260+40, engomado 2050 + embalaje, horas OT 3h.
+
+**A pulir (backlog, no bloqueante):**
+
+| Tema | Qué muestra | Causa técnica |
+|------|-------------|---------------|
+| Gráfico imp. externa | Prev 300 · **Real 0** | `drawPvistoRealChart` usa `hojas_impresas`; externo tiene `numero_hojas`/`hojas_netas` |
+| Engomado en gráfico | No aparece | Gráfico solo campos en hojas, no `estuches_engomados` |
+| Desv. horas OT | `+—` | Desviación 0 → `formatHorasCantidad(0)` devuelve «—» |
+| Dualidad 550 vs 300 | Consumidas 550 h vs Nº hojas 300 | Correcto (brutas enviadas vs netas recibidas); mejorar etiquetas en PDF |
+
+Archivos: `src/lib/hoja-ruta/hoja-ruta-pdf.ts`, `hoja-ruta-formatters.ts`.
+
+##### 15.10.5 Backlog post-sesión 14 jul
+
+| Ítem | Prioridad | Dónde / notas |
+|------|-----------|---------------|
+| **Derivar OT → imp. externa post-despacho** | **Alta** | §15.6.12 — botón Pool OTs (recomendado); sustituir 1/2 por 21 |
+| **Plan engomado desde salida troquel** | Media | `planificacion-ots-ejecucion-tab.tsx` — `estuches_realizar` siembra 550×8=4400; badge ya muestra 260×8=2080 |
+| **Prefill guillotina** | Media | Usar `hojas_iniciales` además de `hojas_finales` al encadenar |
+| **Recepción externo: cantidad esperada** | Baja | Mostrar netas del despacho/paso 21 (ahora «sin dato») |
+| **Hoja ruta PDF prev/real** | Baja | Externo + engomado en gráfico; fix desv. 0h |
+| **Toast cartela skip** | Baja | Avisar si falta `ot_paso_id` o hojas al Enviado |
+| **Pool «Ver cartela»** | Baja | Filtra id ≥99000 (sandbox); ejecución sí muestra pruebas |
+| **Material parcial pool** | Info | 550 muelle vs 300 netas externo — esperado en flujo brutas/netas |
+| Merge rama → `main` | Alta | Tras OK Ramón; preview Vercel en feature branch |
+
+##### 15.10.6 Commits de referencia (14 jul 2026)
+
+| Commit | Descripción |
+|--------|-------------|
+| `34eba91` | 9.4 A/B guillotina + troquel |
+| `22944f3` | 9.4 C impresión externa Enviado |
+| `d5f2cbd` | Wizard imp. externa + fixes cola Externos / cartelas |
+| `27e24fa` | Fix modal cartela React #185 |

@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 9 jul 2026 (Bloque 9: 9.3 sobrantes, 9.4 semáforo pool, sync Optimus diff, pool Ver cartelas, 9.6d muelle multi-línea — §15.9)
+> Última actualización: 14 jul 2026 (Bloque 9: **9.4 A/B/C** consumo cartela validado OT 98013, fixes imp. externa — §15.10)
 
 ---
 
@@ -247,7 +247,7 @@ src/components/produccion/planificacion/
 | 6 | Producidas/Histórico + cierre OT | ⏳ Pendiente (PRÓXIMO GRANDE) |
 | 7 | Expedición/Albarán | ⏳ Pendiente (depende B6 + Odoo) |
 | 8 | Formatos de hoja + formas + componentes (OT contenedor/hijas) | 🔄 En curso — **FORMATO ✅** + **8.0 ✅** + **8.1 ✅** + **8.1.1 ✅**; 8.2–8.4 pendiente — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` |
-| 9 | Material, cartelas de palet y stock libre | 🔄 **9.0–9.6d operativo ✅** (9 jul) — import Optimus (diff), consumo cierre impresión, **semáforo pool ATP (9.4)**, reimpresión remanente libre, valoración remanente, IA Stock, **9.3** ajuste+split, **muelle→cartelas (9.5)**, **STOCK sin OC (9.6a)**, **aviso albarán (9.6b)**, **wizard multi-OT (9.6c)**, **muelle multi-línea (9.6d)**, pool «Ver cartelas» — ver `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §15.9 |
+| 9 | Material, cartelas de palet y stock libre | 🔄 **9.0–9.6d + 9.4 A/B/C ✅** (14 jul) — consumo cartela en **guillotina / impresión / troquel / imp. externa (Enviado)**; prueba E2E OT **98013**; fixes proceso 21 y cola Externos — ver `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §15.10. **Pendiente:** derivar OT a imp. externa post-despacho (§15.6.12) |
 
 ---
 
@@ -303,7 +303,7 @@ src/components/produccion/planificacion/
 
 11. **Encadenado formato de pliego (17 jun 2026, Fase FORMATO ✅)**: por **orden de itinerario** (`prod_ot_pasos.orden`), no por tipo de proceso global. `tamano_hoja` en despacho = **Formato compra** (solo referencia de compra). Guillotina: `tamano_inicial` ← anterior, `tamano_final` → siguiente. Impresión/externos hojas: `formato_hojas`. Troquelado: `tamano_corte` es el troquel (independiente); banner muestra pliego de entrada. Módulo: `hoja-ruta-formato-encadenado.ts`. Probado OT 98009 (commit `aadad81`).
 
-12. **Bloque 9 — Cartelas y stock (9 jul 2026)**: **9.0–9.6d operativo** — SQL cartelas, UI cartelas/stock, **import Optimus** con preview diff (`last_seen`), impresión HTML, **consumo real al cerrar impresión**, **reimpresión remanente libre**, **valoración remanente** prorrateada, lote tintas, asistente IA Stock MVP. **Sesión 7 jul:** **9.5** fotos muelle; **9.6a** STOCK sin OC; **9.6b** aviso «mismo camión»; **9.6c** fix albarán multi-OT. **Sesión 9 jul:** **9.4** semáforo pool con ATP cartelado; **9.3** ajuste manual + split palet; sync Optimus v2; pool «Ver cartelas» (#9480 OT 35534); **9.6d** muelle recepción multi-línea (convive con 1 tarjeta). Prueba import 264 palets (15 nuevos / 249 actualizados / 38 no en Excel). Piloto paralelo Optimus hasta ~dic 2026. Briefing + §15.9: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`.
+12. **Bloque 9 — Cartelas y stock (14 jul 2026)**: **9.0–9.6d operativo** + **9.4 A/B/C** — consumo real al cerrar **guillotina (17), impresión (1/2), troquel (10), imp. externa (21 al Enviado)**. **Sesión 14 jul:** prueba punta a punta OT **98013** (externo → muelle → cartela → recepción 300 h → troquel → engomado); fixes `es_externo` proceso 21, wizard hojas brutas/netas, modal cartela Externos. **Pendiente prioritario:** acción «Derivar a impresión externa» en Pool OTs (§15.6.12). Briefing + §15.10: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`.
 
 13. **Higiene operativa (18 jun 2026)**: `bultos_por_palet_default` de Gabri versionado en migración seed (`20260618143200`). Plantillas offset: **Desbroce** insertado entre Troquelado y Engomado en 5 rutas (`20260618143000`). Rol usuario CTP = **`ctp`** (no `preimpresion`); permisos `produccion` + `produccion_ejecucion` en BD y `permissions.ts`. Marc/Gemma: usuarios aún no creados en Supabase.
 
