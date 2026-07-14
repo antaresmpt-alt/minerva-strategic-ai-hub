@@ -1,7 +1,6 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { useState } from "react";
 
 import { CartelaCierreBlock } from "@/components/produccion/planificacion/cartela-cierre-block";
 import { Button } from "@/components/ui/button";
@@ -27,6 +26,7 @@ type CartelaExternoEnviadoDialogProps = {
   saving: boolean;
 };
 
+/** Modal compacto (mismo patrón que cerrar proceso / guillotina). */
 export function CartelaExternoEnviadoDialog({
   open,
   onOpenChange,
@@ -37,35 +37,26 @@ export function CartelaExternoEnviadoDialog({
   onConfirm,
   saving,
 }: CartelaExternoEnviadoDialogProps) {
-  const [localDatos, setLocalDatos] = useState(datosDraft);
+  if (!open) return null;
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (next) setLocalDatos(datosDraft);
-        onOpenChange(next);
-      }}
-    >
-      <DialogContent className="max-w-lg">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md gap-4">
         <DialogHeader>
           <DialogTitle>Cartela al enviar a externo</DialogTitle>
           <DialogDescription>
-            OT {otNumero} · Impresión externa. Indica el palet consumido antes de
-            marcar como Enviado; el stock se descuenta al confirmar.
+            OT {otNumero} · Impresión externa. Indica el palet antes de marcar
+            Enviado; el stock se descuenta al confirmar.
           </DialogDescription>
         </DialogHeader>
 
         {context ? (
           <CartelaCierreBlock
-            key={open ? "open" : "closed"}
+            key={`${context.otPasoId}-open`}
             otNumero={otNumero}
             procesoId={context.procesoId}
-            datosDraft={localDatos}
-            onDatosChange={(datos) => {
-              setLocalDatos(datos);
-              onDatosChange(datos);
-            }}
+            datosDraft={datosDraft}
+            onDatosChange={onDatosChange}
           />
         ) : null}
 

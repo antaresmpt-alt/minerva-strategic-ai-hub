@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ChevronDown, Loader2, Package } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -74,6 +74,12 @@ export function CartelaCierreBlock({
   const [lookupState, setLookupState] = useState<LookupState>(initialId != null ? "loading" : "idle");
   const [paletPreview, setPaletPreview] = useState<ProdStockPaletRow | null>(null);
   const hojasPrefilledRef = useRef(false);
+  const onDatosChangeRef = useRef(onDatosChange);
+  onDatosChangeRef.current = onDatosChange;
+
+  const emitDatos = useCallback((datos: DatosProcesoGenerico) => {
+    onDatosChangeRef.current(datos);
+  }, []);
 
   useEffect(() => {
     if (hojasPrefilledRef.current || initialHojas != null) return;
@@ -115,7 +121,7 @@ export function CartelaCierreBlock({
       setLookupState("idle");
       setPaletPreview(null);
       const hojas = parseHojasInput(hojasInput);
-      onDatosChange(applyCartelaToDatos(datosRef.current, null, null, hojas));
+      emitDatos(applyCartelaToDatos(datosRef.current, null, null, hojas));
       return;
     }
 
@@ -136,12 +142,12 @@ export function CartelaCierreBlock({
           if (cancelled) return;
           setPaletPreview(palet);
           setLookupState(palet ? "found" : "not_found");
-          onDatosChange(applyCartelaToDatos(datosRef.current, palet, idStock, hojas));
+          emitDatos(applyCartelaToDatos(datosRef.current, palet, idStock, hojas));
         } catch {
           if (cancelled) return;
           setPaletPreview(null);
           setLookupState("error");
-          onDatosChange(applyCartelaToDatos(datosRef.current, null, idStock, hojas));
+          emitDatos(applyCartelaToDatos(datosRef.current, null, idStock, hojas));
         }
       })();
     }, 350);
@@ -150,7 +156,7 @@ export function CartelaCierreBlock({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [idInput, hojasInput, onDatosChange, supabase]);
+  }, [idInput, hojasInput, emitDatos, supabase]);
 
   const updateHojas = (raw: string) => {
     setHojasInput(raw);
@@ -169,11 +175,11 @@ export function CartelaCierreBlock({
           const palet = await fetchPaletByIdStock(supabase, option.idStock);
           setPaletPreview(palet);
           setLookupState(palet ? "found" : "not_found");
-          onDatosChange(applyCartelaToDatos(datosRef.current, palet, option.idStock, hojas));
+          emitDatos(applyCartelaToDatos(datosRef.current, palet, option.idStock, hojas));
         } catch {
           setPaletPreview(null);
           setLookupState("error");
-          onDatosChange(applyCartelaToDatos(datosRef.current, null, option.idStock, hojas));
+          emitDatos(applyCartelaToDatos(datosRef.current, null, option.idStock, hojas));
         }
       })();
     }
