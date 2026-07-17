@@ -1,4 +1,5 @@
 import type { ProdCalendarioProduccionOtRow } from "@/types/prod-calendario-produccion-ot";
+import { ymdFromParts } from "@/lib/etiquetas-calendario-mensual";
 
 export {
   buildSemanasLaboralesMes,
@@ -91,4 +92,49 @@ export function filtrarEntradasPorTexto(
     if (filtered.length > 0) out.set(ymd, filtered);
   }
   return out;
+}
+
+/** Lunes de la semana laboral (Lun–Dom) que contiene `d`. */
+export function mondayOfWeek(d: Date): Date {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0);
+  const dow = x.getDay(); // 0=dom
+  const delta = dow === 0 ? -6 : 1 - dow;
+  x.setDate(x.getDate() + delta);
+  return x;
+}
+
+function ymdFromDate(d: Date): string {
+  return ymdFromParts(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+export function weekRangeYmd(
+  weekMonday: Date,
+  includeSaturday: boolean,
+): { start: string; end: string } {
+  const end = new Date(weekMonday);
+  end.setDate(end.getDate() + (includeSaturday ? 5 : 4));
+  return { start: ymdFromDate(weekMonday), end: ymdFromDate(end) };
+}
+
+export function buildSemanaLaboral(
+  weekMonday: Date,
+  opts?: { includeSaturday?: boolean },
+): Array<{ ymd: string; dayNum: number } | null> {
+  const includeSaturday = opts?.includeSaturday ?? false;
+  const n = includeSaturday ? 6 : 5;
+  const out: Array<{ ymd: string; dayNum: number } | null> = [];
+  for (let i = 0; i < n; i++) {
+    const d = new Date(weekMonday);
+    d.setDate(d.getDate() + i);
+    out.push({ ymd: ymdFromDate(d), dayNum: d.getDate() });
+  }
+  return out;
+}
+
+export function semanaLabelEs(weekMonday: Date, includeSaturday: boolean): string {
+  const end = new Date(weekMonday);
+  end.setDate(end.getDate() + (includeSaturday ? 5 : 4));
+  const fmt = (d: Date) =>
+    d.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
+  return `${fmt(weekMonday)} – ${fmt(end)} ${weekMonday.getFullYear()}`;
 }

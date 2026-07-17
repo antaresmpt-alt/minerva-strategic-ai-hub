@@ -3,14 +3,18 @@
 import {
   ChevronLeft,
   ChevronRight,
+  ClipboardPaste,
   FileDown,
   Loader2,
   Plus,
   RefreshCw,
+  Scissors,
   Search,
   Trash2,
+  Upload,
+  X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -25,20 +29,25 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  buildSemanaLaboral,
   buildSemanasLaboralesMes,
   entradasPorDia,
   fechaDiaLabel,
   filtrarEntradasPorTexto,
   mesAnioLabel,
+  mondayOfWeek,
   monthRangeYmd,
   numColumnasCalendario,
+  semanaLabelEs,
   splitLineasDosColumnas,
+  weekRangeYmd,
   type CalendarioProduccionLinea,
 } from "@/lib/calendario-produccion";
 import {
   exportCalendarioProduccionDiaPdf,
   exportCalendarioProduccionMensualPdf,
 } from "@/lib/calendario-produccion-export";
+import { parseProgramacioPlanificadorExcel } from "@/lib/calendario-produccion-import";
 import { errorMessageFromUnknown } from "@/lib/error-message";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -55,6 +64,16 @@ const MIGRATION_HINT =
   "Ejecuta la migración 20260717140000_prod_calendario_produccion_ot.sql en Supabase.";
 
 const STORAGE_SHOW_SATURDAY = "cal-prod-show-saturday";
+const STORAGE_VISTA = "cal-prod-vista";
+
+type VistaCalendario = "mes" | "semana";
+
+type PortapapelesOt = {
+  id: string;
+  otNumero: string;
+  fromFecha: string;
+  label: string;
+};
 
 function isMissingTable(msg: string): boolean {
   const m = msg.toLowerCase();
@@ -156,14 +175,19 @@ export function CalendarioProduccionPage() {
   const now = useMemo(() => new Date(), []);
   const [year, setYear] = useState(now.getFullYear());
   const [monthIndex, setMonthIndex] = useState(now.getMonth());
+  const [weekMonday, setWeekMonday] = useState(() => mondayOfWeek(now));
+  const [vista, setVista] = useState<VistaCalendario>("mes");
   const [showSaturday, setShowSaturday] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
   const [rows, setRows] = useState<ProdCalendarioProduccionOtRow[]>([]);
   const [tituloByOt, setTituloByOt] = useState<Map<string, string | null>>(
     () => new Map(),
   );
   const [filtro, setFiltro] = useState("");
   const [saving, setSaving] = useState(false);
+  const [portapapeles, setPortapapeles] = useState<PortapapelesOt | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [dayOpen, setDayOpen] = useState(false);
   const [dayYmd, setDayYmd] = useState<string | null>(null);
@@ -180,20 +204,28 @@ export function CalendarioProduccionPage() {
   useEffect(() => {
     try {
       setShowSaturday(localStorage.getItem(STORAGE_SHOW_SATURDAY) === "1");
+      const v = localStorage.getItem(STORAGE_VISTA);
+      if (v === "semana" || v === "mes") setVista(v);
     } catch {
       /* ignore */
     }
   }, []);
 
-  const semanas = useMemo(
+  const semanasMes = useMemo(
     () => buildSemanasLaboralesMes(year, monthIndex, { includeSaturday: showSaturday }),
     [year, monthIndex, showSaturday],
   );
-  const cols = numColumnasCalendario(showSaturday);
-  const range = useMemo(
-    () => monthRangeYmd(year, monthIndex),
-    [year, monthIndex],
+  const semanaActual = useMemo(
+    () => buildSemanaLaboral(weekMonday, { includeSaturday: showSaturday }),
+    [weekMonday, showSaturday],
   );
+  const cols = numColumnasCalendario(showSaturday);
+  const range = useMemo(() => {
+    if (vista === "semana") {
+      return weekRangeYmd(weekMonday, showSaturday);
+    }
+    return monthRangeYmd(year, monthIndex);
+  }, [vista, weekMonday, showSaturday, year, monthIndex]);
 
   const entradasByDay = useMemo(() => {
     const all = entradasPorDia(rows, tituloByOt);
@@ -260,10 +292,93 @@ export function CalendarioProduccionPage() {
     void load();
   }, [load]);
 
-  const shiftMonth = (delta: number) => {
+  const setVistaPersist = (v: VistaCalendario) => {
+    setVista(v);
+    try {
+      localStorage.setItem(STORAGE_VISTA, v);
+    } catch {
+      /* ignore */
+    }
+    if (v === "semana") {
+      setWeekMonday(mondayOfWeek(new Date(year, monthIndex, 15)));
+    } else {
+      setYear(weekMonday.getFullYear());
+      setMonthIndex(weekMonday.getMonth());
+    }
+  };
+
+  const shiftPeriod = (delta: number) => {
+    if (vista === "semana") {
+      const d = new Date(weekMonday);
+      d.setDate(d.getDate() + delta * 7);
+      setWeekMonday(mondayOfWeek(d));
+      setYear(d.getFullYear());
+      setMonthIndex(d.getMonth());
+      return;
+    }
     const d = new Date(year, monthIndex + delta, 1);
     setYear(d.getFullYear());
     setMonthIndex(d.getMonth());
+  };
+
+  const goHoy = () => {
+    const t = new Date();
+    setYear(t.getFullYear());
+    setMonthIndex(t.getMonth());
+    setWeekMonday(mondayOfWeek(t));
+  };
+
+  const importExcel = async (file: File) => {
+    setImporting(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const parsed = parseProgramacioPlanificadorExcel(buffer);
+      if (parsed.length === 0) {
+        toast.message(
+          "No se encontraron OTs en la pestaña «planificador».",
+        );
+        return;
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      const chunkSize = 80;
+      for (let i = 0; i < parsed.length; i += chunkSize) {
+        const chunk = parsed.slice(i, i + chunkSize).map((r) => ({
+          fecha: r.fecha,
+          ot_numero: r.ot_numero,
+          orden: r.orden,
+          created_by: user?.id ?? null,
+        }));
+        const { error } = await supabase.from(TABLE).upsert(chunk, {
+          onConflict: "fecha,ot_numero",
+        });
+        if (error) throw error;
+      }
+
+      const first = parsed[0]!;
+      const [y, m] = first.fecha.split("-").map(Number);
+      const anchor = new Date(y!, (m ?? 1) - 1, Number(first.fecha.slice(8, 10)), 12);
+      setYear(anchor.getFullYear());
+      setMonthIndex(anchor.getMonth());
+      setWeekMonday(mondayOfWeek(anchor));
+      setVista("semana");
+      try {
+        localStorage.setItem(STORAGE_VISTA, "semana");
+      } catch {
+        /* ignore */
+      }
+
+      toast.success(`${parsed.length} OTs importadas desde Excel.`);
+      await load();
+    } catch (e) {
+      toast.error(errorMessageFromUnknown(e, "No se pudo importar el Excel."));
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   const openDay = (ymd: string) => {
@@ -361,12 +476,73 @@ export function CalendarioProduccionPage() {
   const removeEntrada = async (id: string) => {
     setSaving(true);
     try {
-      const { error } = await supabase.from(TABLE).delete().eq("id", id);
+      const { error, count } = await supabase
+        .from(TABLE)
+        .delete({ count: "exact" })
+        .eq("id", id);
       if (error) throw error;
-      toast.success("OT quitada del día.");
+      if (count === 0) {
+        toast.error(
+          "No se pudo quitar (permiso o ya no existe). Recarga e inténtalo.",
+        );
+        return;
+      }
+      if (portapapeles?.id === id) setPortapapeles(null);
+      toast.success("OT quitada del planificador.");
       await load();
     } catch (e) {
       toast.error(errorMessageFromUnknown(e, "No se pudo quitar la OT."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cortarEntrada = (linea: CalendarioProduccionLinea) => {
+    if (!dayYmd) return;
+    setPortapapeles({
+      id: linea.id,
+      otNumero: linea.otNumero,
+      fromFecha: dayYmd,
+      label: linea.label,
+    });
+    toast.message(`OT ${linea.otNumero} cortada. Abre otro día y pega.`);
+  };
+
+  const pegarEnDia = async () => {
+    if (!dayYmd || !portapapeles) return;
+    if (portapapeles.fromFecha === dayYmd) {
+      toast.message("Ya está en este día.");
+      setPortapapeles(null);
+      return;
+    }
+    setSaving(true);
+    try {
+      const existing = rows.filter((r) => r.fecha.slice(0, 10) === dayYmd);
+      const nextOrden =
+        existing.length === 0
+          ? 0
+          : Math.max(...existing.map((r) => r.orden)) + 1;
+
+      const { error } = await supabase
+        .from(TABLE)
+        .update({ fecha: dayYmd, orden: nextOrden })
+        .eq("id", portapapeles.id);
+      if (error) {
+        if (error.code === "23505") {
+          toast.error(
+            `La OT ${portapapeles.otNumero} ya está en este día. Quítala del origen o elige otro.`,
+          );
+          return;
+        }
+        throw error;
+      }
+      toast.success(
+        `OT ${portapapeles.otNumero} movida a ${fechaDiaLabel(dayYmd)}.`,
+      );
+      setPortapapeles(null);
+      await load();
+    } catch (e) {
+      toast.error(errorMessageFromUnknown(e, "No se pudo pegar la OT."));
     } finally {
       setSaving(false);
     }
@@ -446,7 +622,7 @@ export function CalendarioProduccionPage() {
     exportCalendarioProduccionMensualPdf({
       year,
       monthIndex,
-      semanas,
+      semanas: semanasMes,
       entradasByDay,
       includeSaturday: showSaturday,
       filtroTexto: filtro,
@@ -475,42 +651,55 @@ export function CalendarioProduccionPage() {
             Calendario Producción
           </h2>
           <p className="text-xs text-slate-600">
-            Coloca OTs por día (visión mensual). Clic en la OT para ver ficha
-            sintética.
+            Coloca OTs por día. Vista mes o semana (como el Excel de
+            programación). Clic en la OT para ver ficha.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-md border border-slate-200 p-0.5">
+            <Button
+              type="button"
+              variant={vista === "mes" ? "default" : "ghost"}
+              size="sm"
+              className="h-7 px-2.5 text-xs"
+              onClick={() => setVistaPersist("mes")}
+            >
+              Mes
+            </Button>
+            <Button
+              type="button"
+              variant={vista === "semana" ? "default" : "ghost"}
+              size="sm"
+              className="h-7 px-2.5 text-xs"
+              onClick={() => setVistaPersist("semana")}
+            >
+              Semana
+            </Button>
+          </div>
           <Button
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => shiftMonth(-1)}
-            aria-label="Mes anterior"
+            onClick={() => shiftPeriod(-1)}
+            aria-label={vista === "semana" ? "Semana anterior" : "Mes anterior"}
           >
             <ChevronLeft className="size-4" />
           </Button>
-          <span className="min-w-[9rem] text-center text-sm font-semibold text-[#002147]">
-            {mesAnioLabel(year, monthIndex)}
+          <span className="min-w-[11rem] text-center text-sm font-semibold text-[#002147]">
+            {vista === "semana"
+              ? semanaLabelEs(weekMonday, showSaturday)
+              : mesAnioLabel(year, monthIndex)}
           </span>
           <Button
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => shiftMonth(1)}
-            aria-label="Mes siguiente"
+            onClick={() => shiftPeriod(1)}
+            aria-label={vista === "semana" ? "Semana siguiente" : "Mes siguiente"}
           >
             <ChevronRight className="size-4" />
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              const t = new Date();
-              setYear(t.getFullYear());
-              setMonthIndex(t.getMonth());
-            }}
-          >
+          <Button type="button" variant="outline" size="sm" onClick={goHoy}>
             Hoy
           </Button>
           <Button
@@ -526,10 +715,37 @@ export function CalendarioProduccionPage() {
               <RefreshCw className="size-4" />
             )}
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={exportMes}>
-            <FileDown className="mr-1 size-4" />
-            PDF mes
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void importExcel(f);
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={importing}
+            onClick={() => fileInputRef.current?.click()}
+            title="Importar pestaña planificador del Excel de programación"
+          >
+            {importing ? (
+              <Loader2 className="mr-1 size-4 animate-spin" />
+            ) : (
+              <Upload className="mr-1 size-4" />
+            )}
+            Importar Excel
           </Button>
+          {vista === "mes" ? (
+            <Button type="button" variant="outline" size="sm" onClick={exportMes}>
+              <FileDown className="mr-1 size-4" />
+              PDF mes
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -562,6 +778,26 @@ export function CalendarioProduccionPage() {
         </label>
       </div>
 
+      {portapapeles ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300/80 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          <p className="min-w-0">
+            <span className="font-semibold">Cortada:</span> OT{" "}
+            {portapapeles.otNumero} · de {fechaDiaLabel(portapapeles.fromFecha)}.
+            Abre otro día y pulsa Pegar.
+          </p>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 shrink-0 px-2"
+            onClick={() => setPortapapeles(null)}
+          >
+            <X className="mr-1 size-3.5" />
+            Cancelar
+          </Button>
+        </div>
+      ) : null}
+
       {loading ? (
         <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
           <Loader2 className="size-4 animate-spin" />
@@ -583,24 +819,41 @@ export function CalendarioProduccionPage() {
                 {d}
               </div>
             ))}
-            {semanas.map((semana, si) =>
-              semana.map((celda, ci) =>
-                celda ? (
-                  <DiaCelda
-                    key={celda.ymd}
-                    dayNum={celda.dayNum}
-                    lineas={entradasByDay.get(celda.ymd) ?? []}
-                    onEditDay={() => openDay(celda.ymd)}
-                    onOpenOt={(ot) => void openDetalle(ot)}
-                  />
-                ) : (
-                  <div
-                    key={`empty-${si}-${ci}`}
-                    className="min-h-[9rem] bg-slate-100/60"
-                  />
-                ),
-              ),
-            )}
+            {vista === "semana"
+              ? semanaActual.map((celda, ci) =>
+                  celda ? (
+                    <DiaCelda
+                      key={celda.ymd}
+                      dayNum={celda.dayNum}
+                      lineas={entradasByDay.get(celda.ymd) ?? []}
+                      onEditDay={() => openDay(celda.ymd)}
+                      onOpenOt={(ot) => void openDetalle(ot)}
+                    />
+                  ) : (
+                    <div
+                      key={`empty-w-${ci}`}
+                      className="min-h-[12rem] bg-slate-100/60"
+                    />
+                  ),
+                )
+              : semanasMes.map((semana, si) =>
+                  semana.map((celda, ci) =>
+                    celda ? (
+                      <DiaCelda
+                        key={celda.ymd}
+                        dayNum={celda.dayNum}
+                        lineas={entradasByDay.get(celda.ymd) ?? []}
+                        onEditDay={() => openDay(celda.ymd)}
+                        onOpenOt={(ot) => void openDetalle(ot)}
+                      />
+                    ) : (
+                      <div
+                        key={`empty-${si}-${ci}`}
+                        className="min-h-[9rem] bg-slate-100/60"
+                      />
+                    ),
+                  ),
+                )}
           </div>
         </div>
       )}
@@ -615,6 +868,20 @@ export function CalendarioProduccionPage() {
           </DialogHeader>
 
           <div className="space-y-3">
+            {portapapeles && dayYmd && portapapeles.fromFecha !== dayYmd ? (
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                className="w-full"
+                disabled={saving}
+                onClick={() => void pegarEnDia()}
+              >
+                <ClipboardPaste className="mr-1.5 size-4" />
+                Pegar OT {portapapeles.otNumero} aquí
+              </Button>
+            ) : null}
+
             <div>
               <Label className="text-xs">Añadir OT</Label>
               <Input
@@ -653,42 +920,60 @@ export function CalendarioProduccionPage() {
 
             <div>
               <p className="mb-1 text-xs font-medium text-slate-600">
-                En este día ({dayLineas.length})
+                En este día ({dayLineas.length}) — cortar para mover, papelera
+                para quitar
               </p>
               {dayLineas.length === 0 ? (
                 <p className="text-sm text-slate-500">Ninguna OT todavía.</p>
               ) : (
                 <ul className="max-h-56 space-y-1 overflow-y-auto">
                   {dayLineas.map((l) => (
-                      <li
-                        key={l.id}
-                        className="flex items-start justify-between gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5"
+                    <li
+                      key={l.id}
+                      className={`flex items-start justify-between gap-2 rounded-md border bg-white px-2 py-1.5 ${
+                        portapapeles?.id === l.id
+                          ? "border-amber-400 bg-amber-50/80"
+                          : "border-slate-200"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        className="min-w-0 flex-1 text-left text-sm hover:underline"
+                        onClick={() => void openDetalle(l.otNumero)}
                       >
-                        <button
-                          type="button"
-                          className="min-w-0 flex-1 text-left text-sm hover:underline"
-                          onClick={() => void openDetalle(l.otNumero)}
-                        >
-                          <span className="font-semibold text-[#002147]">
-                            {l.otNumero}
-                          </span>
-                          <span className="mt-0.5 block truncate text-xs text-slate-600">
-                            {l.trabajo ?? "—"}
-                          </span>
-                        </button>
+                        <span className="font-semibold text-[#002147]">
+                          {l.otNumero}
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs text-slate-600">
+                          {l.trabajo ?? "—"}
+                        </span>
+                      </button>
+                      <div className="flex shrink-0 items-center gap-0.5">
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="h-7 w-7 shrink-0 p-0 text-red-700"
+                          className="h-7 w-7 p-0 text-[#002147]"
                           disabled={saving}
-                          title="Quitar del día"
+                          title="Cortar (mover a otro día)"
+                          onClick={() => cortarEntrada(l)}
+                        >
+                          <Scissors className="size-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-red-700"
+                          disabled={saving}
+                          title="Quitar del planificador"
                           onClick={() => void removeEntrada(l.id)}
                         >
                           <Trash2 className="size-3.5" />
                         </Button>
-                      </li>
-                    ))}
+                      </div>
+                    </li>
+                  ))}
                 </ul>
               )}
             </div>
