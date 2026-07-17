@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  ChevronDown,
   ChevronLeft,
   Download,
   ExternalLink,
@@ -22,6 +23,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { HojaRutaContenedorPanel } from "@/components/produccion/hoja-ruta/hoja-ruta-contenedor-panel";
 import {
   STEP_ACCENT_STYLES,
@@ -45,7 +54,13 @@ import {
   computeHorasResumenOt,
   formatHorasResumenLine,
 } from "@/lib/hoja-ruta/hoja-ruta-horas";
+import {
+  buildCartelitaPackFromHojaRutaLoad,
+  cartelitaInputFromHojaRuta,
+  exportHojaRutaCartelitaPdf,
+} from "@/lib/hoja-ruta/hoja-ruta-cartelita-pdf";
 import { exportHojaRutaContenedorPdf, exportHojaRutaPdf } from "@/lib/hoja-ruta/hoja-ruta-pdf";
+import { errorMessageFromUnknown } from "@/lib/error-message";
 
 function machineLabel(paso: HojaRutaPaso): string {
   const nombre = String(paso.maquinaNombre ?? "").trim();
@@ -433,7 +448,39 @@ export function HojaRutaOtDialog({
       );
     } catch (e) {
       console.error("[Hoja de ruta] export PDF barco", e);
-      setError(e instanceof Error ? e.message : "No se pudo generar el PDF del barco.");
+      setError(errorMessageFromUnknown(e, "No se pudo generar el PDF del barco."));
+    } finally {
+      setPdfExporting(false);
+    }
+  }, [drillHijaOt, hijaData, loadResult, supabase]);
+
+  const handlePdfSimplificada = useCallback(async () => {
+    if (drillHijaOt && hijaData) {
+      exportHojaRutaCartelitaPdf(cartelitaInputFromHojaRuta(hijaData));
+      return;
+    }
+    if (loadResult?.kind === "ot") {
+      exportHojaRutaCartelitaPdf(cartelitaInputFromHojaRuta(loadResult.data));
+      return;
+    }
+    if (loadResult?.kind !== "contenedor" || loadResult.hijas.length === 0) return;
+
+    setPdfExporting(true);
+    setError(null);
+    try {
+      const hijasFull = await Promise.all(
+        loadResult.hijas.map((h) => fetchHojaRutaOt(supabase, h.otNumero)),
+      );
+      const pack = buildCartelitaPackFromHojaRutaLoad(
+        loadResult,
+        hijasFull.filter((h): h is HojaRutaData => h != null),
+      );
+      exportHojaRutaCartelitaPdf(pack);
+    } catch (e) {
+      console.error("[Hoja de ruta] export PDF simplificada", e);
+      setError(
+        errorMessageFromUnknown(e, "No se pudo generar la hoja de ruta simplificada."),
+      );
     } finally {
       setPdfExporting(false);
     }
@@ -533,23 +580,53 @@ export function HojaRutaOtDialog({
               />
               Recargar
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={loading || hijaLoading || pdfExporting || !canExportPdf}
-              onClick={() => void handlePdfExport()}
-              title={
-                isContenedorView
-                  ? "PDF del barco: resumen + anexo por hija"
-                  : "Descargar PDF de la hoja de ruta"
-              }
-            >
-              <Download
-                className={`mr-2 size-4 ${pdfExporting ? "animate-pulse" : ""}`}
-              />
-              {pdfExporting ? "Generando…" : "PDF"}
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                disabled={loading || hijaLoading || pdfExporting || !canExportPdf}
+                className="inline-flex h-8 items-center justify-center gap-1 rounded-md border border-input bg-background px-3 text-sm font-medium shadow-xs outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+                title="Descargar PDF de la hoja de ruta"
+              >
+                <Download
+                  className={`size-4 ${pdfExporting ? "animate-pulse" : ""}`}
+                />
+                {pdfExporting ? "Generando…" : "PDF"}
+                <ChevronDown className="size-3.5 opacity-70" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="min-w-[240px]">
+                <DropdownMenuLabel>Tipo de PDF</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="gap-2"
+                  disabled={pdfExporting}
+                  onClick={() => void handlePdfExport()}
+                >
+                  <FileText className="size-4 opacity-70" />
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium">Completa</span>
+                    <span className="text-muted-foreground text-xs">
+                      {isContenedorView
+                        ? "Resumen barco + anexo por hija"
+                        : "Itinerario con datos de proceso y ejecución"}
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="gap-2"
+                  disabled={pdfExporting}
+                  onClick={() => void handlePdfSimplificada()}
+                >
+                  <Download className="size-4 opacity-70" />
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium">Simplificada (A5)</span>
+                    <span className="text-muted-foreground text-xs">
+                      {isContenedorView
+                        ? "Portada barco + 1 hoja por forma"
+                        : "Cartelita para planta (itinerario + firmas)"}
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
           <Button
             type="button"

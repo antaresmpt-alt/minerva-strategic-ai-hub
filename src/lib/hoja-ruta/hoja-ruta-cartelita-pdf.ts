@@ -1,7 +1,11 @@
 import { jsPDF } from "jspdf";
 
 import { fmtDateShort } from "@/lib/hoja-ruta/hoja-ruta-formatters";
-import type { HojaRutaData } from "@/lib/hoja-ruta/hoja-ruta-query";
+import type {
+  HojaRutaContenedorData,
+  HojaRutaData,
+  HojaRutaOtLoadResult,
+} from "@/lib/hoja-ruta/hoja-ruta-query";
 
 const NAVY: [number, number, number] = [0, 33, 71];
 const SLATE: [number, number, number] = [71, 85, 105];
@@ -372,7 +376,10 @@ function normalizePack(
   return { portada: null, hijas: [data] };
 }
 
-export function cartelitaInputFromHojaRuta(data: HojaRutaData): HojaRutaCartelitaInput {
+export function cartelitaInputFromHojaRuta(
+  data: HojaRutaData,
+  overrides?: Partial<HojaRutaCartelitaInput>,
+): HojaRutaCartelitaInput {
   return {
     otNumero: data.otNumero,
     cliente: data.cliente,
@@ -387,7 +394,84 @@ export function cartelitaInputFromHojaRuta(data: HojaRutaData): HojaRutaCartelit
       orden: p.orden,
       nombre: p.procesoNombre ?? "—",
     })),
+    hojasBrutas: data.despacho?.hojasBrutas ?? null,
+    ...overrides,
   };
+}
+
+/** Reimpresión A5 desde hoja de ruta ya cargada (OT simple o barco). */
+export function buildCartelitaPackFromHojaRutaLoad(
+  load: HojaRutaOtLoadResult,
+  hijasFull: HojaRutaData[] = [],
+): HojaRutaCartelitaPack {
+  if (load.kind === "ot") {
+    return { portada: null, hijas: [cartelitaInputFromHojaRuta(load.data)] };
+  }
+  return buildCartelitaPackFromContenedor(load, hijasFull);
+}
+
+function buildCartelitaPackFromContenedor(
+  load: HojaRutaContenedorData,
+  hijasFull: HojaRutaData[],
+): HojaRutaCartelitaPack {
+  const padre = load.padre;
+  const shared = {
+    cliente: padre.cliente,
+    trabajo: padre.trabajo,
+    fechaEntrega: padre.fechaEntrega,
+    material: padre.despacho?.material ?? null,
+    tamanoHoja: padre.despacho?.tamanoHoja ?? null,
+    tintas: padre.despacho?.tintas ?? null,
+    troquel: padre.despacho?.troquel ?? null,
+  };
+  const pasosPadre = padre.pasos.map((p) => ({
+    orden: p.orden,
+    nombre: p.procesoNombre ?? "—",
+  }));
+
+  const byOt = new Map(hijasFull.map((h) => [h.otNumero, h]));
+
+  const portada: HojaRutaCartelitaInput = {
+    otNumero: padre.otNumero,
+    cantidad: padre.cantidad != null ? String(padre.cantidad) : null,
+    pasos: [],
+    esPortadaBarco: true,
+    hijasResumen: load.hijas.map((h, i) => {
+      const full = byOt.get(h.otNumero);
+      const netas = full?.despacho?.hojasBrutas ?? 0;
+      return {
+        otNumero: h.otNumero,
+        label: h.formaDescripcion?.trim() || h.trabajo?.trim() || `Forma ${i + 1}`,
+        netas: typeof netas === "number" ? netas : 0,
+        refs: "",
+      };
+    }),
+    ...shared,
+  };
+
+  const hijas: HojaRutaCartelitaInput[] = load.hijas.map((resumen, i) => {
+    const full = byOt.get(resumen.otNumero);
+    const formaLabel =
+      resumen.formaDescripcion?.trim() ||
+      resumen.trabajo?.trim() ||
+      `Forma ${i + 1}`;
+    if (full) {
+      return cartelitaInputFromHojaRuta(full, {
+        ...shared,
+        formaLabel,
+        hojasBrutas: full.despacho?.hojasBrutas ?? null,
+      });
+    }
+    return {
+      otNumero: resumen.otNumero,
+      cantidad: resumen.cantidad != null ? String(resumen.cantidad) : null,
+      formaLabel,
+      pasos: pasosPadre,
+      ...shared,
+    };
+  });
+
+  return { portada, hijas };
 }
 
 /** Descarga PDF A5 vertical — hoja(s) de ruta simplificada. */
