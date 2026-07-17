@@ -92,21 +92,29 @@ function DiaCelda({
   lineas,
   onEditDay,
   onOpenOt,
+  variant = "mes",
 }: {
   dayNum: number;
   lineas: CalendarioProduccionLinea[];
   onEditDay: () => void;
   onOpenOt: (otNumero: string) => void;
+  /** Semana: 1 OT por línea, tipografía mayor, más altura. */
+  variant?: "mes" | "semana";
 }) {
+  const isSemana = variant === "semana";
   const { left, right } = splitLineasDosColumnas(lineas);
-  const dosColumnas = right.length > 0;
+  const dosColumnas = !isSemana && right.length > 0;
 
   const renderList = (list: CalendarioProduccionLinea[]) =>
     list.map((l) => (
       <button
         key={l.id}
         type="button"
-        className="w-full break-words text-left text-[11px] font-medium leading-tight text-[#002147] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#002147]/40"
+        className={
+          isSemana
+            ? "w-full break-words text-left text-[13px] font-medium leading-snug text-[#002147] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#002147]/40"
+            : "w-full break-words text-left text-[11px] font-medium leading-tight text-[#002147] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#002147]/40"
+        }
         title={`${l.label} — ver detalle`}
         onClick={(e) => {
           e.stopPropagation();
@@ -118,8 +126,14 @@ function DiaCelda({
     ));
 
   return (
-    <div className="group relative flex min-h-[9rem] flex-col border border-slate-200/90 bg-white">
-      <div className="flex shrink-0 items-center justify-between bg-[#002147] px-2 py-1">
+    <div
+      className={
+        isSemana
+          ? "group relative flex min-h-[min(70vh,42rem)] flex-col border border-slate-200/90 bg-white"
+          : "group relative flex min-h-[9rem] flex-col border border-slate-200/90 bg-white"
+      }
+    >
+      <div className="flex shrink-0 items-center justify-between bg-[#002147] px-2 py-1.5">
         <button
           type="button"
           className="rounded px-1 text-[10px] font-medium text-white/80 opacity-0 transition group-hover:opacity-100 hover:bg-white/10"
@@ -130,7 +144,11 @@ function DiaCelda({
         </button>
         <button
           type="button"
-          className="shrink-0 text-sm font-bold tabular-nums text-white hover:underline"
+          className={
+            isSemana
+              ? "shrink-0 text-base font-bold tabular-nums text-white hover:underline"
+              : "shrink-0 text-sm font-bold tabular-nums text-white hover:underline"
+          }
           onClick={onEditDay}
           title="Editar día"
         >
@@ -140,7 +158,11 @@ function DiaCelda({
       {lineas.length === 0 ? (
         <button
           type="button"
-          className="min-h-[2rem] flex-1 p-1.5 text-left text-[10px] text-slate-400 hover:bg-slate-50"
+          className={
+            isSemana
+              ? "min-h-[3rem] flex-1 p-2.5 text-left text-sm text-slate-400 hover:bg-slate-50"
+              : "min-h-[2rem] flex-1 p-1.5 text-left text-[10px] text-slate-400 hover:bg-slate-50"
+          }
           onClick={onEditDay}
         >
           + OT
@@ -151,7 +173,13 @@ function DiaCelda({
           <div className="space-y-0.5">{renderList(right)}</div>
         </div>
       ) : (
-        <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-1.5">
+        <div
+          className={
+            isSemana
+              ? "min-h-0 flex-1 space-y-1.5 overflow-y-auto p-2.5"
+              : "min-h-0 flex-1 space-y-0.5 overflow-y-auto p-1.5"
+          }
+        >
           {renderList(lineas)}
         </div>
       )}
@@ -828,11 +856,12 @@ export function CalendarioProduccionPage() {
                       lineas={entradasByDay.get(celda.ymd) ?? []}
                       onEditDay={() => openDay(celda.ymd)}
                       onOpenOt={(ot) => void openDetalle(ot)}
+                      variant="semana"
                     />
                   ) : (
                     <div
                       key={`empty-w-${ci}`}
-                      className="min-h-[12rem] bg-slate-100/60"
+                      className="min-h-[min(70vh,42rem)] bg-slate-100/60"
                     />
                   ),
                 )
@@ -845,6 +874,7 @@ export function CalendarioProduccionPage() {
                         lineas={entradasByDay.get(celda.ymd) ?? []}
                         onEditDay={() => openDay(celda.ymd)}
                         onOpenOt={(ot) => void openDetalle(ot)}
+                        variant="mes"
                       />
                     ) : (
                       <div
