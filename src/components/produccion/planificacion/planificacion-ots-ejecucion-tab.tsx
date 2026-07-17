@@ -26,8 +26,9 @@ import {
 } from "@/components/ui/card";
 import { CerrarProcesoDialog } from "@/components/produccion/planificacion/cerrar-proceso-dialog";
 import { CtpEjecucionRequisitosBlock } from "@/components/produccion/planificacion/ctp-ejecucion-requisitos-block";
-import { aplicarConsumoCartelaSiCorresponde } from "@/lib/cartela-stock-consumo";
-import type { PasoItinerarioConsumo } from "@/lib/cartela-ejecucion";
+import { aplicarConsumoCartelaSiCorresponde, validarCartelaConsumoAntesCerrar } from "@/lib/cartela-stock-consumo";
+import { procesoUsaCartela, type PasoItinerarioConsumo } from "@/lib/cartela-ejecucion";
+import { errorMessageFromUnknown } from "@/lib/error-message";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -1360,7 +1361,7 @@ export function PlanificacionOtsEjecucionTab({
                 updated_at: nowIso,
               })
               .eq("id", openPause.id);
-            if (pauseUpdErr) throw pauseUpdErr;
+            if (pauseUpdErr) throw new Error(pauseUpdErr.message || "No se pudo cerrar la pausa.");
             nextPatch.minutos_pausada_acum = Math.max(0, row.minutosPausadaAcum) + deltaMin;
           }
         }
@@ -1410,27 +1411,27 @@ export function PlanificacionOtsEjecucionTab({
             updated_by_email: updatedByEmail,
           })
           .eq("id", row.id);
-        if (error) throw error;
+        if (error) throw new Error(error.message || "No se pudo actualizar la ejecución.");
         if (nextPatch.estado_ejecucion === "finalizada" && row.mesaTrabajoId) {
           const { error: mesaError } = await supabase
             .from(TABLE_MESA)
             .update({ estado_mesa: "finalizada" })
             .eq("id", row.mesaTrabajoId);
-          if (mesaError) throw mesaError;
+          if (mesaError) throw new Error(mesaError.message || "No se pudo finalizar la mesa.");
         }
         if (datosProcesoUpdate && row.otPasoId) {
           const { error: dpErr } = await supabase
             .from(TABLE_OT_PASOS)
             .update({ datos_proceso: datosProcesoUpdate })
             .eq("id", row.otPasoId);
-          if (dpErr) throw dpErr;
+          if (dpErr) throw new Error(dpErr.message || "No se pudieron guardar los datos del proceso.");
         }
         /* prod_planificacion_pool: sincronizado por trigger prod_trg_mesa_ejecucion_itinerario_finaliza
            (en_transito si quedan pasos; cerrada solo con itinerario completo; sin ot_paso_id -> cerrada). */
         toast.success("Ejecución actualizada.");
         await loadData();
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "No se pudo actualizar la ejecución.";
+        const msg = errorMessageFromUnknown(e, "No se pudo actualizar la ejecución.");
         toast.error(msg);
       } finally {
         setSavingId(null);
@@ -2030,6 +2031,13 @@ function ExecutionCard({
 
   const confirmCerrarProceso = useCallback(() => {
     const datosFinal = { ...datosProcesoLocal, ...cerrarDatosDraft };
+    if (procesoUsaCartela(row.procesoId, pasosItinerario)) {
+      const cartelaErr = validarCartelaConsumoAntesCerrar(datosFinal);
+      if (cartelaErr) {
+        toast.error(cartelaErr);
+        return;
+      }
+    }
     if (row.procesoId === PROCESO_CTP_ID) {
       const pendientes = ctpRequisitosPendientes(datosFinal);
       if (pendientes.length > 0) {
@@ -2062,6 +2070,7 @@ function ExecutionCard({
     observaciones,
     onPatch,
     row.procesoId,
+    pasosItinerario,
   ]);
 
   // Campos que deben persistir en CUALQUIER acción (iniciar, pausar,

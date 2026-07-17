@@ -46,8 +46,13 @@ export function debeRegistrarConsumoCartela(
   pasosItinerario?: PasoItinerarioConsumo[] | null,
 ): boolean {
   if (!procesoUsaCartela(procesoId, pasosItinerario)) return false;
-  const { hojas } = parseCartelaConsumoFromDatos(datos);
-  return hojas != null && hojas > 0;
+  const parsed = parseCartelaConsumoFromDatos(datos);
+  const tienePalet = parsed.paletId != null || parsed.idStock != null;
+  return (
+    parsed.hojas != null &&
+    parsed.hojas > 0 &&
+    tienePalet
+  );
 }
 
 /**
@@ -70,7 +75,9 @@ export async function registrarConsumoCartelaEjecucion(
     p_paso_id: params.pasoId ?? null,
     p_notas: notaConsumoCartelaPorProceso(params.procesoId ?? null),
   });
-  if (error) throw error;
+  if (error) {
+    throw new Error(error.message || "No se pudo descontar el stock de la cartela.");
+  }
 }
 
 export async function resolverPaletIdParaConsumo(
@@ -119,4 +126,20 @@ export async function aplicarConsumoCartelaSiCorresponde(
   });
 
   return { consumido: true, hojas };
+}
+
+/** Valida cartela parcial antes de cerrar (id sin hojas o hojas sin id). */
+export function validarCartelaConsumoAntesCerrar(
+  datos: DatosProcesoGenerico,
+): string | null {
+  const parsed = parseCartelaConsumoFromDatos(datos);
+  const hasId = parsed.paletId != null || parsed.idStock != null;
+  const hasHojas = parsed.hojas != null && parsed.hojas > 0;
+  if (hasId && !hasHojas) {
+    return "Indica las hojas consumidas de la cartela o quita el ID Stock.";
+  }
+  if (hasHojas && !hasId) {
+    return "Selecciona un ID Stock válido o deja vacías las hojas de cartela.";
+  }
+  return null;
 }

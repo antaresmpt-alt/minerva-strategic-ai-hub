@@ -87,7 +87,15 @@ export function CartelaCierreBlock({
     if (suggested == null) return;
     hojasPrefilledRef.current = true;
     setHojasInput(String(suggested));
-  }, [procesoId, datosDraft, initialHojas]);
+    const idFromDraft = readIdStockFromDatos(datosRef.current);
+    const idFromInput = normalizeIdStockInput(idInput);
+    const idStock = idFromDraft ?? idFromInput;
+    if (idStock != null) {
+      emitDatos(
+        applyCartelaToDatos(datosRef.current, paletPreview, idStock, suggested),
+      );
+    }
+  }, [procesoId, datosDraft, initialHojas, idInput, paletPreview, emitDatos]);
 
   // Cargar cartelas asignadas a esta OT
   useEffect(() => {
@@ -192,7 +200,7 @@ export function CartelaCierreBlock({
         <div className="flex-1">
           <p className="text-sm font-semibold text-[#002147]">Cartela / material usado</p>
           <p className="text-xs text-slate-500">
-            Opcional. Mismo ID Stock que en almacén (como en Optimus RDC).
+            Opcional. Si indicas ID Stock, las hojas son obligatorias para descontar stock.
           </p>
         </div>
       </div>
