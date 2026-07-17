@@ -1639,6 +1639,9 @@ export interface TurnLoad {
 | 31 | `20260609170000_sys_parametros_sobreproduccion.sql` |
 | 32 | `20260609180000_procesos_ctp_desbroce_preimpresion.sql` |
 | 33 | `20260610084500_etiquetas_troqueles_flex_reparacion.sql` |
+| … | *(ver carpeta `supabase/migrations/` — lista parcial; no todas las migraciones posteriores están aquí)* |
+| — | `20260717140000_prod_calendario_produccion_ot.sql` — Calendario Producción (17 jul) |
+| — | `20260717150000_prod_calendario_produccion_ot_delete_rls.sql` — RLS delete alineado |
 
 > Nota: aparte de `migrations/`, hay scripts SQL operativos en `supabase/sql/` (RLS, funciones, parches puntuales) y seeds en `supabase/seeds/`.
 

@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 14 jul 2026 (Bloque 9: **9.4 A/B/C** consumo cartela validado OT 98013, fixes imp. externa — §15.10)
+> Última actualización: 17 jul 2026 (Calendario Producción + merge `feature/bloque9-4abc-consumo-material` → `main`; 9.4 A/B/C + HR reimpresión)
 
 ---
 
@@ -247,7 +247,7 @@ src/components/produccion/planificacion/
 | 6 | Producidas/Histórico + cierre OT | ⏳ Pendiente (PRÓXIMO GRANDE) |
 | 7 | Expedición/Albarán | ⏳ Pendiente (depende B6 + Odoo) |
 | 8 | Formatos de hoja + formas + componentes (OT contenedor/hijas) | 🔄 En curso — **FORMATO ✅** + **8.0 ✅** + **8.1 ✅** + **8.1.1 ✅**; 8.2–8.4 pendiente — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` |
-| 9 | Material, cartelas de palet y stock libre | 🔄 **9.0–9.6d + 9.4 A/B/C ✅** (14 jul) — consumo cartela en **guillotina / impresión / troquel / imp. externa (Enviado)**; prueba E2E OT **98013**; fixes proceso 21 y cola Externos — ver `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §15.10. **Pendiente:** derivar OT a imp. externa post-despacho (§15.6.12) |
+| 9 | Material, cartelas de palet y stock libre | ✅ **9.0–9.6d + 9.4 A/B/C** en `main` (17 jul) — consumo cartela guillotina / impresión / troquel / imp. externa; E2E OT **98013**; fix cierre guillotina. **También:** Calendario Producción (planificador Jordi). **Pendiente:** derivar OT a imp. externa post-despacho (§15.6.12) |
 
 ---
 
@@ -303,7 +303,7 @@ src/components/produccion/planificacion/
 
 11. **Encadenado formato de pliego (17 jun 2026, Fase FORMATO ✅)**: por **orden de itinerario** (`prod_ot_pasos.orden`), no por tipo de proceso global. `tamano_hoja` en despacho = **Formato compra** (solo referencia de compra). Guillotina: `tamano_inicial` ← anterior, `tamano_final` → siguiente. Impresión/externos hojas: `formato_hojas`. Troquelado: `tamano_corte` es el troquel (independiente); banner muestra pliego de entrada. Módulo: `hoja-ruta-formato-encadenado.ts`. Probado OT 98009 (commit `aadad81`).
 
-12. **Bloque 9 — Cartelas y stock (14 jul 2026)**: **9.0–9.6d operativo** + **9.4 A/B/C** — consumo real al cerrar **guillotina (17), impresión (1/2), troquel (10), imp. externa (21 al Enviado)**. **Sesión 14 jul:** prueba punta a punta OT **98013** (externo → muelle → cartela → recepción 300 h → troquel → engomado); fixes `es_externo` proceso 21, wizard hojas brutas/netas, modal cartela Externos. **Pendiente prioritario:** acción «Derivar a impresión externa» en Pool OTs (§15.6.12). Briefing + §15.10: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`.
+12. **Bloque 9 — Cartelas y stock (17 jul 2026)**: **9.0–9.6d operativo** + **9.4 A/B/C** en producción (`main`). Consumo cartela al cerrar **guillotina (17), impresión (1/2), troquel (10), imp. externa (21 al Enviado)**. Sesión 14 jul: E2E OT **98013**. Sesión 17 jul: fix cierre guillotina (toasts/validación cartela), reimpresión HR completa/simplificada A5, **Calendario Producción** (ver decisión 18). **Pendiente prioritario:** «Derivar a impresión externa» en Pool (§15.6.12). Briefing: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §15.10–15.11.
 
 13. **Higiene operativa (18 jun 2026)**: `bultos_por_palet_default` de Gabri versionado en migración seed (`20260618143200`). Plantillas offset: **Desbroce** insertado entre Troquelado y Engomado en 5 rutas (`20260618143000`). Rol usuario CTP = **`ctp`** (no `preimpresion`); permisos `produccion` + `produccion_ejecucion` en BD y `permissions.ts`. Marc/Gemma: usuarios aún no creados en Supabase.
 
@@ -314,6 +314,8 @@ src/components/produccion/planificacion/
 16. **Bloque 8.1.2 — agrupación maestro y despachadas (23 jun 2026)**: misma UX barco que Pool/Pipeline en **Maestro OTs** y **OTs despachadas** (`ots-contenedor-display.ts`, expandir hijas lazy). Filtro vista: agrupado | solo simples | solo contenedores | todas planas. Maestro paginado excluye hijas en servidor cuando no es vista plana.
 
 17. **Bloque 10 — Presupuestos (23 jun 2026, diseño)**: **después** de cartelas (9) y antes de ventas/comercial (11+). Hoy las hijas se parten en **despacho** (8.2 puente); futuro: formas en presupuesto + **versión real** al copiar (estructura como se ejecutó, no solo teoría Optimus). Briefing: `MINERVA_BLOQUE10_PRESUPUESTOS.md`. Reunión planta jueves: `MINERVA_REUNION_HOJA_RUTA_JUEVES.md`.
+
+18. **Calendario Producción (17 jul 2026)**: planificador manual de OTs por día (mapa mental planta, estilo Excel Jordi/Carlos). **No** auto-rellena desde `fecha_entrega`. Tabla `prod_calendario_produccion_ot` (unique fecha+ot). UI en **OTs → Calendario Producción**: vista **Mes | Semana**, import Excel pestaña `planificador`, cortar/pegar entre días, PDF día/mes. Detalle OT = maestro + despacho. Semana: 1 OT/línea, tipografía grande. Migraciones: `20260717140000_…`, `20260717150000_…delete_rls`. Datos verano 2026 cargados en prod.
 
 ## 📁 Estructura de carpetas relevante
 

@@ -1035,6 +1035,7 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 | 7 jul 2026 | **§15.8** — Sesión muelle→cartelas: 9.5 fotos, 9.6a STOCK sin OC, 9.6b aviso albarán duplicado, prueba Torraspapel 410864843, fix wizard multi-OT. Commits `dbf3860`, `814d427`. |
 | 9 jul 2026 | **§15.9** — Sesión operativa: 9.4 semáforo pool ATP, sync Optimus diff, pool «Ver cartelas», 9.3 sobrantes, 9.6d muelle multi-línea. Commits `414825c`, `f609d66`, `021f1ea`, `5b9ac5f`, `80f8fc7`. |
 | 14 jul 2026 | **§15.10** — 9.4 A/B/C validado E2E (OT 98013); fixes proceso 21, cola Externos, wizard hojas brutas/netas, doble conteo cartelas, modal Enviado. Revisión PDF hoja de ruta. Backlog §15.10.7. Commits `34eba91`, `22944f3`, `d5f2cbd`, `27e24fa`. |
+| 17 jul 2026 | **§15.11** — Fix cierre guillotina; HR reimpresión Completa/Simplificada; **Calendario Producción** (mes/semana, import Excel, cortar/pegar). Merge rama → `main` / prod Vercel. Commits `631ecf2`, `ce13a78`, `c535b74`, `503afec`, `93a3884`. |
 
 ### Implementación (rellenar al avanzar)
 
@@ -1663,7 +1664,7 @@ Archivos: `src/lib/hoja-ruta/hoja-ruta-pdf.ts`, `hoja-ruta-formatters.ts`.
 | **Toast cartela skip** | Baja | Avisar si falta `ot_paso_id` o hojas al Enviado |
 | **Pool «Ver cartela»** | Baja | Filtra id ≥99000 (sandbox); ejecución sí muestra pruebas |
 | **Material parcial pool** | Info | 550 muelle vs 300 netas externo — esperado en flujo brutas/netas |
-| Merge rama → `main` | Alta | Tras OK Ramón; preview Vercel en feature branch |
+| Merge rama → `main` | Alta | ✅ **Hecho 17 jul** — `feature/bloque9-4abc-consumo-material` → `main` (Vercel prod) |
 
 ##### 15.10.6 Commits de referencia (14 jul 2026)
 
@@ -1673,3 +1674,46 @@ Archivos: `src/lib/hoja-ruta/hoja-ruta-pdf.ts`, `hoja-ruta-formatters.ts`.
 | `22944f3` | 9.4 C impresión externa Enviado |
 | `d5f2cbd` | Wizard imp. externa + fixes cola Externos / cartelas |
 | `27e24fa` | Fix modal cartela React #185 |
+
+#### 15.11 Sesión 17 jul 2026 — Cierre guillotina, HR reimpresión, Calendario Producción
+
+> Rama `feature/bloque9-4abc-consumo-material` → merge **`main`** (deploy Vercel). Datos programación verano 2026 importados a `prod_calendario_produccion_ot`.
+
+##### 15.11.1 Fixes / features
+
+| Pieza | Detalle | Commits |
+|-------|---------|---------|
+| Cierre guillotina | Toasts claros + validación cartela antes de cerrar (`error-message.ts`, `cartela-stock-consumo.ts`) | `631ecf2` |
+| HR PDF reimpresión | Menú Completa vs Simplificada (A5) desde `HojaRutaOtDialog` | `ce13a78` |
+| Calendario Producción | Tabla + UI mes; colocación manual OTs; detalle maestro/despacho; PDF | `c535b74` |
+| Calendario semana + import | Vista semana, import Excel `planificador`, cortar/pegar, RLS delete alineado | `503afec` |
+| UX semana | 1 OT/línea, tipografía mayor, más altura de columna | `93a3884` |
+
+##### 15.11.2 Calendario Producción (referencia)
+
+| Pieza | Detalle |
+|-------|---------|
+| Ruta UI | Producción → OTs → pestaña **Calendario Producción** |
+| Tabla | `prod_calendario_produccion_ot` (`fecha`, `ot_numero`, `orden`, unique fecha+ot) |
+| Migraciones | `20260717140000_prod_calendario_produccion_ot.sql`, `20260717150000_…_delete_rls.sql` |
+| Import | Excel pestaña **`planificador`** (no maestro `OT`); script `scripts/import_programacio_excel.py` + botón UI |
+| Mover OTs | Cortar (tijeras) → abrir otro día → Pegar; papelera = quitar |
+| Diseño | Manual (mapa mental); **no** auto desde fecha entrega Optimus |
+
+##### 15.11.3 Backlog post-sesión 17 jul
+
+| Ítem | Prioridad | Notas |
+|------|-----------|-------|
+| Derivar OT → imp. externa post-despacho | Alta | §15.6.12 (sigue pendiente) |
+| Feedback Jordi calendario | Media | Ajustes tras uso real planificador verano |
+| PDF semana | Baja | Hoy PDF día/mes |
+
+##### 15.11.4 Commits de referencia (17 jul 2026)
+
+| Commit | Descripción |
+|--------|-------------|
+| `631ecf2` | Fix cierre guillotina / cartela |
+| `ce13a78` | HR PDF completa o simplificada |
+| `c535b74` | Calendario Producción (mes) |
+| `503afec` | Semana + import Excel + cortar/pegar |
+| `93a3884` | UX semana una columna |
