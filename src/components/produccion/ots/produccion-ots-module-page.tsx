@@ -2,6 +2,7 @@
 
 import {
   BarChart3,
+  CalendarDays,
   LayoutGrid,
   PackageCheck,
   Rows3,
@@ -59,6 +60,14 @@ const OtsImpresasPage = dynamic(
   { loading: () => <TabRouteLoading label="Cargando analítica…" /> },
 );
 
+const CalendarioProduccionPage = dynamic(
+  () =>
+    import("@/components/produccion/ots/calendario-produccion-page").then(
+      (m) => ({ default: m.CalendarioProduccionPage }),
+    ),
+  { loading: () => <TabRouteLoading label="Cargando calendario…" /> },
+);
+
 const TAB_TRIGGER_CLASS =
   "flex h-full min-h-8 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs data-active:bg-[#C69C2B]/20 data-active:font-semibold data-active:text-[#002147] data-active:shadow-sm data-active:ring-2 data-active:ring-[#C69C2B]/45 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm";
 
@@ -81,6 +90,7 @@ export function ProduccionOtsModulePage({
       "compras",
       "planificacion",
       "impresas",
+      "calendario",
     ]);
     if (!allowed.has(v)) return;
 
@@ -140,6 +150,10 @@ export function ProduccionOtsModulePage({
               <BarChart3 className="size-4 shrink-0 opacity-90" aria-hidden />
               Analítica de Planta
             </TabsTrigger>
+            <TabsTrigger value="calendario" className={TAB_TRIGGER_CLASS}>
+              <CalendarDays className="size-4 shrink-0 opacity-90" aria-hidden />
+              Calendario Producción
+            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -170,6 +184,10 @@ export function ProduccionOtsModulePage({
 
         <TabsContent value="impresas" className="mt-0 space-y-3 outline-none">
           {tab === "impresas" ? <OtsImpresasPage /> : null}
+        </TabsContent>
+
+        <TabsContent value="calendario" className="mt-0 space-y-3 outline-none">
+          {tab === "calendario" ? <CalendarioProduccionPage /> : null}
         </TabsContent>
       </Tabs>
     </div>
