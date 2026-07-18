@@ -861,12 +861,13 @@ export function CalendarioProduccionPage() {
             Importar Excel
           </Button>
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button type="button" variant="outline" size="sm">
-                <FileDown className="mr-1 size-4" />
-                PDF
-                <ChevronDown className="ml-1 size-3.5 opacity-70" />
-              </Button>
+            <DropdownMenuTrigger
+              type="button"
+              className="inline-flex h-8 items-center justify-center gap-1 rounded-md border border-input bg-background px-3 text-sm font-medium shadow-xs outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <FileDown className="size-4" />
+              PDF
+              <ChevronDown className="size-3.5 opacity-70" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>
