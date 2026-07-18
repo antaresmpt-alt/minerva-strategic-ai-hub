@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ClipboardPaste,
@@ -30,14 +29,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -860,33 +851,35 @@ export function CalendarioProduccionPage() {
             )}
             Importar Excel
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Button
               type="button"
-              className="inline-flex h-8 items-center justify-center gap-1 rounded-md border border-input bg-background px-3 text-sm font-medium shadow-xs outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              variant="outline"
+              size="sm"
+              title={
+                vista === "mes"
+                  ? "PDF grid del mes (como pantalla)"
+                  : "PDF grid de la semana (como pantalla)"
+              }
+              onClick={() => {
+                if (vista === "mes") exportMes();
+                else exportSemana();
+              }}
             >
-              <FileDown className="size-4" />
-              PDF
-              <ChevronDown className="size-3.5 opacity-70" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>
-                {vista === "mes" ? "Exportar mes" : "Exportar semana"}
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => {
-                  if (vista === "mes") exportMes();
-                  else exportSemana();
-                }}
-              >
-                Vista grid (como pantalla)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={exportListado}>
-                Listado por día (papel)
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+              <FileDown className="mr-1 size-4" />
+              PDF grid
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              title="PDF listado por día (legible en papel)"
+              onClick={exportListado}
+            >
+              <FileDown className="mr-1 size-4" />
+              PDF listado
+            </Button>
+          </div>
         </div>
       </div>
 
