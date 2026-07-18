@@ -1643,6 +1643,8 @@ export interface TurnLoad {
 | — | `20260717140000_prod_calendario_produccion_ot.sql` — Calendario Producción (17 jul) |
 | — | `20260717150000_prod_calendario_produccion_ot_delete_rls.sql` — RLS delete alineado |
 
+**Calendario Producción (UI/PDF, 18 jul):** `calendario-produccion-page.tsx`, `calendario-produccion.ts`, `calendario-produccion-progreso.ts`, `calendario-produccion-export.ts` (PDF grid mes/semana + **listado por día**), `calendario-produccion-import.ts`. Detalle: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §15.11–15.12.
+
 > Nota: aparte de `migrations/`, hay scripts SQL operativos en `supabase/sql/` (RLS, funciones, parches puntuales) y seeds en `supabase/seeds/`.
 
 ---

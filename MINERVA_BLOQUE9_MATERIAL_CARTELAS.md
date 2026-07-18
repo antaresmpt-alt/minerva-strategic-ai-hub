@@ -4,10 +4,10 @@
 > Tema: recepción de material, cartelas de palet, stock libre y trazabilidad.
 > Complementa `MINERVA_HUB_CONTEXTO_MAESTRO.md`, `FASES_HOJA_RUTA_DIGITAL.md` y briefings Bloques 6 y 7.
 >
-> **Estado:** ✅ **9.0–9.6d operativo (MVP)** + **9.4 A/B/C consumo cartela** (14 jul 2026) — cartelas, Stock ATP, import Optimus (diff + `last_seen`), impresión HTML, consumo al cerrar **guillotina (17) / impresión (1/2) / troquel (10) / imp. externa (21)**, **semáforo pool ATP**, reimpresión remanente libre, valoración remanente, lote tintas, asistente IA Stock. **9.3–9.6d ✅** (ver §11). **Validado E2E:** OT **98013** impresión externa → troquel → engomado (§15.10). **Pendiente:** derivar OT a imp. externa post-despacho (§15.6.12), plan engomado desde salida troquel, mejoras hoja de ruta PDF, cierre OT sobrantes (Bloque 6), sync Optimus marcar agotados, 9.7 OCR.
+> **Estado:** ✅ **9.0–9.6d + 9.4 A/B/C** + **Calendario Producción** (18 jul 2026) — cartelas (impresión **1 copia**), Stock ATP, consumo guillotina/impresión/troquel/imp. externa, planificador OTs Jordi (pastillas, PDF grid+listado). **Validado E2E:** OT **98013**. **Pendiente:** derivar OT a imp. externa post-despacho (§15.6.12), plan engomado desde troquel, 9.7 OCR, cierre OT sobrantes (Bloque 6).
 > **Origen:** Optimus + cartelas CARPAPSA (15 jun 2026).
-> **Actualizado:** 14 jul 2026 — §15.10 sesión: prueba OT 98013, fixes proceso 21 / cartelas / wizard / modal externos, revisión PDF hoja de ruta.
-> **PENDIENTE:** H1/H2 recuento global. Ubicación por filas de material (catálogo UI sin definir en planta). `codigo_articulo` en wizard. Ajuste impresión A6 física vs A4 PDF.
+> **Actualizado:** 18 jul 2026 — §15.12: UX calendario (pastillas, modal, PDF grid/listado), cartela 1 copia, fix crash menú PDF.
+> **PENDIENTE:** H1/H2 recuento global. Ubicación por filas de material (catálogo UI sin definir en planta). Ajuste impresión A6 física vs A4 PDF.
 
 **Relacionado:** sobrantes → Bloque 6 · expedición → Bloque 7 · material contenedor/hijas → Bloque 8 · FSC → maestro artículos.
 
@@ -1035,6 +1035,8 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 | 7 jul 2026 | **§15.8** — Sesión muelle→cartelas: 9.5 fotos, 9.6a STOCK sin OC, 9.6b aviso albarán duplicado, prueba Torraspapel 410864843, fix wizard multi-OT. Commits `dbf3860`, `814d427`. |
 | 9 jul 2026 | **§15.9** — Sesión operativa: 9.4 semáforo pool ATP, sync Optimus diff, pool «Ver cartelas», 9.3 sobrantes, 9.6d muelle multi-línea. Commits `414825c`, `f609d66`, `021f1ea`, `5b9ac5f`, `80f8fc7`. |
 | 14 jul 2026 | **§15.10** — 9.4 A/B/C validado E2E (OT 98013); fixes proceso 21, cola Externos, wizard hojas brutas/netas, doble conteo cartelas, modal Enviado. Revisión PDF hoja de ruta. Backlog §15.10.7. Commits `34eba91`, `22944f3`, `d5f2cbd`, `27e24fa`. |
+| 17 jul 2026 | **§15.11** — Cierre guillotina, HR reimpresión, Calendario Producción (mes/semana/import). |
+| 18 jul 2026 | **§15.12** — Pastillas calendario, PDF grid+listado, cartela 1 copia, fix crash PDF. Commits `a1924b5`, `c70552f`, `701c0e4`. |
 | 17 jul 2026 | **§15.11** — Fix cierre guillotina; HR reimpresión Completa/Simplificada; **Calendario Producción** (mes/semana, import Excel, cortar/pegar). Merge rama → `main` / prod Vercel. Commits `631ecf2`, `ce13a78`, `c535b74`, `503afec`, `93a3884`. |
 
 ### Implementación (rellenar al avanzar)
@@ -1720,32 +1722,63 @@ Archivos: `src/lib/hoja-ruta/hoja-ruta-pdf.ts`, `hoja-ruta-formatters.ts`.
 
 #### 15.12 Sesión 18 jul 2026 — UX calendario + 1 copia cartela
 
-##### 15.12.1 Calendario Producción (lectura)
+> Rama/`main`. Feedback planta: pastillas y PDF listado «mucho mejor». Cierre de jornada documentado aquí.
+
+##### 15.12.1 Calendario Producción — lectura en pantalla
 
 | Pieza | Detalle |
 |-------|---------|
-| Pastillas 1 línea | Estilo Externos compacto: nº OT (badge) + trabajo truncado; sin icono camión |
-| Mes 1 columna | Eliminado `grid-cols-2`; celda crece / scroll |
+| Ruta UI | Producción → OTs → **Calendario Producción** |
+| Pastillas 1 línea | Estilo Externos compacto: badge nº OT + trabajo truncado; **sin** icono camión |
+| Mes 1 columna | Eliminado `grid-cols-2`; celda crece / scroll vertical |
+| Tipografía OT | Nº OT `12px` (mes) / `13px` (semana); más gap entre pastillas |
 | Color progreso HR | Gris sin empezar · azul en curso · verde completo (batch `prod_ot_pasos`) |
-| Mini-modal | Cabecera (cliente/trabajo/cantidad/entrega/estado) + pastillas itinerario + **Ver hoja de ruta** |
-| PDF semana | `exportCalendarioProduccionSemanaPdf` — botón en vista semana |
-| Lib | `calendario-produccion-progreso.ts` |
+| Mini-modal | Cabecera (cliente · trabajo · cantidad · entrega · estado) + pastillas itinerario + **Ver hoja de ruta** |
+| Lib progreso | `src/lib/calendario-produccion-progreso.ts` |
+| Página | `calendario-produccion-page.tsx` |
 
-##### 15.12.2 Cartelas — 1 copia (confirmado planta)
+##### 15.12.2 PDF — grid + listado por día
+
+| Export | Formato | Uso |
+|--------|--------|-----|
+| **PDF grid** | Landscape A4 (mes o semana) | Vista como pantalla; útil en pantalla / overview |
+| **PDF listado** | Portrait A4, sección por día con OTs debajo | **Papel** — tipografía legible; omite días vacíos |
+| PDF día | Portrait (modal editar día) | Ya existía |
+
+- API: `exportCalendarioProduccionMensualPdf`, `…SemanaPdf`, `…ListadoPdf` en `calendario-produccion-export.ts`.
+- UI: botones **PDF grid** / **PDF listado** (no DropdownMenu — ver §15.12.4).
+- Grid mensual: OT en negrita + trabajo al lado (mejor que label único diminuto).
+
+##### 15.12.3 Cartelas — 1 copia (confirmado planta)
 
 Emma (jueves) + Ramón (viernes): **ya no se imprimen 2 copias** por palet, solo **1**.
 
 | Pieza | Cambio |
 |-------|--------|
 | `cartela-print-html.ts` | default `copies = 1` |
-| `cartelas-page.tsx` / wizard | jobs con `copies: 1`; copy UI |
+| `cartelas-page.tsx` / wizard | jobs con `copies: 1`; textos UI |
 | `cartela-print.tsx` | default 1 |
-| Docs | §3g, §7, §15.2, §15.6.3, `docs/referencias/cartelas-optimus-campo.md`, `GUIA_MAÑANA.md` |
+| Docs | §3g, §7, §15.2, §15.6.3, `docs/referencias/cartelas-optimus-campo.md`, `GUIA_MAÑANA.md`, cuestionario Ramón |
 
-##### 15.12.3 Backlog residual
+##### 15.12.4 Incidencias / fixes del día
+
+| Problema | Fix | Commit |
+|----------|-----|--------|
+| Build Vercel: `asChild` en `DropdownMenuTrigger` | Trigger con className (patrón HR) | `c70552f` |
+| Crash al abrir PDF (mes/semana) — bucle tipo React #185 | Quitar DropdownMenu; dos botones directos | `701c0e4` |
+
+##### 15.12.5 Commits de referencia (18 jul 2026)
+
+| Commit | Descripción |
+|--------|-------------|
+| `a1924b5` | Pastillas, progreso HR, mini-modal, PDF listado, cartela 1 copia |
+| `c70552f` | Fix build `asChild` DropdownMenuTrigger |
+| `701c0e4` | Fix crash PDF: botones grid/listado sin menú |
+
+##### 15.12.6 Backlog residual
 
 | Ítem | Prioridad | Notas |
 |------|-----------|-------|
 | Derivar OT → imp. externa post-despacho | Alta | §15.6.12 |
-| Feedback Jordi tras pastillas | Media | Ajustar tipografía/colores si pide |
-| Plan engomado desde troquel | Media | 4400 vs 2080 |
+| Plan engomado desde salida troquel | Media | Badge 2080 vs plan 4400 |
+| Feedback Jordi colores pastilla | Baja | Ya usable; afinar si pide |

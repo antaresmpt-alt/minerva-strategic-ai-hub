@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 18 jul 2026 (Calendario UX pastillas + PDF semana; cartelas **1 copia**)
+> Última actualización: 18 jul 2026 (Calendario pastillas + PDF grid/listado; cartela 1 copia; §15.12)
 
 ---
 
@@ -247,7 +247,7 @@ src/components/produccion/planificacion/
 | 6 | Producidas/Histórico + cierre OT | ⏳ Pendiente (PRÓXIMO GRANDE) |
 | 7 | Expedición/Albarán | ⏳ Pendiente (depende B6 + Odoo) |
 | 8 | Formatos de hoja + formas + componentes (OT contenedor/hijas) | 🔄 En curso — **FORMATO ✅** + **8.0 ✅** + **8.1 ✅** + **8.1.1 ✅**; 8.2–8.4 pendiente — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` |
-| 9 | Material, cartelas de palet y stock libre | ✅ **9.0–9.6d + 9.4 A/B/C** en `main` (17 jul) — consumo cartela guillotina / impresión / troquel / imp. externa; E2E OT **98013**; fix cierre guillotina. **También:** Calendario Producción (planificador Jordi). **Pendiente:** derivar OT a imp. externa post-despacho (§15.6.12) |
+| 9 | Material, cartelas de palet y stock libre | ✅ **9.0–9.6d + 9.4 A/B/C** + Calendario Producción (§15.12, 18 jul) — pastillas, PDF grid/listado, cartela **1 copia**. **Pendiente:** derivar OT a imp. externa (§15.6.12) |
 
 ---
 
@@ -303,7 +303,7 @@ src/components/produccion/planificacion/
 
 11. **Encadenado formato de pliego (17 jun 2026, Fase FORMATO ✅)**: por **orden de itinerario** (`prod_ot_pasos.orden`), no por tipo de proceso global. `tamano_hoja` en despacho = **Formato compra** (solo referencia de compra). Guillotina: `tamano_inicial` ← anterior, `tamano_final` → siguiente. Impresión/externos hojas: `formato_hojas`. Troquelado: `tamano_corte` es el troquel (independiente); banner muestra pliego de entrada. Módulo: `hoja-ruta-formato-encadenado.ts`. Probado OT 98009 (commit `aadad81`).
 
-12. **Bloque 9 — Cartelas y stock (17 jul 2026)**: **9.0–9.6d operativo** + **9.4 A/B/C** en producción (`main`). Consumo cartela al cerrar **guillotina (17), impresión (1/2), troquel (10), imp. externa (21 al Enviado)**. Sesión 14 jul: E2E OT **98013**. Sesión 17 jul: fix cierre guillotina (toasts/validación cartela), reimpresión HR completa/simplificada A5, **Calendario Producción** (ver decisión 18). **Pendiente prioritario:** «Derivar a impresión externa» en Pool (§15.6.12). Briefing: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §15.10–15.11.
+12. **Bloque 9 — Cartelas y stock (18 jul 2026)**: **9.0–9.6d + 9.4 A/B/C** en `main`. Consumo cartela guillotina/impresión/troquel/imp. externa. **Sesión 18 jul:** Calendario Producción UX (pastillas, progreso HR, mini-modal, PDF grid + listado papel), impresión cartela **1 copia**, fix crash menú PDF. Briefing §15.10–15.12: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`. **Pendiente:** «Derivar a impresión externa» Pool (§15.6.12).
 
 13. **Higiene operativa (18 jun 2026)**: `bultos_por_palet_default` de Gabri versionado en migración seed (`20260618143200`). Plantillas offset: **Desbroce** insertado entre Troquelado y Engomado en 5 rutas (`20260618143000`). Rol usuario CTP = **`ctp`** (no `preimpresion`); permisos `produccion` + `produccion_ejecucion` en BD y `permissions.ts`. Marc/Gemma: usuarios aún no creados en Supabase.
 
@@ -315,7 +315,7 @@ src/components/produccion/planificacion/
 
 17. **Bloque 10 — Presupuestos (23 jun 2026, diseño)**: **después** de cartelas (9) y antes de ventas/comercial (11+). Hoy las hijas se parten en **despacho** (8.2 puente); futuro: formas en presupuesto + **versión real** al copiar (estructura como se ejecutó, no solo teoría Optimus). Briefing: `MINERVA_BLOQUE10_PRESUPUESTOS.md`. Reunión planta jueves: `MINERVA_REUNION_HOJA_RUTA_JUEVES.md`.
 
-18. **Calendario Producción (17–18 jul 2026)**: planificador manual de OTs por día (mapa mental planta). UI **OTs → Calendario Producción**: Mes \| Semana, pastillas 1 línea (OT + trabajo), color por progreso itinerario, mini-modal con itinerario + hoja de ruta, PDF día/mes/**semana**, import Excel `planificador`. **No** auto desde `fecha_entrega`.
+18. **Calendario Producción (17–18 jul 2026)**: planificador manual OTs (mapa mental Jordi/Carlos). **OTs → Calendario Producción**: Mes \| Semana; pastillas 1 línea (OT + trabajo); color por progreso itinerario; mini-modal + hoja de ruta; botones **PDF grid** / **PDF listado** (papel); import Excel `planificador`; cortar/pegar. **No** auto desde `fecha_entrega`. Tabla `prod_calendario_produccion_ot`. Detalle §15.11–15.12 Bloque 9.
 
 19. **Cartelas impresión (18 jul 2026)**: **1 copia** por palet (antes 2). Confirmado Emma/Ramón.
 
