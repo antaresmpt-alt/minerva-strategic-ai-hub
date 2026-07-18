@@ -18,7 +18,7 @@ No hace falta un speech largo: responde punto por punto. Si algo varía según e
 
 - Juan recepciona en **Muelle** (ya existe) → **Emma o Ramón** cartelan en paso separado (Juan **no** cartela).
 - Una **cartela** = **1 palet físico** = **1 ID Stock**. Ese palet puede referenciar **varias OTs**, sin desglose de cantidad por OT en la cartela.
-- En físico se pegan **2 copias iguales** de la misma cartela (por si se pierde una), no dos cartelas distintas.
+- En físico se pega **1 copia** de la cartela por palet (actualizado jul 2026; antes 2 por pérdida).
 - El sobrante **no crea cartela nueva**: se actualiza la misma (`cantidad_actual` + movimiento).
 - ID Stock Minerva arrancaría en **10.310** (continuando Optimus).
 - **Arranque:** piloto en paralelo con Optimus (10–20 OTs en Minerva); ver §13c en `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`.

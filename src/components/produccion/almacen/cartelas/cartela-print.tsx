@@ -27,11 +27,11 @@ function resolveOtTitulo(
 
 /**
  * Cartela imprimible estilo Optimus (§7.4 + referencia scan).
- * ID Stock = elemento visual dominante. Layout A6 apaisado, `copies` copias (default 2).
+ * ID Stock = elemento visual dominante. Layout A6 apaisado, `copies` copias (default 1).
  */
 export function CartelaPrint({
   palet,
-  copies = 2,
+  copies = 1,
   proveedorNombre,
   otTitulos,
 }: CartelaPrintProps) {

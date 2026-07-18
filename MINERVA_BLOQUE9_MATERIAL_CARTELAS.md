@@ -337,7 +337,7 @@ comanda 35862   750 fulles (1 palet) kraft liner 300gr 72x102
 
 - Un palet puede servir a **varias OTs** (ej. 300 + 600 + 500 hojas “mentales” para OT1/2/3 + 400 sobrante en el mismo palet).
 - **No** se desglosa cantidad por OT en la cartela — el maquinista conoce las hojas brutas de la OT.
-- En físico se pegan **2 copias iguales** de la misma cartela (por pérdida), no dos cartelas con datos distintos.
+- En físico se pega **1 copia** de la cartela por palet (confirmado planta jul 2026 — Emma/Ramón; antes se imprimían 2 por pérdida).
 - Trazabilidad fina (qué OT consumió cuánto de qué ID Stock) → **`prod_stock_movimientos`**, no la cabecera de la cartela.
 
 ### Roles (corrección 24 jun)
@@ -454,7 +454,7 @@ Esto simplifica el modelo: `prod_ot` → `prod_compra_material` es 1:N, sin tabl
 - Varias OTs pueden referenciarse en la **misma cartela** (tabla puente `prod_stock_palet_ots` o campo JSON `ots_referencia` — a decidir en 9.0).
 - **No** hay cantidad por OT en la cartela (Ramón D1).
 - ~~N cartelas por palet con `palet_fisico_ref`~~ — **deprecado** en favor de 1:1 palet/cartela.
-- Impresión: opción **“2 copias”** de la misma cartela para pegar en el palet (C1).
+- Impresión: **1 copia** por palet (C1; actualizado jul 2026).
 
 ### Reservas parciales — patrón ATP (9.2, 5 jul 2026)
 
@@ -560,7 +560,7 @@ La pestaña **Muelle** ya existe en Minerva y Juan la usa hoy para recepcionar. 
 
 **Roles validados (24 jun 2026):**
 - **Juan:** recepciona en Muelle, introduce albarán/hojas/palets, sube el albarán **en cuanto puede** (acelera cartelado). **No cartela.**
-- **Emma o Ramón:** bandeja “pendiente de cartelar” → crean cartelas (1 por palet), asocian OT(s), imprimen (2 copias opcionales), pegan en palet.
+- **Emma o Ramón:** bandeja “pendiente de cartelar” → crean cartelas (1 por palet), asocian OT(s), imprimen (**1 copia**), pegan en palet.
 - Interfaz cartelas: **PC en oficina/almacén** para Emma/Ramón; Juan puede seguir en **tablet solo en Muelle**.
 
 **Flujo:**
@@ -573,7 +573,7 @@ Recepciona OC(s), nº albarán, hojas, palets
 [NUEVO — Almacén → Cartelas · Emma/Ramón]
 Bandeja agrupada por albarán (antiduplicado si ya cartelado)
 → Por cada palet físico: material, cantidad, OT(s) referencia, STOCK si aplica
-→ "Imprimir cartela" (×2 copias opcional)
+→ "Imprimir cartela" (1 copia)
 → Pegar en palet
 ```
 
@@ -625,7 +625,7 @@ Recibido: 4 palets · 4.925 hojas (muelle)
 └───────────────────────────────────────┘
 … repetir por palet …
 
-[ Imprimir cartelas ]  [ 2 copias por palet ✓ ]
+[ Imprimir cartelas ]  [ 1 copia por palet ]
 ```
 
 - **No** se pide cantidad por OT en la cartela (D1).
@@ -855,7 +855,7 @@ Objetivo: sustituir Optimus/papel en lo esencial — **qué hay en cada palet y 
 | Fase | Entregable |
 |------|------------|
 | **9.0** | SQL: `prod_stock_palets` + `prod_stock_movimientos` + `prod_stock_palet_ots`; ampliar `prod_recepciones_material` (`cantidad_peso`); secuencia `id_stock` desde **10.310** | ✅ **Hecho** |
-| **9.1** | UI **Almacén → Cartelas**: bandeja pendientes por albarán + cartelado 1 palet = 1 ID Stock + OT(s) + impresión (2 copias). Usuarios: **Emma/Ramón**. Antiduplicado albarán. | ✅ **Hecho** |
+| **9.1** | UI **Almacén → Cartelas**: bandeja pendientes por albarán + cartelado 1 palet = 1 ID Stock + OT(s) + impresión (**1 copia**, jul 2026). Usuarios: **Emma/Ramón**. Antiduplicado albarán. | ✅ **Hecho** |
 | **9.1b** | Post smoke: filtros bandeja, wizard split, selector OTs + hijas barco, fallback cliente/trabajo (`prod_ots_general`), `ref_lote` Optimus, fix impresión, cartela print estilo scan | ✅ **Hecho** |
 | **9.2** | UI **Almacén → Stock** (`/produccion/almacen/stock`): tabla estilo Optimus + filtros **Sin OT / Solo libre (ATP) / Solo reservado / Parcial** + tipo_stock + buscador; **reservas parciales ATP**, **valoración €**, vista `stock_palets_atp`, detalle + movimientos + reimpresión (1 copia) + **Import Optimus** + **Asistente IA (MVP)**. MRP legacy retirado. | ✅ **Hecho (5 jul)** |
 | **9.3** | Sobrantes — ajuste manual + split palet (§15.9.2) | ✅ **9 jul 2026** — RPC `prod_stock_ajustar_cantidad` + `prod_stock_split_palet`; UI Stock detalle. Pendiente: popup cierre OT (Bloque 6) |
@@ -1110,7 +1110,7 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 - Al guardar: `ref_lote = "{primeraOT} - {trabajo}"` con fallback `prod_ots_general.titulo`.
 
 **Impresión (actualizado 5 jul 2026 — §15.6.3)**
-- 2 copias por palet desde **Cartelas creadas** / wizard; **1 copia** desde **Stock** reimprimir.
+- **1 copia** por palet desde **Cartelas creadas** / wizard / Stock reimprimir (antes 2 desde Cartelas; confirmado planta jul 2026).
 - **`cartela-print-html.ts`**: ventana popup HTML aislada (no clona DOM de la app). Patrón `openCartelaPrintWindow` → fetch metadata OT → `writeCartelasToWindow`.
 - Título trabajo junto a OT en cartela (`otTitulosFromMetadata`, `truncateCartelaTitulo`).
 - Legacy React `cartela-print.tsx` conservado como referencia visual; impresión real vía HTML.
@@ -1123,9 +1123,9 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 | **10310** | CARPAPSA g3-9999 | 98010-01 | Primera cartela Minerva. Barco / hija. |
 | **10311** | G6-3305 | 35990 | Prueba post-9.1; `ref_lote` solo OT (sin trabajo en compra). |
 | **10312** | G6-3305 | 35990 | Post-9.1b; `ref_lote` = `35990 - EXPOSITOR SEGLE - BLUSH STICK 4x6u` (fallback `prod_ots_general`). |
-| **10313** | G6-3426 | 35970 | Wizard 3 tabs; impresión 2 copias. |
+| **10313** | G6-3426 | 35970 | Wizard 3 tabs; impresión (histórico: 2 copias; ahora 1). |
 
-**Validado OK:** filtros, wizard split, prefill por línea, impresión 2 copias, listado Creadas, cliente/trabajo en bandeja (COMART, CARPAPSA).
+**Validado OK:** filtros, wizard split, prefill por línea, impresión cartela, listado Creadas, cliente/trabajo en bandeja (COMART, CARPAPSA).
 
 **Pendiente UX / datos (no bloquea demo):**
 - ~~`codigo_articulo` no se rellena en wizard~~ → ✅ desde commit `e514e6c`.
@@ -1237,7 +1237,7 @@ Mesa ejecución → Cerrar proceso (OT en impresión offset o digital)
 
 | Problema | `react-to-print` / `window.print` clonaba DOM de Stock (281 filas) → PDFs de 18–27 páginas. |
 | Solución | **`src/lib/cartela-print-html.ts`** — ventana popup HTML autocontenida (`@page 148×105 mm`); abrir **sincronamente** en el clic; fallback iframe. |
-| Copias | **Cartelas creadas / wizard:** 2 · **Stock reimprimir:** 1 |
+| Copias | **1** por palet (Cartelas creadas / wizard / Stock). Antes: 2 desde Cartelas. Confirmado planta jul 2026. |
 | Título OT | Metadata `prod_ots_general` / `ref_lote` en PDF (`cartelas-ot-metadata.ts`, `cartela-print-trigger.ts`) |
 | Eliminado | `cartela-print-runner.tsx` (react-to-print) |
 | Commits | `9e2b997` |
@@ -1706,7 +1706,7 @@ Archivos: `src/lib/hoja-ruta/hoja-ruta-pdf.ts`, `hoja-ruta-formatters.ts`.
 |------|-----------|-------|
 | Derivar OT → imp. externa post-despacho | Alta | §15.6.12 (sigue pendiente) |
 | Feedback Jordi calendario | Media | Ajustes tras uso real planificador verano |
-| PDF semana | Baja | Hoy PDF día/mes |
+| PDF semana | ✅ | Hecho 18 jul (§15.12) |
 
 ##### 15.11.4 Commits de referencia (17 jul 2026)
 
@@ -1717,3 +1717,35 @@ Archivos: `src/lib/hoja-ruta/hoja-ruta-pdf.ts`, `hoja-ruta-formatters.ts`.
 | `c535b74` | Calendario Producción (mes) |
 | `503afec` | Semana + import Excel + cortar/pegar |
 | `93a3884` | UX semana una columna |
+
+#### 15.12 Sesión 18 jul 2026 — UX calendario + 1 copia cartela
+
+##### 15.12.1 Calendario Producción (lectura)
+
+| Pieza | Detalle |
+|-------|---------|
+| Pastillas 1 línea | Estilo Externos compacto: nº OT (badge) + trabajo truncado; sin icono camión |
+| Mes 1 columna | Eliminado `grid-cols-2`; celda crece / scroll |
+| Color progreso HR | Gris sin empezar · azul en curso · verde completo (batch `prod_ot_pasos`) |
+| Mini-modal | Cabecera (cliente/trabajo/cantidad/entrega/estado) + pastillas itinerario + **Ver hoja de ruta** |
+| PDF semana | `exportCalendarioProduccionSemanaPdf` — botón en vista semana |
+| Lib | `calendario-produccion-progreso.ts` |
+
+##### 15.12.2 Cartelas — 1 copia (confirmado planta)
+
+Emma (jueves) + Ramón (viernes): **ya no se imprimen 2 copias** por palet, solo **1**.
+
+| Pieza | Cambio |
+|-------|--------|
+| `cartela-print-html.ts` | default `copies = 1` |
+| `cartelas-page.tsx` / wizard | jobs con `copies: 1`; copy UI |
+| `cartela-print.tsx` | default 1 |
+| Docs | §3g, §7, §15.2, §15.6.3, `docs/referencias/cartelas-optimus-campo.md`, `GUIA_MAÑANA.md` |
+
+##### 15.12.3 Backlog residual
+
+| Ítem | Prioridad | Notas |
+|------|-----------|-------|
+| Derivar OT → imp. externa post-despacho | Alta | §15.6.12 |
+| Feedback Jordi tras pastillas | Media | Ajustar tipografía/colores si pide |
+| Plan engomado desde troquel | Media | 4400 vs 2080 |

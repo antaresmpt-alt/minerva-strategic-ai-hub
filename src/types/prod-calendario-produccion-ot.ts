@@ -10,7 +10,9 @@ export type ProdCalendarioProduccionOtRow = {
   updated_at: string;
 };
 
-/** Detalle enriquecido maestro + despacho para el mini modal. */
+import type { CalendarioPasoResumen } from "@/lib/calendario-produccion-progreso";
+
+/** Detalle enriquecido maestro + despacho + itinerario para el mini modal. */
 export type CalendarioProduccionOtDetalle = {
   otNumero: string;
   cliente: string | null;
@@ -18,6 +20,7 @@ export type CalendarioProduccionOtDetalle = {
   cantidad: number | null;
   fechaEntrega: string | null;
   despachado: boolean;
+  estadoOt: string | null;
   material: string | null;
   gramaje: number | null;
   tamanoHoja: string | null;
@@ -27,4 +30,5 @@ export type CalendarioProduccionOtDetalle = {
   poses: number | null;
   hojasBrutas: number | null;
   hojasNetas: number | null;
+  pasos: CalendarioPasoResumen[];
 };

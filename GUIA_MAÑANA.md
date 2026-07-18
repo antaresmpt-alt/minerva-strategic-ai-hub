@@ -174,7 +174,7 @@ Ramón respondió el cuestionario (`MINERVA_CUESTIONARIO_CARTELAS_RAMON.md`). De
 **Demo rápida:**
 1. Producción → **Cartelas** → Pendientes (filtros: ocultar sin albarán, buscar OT).
 2. Generar cartelas → wizard (panel izq. líneas, panel der. palet).
-3. Imprimir → 2 copias; ID Stock grande; Ref. Lote `OT - TRABAJO`.
+3. Imprimir → **1 copia**; ID Stock grande; Ref. Lote `OT - TRABAJO`.
 
 **Pendiente:** 9.2 Stock, 9.4 consumo, recuento §13b, lista OTs piloto con Emma/Ramón.
 

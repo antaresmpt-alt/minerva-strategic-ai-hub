@@ -1063,7 +1063,7 @@ export function CartelaWizardDialog({
                   </div>
                 ))}
                 <p className="text-xs text-slate-500">
-                  Pulsa Imprimir para obtener 2 copias de cada cartela.
+                  Pulsa Imprimir para obtener 1 copia de cada cartela.
                 </p>
               </div>
             ) : (
@@ -1180,7 +1180,7 @@ export function CartelaWizardDialog({
                 }}
               >
                 <Printer className="size-4 mr-2" />
-                Imprimir cartelas (×2 copias)
+                Imprimir cartelas (1 copia)
               </Button>
             </>
           ) : wizardTab === "albaran" ? (

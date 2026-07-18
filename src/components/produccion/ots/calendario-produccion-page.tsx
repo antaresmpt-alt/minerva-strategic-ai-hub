@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ClipboardPaste,
@@ -8,6 +9,7 @@ import {
   Loader2,
   Plus,
   RefreshCw,
+  Route,
   Scissors,
   Search,
   Trash2,
@@ -17,6 +19,8 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
+import { STEP_BADGE_STYLES } from "@/components/produccion/hoja-ruta/hoja-ruta-step-styles";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,6 +30,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -39,18 +51,27 @@ import {
   monthRangeYmd,
   numColumnasCalendario,
   semanaLabelEs,
-  splitLineasDosColumnas,
   weekRangeYmd,
   type CalendarioProduccionLinea,
 } from "@/lib/calendario-produccion";
 import {
   exportCalendarioProduccionDiaPdf,
+  exportCalendarioProduccionListadoPdf,
   exportCalendarioProduccionMensualPdf,
+  exportCalendarioProduccionSemanaPdf,
 } from "@/lib/calendario-produccion-export";
 import { parseProgramacioPlanificadorExcel } from "@/lib/calendario-produccion-import";
+import {
+  fetchPasosResumenOt,
+  fetchProgresoByOtNumeros,
+  PROGRESO_PILL_STYLES,
+  type CalendarioOtProgreso,
+} from "@/lib/calendario-produccion-progreso";
 import { errorMessageFromUnknown } from "@/lib/error-message";
+import { resolveEstadoOtLabel } from "@/lib/hoja-ruta/hoja-ruta-query";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { cn } from "@/lib/utils";
 import type {
   CalendarioProduccionOtDetalle,
   ProdCalendarioProduccionOtRow,
@@ -92,45 +113,25 @@ function DiaCelda({
   lineas,
   onEditDay,
   onOpenOt,
+  progresoByOt,
   variant = "mes",
 }: {
   dayNum: number;
   lineas: CalendarioProduccionLinea[];
   onEditDay: () => void;
   onOpenOt: (otNumero: string) => void;
-  /** Semana: 1 OT por línea, tipografía mayor, más altura. */
+  progresoByOt: Map<string, CalendarioOtProgreso>;
+  /** Semana: tipografía mayor y más altura de celda. */
   variant?: "mes" | "semana";
 }) {
   const isSemana = variant === "semana";
-  const { left, right } = splitLineasDosColumnas(lineas);
-  const dosColumnas = !isSemana && right.length > 0;
-
-  const renderList = (list: CalendarioProduccionLinea[]) =>
-    list.map((l) => (
-      <button
-        key={l.id}
-        type="button"
-        className={
-          isSemana
-            ? "w-full break-words text-left text-[13px] font-medium leading-snug text-[#002147] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#002147]/40"
-            : "w-full break-words text-left text-[11px] font-medium leading-tight text-[#002147] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#002147]/40"
-        }
-        title={`${l.label} — ver detalle`}
-        onClick={(e) => {
-          e.stopPropagation();
-          onOpenOt(l.otNumero);
-        }}
-      >
-        {l.label}
-      </button>
-    ));
 
   return (
     <div
       className={
         isSemana
           ? "group relative flex min-h-[min(70vh,42rem)] flex-col border border-slate-200/90 bg-white"
-          : "group relative flex min-h-[9rem] flex-col border border-slate-200/90 bg-white"
+          : "group relative flex min-h-[11rem] flex-col border border-slate-200/90 bg-white"
       }
     >
       <div className="flex shrink-0 items-center justify-between bg-[#002147] px-2 py-1.5">
@@ -167,33 +168,58 @@ function DiaCelda({
         >
           + OT
         </button>
-      ) : dosColumnas ? (
-        <div className="grid min-h-0 flex-1 grid-cols-2 gap-x-1.5 overflow-y-auto p-1.5">
-          <div className="space-y-0.5">{renderList(left)}</div>
-          <div className="space-y-0.5">{renderList(right)}</div>
-        </div>
       ) : (
         <div
           className={
             isSemana
-              ? "min-h-0 flex-1 space-y-1.5 overflow-y-auto p-2.5"
-              : "min-h-0 flex-1 space-y-0.5 overflow-y-auto p-1.5"
+              ? "min-h-0 flex-1 space-y-2 overflow-y-auto p-2"
+              : "min-h-0 flex-1 space-y-1.5 overflow-y-auto p-1.5"
           }
         >
-          {renderList(lineas)}
+          {lineas.map((l) => {
+            const progreso =
+              progresoByOt.get(l.otNumero) ?? "sin_itinerario";
+            const styles = PROGRESO_PILL_STYLES[progreso];
+            return (
+              <button
+                key={l.id}
+                type="button"
+                title={`${l.label} — ${styles.title}`}
+                className={cn(
+                  "flex w-full items-center gap-1.5 rounded-md border border-slate-200/90 bg-white text-left shadow-xs",
+                  "border-l-[3px] transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#002147]/40",
+                  styles.border,
+                  isSemana ? "px-2 py-1.5" : "px-1.5 py-1",
+                )}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenOt(l.otNumero);
+                }}
+              >
+                <span
+                  className={cn(
+                    "shrink-0 rounded px-1.5 py-0.5 font-mono font-bold tabular-nums",
+                    styles.otBadge,
+                    isSemana ? "text-[13px]" : "text-[12px]",
+                  )}
+                >
+                  {l.otNumero}
+                </span>
+                <span
+                  className={cn(
+                    "min-w-0 flex-1 truncate font-medium text-[#002147]",
+                    isSemana
+                      ? "text-[13px] leading-snug"
+                      : "text-[11px] leading-tight",
+                  )}
+                >
+                  {l.trabajo?.trim() || "—"}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
-    </div>
-  );
-}
-
-function DetalleField({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
-        {label}
-      </dt>
-      <dd className="mt-0.5 break-words text-sm text-slate-800">{value}</dd>
     </div>
   );
 }
@@ -228,6 +254,11 @@ export function CalendarioProduccionPage() {
   const [detalle, setDetalle] = useState<CalendarioProduccionOtDetalle | null>(
     null,
   );
+  const [progresoByOt, setProgresoByOt] = useState<
+    Map<string, CalendarioOtProgreso>
+  >(() => new Map());
+  const [hojaRutaOt, setHojaRutaOt] = useState<string | null>(null);
+  const [hojaRutaOpen, setHojaRutaOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -293,6 +324,7 @@ export function CalendarioProduccionPage() {
       ];
       if (ots.length === 0) {
         setTituloByOt(new Map());
+        setProgresoByOt(new Map());
         return;
       }
 
@@ -308,6 +340,14 @@ export function CalendarioProduccionPage() {
         if (n) map.set(n, (m as { titulo?: string | null }).titulo ?? null);
       }
       setTituloByOt(map);
+
+      try {
+        const progreso = await fetchProgresoByOtNumeros(supabase, ots);
+        setProgresoByOt(progreso);
+      } catch (progErr) {
+        console.warn("[calendario] progreso itinerario", progErr);
+        setProgresoByOt(new Map());
+      }
     } catch (e) {
       toast.error(errorMessageFromUnknown(e, "No se pudo cargar el calendario."));
       setRows([]);
@@ -582,23 +622,27 @@ export function CalendarioProduccionPage() {
     setDetalleLoading(true);
     try {
       const ot = otNumero.trim();
-      const [{ data: maestro, error: mErr }, { data: despacho, error: dErr }] =
-        await Promise.all([
-          supabase
-            .from(TABLE_MAESTRO)
-            .select(
-              "num_pedido, cliente, titulo, cantidad, fecha_entrega, despachado",
-            )
-            .eq("num_pedido", ot)
-            .maybeSingle(),
-          supabase
-            .from(TABLE_DESPACHADAS)
-            .select(
-              "material, gramaje, tamano_hoja, tintas, acabado_pral, troquel, poses, num_hojas_brutas, num_hojas_netas",
-            )
-            .eq("ot_numero", ot)
-            .maybeSingle(),
-        ]);
+      const [
+        { data: maestro, error: mErr },
+        { data: despacho, error: dErr },
+        pasos,
+      ] = await Promise.all([
+        supabase
+          .from(TABLE_MAESTRO)
+          .select(
+            "num_pedido, cliente, titulo, cantidad, fecha_entrega, despachado, estado_desc",
+          )
+          .eq("num_pedido", ot)
+          .maybeSingle(),
+        supabase
+          .from(TABLE_DESPACHADAS)
+          .select(
+            "material, gramaje, tamano_hoja, tintas, acabado_pral, troquel, poses, num_hojas_brutas, num_hojas_netas",
+          )
+          .eq("ot_numero", ot)
+          .maybeSingle(),
+        fetchPasosResumenOt(supabase, ot).catch(() => []),
+      ]);
       if (mErr) throw mErr;
       if (dErr) throw dErr;
 
@@ -608,6 +652,7 @@ export function CalendarioProduccionPage() {
         cantidad?: number | null;
         fecha_entrega?: string | null;
         despachado?: boolean | null;
+        estado_desc?: string | null;
       } | null;
       const d = despacho as {
         material?: string | null;
@@ -628,6 +673,7 @@ export function CalendarioProduccionPage() {
         cantidad: m?.cantidad ?? null,
         fechaEntrega: m?.fecha_entrega ?? null,
         despachado: Boolean(m?.despachado),
+        estadoOt: resolveEstadoOtLabel(m?.estado_desc ?? null, pasos),
         material: d?.material ?? null,
         gramaje: d?.gramaje ?? null,
         tamanoHoja: d?.tamano_hoja ?? null,
@@ -637,6 +683,7 @@ export function CalendarioProduccionPage() {
         poses: d?.poses ?? null,
         hojasBrutas: d?.num_hojas_brutas ?? null,
         hojasNetas: d?.num_hojas_netas ?? null,
+        pasos,
       });
     } catch (e) {
       toast.error(errorMessageFromUnknown(e, "No se pudo cargar el detalle."));
@@ -654,6 +701,50 @@ export function CalendarioProduccionPage() {
       entradasByDay,
       includeSaturday: showSaturday,
       filtroTexto: filtro,
+    });
+  };
+
+  const exportSemana = () => {
+    exportCalendarioProduccionSemanaPdf({
+      weekMonday,
+      semana: semanaActual,
+      entradasByDay,
+      includeSaturday: showSaturday,
+      filtroTexto: filtro,
+      tituloSemana: semanaLabelEs(weekMonday, showSaturday),
+    });
+  };
+
+  const exportListado = () => {
+    if (vista === "semana") {
+      const dias = semanaActual
+        .filter((c): c is { ymd: string; dayNum: number } => c != null)
+        .map((c) => ({ ymd: c.ymd, titulo: fechaDiaLabel(c.ymd) }));
+      const ymd = `${weekMonday.getFullYear()}-${String(weekMonday.getMonth() + 1).padStart(2, "0")}-${String(weekMonday.getDate()).padStart(2, "0")}`;
+      exportCalendarioProduccionListadoPdf({
+        titulo: "Calendario Producción — Listado semana",
+        subtitulo: semanaLabelEs(weekMonday, showSaturday),
+        dias,
+        entradasByDay,
+        filtroTexto: filtro,
+        filenameStem: `calendario-produccion-semana-${ymd}`,
+      });
+      return;
+    }
+    const dias: { ymd: string; titulo: string }[] = [];
+    for (const semana of semanasMes) {
+      for (const celda of semana) {
+        if (!celda) continue;
+        dias.push({ ymd: celda.ymd, titulo: fechaDiaLabel(celda.ymd) });
+      }
+    }
+    exportCalendarioProduccionListadoPdf({
+      titulo: "Calendario Producción — Listado mes",
+      subtitulo: mesAnioLabel(year, monthIndex),
+      dias,
+      entradasByDay,
+      filtroTexto: filtro,
+      filenameStem: `calendario-produccion-${year}-${String(monthIndex + 1).padStart(2, "0")}`,
     });
   };
 
@@ -680,7 +771,8 @@ export function CalendarioProduccionPage() {
           </h2>
           <p className="text-xs text-slate-600">
             Coloca OTs por día. Vista mes o semana (como el Excel de
-            programación). Clic en la OT para ver ficha.
+            programación). Pastilla = OT + trabajo; clic para resumen e
+            itinerario.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -768,12 +860,32 @@ export function CalendarioProduccionPage() {
             )}
             Importar Excel
           </Button>
-          {vista === "mes" ? (
-            <Button type="button" variant="outline" size="sm" onClick={exportMes}>
-              <FileDown className="mr-1 size-4" />
-              PDF mes
-            </Button>
-          ) : null}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline" size="sm">
+                <FileDown className="mr-1 size-4" />
+                PDF
+                <ChevronDown className="ml-1 size-3.5 opacity-70" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>
+                {vista === "mes" ? "Exportar mes" : "Exportar semana"}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => {
+                  if (vista === "mes") exportMes();
+                  else exportSemana();
+                }}
+              >
+                Vista grid (como pantalla)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={exportListado}>
+                Listado por día (papel)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -857,6 +969,7 @@ export function CalendarioProduccionPage() {
                       onEditDay={() => openDay(celda.ymd)}
                       onOpenOt={(ot) => void openDetalle(ot)}
                       variant="semana"
+                      progresoByOt={progresoByOt}
                     />
                   ) : (
                     <div
@@ -875,11 +988,12 @@ export function CalendarioProduccionPage() {
                         onEditDay={() => openDay(celda.ymd)}
                         onOpenOt={(ot) => void openDetalle(ot)}
                         variant="mes"
+                        progresoByOt={progresoByOt}
                       />
                     ) : (
                       <div
                         key={`empty-${si}-${ci}`}
-                        className="min-h-[9rem] bg-slate-100/60"
+                        className="min-h-[11rem] bg-slate-100/60"
                       />
                     ),
                   ),
@@ -1028,7 +1142,7 @@ export function CalendarioProduccionPage() {
       </Dialog>
 
       <Dialog open={detalleOpen} onOpenChange={setDetalleOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>
               OT{" "}
@@ -1037,7 +1151,7 @@ export function CalendarioProduccionPage() {
               </span>
             </DialogTitle>
             <DialogDescription>
-              Ficha sintética (maestro + despacho).
+              Resumen rápido · itinerario con colores de estado.
             </DialogDescription>
           </DialogHeader>
           {detalleLoading ? (
@@ -1045,78 +1159,112 @@ export function CalendarioProduccionPage() {
               <Loader2 className="size-4 animate-spin" /> Cargando…
             </div>
           ) : detalle ? (
-            <dl className="grid gap-3 sm:grid-cols-2">
-              <DetalleField label="Cliente" value={detalle.cliente ?? "—"} />
-              <DetalleField
-                label="Cantidad"
-                value={
-                  detalle.cantidad != null
-                    ? detalle.cantidad.toLocaleString("es-ES")
-                    : "—"
-                }
-              />
-              <div className="sm:col-span-2">
-                <DetalleField label="Trabajo" value={detalle.trabajo ?? "—"} />
+            <div className="space-y-3">
+              <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+                <div className="text-sm font-semibold text-slate-800">
+                  {detalle.cliente ?? "—"} · {detalle.trabajo ?? "—"}
+                </div>
+                <div className="mt-1.5 grid gap-x-4 gap-y-1 text-xs text-slate-600 sm:grid-cols-3">
+                  <div>
+                    <span className="font-medium">Cantidad:</span>{" "}
+                    {detalle.cantidad != null
+                      ? detalle.cantidad.toLocaleString("es-ES")
+                      : "—"}
+                  </div>
+                  <div>
+                    <span className="font-medium">Entrega:</span>{" "}
+                    {detalle.fechaEntrega
+                      ? formatFechaEsCorta(detalle.fechaEntrega)
+                      : "—"}
+                  </div>
+                  <div>
+                    <span className="font-medium">Estado OT:</span>{" "}
+                    {detalle.estadoOt ?? "—"}
+                  </div>
+                </div>
+                {(detalle.material || detalle.tamanoHoja) && (
+                  <div className="mt-2 border-t border-slate-200 pt-2 text-xs text-slate-600">
+                    {detalle.material ? (
+                      <span>
+                        <span className="font-medium">Material:</span>{" "}
+                        {detalle.material}
+                        {detalle.gramaje != null
+                          ? ` ${detalle.gramaje}g`
+                          : ""}
+                      </span>
+                    ) : null}
+                    {detalle.tamanoHoja ? (
+                      <span className={detalle.material ? " ml-3" : undefined}>
+                        <span className="font-medium">Formato:</span>{" "}
+                        {detalle.tamanoHoja}
+                      </span>
+                    ) : null}
+                  </div>
+                )}
               </div>
-              <DetalleField
-                label="Entrega"
-                value={
-                  detalle.fechaEntrega
-                    ? formatFechaEsCorta(detalle.fechaEntrega)
-                    : "—"
-                }
-              />
-              <DetalleField
-                label="Despachada"
-                value={detalle.despachado ? "Sí" : "No"}
-              />
-              <DetalleField
-                label="Papel / material"
-                value={
-                  [
-                    detalle.material,
-                    detalle.gramaje != null ? `${detalle.gramaje} g` : null,
-                    detalle.tamanoHoja,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ") || "—"
-                }
-              />
-              <DetalleField label="Tintas" value={detalle.tintas ?? "—"} />
-              <DetalleField
-                label="Acabado principal"
-                value={detalle.acabadoPral ?? "—"}
-              />
-              <DetalleField
-                label="Troquel"
-                value={
-                  [
-                    detalle.troquel,
-                    detalle.poses != null ? `${detalle.poses} poses` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ") || "—"
-                }
-              />
-              <DetalleField
-                label="Hojas"
-                value={
-                  detalle.hojasBrutas != null || detalle.hojasNetas != null
-                    ? `${detalle.hojasBrutas?.toLocaleString("es-ES") ?? "—"} brutas · ${detalle.hojasNetas?.toLocaleString("es-ES") ?? "—"} netas`
-                    : "—"
-                }
-              />
-            </dl>
+
+              {detalle.pasos.length > 0 ? (
+                <div>
+                  <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Itinerario
+                  </p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {detalle.pasos.map((p, i) => (
+                      <span
+                        key={`${p.orden}-${i}`}
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold",
+                          STEP_BADGE_STYLES[p.estado] ??
+                            STEP_BADGE_STYLES.pendiente,
+                        )}
+                        title={`${p.orden} · ${p.nombre} · ${p.estado}`}
+                      >
+                        <Route className="size-3" />
+                        {p.orden} · {p.nombre}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500">
+                  Sin itinerario en Minerva (OT no despachada o sin pasos).
+                </p>
+              )}
+            </div>
           ) : (
             <p className="text-sm text-slate-500">Sin datos.</p>
           )}
-          <DialogFooter>
-            <Button type="button" size="sm" onClick={() => setDetalleOpen(false)}>
+          <DialogFooter className="gap-2 sm:justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!detalle?.otNumero}
+              onClick={() => {
+                if (!detalle?.otNumero) return;
+                setHojaRutaOt(detalle.otNumero);
+                setDetalleOpen(false);
+                setHojaRutaOpen(true);
+              }}
+            >
+              Ver hoja de ruta
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setDetalleOpen(false)}
+            >
               Cerrar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <HojaRutaOtDialog
+        otNumero={hojaRutaOt}
+        open={hojaRutaOpen}
+        onOpenChange={setHojaRutaOpen}
+      />
     </div>
   );
 }

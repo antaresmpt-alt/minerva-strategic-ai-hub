@@ -241,7 +241,7 @@ const CARTELA_PRINT_CSS = `
 function buildCartelasDocument(jobs: CartelaPrintJob[]): string {
   const boxes: string[] = [];
   for (const job of jobs) {
-    const copies = job.copies ?? 2;
+    const copies = job.copies ?? 1;
     for (let i = 0; i < copies; i++) {
       boxes.push(
         renderCartelaBoxHtml(job.palet, job.proveedorNombre, job.otTitulos)

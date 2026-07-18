@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 17 jul 2026 (Calendario Producción + merge `feature/bloque9-4abc-consumo-material` → `main`; 9.4 A/B/C + HR reimpresión)
+> Última actualización: 18 jul 2026 (Calendario UX pastillas + PDF semana; cartelas **1 copia**)
 
 ---
 
@@ -315,7 +315,9 @@ src/components/produccion/planificacion/
 
 17. **Bloque 10 — Presupuestos (23 jun 2026, diseño)**: **después** de cartelas (9) y antes de ventas/comercial (11+). Hoy las hijas se parten en **despacho** (8.2 puente); futuro: formas en presupuesto + **versión real** al copiar (estructura como se ejecutó, no solo teoría Optimus). Briefing: `MINERVA_BLOQUE10_PRESUPUESTOS.md`. Reunión planta jueves: `MINERVA_REUNION_HOJA_RUTA_JUEVES.md`.
 
-18. **Calendario Producción (17 jul 2026)**: planificador manual de OTs por día (mapa mental planta, estilo Excel Jordi/Carlos). **No** auto-rellena desde `fecha_entrega`. Tabla `prod_calendario_produccion_ot` (unique fecha+ot). UI en **OTs → Calendario Producción**: vista **Mes | Semana**, import Excel pestaña `planificador`, cortar/pegar entre días, PDF día/mes. Detalle OT = maestro + despacho. Semana: 1 OT/línea, tipografía grande. Migraciones: `20260717140000_…`, `20260717150000_…delete_rls`. Datos verano 2026 cargados en prod.
+18. **Calendario Producción (17–18 jul 2026)**: planificador manual de OTs por día (mapa mental planta). UI **OTs → Calendario Producción**: Mes \| Semana, pastillas 1 línea (OT + trabajo), color por progreso itinerario, mini-modal con itinerario + hoja de ruta, PDF día/mes/**semana**, import Excel `planificador`. **No** auto desde `fecha_entrega`.
+
+19. **Cartelas impresión (18 jul 2026)**: **1 copia** por palet (antes 2). Confirmado Emma/Ramón.
 
 ## 📁 Estructura de carpetas relevante
 

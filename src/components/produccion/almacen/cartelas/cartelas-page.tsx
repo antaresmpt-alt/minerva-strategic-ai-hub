@@ -507,7 +507,7 @@ export function CartelasPage() {
       const jobs = [
         {
           palet,
-          copies: 2 as const,
+          copies: 1 as const,
           proveedorNombre: palet.proveedor_nombre ?? null,
           otTitulos: otTitulosFromMetadata(otNums, meta),
         },
@@ -543,7 +543,7 @@ export function CartelasPage() {
       const otTitulos = otTitulosFromMetadata(otNums, meta);
       const jobs = palets.map((palet) => ({
         palet,
-        copies: 2 as const,
+        copies: 1 as const,
         proveedorNombre: proveedorNombre ?? null,
         otTitulos,
       }));
@@ -1006,7 +1006,7 @@ function CartelaListRow({
           variant="ghost"
           className="size-7 shrink-0"
           onClick={onPrint}
-          title="Imprimir cartela (×2 copias)"
+          title="Imprimir cartela (1 copia)"
         >
           <Printer className="size-3.5" />
         </Button>
