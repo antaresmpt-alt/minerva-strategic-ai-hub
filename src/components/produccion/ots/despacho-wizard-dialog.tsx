@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
+  BookMarked,
   ClipboardCheck,
   GitFork,
   Loader2,
@@ -46,6 +47,14 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  buildSugerenciasFromDespacho,
+  diffSugerenciasVsMaestro,
+  formatSugerenciasResumen,
+  hasAnySugerencia,
+  upsertSugerenciasTecnicas,
+  type SugerenciaFieldDiff,
+} from "@/lib/articulos-maestro-sugerencias";
 import {
   applyClonePrefill,
   buildDatosProcesoSeed,
@@ -302,6 +311,11 @@ export function DespachoWizardDialog({
   >([]);
   const [referenciaHistorialLoading, setReferenciaHistorialLoading] =
     useState(false);
+  const [savingMaestro, setSavingMaestro] = useState(false);
+  const [maestroOverwriteOpen, setMaestroOverwriteOpen] = useState(false);
+  const [maestroConflictDiffs, setMaestroConflictDiffs] = useState<
+    SugerenciaFieldDiff[]
+  >([]);
 
   // Bloque 8.2 — OT contenedor / hijas
   const [otTipo, setOtTipo] = useState<"simple" | "contenedor" | "hija">(
@@ -349,6 +363,8 @@ export function DespachoWizardDialog({
     setProcesoDatos(emptyDespachoWizardProcesoDatos());
     setReferenciaHistorial([]);
     setPostDespachoCartelita(null);
+    setMaestroOverwriteOpen(false);
+    setMaestroConflictDiffs([]);
   }, []);
 
   const hydrateForOt = useCallback(
@@ -938,6 +954,133 @@ export function DespachoWizardDialog({
     },
     [loadItinerarioFromOtNumero, supabase]
   );
+
+  const sugerenciasMaestro = useMemo(
+    () =>
+      buildSugerenciasFromDespacho({
+        material: form.material,
+        gramaje: form.gramaje,
+        poses: form.poses,
+        troquel: form.troquel,
+        tintas: form.tintas,
+        acabado_pral: form.acabado_pral,
+        tipo_engomado: form.tipo_engomado,
+        codigo_caja_embalaje: form.codigo_caja_embalaje,
+        unidades_por_embalaje: form.unidades_por_embalaje,
+        itinerarioSlots,
+      }),
+    [
+      form.acabado_pral,
+      form.codigo_caja_embalaje,
+      form.gramaje,
+      form.material,
+      form.poses,
+      form.tintas,
+      form.tipo_engomado,
+      form.troquel,
+      form.unidades_por_embalaje,
+      itinerarioSlots,
+    ]
+  );
+
+  const sugerenciasMaestroResumen = useMemo(
+    () => formatSugerenciasResumen(sugerenciasMaestro),
+    [sugerenciasMaestro]
+  );
+
+  const canGuardarEnMaestro =
+    Boolean(form.referencia_id) &&
+    Boolean(form.referencia_codigo) &&
+    hasAnySugerencia(sugerenciasMaestro);
+
+  const applyGuardarEnMaestro = useCallback(
+    async (mode: "vacios" | "sobreescribir") => {
+      const refId = form.referencia_id;
+      const codigo = form.referencia_codigo.trim();
+      if (!refId || !codigo) {
+        toast.error("Selecciona una Referencia Minerva primero.");
+        return;
+      }
+      if (!hasAnySugerencia(sugerenciasMaestro)) {
+        toast.info("No hay datos técnicos que guardar en el maestro.");
+        return;
+      }
+      setSavingMaestro(true);
+      try {
+        const result = await upsertSugerenciasTecnicas(
+          supabase,
+          refId,
+          sugerenciasMaestro,
+          mode
+        );
+        setMaestroOverwriteOpen(false);
+        setMaestroConflictDiffs([]);
+        if (result.updatedKeys.length === 0) {
+          toast.info(
+            mode === "vacios"
+              ? `El maestro ${codigo} ya tenía esos campos; nada nuevo que rellenar.`
+              : `Sin cambios en ${codigo}.`
+          );
+          return;
+        }
+        toast.success(
+          `Maestro ${codigo}: ${result.updatedKeys.length} campo${
+            result.updatedKeys.length === 1 ? "" : "s"
+          } actualizado${result.updatedKeys.length === 1 ? "" : "s"}.`
+        );
+      } catch (e) {
+        toast.error(
+          e instanceof Error
+            ? e.message
+            : "No se pudo guardar en el maestro de artículos."
+        );
+      } finally {
+        setSavingMaestro(false);
+      }
+    },
+    [
+      form.referencia_codigo,
+      form.referencia_id,
+      sugerenciasMaestro,
+      supabase,
+    ]
+  );
+
+  const handleGuardarEnMaestroClick = useCallback(async () => {
+    const refId = form.referencia_id;
+    if (!refId) {
+      toast.error("Selecciona una Referencia Minerva primero.");
+      return;
+    }
+    setSavingMaestro(true);
+    try {
+      const { data, error } = await supabase
+        .from("prod_referencias")
+        .select(
+          "material_habitual, gramaje_habitual, poses_habitual, troquel_habitual, tintas_habituales, acabado_habitual, tipo_engomado_habitual, caja_embalaje_habitual, unidades_por_embalaje_habitual, ruta_habitual"
+        )
+        .eq("id", refId)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error("Referencia no encontrada en el maestro.");
+      const diffs = diffSugerenciasVsMaestro(sugerenciasMaestro, data as Parameters<typeof diffSugerenciasVsMaestro>[1]);
+      const conflicts = diffs.filter((d) => d.conflicts);
+      if (conflicts.length > 0) {
+        setMaestroConflictDiffs(conflicts);
+        setMaestroOverwriteOpen(true);
+        return;
+      }
+      await applyGuardarEnMaestro("vacios");
+    } catch (e) {
+      toast.error(
+        e instanceof Error
+          ? e.message
+          : "No se pudo comprobar el maestro de artículos."
+      );
+    } finally {
+      setSavingMaestro(false);
+    }
+  }, [applyGuardarEnMaestro, form.referencia_id, sugerenciasMaestro, supabase]);
 
   useEffect(() => {
     if (!open) {
@@ -2362,6 +2505,7 @@ export function DespachoWizardDialog({
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[min(94vh,920px)] w-[calc(100%-1rem)] !max-w-[min(96vw,1800px)] flex-col gap-0 overflow-hidden p-0 sm:!max-w-[min(96vw,1800px)]">
         <DialogHeader className="shrink-0 border-b border-slate-100 px-6 py-4">
@@ -3539,6 +3683,50 @@ export function DespachoWizardDialog({
                   )}
                 </div>
 
+                {canGuardarEnMaestro ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-4">
+                    <div className="flex items-start gap-3">
+                      <BookMarked className="mt-0.5 size-4 shrink-0 text-amber-800" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-[#002147]">
+                          Guardar como predeterminado en maestro
+                        </p>
+                        <p className="mt-1 text-[11px] text-slate-600">
+                          Para{" "}
+                          <span className="font-mono font-semibold">
+                            {form.referencia_codigo}
+                          </span>
+                          : {sugerenciasMaestroResumen}
+                        </p>
+                        <p className="mt-1 text-[10px] text-slate-500">
+                          Solo rellena campos vacíos del maestro. Si ya hay
+                          valor distinto, te pedirá confirmación. No cambia el
+                          prefill al elegir referencia.
+                        </p>
+                        <div className="mt-3">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            className="text-xs"
+                            disabled={saving || savingMaestro}
+                            onClick={() => void handleGuardarEnMaestroClick()}
+                          >
+                            {savingMaestro ? (
+                              <>
+                                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                                Guardando…
+                              </>
+                            ) : (
+                              "Guardar en maestro"
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
                 {modoContenedor && formas.length > 0 && (
                   <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-4">
                     <p className="mb-3 text-xs font-semibold text-[#002147]">
@@ -3736,5 +3924,76 @@ export function DespachoWizardDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <Dialog
+      open={maestroOverwriteOpen}
+      onOpenChange={(v) => {
+        if (!v) {
+          setMaestroOverwriteOpen(false);
+          setMaestroConflictDiffs([]);
+        }
+      }}
+    >
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Sobrescribir maestro</DialogTitle>
+          <DialogDescription>
+            Estos campos ya tienen valor en{" "}
+            <span className="font-mono font-semibold">
+              {form.referencia_codigo}
+            </span>
+            . ¿Quieres reemplazarlos con lo del despacho actual?
+          </DialogDescription>
+        </DialogHeader>
+        <ul className="max-h-48 space-y-2 overflow-auto text-xs">
+          {maestroConflictDiffs.map((d) => (
+            <li
+              key={d.key}
+              className="rounded border border-slate-200 bg-slate-50 px-2 py-1.5"
+            >
+              <span className="font-medium text-[#002147]">{d.label}</span>
+              <div className="mt-0.5 text-slate-600">
+                Maestro: <span className="font-mono">{d.current}</span>
+              </div>
+              <div className="text-slate-600">
+                Despacho: <span className="font-mono">{d.proposed}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={savingMaestro}
+            onClick={() => {
+              setMaestroOverwriteOpen(false);
+              setMaestroConflictDiffs([]);
+              void applyGuardarEnMaestro("vacios");
+            }}
+          >
+            Solo vacíos
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="bg-[#002147] text-white hover:bg-[#001a38]"
+            disabled={savingMaestro}
+            onClick={() => void applyGuardarEnMaestro("sobreescribir")}
+          >
+            {savingMaestro ? (
+              <>
+                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                Guardando…
+              </>
+            ) : (
+              "Sobrescribir todo"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

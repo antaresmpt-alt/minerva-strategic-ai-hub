@@ -333,11 +333,14 @@ export async function parseArticulosExcelFile(
             formato_ancho_mm: parseOptionalNum(row.formato_ancho_mm),
             formato_fondo_mm: parseOptionalNum(row.formato_fondo_mm),
             material_habitual: cleanStr(row.material_habitual),
+            gramaje_habitual: null,
             poses_habitual: parseOptionalInt(row.poses_habitual),
             troquel_habitual: cleanStr(row.troquel_habitual),
             tintas_habituales: cleanStr(row.tintas_habituales),
             acabado_habitual: cleanStr(row.acabado_habitual),
             ruta_habitual: cleanStr(row.ruta_habitual),
+            caja_embalaje_habitual: null,
+            unidades_por_embalaje_habitual: null,
             notas: cleanStr(row.notas),
           };
           return setPresentFields(parsedRow, {

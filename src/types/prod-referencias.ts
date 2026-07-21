@@ -19,12 +19,15 @@ export type ProdReferenciaRow = {
 
   /** Sugerencias técnicas por defecto (pre-rellenan el modal de despacho) */
   material_habitual: string | null;
+  gramaje_habitual: number | null;
   poses_habitual: number | null;
   troquel_habitual: string | null;
   tintas_habituales: string | null;
   acabado_habitual: string | null;
   ruta_habitual: string | null;
   tipo_engomado_habitual: string | null;
+  caja_embalaje_habitual: string | null;
+  unidades_por_embalaje_habitual: number | null;
 
   /** Certificación FSC */
   fsc: boolean;

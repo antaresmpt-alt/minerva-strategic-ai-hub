@@ -82,12 +82,15 @@ type ArticuloForm = {
   formato_ancho_mm: string;
   formato_fondo_mm: string;
   material_habitual: string;
+  gramaje_habitual: string;
   poses_habitual: string;
   troquel_habitual: string;
   tintas_habituales: string;
   acabado_habitual: string;
   ruta_habitual: string;
   tipo_engomado_habitual: string;
+  caja_embalaje_habitual: string;
+  unidades_por_embalaje_habitual: string;
   fsc: boolean;
   fsc_fecha_validacion: string;
   notas: string;
@@ -105,12 +108,15 @@ const EMPTY_FORM: ArticuloForm = {
   formato_ancho_mm: "",
   formato_fondo_mm: "",
   material_habitual: "",
+  gramaje_habitual: "",
   poses_habitual: "",
   troquel_habitual: "",
   tintas_habituales: "",
   acabado_habitual: "",
   ruta_habitual: "",
   tipo_engomado_habitual: "",
+  caja_embalaje_habitual: "",
+  unidades_por_embalaje_habitual: "",
   fsc: false,
   fsc_fecha_validacion: "",
   notas: "",
@@ -141,12 +147,15 @@ function rowToForm(row: ProdReferenciaRow): ArticuloForm {
     formato_ancho_mm: row.formato_ancho_mm != null ? String(row.formato_ancho_mm) : "",
     formato_fondo_mm: row.formato_fondo_mm != null ? String(row.formato_fondo_mm) : "",
     material_habitual: row.material_habitual ?? "",
+    gramaje_habitual: row.gramaje_habitual != null ? String(row.gramaje_habitual) : "",
     poses_habitual: row.poses_habitual != null ? String(row.poses_habitual) : "",
     troquel_habitual: row.troquel_habitual ?? "",
     tintas_habituales: row.tintas_habituales ?? "",
     acabado_habitual: row.acabado_habitual ?? "",
     ruta_habitual: row.ruta_habitual ?? "",
     tipo_engomado_habitual: row.tipo_engomado_habitual ?? "",
+    caja_embalaje_habitual: row.caja_embalaje_habitual ?? "",
+    unidades_por_embalaje_habitual: row.unidades_por_embalaje_habitual != null ? String(row.unidades_por_embalaje_habitual) : "",
     fsc: row.fsc ?? false,
     fsc_fecha_validacion: row.fsc_fecha_validacion ?? "",
     notas: row.notas ?? "",
@@ -170,12 +179,15 @@ function formToPayload(form: ArticuloForm) {
     formato_ancho_mm: parseNum(form.formato_ancho_mm),
     formato_fondo_mm: parseNum(form.formato_fondo_mm),
     material_habitual: form.material_habitual.trim() || null,
+    gramaje_habitual: parseNum(form.gramaje_habitual),
     poses_habitual: parseNum(form.poses_habitual) != null ? Math.round(parseNum(form.poses_habitual)!) : null,
     troquel_habitual: form.troquel_habitual.trim() || null,
     tintas_habituales: form.tintas_habituales.trim() || null,
     acabado_habitual: form.acabado_habitual.trim() || null,
     ruta_habitual: form.ruta_habitual.trim() || null,
     tipo_engomado_habitual: form.tipo_engomado_habitual.trim() || null,
+    caja_embalaje_habitual: form.caja_embalaje_habitual.trim() || null,
+    unidades_por_embalaje_habitual: parseNum(form.unidades_por_embalaje_habitual) != null ? Math.round(parseNum(form.unidades_por_embalaje_habitual)!) : null,
     fsc: form.fsc,
     fsc_fecha_validacion: form.fsc ? form.fsc_fecha_validacion.trim() || null : null,
     notas: form.notas.trim() || null,
@@ -403,6 +415,17 @@ function ArticuloFormDialog({
               />
             </div>
             <div className="grid gap-1">
+              <Label className="text-xs">Gramaje habitual (g/m²)</Label>
+              <Input
+                className="h-8 text-xs"
+                type="number"
+                min={0}
+                placeholder="300"
+                value={form.gramaje_habitual}
+                onChange={(e) => set("gramaje_habitual", e.target.value)}
+              />
+            </div>
+            <div className="grid gap-1">
               <Label className="text-xs">Troquel habitual</Label>
               <Input
                 className="h-8 font-mono text-xs"
@@ -441,21 +464,41 @@ function ArticuloFormDialog({
               />
             </div>
             <div className="grid gap-1">
-              <Label className="text-xs">Ruta habitual</Label>
-              <Input
-                className="h-8 text-xs"
-                placeholder="impresion+troquelado+engomado"
-                value={form.ruta_habitual}
-                onChange={(e) => set("ruta_habitual", e.target.value)}
-              />
-            </div>
-            <div className="grid gap-1">
               <Label className="text-xs">Tipo de engomado habitual</Label>
               <Input
                 className="h-8 text-xs"
                 placeholder="Pegado 4 puntos"
                 value={form.tipo_engomado_habitual}
                 onChange={(e) => set("tipo_engomado_habitual", e.target.value)}
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label className="text-xs">Caja embalaje habitual</Label>
+              <Input
+                className="h-8 font-mono text-xs"
+                placeholder="MN2L"
+                value={form.caja_embalaje_habitual}
+                onChange={(e) => set("caja_embalaje_habitual", e.target.value)}
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label className="text-xs">Uds por caja habitual</Label>
+              <Input
+                className="h-8 text-xs"
+                type="number"
+                min={1}
+                placeholder="450"
+                value={form.unidades_por_embalaje_habitual}
+                onChange={(e) => set("unidades_por_embalaje_habitual", e.target.value)}
+              />
+            </div>
+            <div className="col-span-2 grid gap-1">
+              <Label className="text-xs">Ruta habitual</Label>
+              <Input
+                className="h-8 text-xs"
+                placeholder="CTP+Impresión Offset+Troquelado+Engomado"
+                value={form.ruta_habitual}
+                onChange={(e) => set("ruta_habitual", e.target.value)}
               />
             </div>
           </div>
