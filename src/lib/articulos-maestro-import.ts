@@ -342,6 +342,7 @@ export async function parseArticulosExcelFile(
             caja_embalaje_habitual: null,
             unidades_por_embalaje_habitual: null,
             notas: cleanStr(row.notas),
+            defaults_proceso: null,
           };
           return setPresentFields(parsedRow, {
             codigo: fieldPresent(row.codigo),

@@ -1,3 +1,37 @@
+/** Defaults de configuración por proceso guardados en el maestro (Ola 2 Fase 2).
+ *  Mismas claves que DespachoWizardProcesoDatos, pero solo campos estables por artículo.
+ *  Prohibido: hojas_iniciales, hojas_finales, hojas_brutas, hojas_netas, horas_*. */
+export type DefaultsProcesoCtpMaestro = Partial<Record<
+  | "prueba_digital"
+  | "prueba_gmg"
+  | "pdf_x_ok"
+  | "maqueta"
+  | "gestion_troquel"
+  | "preparacion_montaje"
+  | "retoque_diseno"
+  | "gestion_relieves_stamping"
+  | "gestion_fsc",
+  boolean
+>>;
+
+export type DefaultsProcesoGuillotinaMaestro = {
+  patron_corte?: string | null;
+  tamano_final?: string | null;
+};
+
+export type DefaultsProcesoExternoMaestro = {
+  acabado_detalle?: string | null;
+  acabado_cara?: string | null;
+  acabado_dorso?: string | null;
+};
+
+export type DefaultsProcesoMaestro = {
+  ctp?: DefaultsProcesoCtpMaestro;
+  guillotina?: DefaultsProcesoGuillotinaMaestro;
+  /** Clave = proceso_id como string (igual que DespachoWizardProcesoDatos.externos). */
+  externos?: Record<string, DefaultsProcesoExternoMaestro>;
+};
+
 /** Fila de `prod_referencias` (Referencia Minerva: agrupador de repeticiones y maestro de artículos). */
 export type ProdReferenciaRow = {
   id: string;
@@ -39,6 +73,9 @@ export type ProdReferenciaRow = {
   total_repeticiones: number;
 
   notas: string | null;
+
+  /** Defaults de configuración por proceso (CTP, guillotina, externos). Solo campos estables. */
+  defaults_proceso: DefaultsProcesoMaestro | null;
 
   created_at: string | null;
   updated_at: string | null;

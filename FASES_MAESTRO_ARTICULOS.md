@@ -42,23 +42,66 @@ Indicadores visuales para detectar fichas incompletas y priorizar el relleno.
 
 ---
 
-## Fase 2 — Auto-enriquecimiento desde despacho (≈ 45 min)
+## Fase 2 — Auto-enriquecimiento desde despacho (✅ jul 2026)
 
 Cuando el usuario despacha una OT y rellena datos técnicos, puede guardarlos como predeterminados en el maestro con un click.
 
 **Nota Bloque 8 (17 jun):** el campo `tamano_hoja` en despacho es hoy **formato de compra**, no necesariamente formato de impresión. Futuro: `formato_compra_habitual` y `formato_impresion_habitual` en maestro + encadenado por proceso. Ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` §6.
 
-**UX propuesta:**
-En el modal de despacho, después de seleccionar la Referencia Minerva, aparece un pequeño bloque colapsable:
-> 💡 "Guardar como predeterminado para M-00001: Zenith 300g · 4 poses · TAG00205 · 4+1 · Barniz brillo"
-> [Guardar en maestro] [Descartar]
+**Relación con Bloque 6.x:** esta fase es el **bootstrap manual** (despacho → `*_habitual`). El recálculo de **promedios** desde histórico (`prod_ot_producidas`) es distinto y vive en `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` §7.1. No se toca el prefill automático del wizard (sigue mandando el último despacho de la referencia); ver §7.1.8.
+
+**UX:**
+En el wizard de despacho (pestaña Resumen), si hay Referencia Minerva y datos técnicos:
+> 💡 Guardar como predeterminado para M-00001: Zenith 300g · 4 poses · TAG00205 · …
+> [Guardar en maestro] — solo vacíos; si hay conflictos, confirma sobrescritura.
 
 **Regla:** solo se actualiza si el campo está vacío en el maestro **o** si el usuario lo acepta explícitamente. Nunca sobrescribe sin confirmar.
 
-**Archivos a tocar:**
-- `src/components/produccion/ots/master-ots-page.tsx` (añadir botón/bloque en sección de despacho)
-- `src/components/produccion/ots/ots-despachadas-page.tsx` (igual para edición)
-- `src/lib/articulos-maestro-import.ts` (añadir función `upsertSugerenciasTecnicas`)
+**Archivos:**
+- `src/lib/articulos-maestro-sugerencias.ts` — `buildSugerenciasFromDespacho` + `upsertSugerenciasTecnicas`
+- `src/components/produccion/ots/despacho-wizard-dialog.tsx` — bloque UI en Resumen
+
+### Ampliación Fase 2 — Olas (jul 2026)
+
+> Prefill automático del wizard **no se cambia** en ninguna ola (sigue último despacho).
+> Promedios de horas (entrada vs millar) → `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` §7.1.10; **no** en estas olas.
+
+| Ola | Qué | Estado |
+|-----|-----|--------|
+| **0** | MVP: 6 campos (`material`, poses, troquel, tintas, acabado, tipo engomado) | ✅ Hecho |
+| **1** | Embalaje + `ruta_habitual` + ampliar “Guardar en maestro” | ⏳ Siguiente |
+| **2** | Defaults por proceso (CTP / guillotina / …) vía JSONB o columnas | Pendiente |
+| **3** | Prefill con botones explícitos (“Usar último trabajo” / “Usar maestro”) + fix picker | Pendiente (acuerdo planta) |
+
+#### Ola 1 — alcance concreto
+
+1. Migración aditiva `prod_referencias`:
+   - `caja_embalaje_habitual text null`
+   - `unidades_por_embalaje_habitual integer null` (estuches/uds por caja)
+   - (opcional si cabe fácil) `gramaje_habitual numeric null`
+2. Ampliar `articulos-maestro-sugerencias.ts`: mapear `codigo_caja_embalaje` → caja; `unidades_por_embalaje` → uds; serializar itinerario del wizard → `ruta_habitual` (solo si vacío o con confirmación, misma regla).
+3. Formulario Maestro de Artículos: mostrar/editar los campos nuevos.
+4. UI Resumen wizard: incluir embalaje (+ ruta) en el resumen del bloque “Guardar en maestro”.
+5. **No** tocar `handleReferenciaPicked` / orden de prefill.
+6. **No** columnas de horas/millar (§7.1.10).
+
+**Prompt listo para Agent (copiar/pegar):**
+
+```text
+Ola 1 ampliación Fase 2 maestro (solo esta ola).
+
+Lee FASES_MAESTRO_ARTICULOS.md § Fase 2 / Ola 1 y MINERVA_BLOQUE6 §7.1.8 + §7.1.10.
+
+Implementa Ola 1:
+- Migración: caja_embalaje_habitual, unidades_por_embalaje_habitual (+ gramaje_habitual si trivial).
+- Ampliar upsert/sugerencias desde despacho (form.codigo_caja_embalaje, unidades_por_embalaje) y ruta_habitual desde itinerarioSlots.
+- UI maestro + bloque Guardar en maestro en Resumen.
+- NO cambiar prefill al elegir referencia.
+- NO horas/millar ni promedios Bloque 6.
+Commit al final con mensaje claro. Prueba mental: M-00003 con MN2L y 450 uds.
+```
+
+Tras Ola 1: commit → prueba en wizard → luego pedir **“Ola 2”** (defaults proceso).
 
 ---
 
@@ -79,7 +122,12 @@ Cuando el sistema cierra una OT (el itinerario completa todos los pasos), actual
 
 ---
 
-## Fase 4 — Sugerencias desde histórico (≈ 60 min)
+## Fase 4 — Sugerencias desde histórico (≈ 60 min) → evoluciona a Bloque 6.x
+
+> **Diseño vigente:** el recálculo de promedios **no** se hace al vuelo en despacho.
+> Ver `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` §7.1 (precálculo persistido, botón en Maestro,
+> dependencia de `prod_ot_producidas`) y **§7.1.10** (entrada/prep absoluta vs tiraje
+> `horas_millar_*` para impresión, troquelado y engomado). Esta fase queda como placeholder hasta Bloque 6.
 
 Para fichas con datos técnicos vacíos, calcular los valores más frecuentes mirando las últimas N OTs reales asociadas a esa referencia.
 

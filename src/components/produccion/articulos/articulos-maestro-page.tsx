@@ -44,7 +44,12 @@ import {
 import {
   ARTICULO_TIPO_PRODUCTO_OPTIONS,
   type ProdReferenciaRow,
+  type DefaultsProcesoMaestro,
 } from "@/types/prod-referencias";
+import {
+  CTP_REQUISITO_DEFS,
+  type DespachoWizardCtpDatos,
+} from "@/lib/ctp-despacho";
 
 const REFERENCIAS_PAGE_SIZE = 1000;
 
@@ -94,6 +99,8 @@ type ArticuloForm = {
   fsc: boolean;
   fsc_fecha_validacion: string;
   notas: string;
+  /** Ola 2: configuración por proceso. Se maneja directamente como objeto, no como campos de texto. */
+  defaults_proceso: DefaultsProcesoMaestro;
 };
 
 const EMPTY_FORM: ArticuloForm = {
@@ -120,6 +127,7 @@ const EMPTY_FORM: ArticuloForm = {
   fsc: false,
   fsc_fecha_validacion: "",
   notas: "",
+  defaults_proceso: {},
 };
 
 function formatImportError(error: unknown): string {
@@ -159,6 +167,7 @@ function rowToForm(row: ProdReferenciaRow): ArticuloForm {
     fsc: row.fsc ?? false,
     fsc_fecha_validacion: row.fsc_fecha_validacion ?? "",
     notas: row.notas ?? "",
+    defaults_proceso: (row.defaults_proceso as DefaultsProcesoMaestro | null) ?? {},
   };
 }
 
@@ -191,6 +200,7 @@ function formToPayload(form: ArticuloForm) {
     fsc: form.fsc,
     fsc_fecha_validacion: form.fsc ? form.fsc_fecha_validacion.trim() || null : null,
     notas: form.notas.trim() || null,
+    defaults_proceso: Object.keys(form.defaults_proceso).length > 0 ? form.defaults_proceso : null,
   };
 }
 
@@ -274,7 +284,7 @@ function ArticuloFormDialog({
   onClose: () => void;
   showCodigo?: boolean;
 }) {
-  const set = (k: keyof ArticuloForm, v: string | boolean) =>
+  const set = (k: keyof ArticuloForm, v: string | boolean | DefaultsProcesoMaestro) =>
     onFormChange({ ...form, [k]: v });
 
   return (
@@ -500,6 +510,91 @@ function ArticuloFormDialog({
                 value={form.ruta_habitual}
                 onChange={(e) => set("ruta_habitual", e.target.value)}
               />
+            </div>
+          </div>
+
+          {/* Defaults por proceso (Ola 2) */}
+          <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            Defaults por proceso
+          </p>
+          <p className="text-[10px] text-slate-400">
+            Configuración estable por artículo (checks CTP, guillotina). Solo campos independientes de la tirada.
+          </p>
+
+          {/* CTP */}
+          <div className="rounded-md border border-slate-200 p-3">
+            <p className="mb-2 text-[11px] font-semibold text-slate-600">CTP / Preimpresión</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+              {CTP_REQUISITO_DEFS.map((def) => {
+                const checked = Boolean(
+                  (form.defaults_proceso.ctp as Record<string, boolean> | undefined)?.[def.hechoKey]
+                );
+                return (
+                  <div key={def.hechoKey} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`ctp-${def.hechoKey}`}
+                      checked={checked}
+                      onCheckedChange={(v) => {
+                        const current = form.defaults_proceso.ctp ?? {};
+                        const updated: Record<string, boolean> = { ...current };
+                        if (v) updated[def.hechoKey] = true;
+                        else delete updated[def.hechoKey];
+                        set("defaults_proceso", {
+                          ...form.defaults_proceso,
+                          ctp: updated as DefaultsProcesoMaestro["ctp"],
+                        });
+                      }}
+                    />
+                    <Label
+                      htmlFor={`ctp-${def.hechoKey}`}
+                      className="cursor-pointer text-xs font-normal"
+                    >
+                      {def.label}
+                    </Label>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Guillotina */}
+          <div className="rounded-md border border-slate-200 p-3">
+            <p className="mb-2 text-[11px] font-semibold text-slate-600">Guillotina</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1">
+                <Label className="text-xs">Patrón de corte</Label>
+                <Input
+                  className="h-8 text-xs"
+                  placeholder="72×102 → 2×3"
+                  value={form.defaults_proceso.guillotina?.patron_corte ?? ""}
+                  onChange={(e) =>
+                    set("defaults_proceso", {
+                      ...form.defaults_proceso,
+                      guillotina: {
+                        ...form.defaults_proceso.guillotina,
+                        patron_corte: e.target.value || null,
+                      },
+                    })
+                  }
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label className="text-xs">Tamaño final</Label>
+                <Input
+                  className="h-8 text-xs"
+                  placeholder="360×510"
+                  value={form.defaults_proceso.guillotina?.tamano_final ?? ""}
+                  onChange={(e) =>
+                    set("defaults_proceso", {
+                      ...form.defaults_proceso,
+                      guillotina: {
+                        ...form.defaults_proceso.guillotina,
+                        tamano_final: e.target.value || null,
+                      },
+                    })
+                  }
+                />
+              </div>
             </div>
           </div>
 

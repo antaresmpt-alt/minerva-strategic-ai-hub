@@ -5,6 +5,7 @@
 > Complementa a `MINERVA_BRIEFING.md`, `MINERVA_CONTEXTO_TECNICO.md` y `FASES_HOJA_RUTA_DIGITAL.md`.
 >
 > Fecha: 13 de junio de 2026.
+> Actualizado: jul 2026 — §7.1 Recalculo precalculado y persistido + §7.1.10 horas (prep absoluta vs tiraje/millar; formulas en texto plano; convenio nombres pendiente; prep no trasladable entre codigos).
 
 ---
 
@@ -323,6 +324,243 @@ Para una referencia:
 
 ---
 
+## 7.1 Recalculo precalculado y persistido (decision cerrada — jul 2026)
+
+> Sesion Manel + Claude + Cursor (jul 2026). Refina y en parte **corrige** el §7:
+> el §7 describia mostrar la sugerencia "al vuelo" al despachar; aqui se decide
+> **precalcular y persistir** el resultado en el maestro. Esta es la decision de
+> arquitectura vigente para el recalculo.
+
+### 7.1.1 El patron: maestro como cache de lectura, historico como fuente
+
+La idea de Manel: el despacho **no debe calcular nada online**. En vez de que el
+wizard haga `AVG()` / mediana sobre `prod_ot_producidas` cada vez que se abre, un
+proceso **bajo demanda** (boton "Actualizar promedios" en el Maestro) recorre el
+historico, calcula, y **escribe el resultado en columnas de `prod_referencias`**.
+El despacho luego solo **lee** el maestro (lectura simple, instantanea).
+
+```text
+OT termina -> revision -> prod_ot_producidas   (historico inmutable = fuente)
+                                 |
+                                 v
+             boton "Actualizar promedios"       (bajo demanda, control humano)
+                                 |
+                                 v
+                        prod_referencias         (maestro = cache de decision)
+                                 |
+                                 v
+             Despacho nuevo -> prefill instantaneo (lectura simple, sin calculo)
+```
+
+**Por que precalcular y no calcular al vuelo:**
+
+- El despacho es el momento de **maxima prisa** en oficina tecnica; meter ahi una
+  agregacion sobre historico (con snapshots JSONB y OTs contenedor/hijas) es
+  arriesgado en latencia justo donde no se quiere.
+- **Coherencia con lo que ya existe:** el flujo actual `tipo_engomado_habitual`
+  (maestro) -> despacho ya es este mismo patron. Esto lo **extiende**, no introduce
+  un modelo nuevo.
+- **Control humano:** el historico no pisa el maestro solo; alguien revisa y pulsa
+  actualizar. Alineado con el Riesgo 4 del §8 ("nunca pisar el maestro sin aprobacion").
+
+### 7.1.2 Por que aqui SI se cachea un derivado (y en Bloque 9 NO)
+
+Tension conceptual a dejar por escrito, para no auto-contradecirse mas adelante:
+
+En **Bloque 9** se decidio que los campos calculados (`cantidad_libre`) **nunca se
+almacenan** — se derivan siempre (vista `stock_palets_atp`), porque "el estado nunca
+miente". Aqui se hace lo contrario **a proposito**, y esta bien. La diferencia:
+
+| | `cantidad_libre` (Bloque 9) | promedio de referencia (Bloque 6.x) |
+|---|---|---|
+| Frecuencia de cambio | Con **cada movimiento** de stock | Solo al **cerrar una OT nueva** de esa referencia |
+| Control del recalculo | Ninguno (cambia solo) | Total (Manel pulsa el boton) |
+| Si se cachea | Se descuadra en segundos | Se mantiene valido semanas |
+
+**Regla general:** un derivado que cambia constantemente y sin control **no** se cachea;
+uno que cambia rara vez y bajo control humano **si** se cachea. El promedio es del
+segundo tipo.
+
+### 7.1.3 Separacion promedio / oficial (no mezclar en la misma columna)
+
+El boton de recalculo **nunca** debe pisar un valor fijado a mano. Por cada campo
+promediable, dos capas:
+
+| Capa | Ejemplo | Quien la escribe |
+|------|---------|------------------|
+| **Promedio calculado** | `horas_impresion_promedio` | Solo el boton "Actualizar promedios" |
+| **Valor oficial / lock** | `horas_impresion_oficial` (o flag `_lock`) | Solo un humano, a mano |
+
+- Prefill en despacho = `oficial ?? promedio`.
+- El boton recalcula y pisa **solo** la columna `_promedio`; jamas toca `_oficial`.
+- Esto materializa el Riesgo 4 del §8 ("guardar sugerencias separadas de valores oficiales").
+
+### 7.1.4 Metadatos del calculo (guardar mas que el numero)
+
+Junto a cada promedio, persistir el contexto para poder confiar en el:
+
+- `promedios_actualizados_at` — cuando se recalculo por ultima vez.
+- `promedios_basados_en_n_ots` (o `x_muestra_n` por campo) — sobre cuantas OTs se calculo.
+- Opcional: guardar **mediana Y media** para numericos, para detectar dispersion.
+
+Motivo: en despacho, ver "impresion 1,8 h" no es lo mismo si sale de **5 OTs** o de **1 sola**
+anomala. El `n` da confianza (o alerta) sobre el dato.
+
+### 7.1.5 Estadistico por tipo de campo
+
+- **Categoricos** (material, troquel, tipo_engomado, caja): **moda** (valor mas frecuente en las N).
+- **Numericos** (horas por proceso, merma, estuches/bulto): **mediana** (o media recortada),
+  no media simple — menos sensible a una OT con averia.
+- **Horas de produccion:** ver §7.1.10 — no promediar "horas totales" a pelo; separar
+  **entrada/preparacion** (absoluta) de **tiraje** (normalizado a horas/millar).
+
+### 7.1.6 Dependencia dura: esto NO se construye sin Bloque 6
+
+El boton de promedios necesita una **fuente de historico real, cerrada y limpia**:
+`prod_ot_producidas` con el flag de "produccion anomala / excluir de medias". Hoy esa
+tabla **no existe** todavia.
+
+- Mientras no exista, el unico "promedio" posible saldria de `produccion_ot_despachadas`,
+  que es **planificado, no real**. Sirve de puente, pero **no** responde a la pregunta
+  de negocio ("troquelamos en 2 h o en 3 de media?").
+- Por tanto: **Bloque 6 (tabla + cierre en dos fases + flag anomala) va primero.**
+  El boton de recalculo (esta sub-fase, "Bloque 6.x") va **despues** y lee de ahi.
+
+Lo unico que se puede adelantar sin Bloque 6, por ser barato y aditivo:
+- Anadir a `prod_referencias` las columnas `*_promedio`, `*_oficial`,
+  `promedios_actualizados_at`, `*_muestra_n`. Migracion aditiva, sin dependencia.
+
+### 7.1.7 Fase 2 (bootstrap manual) vs Fase 6.x (promedios): son complementarias
+
+No son excluyentes; cubren momentos distintos del proyecto:
+
+| | **Fase 2 — Despacho -> Maestro** | **Fase 6.x — Historico -> Maestro** |
+|---|---|---|
+| Que es | Boton "guardar esto como predeterminado" al despachar | Boton "actualizar promedios" en el maestro |
+| Fuente | El despacho que se esta haciendo | `prod_ot_producidas` (N OTs cerradas) |
+| Necesita Bloque 6 | **No** | **Si** |
+| Cuando aporta | **Ya** — es el bootstrap manual, sin historico | Cuando hay volumen de OTs cerradas fiables (Ramon cerrando) |
+| Regla de escritura | Solo rellena vacios o con confirmacion explicita | Solo pisa `_promedio`, respeta `_oficial` |
+
+Durante meses, la **Fase 2 sera la unica fuente real** (Ramon aun no cierra OTs con
+datos fiables). La Fase 6.x brilla cuando `prod_ot_producidas` tenga masa critica.
+
+### 7.1.8 Deuda tecnica conocida — prefill actual y bug del picker
+
+Verificado en codigo (jul 2026), para que quien retome esto no asuma de mas:
+
+- **El prefill de despacho hoy NO lee del maestro.** Al elegir referencia
+  (`handleReferenciaPicked`), el orden real es: (1) valores ya en el formulario,
+  (2) **ultimo despacho de esa referencia** (`applyClonePrefill`, solo campos vacios),
+  (3) fallback `tipo_engomado_habitual`, (4) el resto de `*_habitual` **no se usa**.
+  En planta lo que funciona es: "elijo referencia -> me sale lo del ultimo despacho".
+- **Bug latente:** `referencia-minerva-picker.tsx` no incluye `tipo_engomado_habitual`
+  en su `SELECT`, asi que el fallback (3) casi nunca llega a aplicarse. La intencion
+  documentada en `FASES_HOJA_RUTA_DIGITAL.md` §3.5 quedo a medias por este `SELECT`
+  incompleto.
+- **Implicacion para cuando exista el maestro-con-promedios:** cambiar el prefill a
+  "maestro gana sobre ultimo despacho" es un **cambio de comportamiento visible** en
+  oficina tecnica (Carlos/Zaida). **No hacerlo en silencio.** Enfoque acordado:
+  - Por defecto sigue mandando el **ultimo despacho** (lo que ya esperan).
+  - Maestro como **fallback solo si no hay historico** (el toast "sin despachos
+    anteriores" ya existe).
+  - Botones explicitos: "Usar ultimo trabajo" / "Usar valores del maestro".
+  - El fix del picker (cargar `tipo_engomado_habitual` en el `SELECT`) tambien cambia
+    lo que se ve para referencias sin historico -> tratarlo como **tarea separada y
+    explicita**, junto a la conversacion de prefill con planta, **no** como un fix
+    silencioso "de paso".
+
+### 7.1.9 Roadmap de esta sub-fase
+
+| Orden | Paso | Depende de | Riesgo |
+|-------|------|-----------|--------|
+| 1 | **Fase 2**: boton "guardar en maestro" al despachar (solo vacios/confirmacion) | Nada | Bajo — no cambia prefill |
+| 2 | Columnas `*_promedio` / `*_oficial` / `_muestra_n` / `promedios_actualizados_at` en `prod_referencias` | Nada (aditivo) | Bajo |
+| 3 | **Bloque 6**: `prod_ot_producidas` + cierre 2 fases + flag anomala | — | Bloque grande |
+| 4 | **Boton "Actualizar promedios"** en Maestro (lee historico, escribe `_promedio` + horas/millar §7.1.10) | Paso 3 | Medio |
+| 5 | Prefill despacho desde maestro con **botones explicitos** + fix picker | Acuerdo con planta | Medio (cambio visible) |
+
+### 7.1.10 Normalizacion de horas: entrada/preparacion vs tiraje por millar
+
+> Decision cerrada sesion jul 2026 (Manel). Aplica a **impresion, troquelado y engomado**.
+> No implementar hasta existir `prod_ot_producidas` + boton de recalculo (§7.1.9 pasos 3–4).
+> Documentado ahora para que las olas de maestro (embalaje/ruta/defaults) no inventen
+> promedios de horas incorrectos.
+
+#### Problema
+
+Promediar "horas de impresion = 2,1 h" entre OTs de 3.500 y 12.000 unidades **no sirve**
+para planificar: las horas de **tiraje** escalan con la cantidad pedida (y, en impresion/
+troquel, el trabajo real ya incorpora poses, formato, etc.).
+
+#### Separacion obligatoria (tres procesos)
+
+Para **cada** proceso (impresion, troquelado, engomado) hay **dos familias** de metricas:
+
+| Familia | Que mide | Como se agrega | Ejemplo orientativo (ver convenio abajo) |
+|---------|----------|----------------|------------------------------------------|
+| **Entrada / preparacion** | Arranque, montaje, prep. Casi **fija por trabajo**; distinta segun articulo, pero **estable** en repeticiones del mismo codigo. **No** escala lineal con la cantidad. | Mediana (o media) **absoluta** en horas | `horas_prep_impresion_promedio`, `horas_prep_troquelado_promedio`, `horas_prep_engomado_promedio` |
+| **Tiraje / trabajo** | Tiempo de produccion que **si** crece con unidades pedidas | Normalizar a **horas por millar de pedido**, luego mediana de esos millar | `horas_millar_impresion_promedio`, `horas_millar_troquelado_promedio`, `horas_millar_engomado_promedio` |
+
+**Engomado:** igual que impresion y troquel — la preparacion (montar, ajustar) es distinta
+por trabajo pero estable; el pegado/tiraje depende de la cantidad. **Separar prep de tiraje.**
+
+**Convenio de nombres (pendiente de fijar al escribir la migracion 6.x):** unificar
+`entrada` vs `prep` (recomendacion: siempre `prep`), sufijo `_promedio` / `_oficial` /
+`_muestra_n` en **todas** las metricas (tambien en millar), y nombres de proceso
+(`impresion` / `troquelado` / `engomado`) en singular de proceso, no mezclar
+`troquel` vs `troquelado`. Los ejemplos de esta seccion son orientativos hasta esa migracion.
+Misma deuda abierta que `_promedio` / `_oficial` en §7.1.3.
+
+**Alcance de la estabilidad de la prep:** la entrada/prep es estable **dentro del mismo
+codigo de articulo** (tintas y troquel suelen ser fijos ahi; montar 6 planchas vs 2 queda
+absorbido al promediar OTs de ese codigo). **No** es trasladable entre codigos distintos
+sin ajustar por tintas/troquel: no copiar la prep de un articulo a otro "por analogia"
+sin revisar eso.
+
+#### Formula del millar (tiraje)
+
+Por cada OT cerrada no anomala, con cantidad pedida `Q > 0` y horas de tiraje reales `H`:
+
+```text
+horas_millar = H × 1000 / Q
+```
+
+Al despachar una OT nueva con cantidad `Q'`:
+
+```text
+horas_tiraje_previstas ≈ horas_millar × (Q' / 1000)
+horas_totales_proceso  ≈ entrada/prep + horas_tiraje_previstas
+```
+
+#### Por que no hace falta "poses" en la formula
+
+El denominador es **cantidad de pedido** (unidades cliente), no hojas. Las poses, el
+formato y el ritmo de aquella produccion ya estan **embebidos** en las horas historicas
+`H` de ese articulo. Extrapolamos el resultado pasado a la cantidad nueva del **mismo codigo**.
+
+Si cambian poses de forma estructural (p. ej. 4 → 8), el millar se desvia: override
+`_oficial` o recalcular tras nuevas OTs cerradas.
+
+#### Capas promedio / oficial (§7.1.3)
+
+Misma regla: el boton escribe solo `*_promedio`; nunca pisa `*_oficial`.
+Prefill = `oficial ?? promedio`. Guardar `muestra_n` y `promedios_actualizados_at`.
+
+#### Controles al calcular
+
+- Solo OTs en `prod_ot_producidas`, no despachos planificados.
+- Excluir flag anomala / outliers de cantidad muy rara.
+- Mediana de los millar (y de las entradas absolutas), no media simple.
+- Si `n` es bajo (p. ej. < 3), mostrar aviso de poca confianza; no planificar a ciegas.
+
+#### Que NO hacer en las olas de maestro (Fase 2 ampliada)
+
+Las olas 1–3 de ampliacion despacho→maestro **no** implementan estos campos de horas.
+Solo documentan / dejan hueco. Los promedios de horas llegan con Bloque 6.x.
+
+---
+
 ## 8. Riesgos y puntos delicados
 
 ### Riesgo 1: cerrar con datos malos
@@ -377,7 +615,7 @@ Mitigacion:
 7. Que datos solo deben generar aviso no bloqueante?
 8. Como marcar una produccion como anomala para excluirla de medias?
 9. Como mostrar al usuario \"lo que usamos la ultima vez\" sin saturar la pantalla?
-10. Cuando se recalcula el maestro: al cerrar, bajo demanda o en una pantalla de revision?
+10. Cuando se recalcula el maestro: al cerrar, bajo demanda o en una pantalla de revision? → **RESUELTO §7.1:** bajo demanda (boton en Maestro), precalculado y persistido.
 
 ---
 
@@ -406,4 +644,3 @@ Devuelveme:
 --- BRIEFING ---
 <pegar MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md>
 ```
-

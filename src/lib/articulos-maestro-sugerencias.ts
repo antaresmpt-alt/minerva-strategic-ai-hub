@@ -1,6 +1,28 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ProdReferenciaRow } from "@/types/prod-referencias";
+import type {
+  ProdReferenciaRow,
+  DefaultsProcesoMaestro,
+  DefaultsProcesoCtpMaestro,
+  DefaultsProcesoGuillotinaMaestro,
+  DefaultsProcesoExternoMaestro,
+} from "@/types/prod-referencias";
 import type { DespachoItinerarioSlot } from "@/components/produccion/ots/despacho-itinerario-picker";
+import type {
+  DespachoWizardProcesoDatos,
+} from "@/lib/despacho-wizard-shared";
+import {
+  CTP_REQUISITO_DEFS,
+  type DespachoWizardCtpDatos,
+} from "@/lib/ctp-despacho";
+
+export type {
+  DefaultsProcesoMaestro,
+  DefaultsProcesoCtpMaestro,
+  DefaultsProcesoGuillotinaMaestro,
+  DefaultsProcesoExternoMaestro,
+};
+
+// ─── Columnas escalares (Ola 0 + Ola 1) ──────────────────────────────────────
 
 /** Campos del maestro que la Fase 2 puede rellenar desde el despacho. */
 export type SugerenciasTecnicasMaestro = {
@@ -199,6 +221,7 @@ export type UpsertSugerenciasMode = "vacios" | "sobreescribir";
 export type UpsertSugerenciasResult = {
   updatedKeys: MaestroSugerenciaKey[];
   skippedKeys: MaestroSugerenciaKey[];
+  defaultsProcesoUpdated: boolean;
 };
 
 const SELECT_SUGERENCIAS_COLS = [
@@ -213,6 +236,7 @@ const SELECT_SUGERENCIAS_COLS = [
   "caja_embalaje_habitual",
   "unidades_por_embalaje_habitual",
   "ruta_habitual",
+  "defaults_proceso",
 ].join(", ");
 
 /**
@@ -224,7 +248,8 @@ export async function upsertSugerenciasTecnicas(
   supabase: SupabaseClient,
   referenciaId: string,
   proposed: SugerenciasTecnicasMaestro,
-  mode: UpsertSugerenciasMode
+  mode: UpsertSugerenciasMode,
+  proposedDefaults?: DefaultsProcesoMaestro | null
 ): Promise<UpsertSugerenciasResult> {
   const { data, error } = await supabase
     .from("prod_referencias")
@@ -234,9 +259,9 @@ export async function upsertSugerenciasTecnicas(
   if (error) throw error;
   if (!data) throw new Error("Referencia no encontrada en el maestro.");
 
-  const row = data as unknown as Pick<ProdReferenciaRow, MaestroSugerenciaKey | "id">;
+  const row = data as unknown as Pick<ProdReferenciaRow, MaestroSugerenciaKey | "id" | "defaults_proceso">;
   const diffs = diffSugerenciasVsMaestro(proposed, row);
-  const patch: Record<string, string | number | null> = {};
+  const patch: Record<string, unknown> = {};
   const updatedKeys: MaestroSugerenciaKey[] = [];
   const skippedKeys: MaestroSugerenciaKey[] = [];
 
@@ -253,8 +278,20 @@ export async function upsertSugerenciasTecnicas(
     }
   }
 
-  if (updatedKeys.length === 0) {
-    return { updatedKeys, skippedKeys };
+  // Merge defaults_proceso
+  let defaultsProcesoUpdated = false;
+  if (proposedDefaults && hasAnyDefaultsProceso(proposedDefaults)) {
+    const merged = mergeDefaultsProceso(
+      row.defaults_proceso ?? null,
+      proposedDefaults,
+      mode
+    );
+    patch.defaults_proceso = merged;
+    defaultsProcesoUpdated = true;
+  }
+
+  if (updatedKeys.length === 0 && !defaultsProcesoUpdated) {
+    return { updatedKeys, skippedKeys, defaultsProcesoUpdated: false };
   }
 
   const { error: updErr } = await supabase
@@ -263,5 +300,196 @@ export async function upsertSugerenciasTecnicas(
     .eq("id", referenciaId);
   if (updErr) throw updErr;
 
-  return { updatedKeys, skippedKeys };
+  return { updatedKeys, skippedKeys, defaultsProcesoUpdated };
+}
+
+// ─── Ola 2: defaults_proceso JSONB ────────────────────────────────────────────
+
+/**
+ * Extrae los campos estables por artículo de procesoDatos del wizard.
+ * Prohibido: hojas_iniciales, hojas_finales, hojas_brutas, hojas_netas, horas_*.
+ */
+export function buildDefaultsProcesoFromWizard(
+  procesoDatos: DespachoWizardProcesoDatos,
+  itinerarioSlots: DespachoItinerarioSlot[]
+): DefaultsProcesoMaestro {
+  const result: DefaultsProcesoMaestro = {};
+
+  // CTP: todos los flags son estables por artículo
+  const ctpActive = buildCtpDefaultsFromWizard(procesoDatos.ctp);
+  if (ctpActive && Object.keys(ctpActive).length > 0) {
+    result.ctp = ctpActive;
+  }
+
+  // Guillotina: solo patron_corte y tamano_final (NO hojas_iniciales/finales)
+  const { patron_corte, tamano_final } = procesoDatos.guillotina;
+  if (patron_corte?.trim() || tamano_final?.trim()) {
+    result.guillotina = {
+      patron_corte: patron_corte?.trim() || null,
+      tamano_final: tamano_final?.trim() || null,
+    };
+  }
+
+  // Externos: solo acabado fields (NO hojas_brutas/netas)
+  const externoIds = Object.keys(procesoDatos.externos);
+  if (externoIds.length > 0) {
+    const extResult: Record<string, DefaultsProcesoExternoMaestro> = {};
+    for (const id of externoIds) {
+      const ext = procesoDatos.externos[id];
+      if (!ext) continue;
+      const { acabado_detalle, acabado_cara, acabado_dorso } = ext;
+      if (acabado_detalle?.trim() || acabado_cara?.trim() || acabado_dorso?.trim()) {
+        extResult[id] = {
+          acabado_detalle: acabado_detalle?.trim() || null,
+          acabado_cara: acabado_cara?.trim() || null,
+          acabado_dorso: acabado_dorso?.trim() || null,
+        };
+      }
+    }
+    if (Object.keys(extResult).length > 0) {
+      result.externos = extResult;
+    }
+  }
+
+  // Validar con el itinerario: solo incluir procesos que están en la ruta
+  const procesoIdsEnRuta = new Set(itinerarioSlots.map((s) => s.procesoId));
+  return filterDefaultsByItinerario(result, procesoIdsEnRuta);
+}
+
+function buildCtpDefaultsFromWizard(
+  ctp: DespachoWizardCtpDatos
+): DefaultsProcesoCtpMaestro {
+  const active: DefaultsProcesoCtpMaestro = {};
+  for (const def of CTP_REQUISITO_DEFS) {
+    if (ctp[def.hechoKey]) {
+      (active as Record<string, boolean>)[def.hechoKey] = true;
+    }
+  }
+  return active;
+}
+
+const PROCESO_CTP_ID = 16;
+const PROCESO_GUILLOTINA_ID = 17;
+
+function filterDefaultsByItinerario(
+  defaults: DefaultsProcesoMaestro,
+  procesoIds: Set<number>
+): DefaultsProcesoMaestro {
+  const filtered: DefaultsProcesoMaestro = {};
+  if (defaults.ctp && procesoIds.has(PROCESO_CTP_ID)) {
+    filtered.ctp = defaults.ctp;
+  }
+  if (defaults.guillotina && procesoIds.has(PROCESO_GUILLOTINA_ID)) {
+    filtered.guillotina = defaults.guillotina;
+  }
+  if (defaults.externos) {
+    const extFiltered: Record<string, DefaultsProcesoExternoMaestro> = {};
+    for (const [id, val] of Object.entries(defaults.externos)) {
+      if (procesoIds.has(Number(id))) {
+        extFiltered[id] = val;
+      }
+    }
+    if (Object.keys(extFiltered).length > 0) {
+      filtered.externos = extFiltered;
+    }
+  }
+  return filtered;
+}
+
+export function hasAnyDefaultsProceso(d: DefaultsProcesoMaestro): boolean {
+  if (d.ctp && Object.values(d.ctp).some(Boolean)) return true;
+  if (d.guillotina && (d.guillotina.patron_corte || d.guillotina.tamano_final)) return true;
+  if (d.externos && Object.keys(d.externos).length > 0) return true;
+  return false;
+}
+
+/** Resumen legible de defaults_proceso para el bloque UI. */
+export function formatDefaultsProcesoResumen(d: DefaultsProcesoMaestro): string {
+  const parts: string[] = [];
+
+  if (d.ctp) {
+    const active = CTP_REQUISITO_DEFS
+      .filter((def) => (d.ctp as Record<string, boolean>)[def.hechoKey])
+      .map((def) => def.label);
+    if (active.length > 0) parts.push(`CTP: ${active.join(", ")}`);
+  }
+
+  if (d.guillotina) {
+    const g: string[] = [];
+    if (d.guillotina.patron_corte) g.push(d.guillotina.patron_corte);
+    if (d.guillotina.tamano_final) g.push(d.guillotina.tamano_final);
+    if (g.length > 0) parts.push(`Guillotina: ${g.join(" / ")}`);
+  }
+
+  if (d.externos) {
+    for (const [, ext] of Object.entries(d.externos)) {
+      const ac: string[] = [];
+      if (ext.acabado_detalle) ac.push(ext.acabado_detalle);
+      if (ext.acabado_cara) ac.push(`cara: ${ext.acabado_cara}`);
+      if (ext.acabado_dorso) ac.push(`dorso: ${ext.acabado_dorso}`);
+      if (ac.length > 0) parts.push(`Externo: ${ac.join(" · ")}`);
+    }
+  }
+
+  return parts.join(" · ");
+}
+
+/**
+ * Merge de defaults_proceso del maestro con los propuestos.
+ * - `vacios`: solo actualiza subclaves vacías o nulas.
+ * - `sobreescribir`: pisa todo lo propuesto.
+ */
+function mergeDefaultsProceso(
+  current: DefaultsProcesoMaestro | null,
+  proposed: DefaultsProcesoMaestro,
+  mode: UpsertSugerenciasMode
+): DefaultsProcesoMaestro {
+  const base: DefaultsProcesoMaestro = current ? structuredClone(current) : {};
+
+  // CTP: merge flag a flag
+  if (proposed.ctp && Object.keys(proposed.ctp).length > 0) {
+    if (!base.ctp || mode === "sobreescribir") {
+      base.ctp = { ...base.ctp, ...proposed.ctp };
+    } else {
+      const merged: DefaultsProcesoCtpMaestro = { ...base.ctp };
+      for (const [k, v] of Object.entries(proposed.ctp)) {
+        if (!(k in merged) || merged[k as keyof DefaultsProcesoCtpMaestro] == null) {
+          (merged as Record<string, boolean>)[k] = v as boolean;
+        }
+      }
+      base.ctp = merged;
+    }
+  }
+
+  // Guillotina
+  if (proposed.guillotina) {
+    if (!base.guillotina || mode === "sobreescribir") {
+      base.guillotina = { ...base.guillotina, ...proposed.guillotina };
+    } else {
+      const mg: DefaultsProcesoGuillotinaMaestro = { ...base.guillotina };
+      if (!mg.patron_corte && proposed.guillotina.patron_corte)
+        mg.patron_corte = proposed.guillotina.patron_corte;
+      if (!mg.tamano_final && proposed.guillotina.tamano_final)
+        mg.tamano_final = proposed.guillotina.tamano_final;
+      base.guillotina = mg;
+    }
+  }
+
+  // Externos
+  if (proposed.externos) {
+    if (!base.externos) base.externos = {};
+    for (const [id, ext] of Object.entries(proposed.externos)) {
+      if (!base.externos[id] || mode === "sobreescribir") {
+        base.externos[id] = { ...base.externos[id], ...ext };
+      } else {
+        const me: DefaultsProcesoExternoMaestro = { ...base.externos[id] };
+        if (!me.acabado_detalle && ext.acabado_detalle) me.acabado_detalle = ext.acabado_detalle;
+        if (!me.acabado_cara && ext.acabado_cara) me.acabado_cara = ext.acabado_cara;
+        if (!me.acabado_dorso && ext.acabado_dorso) me.acabado_dorso = ext.acabado_dorso;
+        base.externos[id] = me;
+      }
+    }
+  }
+
+  return base;
 }

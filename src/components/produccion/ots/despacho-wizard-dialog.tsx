@@ -49,9 +49,12 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   buildSugerenciasFromDespacho,
+  buildDefaultsProcesoFromWizard,
   diffSugerenciasVsMaestro,
   formatSugerenciasResumen,
+  formatDefaultsProcesoResumen,
   hasAnySugerencia,
+  hasAnyDefaultsProceso,
   upsertSugerenciasTecnicas,
   type SugerenciaFieldDiff,
 } from "@/lib/articulos-maestro-sugerencias";
@@ -988,10 +991,20 @@ export function DespachoWizardDialog({
     [sugerenciasMaestro]
   );
 
+  const defaultsProceso = useMemo(
+    () => buildDefaultsProcesoFromWizard(procesoDatos, itinerarioSlots),
+    [procesoDatos, itinerarioSlots]
+  );
+
+  const defaultsProcesoResumen = useMemo(
+    () => (hasAnyDefaultsProceso(defaultsProceso) ? formatDefaultsProcesoResumen(defaultsProceso) : ""),
+    [defaultsProceso]
+  );
+
   const canGuardarEnMaestro =
     Boolean(form.referencia_id) &&
     Boolean(form.referencia_codigo) &&
-    hasAnySugerencia(sugerenciasMaestro);
+    (hasAnySugerencia(sugerenciasMaestro) || hasAnyDefaultsProceso(defaultsProceso));
 
   const applyGuardarEnMaestro = useCallback(
     async (mode: "vacios" | "sobreescribir") => {
@@ -1001,7 +1014,7 @@ export function DespachoWizardDialog({
         toast.error("Selecciona una Referencia Minerva primero.");
         return;
       }
-      if (!hasAnySugerencia(sugerenciasMaestro)) {
+      if (!hasAnySugerencia(sugerenciasMaestro) && !hasAnyDefaultsProceso(defaultsProceso)) {
         toast.info("No hay datos técnicos que guardar en el maestro.");
         return;
       }
@@ -1011,11 +1024,13 @@ export function DespachoWizardDialog({
           supabase,
           refId,
           sugerenciasMaestro,
-          mode
+          mode,
+          defaultsProceso
         );
         setMaestroOverwriteOpen(false);
         setMaestroConflictDiffs([]);
-        if (result.updatedKeys.length === 0) {
+        const totalUpdated = result.updatedKeys.length + (result.defaultsProcesoUpdated ? 1 : 0);
+        if (totalUpdated === 0) {
           toast.info(
             mode === "vacios"
               ? `El maestro ${codigo} ya tenía esos campos; nada nuevo que rellenar.`
@@ -1023,10 +1038,11 @@ export function DespachoWizardDialog({
           );
           return;
         }
+        const procesoMsg = result.defaultsProcesoUpdated ? " + configuración de proceso" : "";
         toast.success(
           `Maestro ${codigo}: ${result.updatedKeys.length} campo${
             result.updatedKeys.length === 1 ? "" : "s"
-          } actualizado${result.updatedKeys.length === 1 ? "" : "s"}.`
+          } actualizado${result.updatedKeys.length === 1 ? "" : "s"}${procesoMsg}.`
         );
       } catch (e) {
         toast.error(
@@ -1039,6 +1055,7 @@ export function DespachoWizardDialog({
       }
     },
     [
+      defaultsProceso,
       form.referencia_codigo,
       form.referencia_id,
       sugerenciasMaestro,
@@ -1080,7 +1097,7 @@ export function DespachoWizardDialog({
     } finally {
       setSavingMaestro(false);
     }
-  }, [applyGuardarEnMaestro, form.referencia_id, sugerenciasMaestro, supabase]);
+  }, [applyGuardarEnMaestro, defaultsProceso, form.referencia_id, sugerenciasMaestro, supabase]);
 
   useEffect(() => {
     if (!open) {
@@ -3696,8 +3713,13 @@ export function DespachoWizardDialog({
                           <span className="font-mono font-semibold">
                             {form.referencia_codigo}
                           </span>
-                          : {sugerenciasMaestroResumen}
+                          {sugerenciasMaestroResumen ? `: ${sugerenciasMaestroResumen}` : ""}
                         </p>
+                        {defaultsProcesoResumen ? (
+                          <p className="mt-0.5 text-[11px] text-slate-500">
+                            {defaultsProcesoResumen}
+                          </p>
+                        ) : null}
                         <p className="mt-1 text-[10px] text-slate-500">
                           Solo rellena campos vacíos del maestro. Si ya hay
                           valor distinto, te pedirá confirmación. No cambia el
