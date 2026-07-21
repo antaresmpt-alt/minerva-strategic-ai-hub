@@ -32,6 +32,33 @@ type ReferenciaMinervaPickerProps = {
   className?: string;
 };
 
+/**
+ * Fix Ola 3: el select original solo traía id/codigo/referencia_cliente/descripcion/cliente.
+ * `onReferenciaPicked` (wizard de despacho) necesita los *_habitual y `defaults_proceso`
+ * para el prefill "Usar maestro" y para `tipo_engomado_habitual` (ya se usaba, pero llegaba
+ * siempre undefined porque no se seleccionaba en la query).
+ */
+const REFERENCIA_PICKER_SELECT_COLS = [
+  "id",
+  "codigo",
+  "referencia_cliente",
+  "descripcion",
+  "cliente",
+  "material_habitual",
+  "gramaje_habitual",
+  "poses_habitual",
+  "troquel_habitual",
+  "tintas_habituales",
+  "acabado_habitual",
+  "tipo_engomado_habitual",
+  "caja_embalaje_habitual",
+  "unidades_por_embalaje_habitual",
+  "ruta_habitual",
+  "defaults_proceso",
+  "created_at",
+  "updated_at",
+].join(", ");
+
 function buildReferenciasOrFilter(term: string): string | null {
   const t = term.trim();
   if (!t) return null;
@@ -85,15 +112,13 @@ export function ReferenciaMinervaPicker({
         const orF = buildReferenciasOrFilter(t);
         let query = supabase
           .from("prod_referencias")
-          .select(
-            "id, codigo, referencia_cliente, descripcion, cliente, created_at, updated_at"
-          )
+          .select(REFERENCIA_PICKER_SELECT_COLS)
           .order("codigo", { ascending: true })
           .limit(12);
         if (orF) query = query.or(orF);
         const { data, error } = await query;
         if (error) throw error;
-        setHits((data ?? []) as ProdReferenciaRow[]);
+        setHits((data ?? []) as unknown as ProdReferenciaRow[]);
       } catch {
         setHits([]);
       } finally {

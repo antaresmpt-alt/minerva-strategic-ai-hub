@@ -69,9 +69,9 @@ En el wizard de despacho (pestaña Resumen), si hay Referencia Minerva y datos t
 | Ola | Qué | Estado |
 |-----|-----|--------|
 | **0** | MVP: 6 campos (`material`, poses, troquel, tintas, acabado, tipo engomado) | ✅ Hecho |
-| **1** | Embalaje + `ruta_habitual` + ampliar “Guardar en maestro” | ⏳ Siguiente |
-| **2** | Defaults por proceso (CTP / guillotina / …) vía JSONB o columnas | Pendiente |
-| **3** | Prefill con botones explícitos (“Usar último trabajo” / “Usar maestro”) + fix picker | Pendiente (acuerdo planta) |
+| **1** | Embalaje + `ruta_habitual` + ampliar “Guardar en maestro” | ✅ Hecho (jul 2026) |
+| **2** | Defaults por proceso (CTP / guillotina / externos) vía JSONB `defaults_proceso` | ✅ Hecho (jul 2026) |
+| **3** | Prefill con botones explícitos (“Usar último trabajo” / “Usar maestro”) + fix picker | ✅ Hecho (jul 2026) |
 
 #### Ola 1 — alcance concreto
 
@@ -102,6 +102,29 @@ Commit al final con mensaje claro. Prueba mental: M-00003 con MN2L y 450 uds.
 ```
 
 Tras Ola 1: commit → prueba en wizard → luego pedir **“Ola 2”** (defaults proceso).
+
+#### Ola 2 — alcance concreto (hecho)
+
+1. Migración aditiva `prod_referencias`: `defaults_proceso jsonb null`.
+2. `articulos-maestro-sugerencias.ts`: `buildDefaultsProcesoFromWizard`, `formatDefaultsProcesoResumen`, `hasAnyDefaultsProceso`, `mergeDefaultsProceso`; `upsertSugerenciasTecnicas` acepta `proposedDefaults` opcional.
+3. Estructura JSONB — misma forma que `DespachoWizardProcesoDatos` (no inventada):
+   - `ctp`: los 9 flags de `CTP_REQUISITO_DEFS` (todos estables por artículo).
+   - `guillotina`: solo `patron_corte` y `tamano_final` (**nunca** `hojas_iniciales`/`hojas_finales`).
+   - `externos`: solo `acabado_detalle`/`acabado_cara`/`acabado_dorso` por proceso externo (**nunca** `hojas_brutas`/`hojas_netas`).
+4. Formulario Maestro: sección “Defaults por proceso” con checkboxes CTP + inputs guillotina.
+5. **No** duplica embalaje (ya son columnas propias de Ola 1). **No** columnas de horas/millar.
+
+#### Ola 3 — alcance concreto (hecho)
+
+Objetivo: ofrecer el maestro como fuente de prefill **sin cambiar el comportamiento por defecto**.
+
+1. **Comportamiento por defecto sin cambios**: al elegir una Referencia Minerva, el wizard sigue clonando el **último despacho** (`applyUltimoTrabajoPrefill`, antes `handleReferenciaPicked`). Esto es intencional — no rompe el hábito de Zaida/Carlos.
+2. **Botones explícitos** junto al picker de Referencia (visibles solo si hay referencia elegida):
+   - **“Usar último trabajo”** — re-aplica el clon del último despacho (útil tras haber pulsado “Usar maestro” y querer volver atrás).
+   - **“Usar maestro”** — rellena **solo campos vacíos** del formulario y de `procesoDatos` desde `*_habitual` + `defaults_proceso` del maestro. Nunca sobrescribe algo ya tecleado (sin confirmación, porque solo actúa sobre vacíos).
+   - `ruta_habitual` queda **fuera** del botón "Usar maestro": aplicarla al itinerario es la Fase 6 (pendiente), no esta ola.
+3. **Fix picker** (`referencia-minerva-picker.tsx`): el `select` original solo traía `id, codigo, referencia_cliente, descripcion, cliente` — por eso `tipo_engomado_habitual` llegaba siempre `undefined` al elegir de la lista, y con eso "arrastrado" desde hace más tiempo, ningún otro campo `*_habitual` estaba disponible tampoco. Ahora el `select` incluye todos los `*_habitual` + `defaults_proceso`.
+4. Nuevas funciones en `articulos-maestro-sugerencias.ts`: `buildFormPatchFromMaestro` (campos planos), `buildProcesoDatosPatchFromMaestro` (CTP/guillotina/externos, filtrado por procesos presentes en el itinerario), `formatMaestroPrefillResumen`.
 
 ---
 

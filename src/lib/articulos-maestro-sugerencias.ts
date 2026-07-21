@@ -7,8 +7,12 @@ import type {
   DefaultsProcesoExternoMaestro,
 } from "@/types/prod-referencias";
 import type { DespachoItinerarioSlot } from "@/components/produccion/ots/despacho-itinerario-picker";
-import type {
-  DespachoWizardProcesoDatos,
+import {
+  emptyDespachoWizardExternoDatos,
+  PROCESO_CTP_ID,
+  PROCESO_GUILLOTINA_ID,
+  type DespachoFormState,
+  type DespachoWizardProcesoDatos,
 } from "@/lib/despacho-wizard-shared";
 import {
   CTP_REQUISITO_DEFS,
@@ -368,9 +372,6 @@ function buildCtpDefaultsFromWizard(
   return active;
 }
 
-const PROCESO_CTP_ID = 16;
-const PROCESO_GUILLOTINA_ID = 17;
-
 function filterDefaultsByItinerario(
   defaults: DefaultsProcesoMaestro,
   procesoIds: Set<number>
@@ -492,4 +493,133 @@ function mergeDefaultsProceso(
   }
 
   return base;
+}
+
+// ─── Ola 3: prefill explícito desde maestro (botón "Usar maestro") ───────────
+//
+// Dirección inversa a la Fase 2: maestro → wizard. Solo rellena campos VACÍOS
+// del formulario/procesoDatos actuales (nunca sobrescribe algo ya tecleado).
+// El prefill AUTOMÁTICO al elegir referencia sigue siendo "último despacho"
+// (handleReferenciaPicked) — esto es solo el botón explícito "Usar maestro".
+
+/** Columnas *_habitual del maestro → campo del formulario de despacho.
+ *  `ruta_habitual` queda fuera: aplicarla al itinerario es la Fase 6 (pendiente). */
+const FORM_FIELD_FROM_MAESTRO: Partial<Record<MaestroSugerenciaKey, keyof DespachoFormState>> = {
+  material_habitual: "material",
+  gramaje_habitual: "gramaje",
+  poses_habitual: "poses",
+  troquel_habitual: "troquel",
+  tintas_habituales: "tintas",
+  acabado_habitual: "acabado_pral",
+  tipo_engomado_habitual: "tipo_engomado",
+  caja_embalaje_habitual: "codigo_caja_embalaje",
+  unidades_por_embalaje_habitual: "unidades_por_embalaje",
+};
+
+export type MaestroPrefillFormPatch = Partial<
+  Pick<DespachoFormState, "material" | "gramaje" | "poses" | "troquel" | "tintas" | "acabado_pral" | "tipo_engomado" | "codigo_caja_embalaje" | "unidades_por_embalaje">
+>;
+
+/** Construye el patch de campos planos del formulario desde el maestro — solo vacíos. */
+export function buildFormPatchFromMaestro(
+  maestro: Pick<ProdReferenciaRow, MaestroSugerenciaKey>,
+  currentForm: DespachoFormState
+): { patch: MaestroPrefillFormPatch; filledLabels: string[]; skippedLabels: string[] } {
+  const patch: Record<string, string> = {};
+  const filledLabels: string[] = [];
+  const skippedLabels: string[] = [];
+
+  for (const key of MAESTRO_SUGERENCIA_KEYS) {
+    const formField = FORM_FIELD_FROM_MAESTRO[key];
+    if (!formField) continue;
+    const maestroVal = currentMaestroValue(maestro, key);
+    if (!maestroVal) continue;
+    const currentVal = String(currentForm[formField] ?? "").trim();
+    if (currentVal) {
+      skippedLabels.push(FIELD_LABELS[key]);
+      continue;
+    }
+    patch[formField] = maestroVal;
+    filledLabels.push(FIELD_LABELS[key]);
+  }
+
+  return { patch: patch as MaestroPrefillFormPatch, filledLabels, skippedLabels };
+}
+
+/** Construye el patch de `procesoDatos` (CTP, guillotina, externos) desde `defaults_proceso` — solo vacíos. */
+export function buildProcesoDatosPatchFromMaestro(
+  defaults: DefaultsProcesoMaestro | null | undefined,
+  currentProcesoDatos: DespachoWizardProcesoDatos,
+  procesoIdsEnRuta: Set<number>
+): { patch: Partial<DespachoWizardProcesoDatos>; filledLabels: string[] } {
+  const filledLabels: string[] = [];
+  if (!defaults) return { patch: {}, filledLabels };
+
+  const patch: Partial<DespachoWizardProcesoDatos> = {};
+
+  if (defaults.ctp && procesoIdsEnRuta.has(PROCESO_CTP_ID)) {
+    const nextCtp = { ...currentProcesoDatos.ctp };
+    let changed = false;
+    for (const def of CTP_REQUISITO_DEFS) {
+      const wants = Boolean((defaults.ctp as Record<string, boolean>)[def.hechoKey]);
+      if (wants && !nextCtp[def.hechoKey]) {
+        nextCtp[def.hechoKey] = true;
+        changed = true;
+      }
+    }
+    if (changed) {
+      patch.ctp = nextCtp;
+      filledLabels.push("CTP");
+    }
+  }
+
+  if (defaults.guillotina && procesoIdsEnRuta.has(PROCESO_GUILLOTINA_ID)) {
+    const g = currentProcesoDatos.guillotina;
+    const nextG = { ...g };
+    let changed = false;
+    if (!g.patron_corte?.trim() && defaults.guillotina.patron_corte) {
+      nextG.patron_corte = defaults.guillotina.patron_corte;
+      changed = true;
+    }
+    if (!g.tamano_final?.trim() && defaults.guillotina.tamano_final) {
+      nextG.tamano_final = defaults.guillotina.tamano_final;
+      changed = true;
+    }
+    if (changed) {
+      patch.guillotina = nextG;
+      filledLabels.push("Guillotina");
+    }
+  }
+
+  if (defaults.externos) {
+    const nextExternos = { ...currentProcesoDatos.externos };
+    let changed = false;
+    for (const [id, ext] of Object.entries(defaults.externos)) {
+      if (!procesoIdsEnRuta.has(Number(id))) continue;
+      const current = nextExternos[id] ?? emptyDespachoWizardExternoDatos();
+      const hasCurrent = Boolean(
+        current.acabado_detalle?.trim() || current.acabado_cara?.trim() || current.acabado_dorso?.trim()
+      );
+      if (hasCurrent) continue;
+      nextExternos[id] = {
+        ...current,
+        acabado_detalle: ext.acabado_detalle || current.acabado_detalle,
+        acabado_cara: ext.acabado_cara || current.acabado_cara,
+        acabado_dorso: ext.acabado_dorso || current.acabado_dorso,
+      };
+      changed = true;
+    }
+    if (changed) {
+      patch.externos = nextExternos;
+      filledLabels.push("Acabado externo");
+    }
+  }
+
+  return { patch, filledLabels };
+}
+
+/** Resumen legible tras aplicar "Usar maestro" (ej: "Material, Poses, CTP, Guillotina"). */
+export function formatMaestroPrefillResumen(filledLabels: string[]): string {
+  if (filledLabels.length === 0) return "";
+  return filledLabels.join(", ");
 }

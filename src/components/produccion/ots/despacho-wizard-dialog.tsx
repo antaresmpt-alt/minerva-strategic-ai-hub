@@ -50,12 +50,15 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   buildSugerenciasFromDespacho,
   buildDefaultsProcesoFromWizard,
+  buildFormPatchFromMaestro,
+  buildProcesoDatosPatchFromMaestro,
   diffSugerenciasVsMaestro,
   formatSugerenciasResumen,
   formatDefaultsProcesoResumen,
   hasAnySugerencia,
   hasAnyDefaultsProceso,
   upsertSugerenciasTecnicas,
+  type MaestroSugerenciaKey,
   type SugerenciaFieldDiff,
 } from "@/lib/articulos-maestro-sugerencias";
 import {
@@ -127,7 +130,7 @@ import {
 } from "@/lib/hoja-ruta/hoja-ruta-cartelita-pdf";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
-import type { ProdReferenciaRow } from "@/types/prod-referencias";
+import type { DefaultsProcesoMaestro, ProdReferenciaRow } from "@/types/prod-referencias";
 
 export type DespachoWizardDialogProps = {
   open: boolean;
@@ -841,26 +844,41 @@ export function DespachoWizardDialog({
     [supabase]
   );
 
-  const handleReferenciaPicked = useCallback(
-    async (row: ProdReferenciaRow) => {
+  /**
+   * Ola 3: extraído de handleReferenciaPicked para poder reusarlo desde el
+   * botón explícito "Usar último trabajo", además del prefill automático
+   * al elegir referencia (comportamiento por defecto, sin cambios).
+   */
+  const applyUltimoTrabajoPrefill = useCallback(
+    async (refId: string, refCodigo: string, tipoEngomadoHabitualHint?: string | null) => {
       try {
         const { data, error } = await supabase
           .from(TABLE_OT_DESPACHADAS)
           .select(`ot_numero, ${DESPACHO_CLONE_SELECT}`)
-          .eq("referencia_id", row.id)
+          .eq("referencia_id", refId)
           .order("despachado_at", { ascending: false })
           .limit(1)
           .maybeSingle();
         if (error) throw error;
-        const tipoEngomadoHabitual = String(
-          (row as { tipo_engomado_habitual?: string | null })
-            .tipo_engomado_habitual ?? ""
-        ).trim();
+
+        let tipoEngomadoHabitual = String(tipoEngomadoHabitualHint ?? "").trim();
+        if (!tipoEngomadoHabitual) {
+          const { data: refRow } = await supabase
+            .from("prod_referencias")
+            .select("tipo_engomado_habitual")
+            .eq("id", refId)
+            .maybeSingle();
+          tipoEngomadoHabitual = String(
+            (refRow as { tipo_engomado_habitual?: string | null } | null)
+              ?.tipo_engomado_habitual ?? ""
+          ).trim();
+        }
+
         setForm((f) => {
           const base: DespachoFormState = {
             ...f,
-            referencia_id: row.id,
-            referencia_codigo: row.codigo,
+            referencia_id: refId,
+            referencia_codigo: refCodigo,
           };
           const next = data
             ? applyClonePrefill(base, data as Record<string, unknown>).next
@@ -872,12 +890,12 @@ export function DespachoWizardDialog({
         });
         if (!data) {
           toast.info(
-            `Referencia ${row.codigo} sin histórico todavía: nada que heredar.`
+            `Referencia ${refCodigo} sin histórico todavía: nada que heredar.`
           );
           return;
         }
         toast.success(
-          `Datos heredados de la referencia ${row.codigo} (solo campos vacíos).`
+          `Datos heredados de la referencia ${refCodigo} (solo campos vacíos).`
         );
         const sourceOt = String(
           (data as { ot_numero?: string | null }).ot_numero ?? ""
@@ -904,6 +922,71 @@ export function DespachoWizardDialog({
     },
     [loadItinerarioFromOtNumero, supabase]
   );
+
+  /** Prefill AUTOMÁTICO al elegir referencia — sigue siendo "último despacho" (sin cambios). */
+  const handleReferenciaPicked = useCallback(
+    (row: ProdReferenciaRow) => {
+      const tipoEngomadoHabitual =
+        (row as { tipo_engomado_habitual?: string | null }).tipo_engomado_habitual ?? null;
+      void applyUltimoTrabajoPrefill(row.id, row.codigo, tipoEngomadoHabitual);
+    },
+    [applyUltimoTrabajoPrefill]
+  );
+
+  /** Botón explícito "Usar maestro": rellena SOLO campos vacíos desde `*_habitual` + `defaults_proceso`. */
+  const applyMaestroPrefillClick = useCallback(async () => {
+    const refId = form.referencia_id;
+    const refCodigo = form.referencia_codigo.trim();
+    if (!refId || !refCodigo) {
+      toast.error("Selecciona una Referencia Minerva primero.");
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from("prod_referencias")
+        .select(
+          "material_habitual, gramaje_habitual, poses_habitual, troquel_habitual, tintas_habituales, acabado_habitual, tipo_engomado_habitual, caja_embalaje_habitual, unidades_por_embalaje_habitual, ruta_habitual, defaults_proceso"
+        )
+        .eq("id", refId)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) {
+        toast.info(`Referencia ${refCodigo} sin datos en el maestro todavía.`);
+        return;
+      }
+      const maestroRow = data as unknown as Pick<ProdReferenciaRow, MaestroSugerenciaKey> & {
+        defaults_proceso: DefaultsProcesoMaestro | null;
+      };
+
+      const procesoIdsEnRuta = new Set(itinerarioSlots.map((s) => s.procesoId));
+      const { patch: formPatch, filledLabels: formFilled } = buildFormPatchFromMaestro(
+        maestroRow,
+        form
+      );
+      const { patch: procesoPatch, filledLabels: procesoFilled } =
+        buildProcesoDatosPatchFromMaestro(maestroRow.defaults_proceso, procesoDatos, procesoIdsEnRuta);
+
+      const allFilled = [...formFilled, ...procesoFilled];
+      if (allFilled.length === 0) {
+        toast.info(
+          `Maestro ${refCodigo}: nada nuevo que aportar (ya rellenado o maestro vacío).`
+        );
+        return;
+      }
+
+      if (Object.keys(formPatch).length > 0) {
+        setForm((f) => ({ ...f, ...formPatch }));
+      }
+      if (Object.keys(procesoPatch).length > 0) {
+        setProcesoDatos((pd) => ({ ...pd, ...procesoPatch }));
+      }
+      toast.success(`Rellenado desde maestro ${refCodigo}: ${allFilled.join(", ")}.`);
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "No se pudo leer el maestro de artículos."
+      );
+    }
+  }, [form, itinerarioSlots, procesoDatos, supabase]);
 
   const cloneFromOtAnterior = useCallback(
     async (otRaw: string) => {
@@ -2709,6 +2792,41 @@ export function DespachoWizardDialog({
                     }}
                     disabled={saving || !seleccion}
                   />
+                  {form.referencia_id ? (
+                    <div className="flex flex-wrap items-center gap-2 lg:col-span-2">
+                      <span className="text-[11px] text-slate-500">
+                        Prefill aplicado: último trabajo (por defecto). También puedes:
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-[11px]"
+                        disabled={saving}
+                        onClick={() =>
+                          void applyUltimoTrabajoPrefill(
+                            form.referencia_id!,
+                            form.referencia_codigo
+                          )
+                        }
+                      >
+                        Usar último trabajo
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-[11px]"
+                        disabled={saving}
+                        onClick={() => void applyMaestroPrefillClick()}
+                      >
+                        Usar maestro
+                      </Button>
+                      <span className="text-[10px] text-slate-400">
+                        (solo rellenan campos vacíos, nunca pisan lo ya escrito)
+                      </span>
+                    </div>
+                  ) : null}
                   <div className="grid gap-1">
                     <Label htmlFor="wiz-ot-anterior" className="text-xs">
                       OT anterior (clonar)
