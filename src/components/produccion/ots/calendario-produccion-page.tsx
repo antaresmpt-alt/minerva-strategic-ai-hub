@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   ClipboardPaste,
   FileDown,
   Loader2,
@@ -567,6 +569,44 @@ export function CalendarioProduccionPage() {
     toast.message(`OT ${linea.otNumero} cortada. Abre otro día y pega.`);
   };
 
+  /** Subir/bajar OT dentro del mismo día (campo `orden`). */
+  const moverEntradaEnDia = async (id: string, direction: -1 | 1) => {
+    if (!dayYmd) return;
+    const list = dayLineas;
+    const idx = list.findIndex((l) => l.id === id);
+    const swapIdx = idx + direction;
+    if (idx < 0 || swapIdx < 0 || swapIdx >= list.length) return;
+
+    const reordered = [...list];
+    const a = reordered[idx]!;
+    reordered[idx] = reordered[swapIdx]!;
+    reordered[swapIdx] = a;
+
+    const ordenById = new Map(reordered.map((l, i) => [l.id, i] as const));
+    setRows((prev) =>
+      prev.map((r) => {
+        const nextOrden = ordenById.get(r.id);
+        return nextOrden === undefined ? r : { ...r, orden: nextOrden };
+      }),
+    );
+
+    setSaving(true);
+    try {
+      const results = await Promise.all(
+        reordered.map((l, i) =>
+          supabase.from(TABLE).update({ orden: i }).eq("id", l.id),
+        ),
+      );
+      const err = results.find((r) => r.error)?.error;
+      if (err) throw err;
+    } catch (e) {
+      toast.error(errorMessageFromUnknown(e, "No se pudo reordenar."));
+      await load();
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const pegarEnDia = async () => {
     if (!dayYmd || !portapapeles) return;
     if (portapapeles.fromFecha === dayYmd) {
@@ -1058,14 +1098,14 @@ export function CalendarioProduccionPage() {
 
             <div>
               <p className="mb-1 text-xs font-medium text-slate-600">
-                En este día ({dayLineas.length}) — cortar para mover, papelera
-                para quitar
+                En este día ({dayLineas.length}) — ↑↓ ordenar, cortar para
+                mover de día, papelera para quitar
               </p>
               {dayLineas.length === 0 ? (
                 <p className="text-sm text-slate-500">Ninguna OT todavía.</p>
               ) : (
                 <ul className="max-h-56 space-y-1 overflow-y-auto">
-                  {dayLineas.map((l) => (
+                  {dayLineas.map((l, idx) => (
                     <li
                       key={l.id}
                       className={`flex items-start justify-between gap-2 rounded-md border bg-white px-2 py-1.5 ${
@@ -1087,6 +1127,28 @@ export function CalendarioProduccionPage() {
                         </span>
                       </button>
                       <div className="flex shrink-0 items-center gap-0.5">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-[#002147]"
+                          disabled={saving || idx === 0}
+                          title="Subir"
+                          onClick={() => void moverEntradaEnDia(l.id, -1)}
+                        >
+                          <ChevronUp className="size-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-[#002147]"
+                          disabled={saving || idx === dayLineas.length - 1}
+                          title="Bajar"
+                          onClick={() => void moverEntradaEnDia(l.id, 1)}
+                        >
+                          <ChevronDown className="size-3.5" />
+                        </Button>
                         <Button
                           type="button"
                           variant="ghost"
