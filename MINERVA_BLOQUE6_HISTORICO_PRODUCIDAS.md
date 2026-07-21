@@ -445,40 +445,36 @@ No son excluyentes; cubren momentos distintos del proyecto:
 Durante meses, la **Fase 2 sera la unica fuente real** (Ramon aun no cierra OTs con
 datos fiables). La Fase 6.x brilla cuando `prod_ot_producidas` tenga masa critica.
 
-### 7.1.8 Deuda tecnica conocida — prefill actual y bug del picker
+### 7.1.8 Deuda tecnica del prefill y bug del picker — RESUELTO (Ola 3, jul 2026)
 
-Verificado en codigo (jul 2026), para que quien retome esto no asuma de mas:
+Estado historico (antes de Ola 3), para contexto:
 
-- **El prefill de despacho hoy NO lee del maestro.** Al elegir referencia
-  (`handleReferenciaPicked`), el orden real es: (1) valores ya en el formulario,
-  (2) **ultimo despacho de esa referencia** (`applyClonePrefill`, solo campos vacios),
-  (3) fallback `tipo_engomado_habitual`, (4) el resto de `*_habitual` **no se usa**.
-  En planta lo que funciona es: "elijo referencia -> me sale lo del ultimo despacho".
-- **Bug latente:** `referencia-minerva-picker.tsx` no incluye `tipo_engomado_habitual`
-  en su `SELECT`, asi que el fallback (3) casi nunca llega a aplicarse. La intencion
-  documentada en `FASES_HOJA_RUTA_DIGITAL.md` §3.5 quedo a medias por este `SELECT`
-  incompleto.
-- **Implicacion para cuando exista el maestro-con-promedios:** cambiar el prefill a
-  "maestro gana sobre ultimo despacho" es un **cambio de comportamiento visible** en
-  oficina tecnica (Carlos/Zaida). **No hacerlo en silencio.** Enfoque acordado:
-  - Por defecto sigue mandando el **ultimo despacho** (lo que ya esperan).
-  - Maestro como **fallback solo si no hay historico** (el toast "sin despachos
-    anteriores" ya existe).
-  - Botones explicitos: "Usar ultimo trabajo" / "Usar valores del maestro".
-  - El fix del picker (cargar `tipo_engomado_habitual` en el `SELECT`) tambien cambia
-    lo que se ve para referencias sin historico -> tratarlo como **tarea separada y
-    explicita**, junto a la conversacion de prefill con planta, **no** como un fix
-    silencioso "de paso".
+- El prefill de despacho no leia del maestro. Al elegir referencia, el orden era:
+  (1) valores ya en el formulario, (2) ultimo despacho de esa referencia
+  (`applyClonePrefill`, solo campos vacios), (3) fallback `tipo_engomado_habitual`
+  (roto, ver bug abajo), (4) el resto de `*_habitual` no se usaba.
+- **Bug:** `referencia-minerva-picker.tsx` no incluia `tipo_engomado_habitual` (ni
+  ningun otro `*_habitual`, ni `defaults_proceso`) en su `SELECT`, asi que el
+  fallback (3) casi nunca llegaba a aplicarse.
+
+**Resuelto en Ola 3** (ver `FASES_MAESTRO_ARTICULOS.md` § Fase 2 / Ola 3):
+
+- El prefill automatico **sigue siendo el ultimo despacho** (sin cambios, decision
+  respetada — no se cambio en silencio).
+- Fix del `SELECT` del picker: ahora trae todos los `*_habitual` + `defaults_proceso`.
+- Botones explicitos junto al picker: **"Usar ultimo trabajo"** / **"Usar maestro"**
+  (este ultimo rellena solo vacios desde `*_habitual` + `defaults_proceso`, nunca
+  sobrescribe). `ruta_habitual` queda fuera del boton — ver Fase 6 (pendiente).
 
 ### 7.1.9 Roadmap de esta sub-fase
 
-| Orden | Paso | Depende de | Riesgo |
-|-------|------|-----------|--------|
-| 1 | **Fase 2**: boton "guardar en maestro" al despachar (solo vacios/confirmacion) | Nada | Bajo — no cambia prefill |
-| 2 | Columnas `*_promedio` / `*_oficial` / `_muestra_n` / `promedios_actualizados_at` en `prod_referencias` | Nada (aditivo) | Bajo |
-| 3 | **Bloque 6**: `prod_ot_producidas` + cierre 2 fases + flag anomala | — | Bloque grande |
-| 4 | **Boton "Actualizar promedios"** en Maestro (lee historico, escribe `_promedio` + horas/millar §7.1.10) | Paso 3 | Medio |
-| 5 | Prefill despacho desde maestro con **botones explicitos** + fix picker | Acuerdo con planta | Medio (cambio visible) |
+| Orden | Paso | Depende de | Riesgo | Estado |
+|-------|------|-----------|--------|--------|
+| 1 | **Fase 2**: boton "guardar en maestro" al despachar (solo vacios/confirmacion) | Nada | Bajo — no cambia prefill | ✅ Hecho |
+| 2 | Columnas `*_promedio` / `*_oficial` / `_muestra_n` / `promedios_actualizados_at` en `prod_referencias` | Nada (aditivo) | Bajo | Pendiente |
+| 3 | **Bloque 6**: `prod_ot_producidas` + cierre 2 fases + flag anomala | — | Bloque grande | Pendiente — **siguiente paso grande** |
+| 4 | **Boton "Actualizar promedios"** en Maestro (lee historico, escribe `_promedio` + horas/millar §7.1.10) | Paso 3 | Medio | Pendiente (depende de 3) |
+| 5 | Prefill despacho desde maestro con **botones explicitos** + fix picker | Acuerdo con planta | Medio (cambio visible) | ✅ Hecho (Ola 3, no dependia de Bloque 6) |
 
 ### 7.1.10 Normalizacion de horas: entrada/preparacion vs tiraje por millar
 
