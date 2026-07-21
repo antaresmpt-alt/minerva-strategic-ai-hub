@@ -22,6 +22,10 @@ import { toast } from "sonner";
 
 import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
 import { STEP_BADGE_STYLES } from "@/components/produccion/hoja-ruta/hoja-ruta-step-styles";
+import {
+  CALENDARIO_CAFE_EASTER_EGG_EMAIL,
+  CalendarioCafeEasterEggDialog,
+} from "@/components/produccion/ots/calendario-cafe-easter-egg-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -252,6 +256,11 @@ export function CalendarioProduccionPage() {
   >(() => new Map());
   const [hojaRutaOt, setHojaRutaOt] = useState<string | null>(null);
   const [hojaRutaOpen, setHojaRutaOpen] = useState(false);
+  const [cafeOpen, setCafeOpen] = useState(false);
+  const [cafePending, setCafePending] = useState<{
+    hit: OtSearchHit;
+    otherYmd: string;
+  } | null>(null);
 
   useEffect(() => {
     try {
@@ -488,50 +497,96 @@ export function CalendarioProduccionPage() {
     return () => window.clearTimeout(t);
   }, [otQuery, dayOpen, searchOts]);
 
+  const insertOtToDay = useCallback(
+    async (hit: OtSearchHit) => {
+      if (!dayYmd) return;
+      const ot = String(hit.num_pedido ?? "").trim();
+      if (!ot) return;
+      setSaving(true);
+      try {
+        const existing = rows.filter((r) => r.fecha.slice(0, 10) === dayYmd);
+        const nextOrden =
+          existing.length === 0
+            ? 0
+            : Math.max(...existing.map((r) => r.orden)) + 1;
+
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        const { error } = await supabase.from(TABLE).insert({
+          fecha: dayYmd,
+          ot_numero: ot,
+          orden: nextOrden,
+          created_by: user?.id ?? null,
+        });
+        if (error) {
+          if (error.code === "23505") {
+            toast.message(`La OT ${ot} ya está en este día.`);
+            return;
+          }
+          throw error;
+        }
+
+        setTituloByOt((prev) => {
+          const next = new Map(prev);
+          next.set(ot, hit.titulo ?? null);
+          return next;
+        });
+        toast.success(`OT ${ot} añadida.`);
+        setOtQuery("");
+        setOtHits([]);
+        await load();
+      } catch (e) {
+        toast.error(errorMessageFromUnknown(e, "No se pudo añadir la OT."));
+      } finally {
+        setSaving(false);
+      }
+    },
+    [dayYmd, load, rows, supabase],
+  );
+
   const addOtToDay = async (hit: OtSearchHit) => {
     if (!dayYmd) return;
     const ot = String(hit.num_pedido ?? "").trim();
     if (!ot) return;
-    setSaving(true);
-    try {
-      const existing = rows.filter((r) => r.fecha.slice(0, 10) === dayYmd);
-      const nextOrden =
-        existing.length === 0
-          ? 0
-          : Math.max(...existing.map((r) => r.orden)) + 1;
 
+    if (
+      rows.some(
+        (r) =>
+          r.fecha.slice(0, 10) === dayYmd &&
+          String(r.ot_numero ?? "").trim() === ot,
+      )
+    ) {
+      toast.message(`La OT ${ot} ya está en este día.`);
+      return;
+    }
+
+    const otherRow = rows.find(
+      (r) =>
+        String(r.ot_numero ?? "").trim() === ot &&
+        r.fecha.slice(0, 10) !== dayYmd,
+    );
+
+    if (otherRow) {
       const {
         data: { user },
       } = await supabase.auth.getUser();
+      const email = user?.email?.trim().toLowerCase() ?? "";
+      const otherYmd = otherRow.fecha.slice(0, 10);
 
-      const { error } = await supabase.from(TABLE).insert({
-        fecha: dayYmd,
-        ot_numero: ot,
-        orden: nextOrden,
-        created_by: user?.id ?? null,
-      });
-      if (error) {
-        if (error.code === "23505") {
-          toast.message(`La OT ${ot} ya está en este día.`);
-          return;
-        }
-        throw error;
+      if (email === CALENDARIO_CAFE_EASTER_EGG_EMAIL) {
+        setCafePending({ hit, otherYmd });
+        setCafeOpen(true);
+        return;
       }
 
-      setTituloByOt((prev) => {
-        const next = new Map(prev);
-        next.set(ot, hit.titulo ?? null);
-        return next;
-      });
-      toast.success(`OT ${ot} añadida.`);
-      setOtQuery("");
-      setOtHits([]);
-      await load();
-    } catch (e) {
-      toast.error(errorMessageFromUnknown(e, "No se pudo añadir la OT."));
-    } finally {
-      setSaving(false);
+      toast.message(
+        `La OT ${ot} ya está planificada el ${fechaDiaLabel(otherYmd)}.`,
+      );
     }
+
+    await insertOtToDay(hit);
   };
 
   const removeEntrada = async (id: string) => {
@@ -1320,6 +1375,22 @@ export function CalendarioProduccionPage() {
         otNumero={hojaRutaOt}
         open={hojaRutaOpen}
         onOpenChange={setHojaRutaOpen}
+      />
+
+      <CalendarioCafeEasterEggDialog
+        open={cafeOpen}
+        onOpenChange={(open) => {
+          setCafeOpen(open);
+          if (!open) setCafePending(null);
+        }}
+        otNumero={String(cafePending?.hit.num_pedido ?? "").trim()}
+        otherDayLabel={
+          cafePending ? fechaDiaLabel(cafePending.otherYmd) : ""
+        }
+        onAddAnyway={() => {
+          if (cafePending) void insertOtToDay(cafePending.hit);
+          setCafePending(null);
+        }}
       />
     </div>
   );
