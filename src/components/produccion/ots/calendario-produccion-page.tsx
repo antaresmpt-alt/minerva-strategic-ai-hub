@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   buildSemanaLaboral,
   buildSemanasLaboralesMes,
@@ -73,13 +74,17 @@ import type {
   CalendarioProduccionOtDetalle,
   ProdCalendarioProduccionOtRow,
 } from "@/types/prod-calendario-produccion-ot";
+import type { ProdCalendarioProduccionNotaRow } from "@/types/prod-calendario-produccion-nota";
 
 const TABLE = "prod_calendario_produccion_ot";
+const TABLE_NOTAS = "prod_calendario_produccion_nota";
 const TABLE_MAESTRO = "prod_ots_general";
 const TABLE_DESPACHADAS = "produccion_ot_despachadas";
 
 const MIGRATION_HINT =
   "Ejecuta la migración 20260717140000_prod_calendario_produccion_ot.sql en Supabase.";
+const MIGRATION_HINT_NOTAS =
+  "Ejecuta la migración 20260721120000_prod_calendario_produccion_nota.sql en Supabase.";
 
 const STORAGE_SHOW_SATURDAY = "cal-prod-show-saturday";
 const STORAGE_VISTA = "cal-prod-vista";
@@ -98,6 +103,11 @@ function isMissingTable(msg: string): boolean {
   return m.includes("schema cache") && m.includes("prod_calendario_produccion_ot");
 }
 
+function isMissingNotasTable(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return m.includes("schema cache") && m.includes("prod_calendario_produccion_nota");
+}
+
 type OtSearchHit = {
   num_pedido: string;
   cliente: string | null;
@@ -108,20 +118,25 @@ type OtSearchHit = {
 function DiaCelda({
   dayNum,
   lineas,
+  notas,
   onEditDay,
   onOpenOt,
   progresoByOt,
+  duplicatedOtSet,
   variant = "mes",
 }: {
   dayNum: number;
   lineas: CalendarioProduccionLinea[];
+  notas: ProdCalendarioProduccionNotaRow[];
   onEditDay: () => void;
   onOpenOt: (otNumero: string) => void;
   progresoByOt: Map<string, CalendarioOtProgreso>;
+  duplicatedOtSet: Set<string>;
   /** Semana: tipografía mayor y más altura de celda. */
   variant?: "mes" | "semana";
 }) {
   const isSemana = variant === "semana";
+  const hasContenido = lineas.length > 0 || notas.length > 0;
 
   return (
     <div
@@ -153,7 +168,7 @@ function DiaCelda({
           {dayNum}
         </button>
       </div>
-      {lineas.length === 0 ? (
+      {!hasContenido ? (
         <button
           type="button"
           className={
@@ -177,6 +192,7 @@ function DiaCelda({
             const progreso =
               progresoByOt.get(l.otNumero) ?? "sin_itinerario";
             const styles = PROGRESO_PILL_STYLES[progreso];
+            const isDuplicada = duplicatedOtSet.has(l.otNumero);
             return (
               <button
                 key={l.id}
@@ -196,7 +212,7 @@ function DiaCelda({
                 <span
                   className={cn(
                     "shrink-0 rounded px-1.5 py-0.5 font-mono font-bold tabular-nums",
-                    styles.otBadge,
+                    isDuplicada ? "bg-pink-100 text-pink-900" : styles.otBadge,
                     isSemana ? "text-[13px]" : "text-[12px]",
                   )}
                 >
@@ -215,6 +231,18 @@ function DiaCelda({
               </button>
             );
           })}
+          {notas.map((n) => (
+            <div
+              key={n.id}
+              title={n.texto}
+              className={cn(
+                "rounded-md border border-amber-200/80 bg-amber-50 px-2 py-1 text-slate-700",
+                isSemana ? "text-[12px] leading-snug" : "text-[10px] leading-tight",
+              )}
+            >
+              📝 {n.texto}
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -232,6 +260,7 @@ export function CalendarioProduccionPage() {
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [rows, setRows] = useState<ProdCalendarioProduccionOtRow[]>([]);
+  const [notasRows, setNotasRows] = useState<ProdCalendarioProduccionNotaRow[]>([]);
   const [tituloByOt, setTituloByOt] = useState<Map<string, string | null>>(
     () => new Map(),
   );
@@ -243,6 +272,7 @@ export function CalendarioProduccionPage() {
   const [dayOpen, setDayOpen] = useState(false);
   const [dayYmd, setDayYmd] = useState<string | null>(null);
   const [otQuery, setOtQuery] = useState("");
+  const [notaTexto, setNotaTexto] = useState("");
   const [otHits, setOtHits] = useState<OtSearchHit[]>([]);
   const [searchingOt, setSearchingOt] = useState(false);
 
@@ -293,21 +323,63 @@ export function CalendarioProduccionPage() {
     return filtrarEntradasPorTexto(all, filtro);
   }, [rows, tituloByOt, filtro]);
 
+  const notasByDay = useMemo(() => {
+    const map = new Map<string, ProdCalendarioProduccionNotaRow[]>();
+    for (const n of notasRows) {
+      const key = String(n.fecha ?? "").slice(0, 10);
+      if (!key) continue;
+      const list = map.get(key) ?? [];
+      list.push(n);
+      map.set(key, list);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => a.orden - b.orden);
+    }
+    return map;
+  }, [notasRows]);
+
+  const duplicatedOtSet = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of rows) {
+      const ot = String(r.ot_numero ?? "").trim();
+      if (!ot) continue;
+      counts.set(ot, (counts.get(ot) ?? 0) + 1);
+    }
+    return new Set(
+      [...counts.entries()].filter(([, n]) => n > 1).map(([ot]) => ot),
+    );
+  }, [rows]);
+
   const dayLineas = useMemo(() => {
     if (!dayYmd) return [];
     return entradasByDay.get(dayYmd) ?? [];
   }, [dayYmd, entradasByDay]);
 
+  const dayNotas = useMemo(() => {
+    if (!dayYmd) return [];
+    return notasByDay.get(dayYmd) ?? [];
+  }, [dayYmd, notasByDay]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from(TABLE)
-        .select("id, fecha, ot_numero, orden, notas, created_by, created_at, updated_at")
-        .gte("fecha", range.start)
-        .lte("fecha", range.end)
-        .order("fecha", { ascending: true })
-        .order("orden", { ascending: true });
+      const [{ data, error }, { data: notasData, error: notasErr }] =
+        await Promise.all([
+          supabase
+            .from(TABLE)
+            .select("id, fecha, ot_numero, orden, notas, created_by, created_at, updated_at")
+            .gte("fecha", range.start)
+            .lte("fecha", range.end)
+            .order("fecha", { ascending: true })
+            .order("orden", { ascending: true }),
+          supabase
+            .from(TABLE_NOTAS)
+            .select("id, fecha, texto, orden, created_by, created_at, updated_at")
+            .gte("fecha", range.start)
+            .lte("fecha", range.end)
+            .order("fecha", { ascending: true })
+            .order("orden", { ascending: true }),
+        ]);
 
       if (error) {
         if (isMissingTable(error.message)) {
@@ -317,9 +389,18 @@ export function CalendarioProduccionPage() {
         }
         throw error;
       }
+      if (notasErr) {
+        if (isMissingNotasTable(notasErr.message)) {
+          toast.error(MIGRATION_HINT_NOTAS);
+          setNotasRows([]);
+        } else {
+          throw notasErr;
+        }
+      }
 
       const list = (data ?? []) as ProdCalendarioProduccionOtRow[];
       setRows(list);
+      setNotasRows((notasData ?? []) as ProdCalendarioProduccionNotaRow[]);
 
       const ots = [
         ...new Set(list.map((r) => String(r.ot_numero ?? "").trim()).filter(Boolean)),
@@ -353,6 +434,7 @@ export function CalendarioProduccionPage() {
     } catch (e) {
       toast.error(errorMessageFromUnknown(e, "No se pudo cargar el calendario."));
       setRows([]);
+      setNotasRows([]);
     } finally {
       setLoading(false);
     }
@@ -454,6 +536,7 @@ export function CalendarioProduccionPage() {
   const openDay = (ymd: string) => {
     setDayYmd(ymd);
     setOtQuery("");
+    setNotaTexto("");
     setOtHits([]);
     setDayOpen(true);
   };
@@ -587,6 +670,94 @@ export function CalendarioProduccionPage() {
     }
 
     await insertOtToDay(hit);
+  };
+
+  const addNotaToDay = async () => {
+    if (!dayYmd) return;
+    const texto = notaTexto.trim();
+    if (!texto) return;
+    setSaving(true);
+    try {
+      const existing = notasRows.filter((n) => n.fecha.slice(0, 10) === dayYmd);
+      const nextOrden =
+        existing.length === 0 ? 0 : Math.max(...existing.map((n) => n.orden)) + 1;
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const { error } = await supabase.from(TABLE_NOTAS).insert({
+        fecha: dayYmd,
+        texto,
+        orden: nextOrden,
+        created_by: user?.id ?? null,
+      });
+      if (error) throw error;
+      setNotaTexto("");
+      toast.success("Nota añadida al día.");
+      await load();
+    } catch (e) {
+      toast.error(errorMessageFromUnknown(e, "No se pudo añadir la nota."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeNota = async (id: string) => {
+    setSaving(true);
+    try {
+      const { error, count } = await supabase
+        .from(TABLE_NOTAS)
+        .delete({ count: "exact" })
+        .eq("id", id);
+      if (error) throw error;
+      if (count === 0) {
+        toast.error("No se pudo quitar la nota (ya no existe).");
+        return;
+      }
+      toast.success("Nota quitada del día.");
+      await load();
+    } catch (e) {
+      toast.error(errorMessageFromUnknown(e, "No se pudo quitar la nota."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /** Subir/bajar nota dentro del mismo día (campo `orden`). */
+  const moverNotaEnDia = async (id: string, direction: -1 | 1) => {
+    if (!dayYmd) return;
+    const list = dayNotas;
+    const idx = list.findIndex((n) => n.id === id);
+    const swapIdx = idx + direction;
+    if (idx < 0 || swapIdx < 0 || swapIdx >= list.length) return;
+
+    const reordered = [...list];
+    const a = reordered[idx]!;
+    reordered[idx] = reordered[swapIdx]!;
+    reordered[swapIdx] = a;
+
+    const ordenById = new Map(reordered.map((n, i) => [n.id, i] as const));
+    setNotasRows((prev) =>
+      prev.map((r) => {
+        const nextOrden = ordenById.get(r.id);
+        return nextOrden === undefined ? r : { ...r, orden: nextOrden };
+      }),
+    );
+
+    setSaving(true);
+    try {
+      const results = await Promise.all(
+        reordered.map((n, i) =>
+          supabase.from(TABLE_NOTAS).update({ orden: i }).eq("id", n.id),
+        ),
+      );
+      const err = results.find((r) => r.error)?.error;
+      if (err) throw err;
+    } catch (e) {
+      toast.error(errorMessageFromUnknown(e, "No se pudo reordenar la nota."));
+      await load();
+    } finally {
+      setSaving(false);
+    }
   };
 
   const removeEntrada = async (id: string) => {
@@ -785,6 +956,7 @@ export function CalendarioProduccionPage() {
       monthIndex,
       semanas: semanasMes,
       entradasByDay,
+      notasByDay,
       includeSaturday: showSaturday,
       filtroTexto: filtro,
     });
@@ -795,6 +967,7 @@ export function CalendarioProduccionPage() {
       weekMonday,
       semana: semanaActual,
       entradasByDay,
+      notasByDay,
       includeSaturday: showSaturday,
       filtroTexto: filtro,
       tituloSemana: semanaLabelEs(weekMonday, showSaturday),
@@ -812,6 +985,7 @@ export function CalendarioProduccionPage() {
         subtitulo: semanaLabelEs(weekMonday, showSaturday),
         dias,
         entradasByDay,
+        notasByDay,
         filtroTexto: filtro,
         filenameStem: `calendario-produccion-semana-${ymd}`,
       });
@@ -829,6 +1003,7 @@ export function CalendarioProduccionPage() {
       subtitulo: mesAnioLabel(year, monthIndex),
       dias,
       entradasByDay,
+      notasByDay,
       filtroTexto: filtro,
       filenameStem: `calendario-produccion-${year}-${String(monthIndex + 1).padStart(2, "0")}`,
     });
@@ -840,6 +1015,7 @@ export function CalendarioProduccionPage() {
       ymd: dayYmd,
       tituloDia: fechaDiaLabel(dayYmd),
       lineas: dayLineas,
+      notas: dayNotas,
     });
   };
 
@@ -1055,10 +1231,12 @@ export function CalendarioProduccionPage() {
                       key={celda.ymd}
                       dayNum={celda.dayNum}
                       lineas={entradasByDay.get(celda.ymd) ?? []}
+                      notas={notasByDay.get(celda.ymd) ?? []}
                       onEditDay={() => openDay(celda.ymd)}
                       onOpenOt={(ot) => void openDetalle(ot)}
                       variant="semana"
                       progresoByOt={progresoByOt}
+                      duplicatedOtSet={duplicatedOtSet}
                     />
                   ) : (
                     <div
@@ -1074,10 +1252,12 @@ export function CalendarioProduccionPage() {
                         key={celda.ymd}
                         dayNum={celda.dayNum}
                         lineas={entradasByDay.get(celda.ymd) ?? []}
+                        notas={notasByDay.get(celda.ymd) ?? []}
                         onEditDay={() => openDay(celda.ymd)}
                         onOpenOt={(ot) => void openDetalle(ot)}
                         variant="mes"
                         progresoByOt={progresoByOt}
+                        duplicatedOtSet={duplicatedOtSet}
                       />
                     ) : (
                       <div
@@ -1094,7 +1274,7 @@ export function CalendarioProduccionPage() {
       <Dialog open={dayOpen} onOpenChange={setDayOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>OTs del día</DialogTitle>
+            <DialogTitle>OTs y notas del día</DialogTitle>
             <DialogDescription>
               {dayYmd ? fechaDiaLabel(dayYmd) : ""}
             </DialogDescription>
@@ -1152,14 +1332,85 @@ export function CalendarioProduccionPage() {
             </div>
 
             <div>
+              <Label className="text-xs">Añadir nota libre</Label>
+              <div className="mt-1 flex items-start gap-2">
+                <Textarea
+                  className="min-h-[2.5rem] text-sm"
+                  placeholder="Ej: Priorizar cambios de troquel, reunión cliente, etc."
+                  value={notaTexto}
+                  onChange={(e) => setNotaTexto(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={saving || notaTexto.trim().length === 0}
+                  onClick={() => void addNotaToDay()}
+                >
+                  Añadir
+                </Button>
+              </div>
+            </div>
+
+            <div>
               <p className="mb-1 text-xs font-medium text-slate-600">
-                En este día ({dayLineas.length}) — ↑↓ ordenar, cortar para
-                mover de día, papelera para quitar
+                En este día ({dayLineas.length} OTs · {dayNotas.length} notas) —
+                ↑↓ ordenar OTs y notas, cortar para mover de día, papelera para quitar
               </p>
-              {dayLineas.length === 0 ? (
-                <p className="text-sm text-slate-500">Ninguna OT todavía.</p>
+              {dayLineas.length === 0 && dayNotas.length === 0 ? (
+                <p className="text-sm text-slate-500">Sin OTs ni notas todavía.</p>
               ) : (
-                <ul className="max-h-56 space-y-1 overflow-y-auto">
+                <div className="max-h-56 space-y-2 overflow-y-auto">
+                  {dayNotas.length > 0 ? (
+                    <ul className="space-y-1">
+                      {dayNotas.map((n, idx) => (
+                        <li
+                          key={n.id}
+                          className="flex items-start justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5"
+                        >
+                          <p className="min-w-0 flex-1 break-words text-xs text-amber-950">
+                            📝 {n.texto}
+                          </p>
+                          <div className="flex shrink-0 items-center gap-0.5">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-[#8a2b2b]"
+                              disabled={saving || idx === 0}
+                              title="Subir nota"
+                              onClick={() => void moverNotaEnDia(n.id, -1)}
+                            >
+                              <ChevronUp className="size-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-[#8a2b2b]"
+                              disabled={saving || idx === dayNotas.length - 1}
+                              title="Bajar nota"
+                              onClick={() => void moverNotaEnDia(n.id, 1)}
+                            >
+                              <ChevronDown className="size-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-red-700"
+                              disabled={saving}
+                              title="Quitar nota"
+                              onClick={() => void removeNota(n.id)}
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+
+                  <ul className="space-y-1">
                   {dayLineas.map((l, idx) => (
                     <li
                       key={l.id}
@@ -1229,7 +1480,8 @@ export function CalendarioProduccionPage() {
                       </div>
                     </li>
                   ))}
-                </ul>
+                  </ul>
+                </div>
               )}
             </div>
           </div>

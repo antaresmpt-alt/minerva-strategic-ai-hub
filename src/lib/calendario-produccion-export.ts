@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 
 import type { CalendarioProduccionLinea } from "@/lib/calendario-produccion";
+import type { ProdCalendarioProduccionNotaRow } from "@/types/prod-calendario-produccion-nota";
 import {
   diasLaborablesCabecera,
   mesAnioLabel,
@@ -30,11 +31,16 @@ function fmtNowEs(): string {
   }).format(new Date());
 }
 
+function notaPreview(n: ProdCalendarioProduccionNotaRow): string {
+  return `📝 ${String(n.texto ?? "").trim()}`;
+}
+
 export function exportCalendarioProduccionMensualPdf(params: {
   year: number;
   monthIndex: number;
   semanas: CalendarioSemanaLaboral[];
   entradasByDay: Map<string, CalendarioProduccionLinea[]>;
+  notasByDay: Map<string, ProdCalendarioProduccionNotaRow[]>;
   includeSaturday?: boolean;
   filtroTexto?: string;
 }): void {
@@ -43,6 +49,7 @@ export function exportCalendarioProduccionMensualPdf(params: {
     monthIndex,
     semanas,
     entradasByDay,
+    notasByDay,
     includeSaturday = false,
     filtroTexto = "",
   } = params;
@@ -110,18 +117,21 @@ export function exportCalendarioProduccionMensualPdf(params: {
       doc.setTextColor(0, 0, 0);
 
       const lines = (entradasByDay.get(celda.ymd) ?? []).map((e) => e.label);
+      const notas = (notasByDay.get(celda.ymd) ?? []).map(notaPreview);
+      const items = [...notas, ...lines];
       doc.setFont("helvetica", "normal");
       doc.setFontSize(6);
       doc.setTextColor(...SLATE);
       let ty = rowY + 7.5;
       const maxY = rowY + rowH - 1.5;
-      for (const line of lines) {
+      for (const line of items) {
         if (ty > maxY) {
           doc.text("…", x + 1.5, ty);
           break;
         }
         // OT en negrita + trabajo truncado (más legible que label único)
-        const otMatch = /^(\S+)\s*[·-]\s*(.*)$/.exec(line);
+        const isNota = line.startsWith("📝 ");
+        const otMatch = isNota ? null : /^(\S+)\s*[·-]\s*(.*)$/.exec(line);
         if (otMatch) {
           doc.setFont("helvetica", "bold");
           doc.setTextColor(...NAVY);
@@ -133,6 +143,15 @@ export function exportCalendarioProduccionMensualPdf(params: {
           const rest = doc.splitTextToSize(otMatch[2] || "—", colW - 16);
           doc.text(String(rest[0] ?? ""), x + 14, ty);
         } else {
+          if (isNota) {
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(120, 53, 15);
+            doc.setFontSize(5.8);
+            const wrapped = doc.splitTextToSize(line, colW - 3);
+            doc.text(String(wrapped[0] ?? line), x + 1.5, ty);
+            ty += 2.8;
+            continue;
+          }
           const wrapped = doc.splitTextToSize(line, colW - 3);
           doc.text(String(wrapped[0] ?? line), x + 1.5, ty);
         }
@@ -155,8 +174,9 @@ export function exportCalendarioProduccionDiaPdf(params: {
   ymd: string;
   tituloDia: string;
   lineas: CalendarioProduccionLinea[];
+  notas: ProdCalendarioProduccionNotaRow[];
 }): void {
-  const { ymd, tituloDia, lineas } = params;
+  const { ymd, tituloDia, lineas, notas } = params;
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const w = pageW(doc);
 
@@ -175,15 +195,35 @@ export function exportCalendarioProduccionDiaPdf(params: {
   let y = 26;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
-  doc.text(`${lineas.length} OT${lineas.length === 1 ? "" : "s"}`, MARGIN, y);
+  doc.text(
+    `${lineas.length} OT${lineas.length === 1 ? "" : "s"} · ${notas.length} nota${notas.length === 1 ? "" : "s"}`,
+    MARGIN,
+    y,
+  );
   y += 6;
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
-  if (lineas.length === 0) {
+  if (lineas.length === 0 && notas.length === 0) {
     doc.setTextColor(...SLATE);
-    doc.text("Sin OTs en este día.", MARGIN, y);
+    doc.text("Sin OTs ni notas en este día.", MARGIN, y);
   } else {
+    for (const n of notas) {
+      if (y > 280) {
+        doc.addPage();
+        y = 20;
+      }
+      doc.setTextColor(120, 53, 15);
+      doc.setFont("helvetica", "bold");
+      doc.text("📝", MARGIN, y);
+      doc.setFont("helvetica", "normal");
+      const wrapped = doc.splitTextToSize(
+        String(n.texto ?? "").trim() || "—",
+        w - MARGIN * 2 - 10,
+      );
+      doc.text(wrapped, MARGIN + 8, y);
+      y += Math.max(6, wrapped.length * 4.5);
+    }
     for (const l of lineas) {
       if (y > 280) {
         doc.addPage();
@@ -209,6 +249,7 @@ export function exportCalendarioProduccionSemanaPdf(params: {
   weekMonday: Date;
   semana: Array<{ ymd: string; dayNum: number } | null>;
   entradasByDay: Map<string, CalendarioProduccionLinea[]>;
+  notasByDay: Map<string, ProdCalendarioProduccionNotaRow[]>;
   includeSaturday?: boolean;
   filtroTexto?: string;
   tituloSemana: string;
@@ -217,6 +258,7 @@ export function exportCalendarioProduccionSemanaPdf(params: {
     weekMonday,
     semana,
     entradasByDay,
+    notasByDay,
     includeSaturday = false,
     filtroTexto = "",
     tituloSemana,
@@ -276,14 +318,30 @@ export function exportCalendarioProduccionSemanaPdf(params: {
     if (!celda) continue;
 
     const lines = entradasByDay.get(celda.ymd) ?? [];
+    const notas = notasByDay.get(celda.ymd) ?? [];
     doc.setFont("helvetica", "normal");
     doc.setFontSize(6.5);
     let ty = y + 4;
     let shown = 0;
-    for (const l of lines) {
-      if (shown >= maxLinesPerCol - 1 && lines.length > maxLinesPerCol) {
+    const total = notas.length + lines.length;
+    for (const n of notas) {
+      if (shown >= maxLinesPerCol - 1 && total > maxLinesPerCol) {
         doc.setTextColor(...SLATE);
-        doc.text(`… +${lines.length - shown} más`, x + 1.5, ty);
+        doc.text(`… +${total - shown} más`, x + 1.5, ty);
+        break;
+      }
+      doc.setTextColor(120, 53, 15);
+      doc.setFont("helvetica", "normal");
+      const wrapped = doc.splitTextToSize(notaPreview(n), colW - 3);
+      doc.text(String(wrapped[0] ?? "—"), x + 1.5, ty);
+      ty += 4.2;
+      shown += 1;
+      if (ty > y + bodyH - 3) break;
+    }
+    for (const l of lines) {
+      if (shown >= maxLinesPerCol - 1 && total > maxLinesPerCol) {
+        doc.setTextColor(...SLATE);
+        doc.text(`… +${total - shown} más`, x + 1.5, ty);
         break;
       }
       doc.setTextColor(...NAVY);
@@ -299,7 +357,7 @@ export function exportCalendarioProduccionSemanaPdf(params: {
       shown += 1;
       if (ty > y + bodyH - 3) break;
     }
-    if (lines.length === 0) {
+    if (total === 0) {
       doc.setTextColor(...SLATE);
       doc.setFont("helvetica", "italic");
       doc.setFontSize(7);
@@ -330,6 +388,7 @@ export function exportCalendarioProduccionListadoPdf(params: {
   subtitulo: string;
   dias: CalendarioListadoDia[];
   entradasByDay: Map<string, CalendarioProduccionLinea[]>;
+  notasByDay: Map<string, ProdCalendarioProduccionNotaRow[]>;
   filtroTexto?: string;
   filenameStem: string;
 }): void {
@@ -338,6 +397,7 @@ export function exportCalendarioProduccionListadoPdf(params: {
     subtitulo,
     dias,
     entradasByDay,
+    notasByDay,
     filtroTexto = "",
     filenameStem,
   } = params;
@@ -368,22 +428,25 @@ export function exportCalendarioProduccionListadoPdf(params: {
   drawHeader();
   let y = 26;
 
-  const diasConOts = dias.filter(
-    (d) => (entradasByDay.get(d.ymd) ?? []).length > 0,
+  const diasConContenido = dias.filter(
+    (d) =>
+      (entradasByDay.get(d.ymd) ?? []).length > 0 ||
+      (notasByDay.get(d.ymd) ?? []).length > 0,
   );
 
-  if (diasConOts.length === 0) {
+  if (diasConContenido.length === 0) {
     doc.setFont("helvetica", "italic");
     doc.setFontSize(10);
     doc.setTextColor(...SLATE);
-    doc.text("Sin OTs en el periodo.", MARGIN, y);
+    doc.text("Sin OTs ni notas en el periodo.", MARGIN, y);
     doc.save(`${filenameStem}-listado.pdf`);
     return;
   }
 
-  for (const dia of diasConOts) {
+  for (const dia of diasConContenido) {
     const lineas = entradasByDay.get(dia.ymd) ?? [];
-    const blockH = 8 + lineas.length * 6.5 + 4;
+    const notas = notasByDay.get(dia.ymd) ?? [];
+    const blockH = 8 + (lineas.length + notas.length) * 6.5 + 4;
     if (y + Math.min(blockH, 20) > h - 12) {
       doc.addPage();
       drawHeader();
@@ -396,12 +459,29 @@ export function exportCalendarioProduccionListadoPdf(params: {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
     doc.text(
-      `${dia.titulo}  ·  ${lineas.length} OT${lineas.length === 1 ? "" : "s"}`,
+      `${dia.titulo}  ·  ${lineas.length} OT${lineas.length === 1 ? "" : "s"} · ${notas.length} nota${notas.length === 1 ? "" : "s"}`,
       MARGIN + 2.5,
       y,
     );
     doc.setTextColor(0, 0, 0);
     y += 7;
+
+    for (const n of notas) {
+      if (y > h - 14) {
+        doc.addPage();
+        drawHeader();
+        y = 26;
+      }
+      doc.setDrawColor(253, 230, 138);
+      doc.setFillColor(255, 251, 235);
+      doc.roundedRect(MARGIN, y - 3.5, usable, 6, 0.8, 0.8, "FD");
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(120, 53, 15);
+      const wrapped = doc.splitTextToSize(notaPreview(n), usable - 4);
+      doc.text(String(wrapped[0] ?? "—"), MARGIN + 2, y);
+      y += 6.5;
+    }
 
     for (const l of lineas) {
       if (y > h - 14) {
