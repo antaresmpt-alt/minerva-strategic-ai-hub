@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 18 jul 2026 (Calendario pastillas + PDF grid/listado; cartela 1 copia; §15.12)
+> Última actualización: 23 jul 2026 (Bloque 6 MVP cierre/histórico operativo; handoff en `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` §0)
 
 ---
 
@@ -79,7 +79,7 @@ Software a medida para la planta de producción gráfica/impresión de la empres
 | **Previsto vs real** | Separación entre dato planificado y dato real capturado en planta. |
 | **Poses** | Figuras/estuches por hoja; clave para pasar de hojas a estuches. |
 | **Pico** | Bulto incompleto en engomado/embalaje. |
-| **Producidas** | Futuro histórico inmutable de OTs cerradas (Bloque 6). |
+| **Producidas** | Histórico inmutable de OTs cerradas (Bloque 6 MVP ✅ — ver `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` §0). |
 
 ---
 
@@ -93,7 +93,7 @@ Software a medida para la planta de producción gráfica/impresión de la empres
 | Ramón | Hermano de Manel, gestión de externos y compras |
 | Hugo | Encargado de etiquetas |
 | Carlos | Responsable de producción |
-| Marc / Gemma | Preimpresión — rol **`ctp`** en `profiles` (usuarios aún no creados en Supabase, jun 2026) |
+| Marc / Gemma | Preimpresión — rol **`ctp`** (`ctp@` / `ctp2@`). **Gemma Gaya (gerencia)** es otra cuenta: `gemma@minervaglobal.es`. |
 | Gabri | Referente para datos de cajas de embalaje |
 
 ---
@@ -244,7 +244,7 @@ src/components/produccion/planificacion/
 | 3.8 | Pruebas campo CTP/externos/desbroce | ✅ Implementado (11 jun, merge main 16 jun) |
 | 4 | PDF acompañante desde HojaRutaOtDialog | ✅ Beta implementada (11 jun) |
 | 5 | Integración Etiquetas ↔ Hoja de Ruta | ⏳ Pendiente |
-| 6 | Producidas/Histórico + cierre OT | ⏳ Pendiente (PRÓXIMO GRANDE) |
+| 6 | Producidas/Histórico + cierre OT | ✅ **MVP operativo** (23 jul): cierre/reabrir simples, `/produccion/producidas`, Pipeline pendientes, club cierre. ⏭️ Prep/tiraje engomado, promedios maestro, cierre contenedor — `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` §0 |
 | 7 | Expedición/Albarán | ⏳ Pendiente (depende B6 + Odoo) |
 | 8 | Formatos de hoja + formas + componentes (OT contenedor/hijas) | 🔄 En curso — **FORMATO ✅** + **8.0 ✅** + **8.1 ✅** + **8.1.1 ✅**; 8.2–8.4 pendiente — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` |
 | 9 | Material, cartelas de palet y stock libre | ✅ **9.0–9.6d + 9.4 A/B/C** + Calendario Producción (§15.12, 18 jul) — pastillas, PDF grid/listado, cartela **1 copia**. **Pendiente:** derivar OT a imp. externa (§15.6.12) |
@@ -253,13 +253,21 @@ src/components/produccion/planificacion/
 
 ## 🔜 Tareas pendientes inmediatas
 
-### Retomar aquí (18 jun 2026 noche)
+### Retomar aquí (23 jul 2026 — post Bloque 6 MVP)
+- [ ] **Bloque 6.x — Engomado prep/tiraje** en UI ejecución (hoy columnas NULL; ver §7.1.10 del briefing B6)
+- [ ] **Bloque 6.x — Promedios maestro**: columnas `*_promedio` + botón «Actualizar promedios» (§7.1.9 pasos 2+4)
+- [ ] **Bloque 6.x** (opcional): comparar versiones OT; UX Pipeline «Listo para cerrar»
+- [ ] **Fase 8.4**: cierre OT contenedor/hijas (depende B6 + Bloque 8)
+- [x] **Bloque 6 MVP**: cierre/reabrir + Producidas + Pipeline pendientes + club usuarios (23 jul) — handoff §0 en `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md`
+
+### Histórico (junio — Bloque 8 / CTP)
 - [x] **Fase FORMATO**: encadenado formato de hoja — commit `aadad81`, probado OT 98009
 - [x] **Fase 8.0**: migración `ot_tipo` / `ot_padre_numero` + campos hija (`aedb353`)
 - [x] **Fase 8.1**: agrupación UI Pool/Pipeline (contenedor + hijas expandibles, filtro tipo OT)
 - [x] **Fase 8.1.1**: pool mesa lateral, material barco, merma impresión, prefill troquel, % pasos — rama `feature/bloque8.1-pool-mesa-ejecucion-fixes`
 - [x] **OT prueba 98010**: 01 avanzada; 02 CTP confirmada; 03 pendiente pool — script `setup-contenedor-test-98010.mjs`
 - [x] **Usuarios CTP**: `ctp@minervaglobal.es` (Gemma), `ctp2@minervaglobal.es` (Marc) — rol `ctp`
+- [x] **Usuarios gerencia/OT (23 jul)**: `albert@`, `gemma@` (gerencia), `zaida@` (oficina_tecnica) + flags club cierre
 - [x] **Campos CTP**: cerrados de momento (checkboxes actuales suficientes)
 - [ ] **Demo planta** (Albert/Jordi): guía en `GUIA_MAÑANA.md`
 - [ ] **Fase 8.2**: wizard despacho contenedor + hijas (responder §12 planta antes)
@@ -275,7 +283,9 @@ src/components/produccion/planificacion/
 - [ ] Afinar diseño del PDF acompañante tras feedback real de planta/dirección
 
 ### Siguiente bloque grande
-- **Bloque 6**: `prod_ot_producidas` + lifecycle de cierre (`pendiente_revision` → `producida`) + snapshot JSONB híbrido + recálculo maestro desde últimas N OTs
+- **Bloque 6.x** (continuación): engomado prep/tiraje + promedios maestro — handoff en `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` §0
+- **Bloque 8.2+ / 8.4**: wizard contenedor + cierre hijas
+- **Bloque 7**: expedición / albarán (depende Odoo)
 
 ---
 
@@ -291,7 +301,7 @@ src/components/produccion/planificacion/
 
 5. **Etiquetas: flujo independiente** (no integrar en motor datos_proceso). Solo sincronización unidireccional al cierre.
 
-6. **Bloque 6 lifecycle de cierre**: automático a `pendiente_revision` al finalizar último paso → manual a `producida` (revisión humana protege calidad del histórico).
+6. **Bloque 6 lifecycle de cierre (MVP 23 jul ✅)**: estado `pendiente_revision` **derivado** (no columna OT) → revisión humana → INSERT `prod_ot_producidas`. Reapertura versiona. Recálculo maestro = bajo demanda (aún pendiente UI). Detalle: briefing B6 §0.
 
 7. **Odoo en el horizonte**: cuando llegue, la integración vía API/JSON será limpia. Minerva Hub captura datos de producción; Odoo para gestión/contabilidad. Albarán (Bloque 7) depende de esta decisión.
 
@@ -364,7 +374,7 @@ repositorio/              ← documentación adicional
 | `prod_despacho_catalogo` | Catálogos genéricos (tipo engomado, etc.) |
 | `sys_parametros` | Parámetros del sistema (márgenes semáforo, etc.) |
 | `sys_motivos_pausa` | Motivos de pausa por tipo de máquina |
-| `prod_ot_producidas` | ⏳ PENDIENTE (Bloque 6): snapshot histórico de OTs cerradas |
+| `prod_ot_producidas` | ✅ Bloque 6 MVP: snapshot + planas; reapertura versionada; trigger inmutabilidad |
 
 ---
 

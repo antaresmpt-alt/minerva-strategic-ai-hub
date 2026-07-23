@@ -1704,6 +1704,19 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | `planificacion-contenedor-query.ts` | Bloque 8.1: meta `ot_tipo`, hijas por padre, progreso contenedor, filtros UI. |
 | `supabase-error-message.ts` | Normaliza mensajes de error PostgREST para UI. |
 
+### Bloque 6 — Cierre OT / Producidas (23 jul 2026 MVP ✅)
+| Archivo | Responsabilidad |
+|---------|-----------------|
+| `src/lib/prod-ot-cierre.ts` | Estado derivado pendiente revisión, mapper planas, cantidad (engomado / sin engomado), reabrir, meta revisión. |
+| `src/lib/prod-ot-cierre-permisos.ts` | `puedeCerrarOt` / `puedeReabrirOt` (admin/gerencia o flags). |
+| `src/lib/prod-ot-producidas-export.ts` | Export Excel del histórico. |
+| `src/types/prod-ot-producidas.ts` | Tipos fila histórico. |
+| `src/components/produccion/producidas/*` | Página `/produccion/producidas` + diálogo snapshot. |
+| `src/components/produccion/hoja-ruta/cierre-ot-dialog.tsx` | Checklist cierre → INSERT. |
+| Pipeline | Badge/filtro `pendiente_revision` en `pipeline-query.ts` + `planificacion-pipeline-tab.tsx`. |
+
+Handoff y backlog: `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` **§0**.
+
 ### `src/components/produccion/hoja-ruta/`
 | Archivo | Responsabilidad |
 |---------|-----------------|

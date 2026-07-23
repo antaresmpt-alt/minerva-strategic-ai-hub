@@ -9,6 +9,7 @@
 > ver el documento complementario **`MINERVA_CONTEXTO_TECNICO.md`**.
 >
 > Fecha: 13 de junio de 2026.
+> Actualizado: 23 jul 2026 — Bloque 6 MVP marcado como operativo; ver handoff en `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` §0.
 
 ---
 
@@ -88,7 +89,7 @@ prefill desde histórico/plan, derivaciones automáticas y UI compacta apta para
 | **Poses** | Nº de estuches/figuras por hoja (clave para encadenar hojas → estuches). |
 | **Bulto / Pico / Palet** | Embalaje: estuches → bultos (cajas) → palets. "Pico" = bulto incompleto (resto). |
 | **Externos** | Procesos subcontratados (plastificado, stamping, ventana, forrado...). Tienen su propia trazabilidad (proveedor, envío, recepción). |
-| **Producidas / Histórico** | OTs terminadas, congeladas en snapshot inmutable (futuro, Bloque 6). |
+| **Producidas / Histórico** | OTs terminadas, snapshot inmutable en `prod_ot_producidas` (**Bloque 6 MVP ✅**, 23 jul). |
 | **Optimus** | Software legacy actual que Minerva pretende sustituir. |
 | **Odoo** | ERP externo. Pendiente decidir si Minerva emite albaranes o solo exporta a Odoo. |
 
@@ -121,8 +122,8 @@ prefill desde histórico/plan, derivaciones automáticas y UI compacta apta para
       junta todo lo anterior + externos + pausas; exporta PDF "hoja viajera"
             │
             ▼
-   6) PRODUCIDAS / HISTÓRICO  (prod_ot_producidas)  [PENDIENTE - Bloque 6]
-      snapshot inmutable al cerrar; alimenta medias del maestro
+   6) PRODUCIDAS / HISTÓRICO  (prod_ot_producidas)  [OK MVP - Bloque 6; siguiente: promedios]
+      snapshot inmutable al cerrar; alimentara medias del maestro
             │
             ▼
    7) EXPEDICIÓN / ALBARÁN  [PENDIENTE - Bloque 7, depende de Odoo]
@@ -230,10 +231,11 @@ Sobre este encadenado se calculan **semáforos** comparando la proyección con e
 - **Bloque 5 — Integración Etiquetas ↔ Hoja de Ruta (flujo Hugo)**: que las OTs de etiqueta se
   auto-generen en la pestaña de Hugo desde el pool, manteniendo su flujo independiente, y se
   sincronicen al cierre (unidireccional).
-- **Bloque 6 — Producidas / Histórico + Cierre de OT**: tabla `prod_ot_producidas` con **snapshot
-  JSONB inmutable + columnas planas indexadas**. Lifecycle: último paso finaliza → `pendiente_revision`
-  → revisión humana → `producida`. Reapertura versiona el snapshot. El histórico **recalcula** los
-  valores por defecto del maestro (últimas N OTs, descartando outliers, con override manual).
+- **Bloque 6 — Producidas / Histórico + Cierre de OT**: ✅ **MVP operativo (23 jul 2026)** —
+  `prod_ot_producidas` (snapshot JSONB + planas), cierre/reabrir OTs simples, pantalla
+  `/produccion/producidas`, filtro Pipeline «Pendientes de revisión», club cierre
+  (Manel/Jordi/Albert/Gemma/Zaida/Carlos). ⏭️ Siguiente: prep/tiraje engomado, botón
+  promedios maestro, cierre contenedor/hijas. Handoff: `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` §0.
 - **Bloque 7 — Expedición / Albarán**: depende del Bloque 6 y de la **decisión sobre Odoo** (¿Minerva
   emite albarán legal con numeración, o solo prepara/exporta y Odoo emite?). Modelo 1 OT → N albaranes
   (entregas parciales). Faltan datos logísticos no presentes en la hoja de ruta.

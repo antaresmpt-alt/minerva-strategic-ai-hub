@@ -5,7 +5,82 @@
 > Complementa a `MINERVA_BRIEFING.md`, `MINERVA_CONTEXTO_TECNICO.md` y `FASES_HOJA_RUTA_DIGITAL.md`.
 >
 > Fecha: 13 de junio de 2026.
-> Actualizado: 23 jul 2026 — Usuarios club cierre (Albert/Gemma gerencia, Zaida OT), Pipeline filtro «Pendientes de revisión», mapper cantidad sin engomado + backfill referencia OT 36070. Pendiente: Engomado prep/tiraje, recálculo promedios.
+> Actualizado: 23 jul 2026 (noche) — **MVP cierre/histórico operativo en planta.** Handoff §0.
+> Pendiente próxima sesión: Engomado prep/tiraje UI, promedios maestro (§7.1.9 pasos 2+4), cierre contenedor/hijas (8.4), comparar versiones.
+
+---
+
+## 0. Handoff — cierre de sesión 23 jul 2026
+
+Documento de arranque para la **siguiente sesión**. El MVP de Bloque 6 (opción 3: estado derivado) está **en producción** (`main`).
+
+### ✅ Hecho en esta tanda (resumen)
+
+| Área | Qué | Notas |
+|------|-----|--------|
+| Tabla + RLS | `prod_ot_producidas` | Snapshot JSONB + columnas planas; INSERT con `puede_cerrar_ot_actual()` |
+| Cierre OT | Hoja de Ruta → checklist → histórico | Solo OTs **simples**; botón si itinerario completo + no archivada |
+| Reabrir | `reabierta_at` / `reabierta_por` + version+1 | No se borra historial; fila antigua marcada |
+| Inmutabilidad | Trigger BEFORE UPDATE whitelist | Solo meta revisión + campos de reapertura |
+| UI Producidas | `/produccion/producidas` | Listado, detalle snapshot, Excel, editar exclusión/obs |
+| Pipeline | Filtro **Pendientes de revisión** | Badge `pendiente_revision` + KPI; Paso actual "—" es normal (todo finalizado) |
+| Mapper | Referencia + cantidad | `referencia_id`/`minerva`/`cliente`; cantidad sin engomado vía `unidades` / hojas×poses |
+| Permisos | Club de 6 | Ver abajo |
+| Usuarios | Albert, Gemma, Zaida | Script `scripts/create-gerencia-ot-users.mjs` |
+| PDF hoja ruta | Botones PDF / PDF A5 | Sin DropdownMenu dentro del Dialog (evitaba pantalla blanca) |
+| Datos | Backfill OT 36070 referencia | `M-00701` / `0026563` |
+| Prueba real | OT **99906** cerrada | Referencia OK, 2100 uds engomado, horas/merma coherentes |
+
+**Migraciones relevantes** (`supabase/migrations/`):
+
+- `20260723170000_prod_ot_producidas.sql`
+- `20260723180000_prod_ot_cierre_permisos.sql`
+- `20260723181000_prod_ot_cierre_rls_insert.sql`
+- `20260723190000_prod_ot_reabrir_update_rls.sql`
+- `20260723191000_prod_ot_producidas_update_guard.sql`
+
+**Código clave:**
+
+- `src/lib/prod-ot-cierre.ts` / `prod-ot-cierre-permisos.ts`
+- `src/components/produccion/hoja-ruta/hoja-ruta-ot-dialog.tsx` + `cierre-ot-dialog.tsx`
+- `src/components/produccion/producidas/*`
+- `src/lib/pipeline/pipeline-query.ts` + `planificacion-pipeline-tab.tsx`
+- Scripts: `create-gerencia-ot-users.mjs`, `verify-prod-ot-cierre-mapper.mjs`
+
+### Club cierre / reapertura
+
+| Persona | Email | Rol `profiles` | Flags |
+|---------|-------|----------------|-------|
+| Manel | `manel.puigcerver@…` | admin | cierre/reabrir ON (también por rol) |
+| Jordi | `jordi@…` | gerencia | ON |
+| Albert | `albert@…` | gerencia | ON (alta 23 jul) |
+| Gemma Gaya | `gemma@…` | gerencia | ON (alta 23 jul) |
+| Zaida | `zaida@…` | oficina_tecnica | ON (alta 23 jul; flags necesarios: no es admin/gerencia) |
+| Carlos | `produccion@…` | produccion | ON |
+
+**No confundir:** `ctp@` / `ctp2@` (Gemma/Marc **CTP**) ≠ `gemma@` (gerencia).
+
+Admin/gerencia pueden cerrar/reabrir **siempre** por rol; el resto necesita `puede_cerrar_ot` / `puede_reabrir_ot`.
+
+### ⏭️ Próxima sesión (prioridad sugerida)
+
+1. **Engomado prep vs tiraje en UI de ejecución** — hoy `horas_prep_engomado_reales` / `horas_tiraje_*` quedan `NULL` a propósito; solo entra `tiempo_real` al total. Bloqueante para promedios §7.1.10.
+2. **Promedios maestro** (§7.1.9 pasos 2 + 4): columnas `*_promedio` / `_muestra_n` / `promedios_actualizados_at` + botón «Actualizar promedios» en Maestro (excluye `excluido_de_promedios`).
+3. **Cierre contenedor / hijas** (Fase 8.4) — fuera del MVP simple.
+4. **Comparar versiones** de la misma OT (v1 vs v2 tras reabrir) en UI Producidas.
+5. **UX Pipeline** (opcional): en pendientes de revisión, mostrar «Listo para cerrar» / último paso en lugar de "—" en Paso actual.
+6. **Calidad datos al cierre**: avisar fuerte si producida ≫ pedida (ej. 99906: 1000→2100) o gramaje 0; no bloquea MVP.
+
+### Decisiones ya cerradas (no reabrir en brainstorm)
+
+- Estado `pendiente_revision` = **derivado** (no columna en `prod_ots_general`).
+- Una fila por **versión** de cierre; reapertura marca la fila y el siguiente cierre hace `version+1`.
+- Snapshot inmutable; solo se editan observaciones / exclusión / reapertura.
+- Recálculo maestro = **bajo demanda**, no al cerrar.
+
+### Commits recientes (referencia)
+
+Buscar en `main` mensajes `feat(bloque6)` / `fix(bloque6)` / `fix(hoja-ruta): PDF` del 23 jul 2026.
 
 ---
 
@@ -74,8 +149,8 @@ La tabla `prod_ot_producidas` deberia tener:
 1. **`snapshot jsonb`**: copia completa de la Hoja de Ruta en el momento del cierre.
 2. **Columnas planas indexadas**: campos clave para busqueda, filtros, promedios y analitica.
 
-**ESTADO (23 jul 2026):** Tabla creada (`20260723170000_prod_ot_producidas.sql`).
-UI de cierre MVP implementada (solo OTs simples; contenedor/hijas = Fase 8.4).
+**ESTADO (23 jul 2026):** Tabla + RLS + UI cierre/reabrir + Producidas + Pipeline pendientes
+**operativos en `main`**. Detalle handoff → **§0**. Solo OTs simples; contenedor/hijas = Fase 8.4.
 
 Motivo:
 
@@ -107,11 +182,13 @@ Motivo:
 
 ### Reapertura
 
+**ESTADO (23 jul 2026):** Implementado.
+
 Si una OT ya cerrada contiene un error:
 
-- Se debe poder **reabrir**.
+- Se debe poder **reabrir** (`reabierta_at` / `reabierta_por` en la fila).
 - No se debe pisar el snapshot antiguo sin rastro.
-- Al volver a cerrar, se genera una nueva **version** del snapshot.
+- Al volver a cerrar, se genera una nueva **version** del snapshot (`reabierta_desde_id`).
 
 ---
 
@@ -612,15 +689,17 @@ Mitigacion:
 
 ## 9. Preguntas para brainstorming
 
-1. Que estado exacto debe disparar `pendiente_revision`?
-2. Que pasos son obligatorios y cuales pueden ser no aplica?
-3. Quien puede cerrar y quien puede reabrir?
-4. Conviene que `prod_ot_producidas` tenga una fila por OT o una fila por version?
-5. Que columnas planas son imprescindibles desde el dia 1?
-6. Que datos deben bloquear el cierre si faltan?
-7. Que datos solo deben generar aviso no bloqueante?
-8. Como marcar una produccion como anomala para excluirla de medias?
-9. Como mostrar al usuario \"lo que usamos la ultima vez\" sin saturar la pantalla?
+> Muchas quedaron **resueltas en el MVP 23 jul** (ver §0). Se conservan como historial de diseño.
+
+1. Que estado exacto debe disparar `pendiente_revision`? → **RESUELTO:** derivado (simple + itinerario completo + no archivada).
+2. Que pasos son obligatorios y cuales pueden ser no aplica? → Abierto (MVP: todos los del itinerario finalizados).
+3. Quien puede cerrar y quien puede reabrir? → **RESUELTO:** admin/gerencia siempre; resto con flags; club de 6 en §0.
+4. Conviene que `prod_ot_producidas` tenga una fila por OT o una fila por version? → **RESUELTO:** fila por version.
+5. Que columnas planas son imprescindibles desde el dia 1? → **RESUELTO:** las del esquema actual (ver migracion + tipos).
+6. Que datos deben bloquear el cierre si faltan? → Parcial (cantidad > 0, checklist); endurecer en próximas olas.
+7. Que datos solo deben generar aviso no bloqueante? → Abierto (ej. producida ≫ pedida).
+8. Como marcar una produccion como anomala para excluirla de medias? → **RESUELTO:** `excluido_de_promedios` + motivo.
+9. Como mostrar al usuario \"lo que usamos la ultima vez\" sin saturar la pantalla? → Depende de promedios maestro (paso 4).
 10. Cuando se recalcula el maestro: al cerrar, bajo demanda o en una pantalla de revision? → **RESUELTO §7.1:** bajo demanda (boton en Maestro), precalculado y persistido.
 
 ---
