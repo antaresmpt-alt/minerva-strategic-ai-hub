@@ -74,6 +74,9 @@ La tabla `prod_ot_producidas` deberia tener:
 1. **`snapshot jsonb`**: copia completa de la Hoja de Ruta en el momento del cierre.
 2. **Columnas planas indexadas**: campos clave para busqueda, filtros, promedios y analitica.
 
+**ESTADO (23 jul 2026):** Tabla creada (`20260723170000_prod_ot_producidas.sql`).
+UI de cierre MVP implementada (solo OTs simples; contenedor/hijas = Fase 8.4).
+
 Motivo:
 
 - El snapshot preserva toda la verdad historica, aunque el modelo cambie en el futuro.
@@ -83,16 +86,19 @@ Motivo:
 
 No cerrar automaticamente al finalizar el ultimo paso.
 
-Flujo acordado:
+Flujo acordado (MVP opción 3 — estado derivado):
 
 ```text
 Ultimo paso finalizado
-  -> OT pasa a pendiente_revision
-  -> revision humana
-  -> Cerrar y enviar a historico
-  -> snapshot en prod_ot_producidas
-  -> OT pasa a producida / cerrada
+  -> OT cumple condición derivada "pendiente revisión" (itinerario completo + no archivada)
+  -> Botón "Cerrar y enviar a histórico" visible en HojaRutaOtDialog
+  -> revision humana + checklist
+  -> INSERT en prod_ot_producidas
+  -> botón desaparece (OT ya archivada)
 ```
+
+**NO hay transición automática de estado** en esta versión. El botón aparece cuando
+se cumplen las 3 condiciones: OT simple, itinerario completo, sin fila en histórico.
 
 Motivo:
 

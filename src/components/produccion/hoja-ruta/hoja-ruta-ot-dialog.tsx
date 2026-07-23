@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   AlertTriangle,
+  Archive,
   ChevronDown,
   ChevronLeft,
   Download,
@@ -61,6 +63,13 @@ import {
 } from "@/lib/hoja-ruta/hoja-ruta-cartelita-pdf";
 import { exportHojaRutaContenedorPdf, exportHojaRutaPdf } from "@/lib/hoja-ruta/hoja-ruta-pdf";
 import { errorMessageFromUnknown } from "@/lib/error-message";
+import { isOtPendienteRevision } from "@/lib/prod-ot-cierre";
+import { puedeCerrarOt, type ProfileConPermisos } from "@/lib/prod-ot-cierre-permisos";
+import {
+  CierreOtDialog,
+  type CierrePrevioChecklistData,
+  type CierreOtFormData,
+} from "@/components/produccion/hoja-ruta/cierre-ot-dialog";
 
 function machineLabel(paso: HojaRutaPaso): string {
   const nombre = String(paso.maquinaNombre ?? "").trim();
@@ -352,6 +361,12 @@ export function HojaRutaOtDialog({
   const [hijaLoading, setHijaLoading] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Bloque 6 — Cierre de OT
+  const [profile, setProfile] = useState<ProfileConPermisos | null>(null);
+  const [pendienteRevision, setPendienteRevision] = useState(false);
+  const [cierreDialogOpen, setCierreDialogOpen] = useState(false);
+  const [cerrandoOt, setCerrandoOt] = useState(false);
 
   const padreNumero =
     loadResult?.kind === "contenedor" ? loadResult.padre.otNumero : (otNumero ?? "");
@@ -382,10 +397,25 @@ export function HojaRutaOtDialog({
     try {
       const result = await fetchHojaRutaLoad(supabase, otNumero);
       setLoadResult(result);
+      
+      // Bloque 6 — Verificar si está pendiente de revisión (solo OTs simples)
+      if (result?.kind === "ot") {
+        const otTipo = (result.data as unknown as { ot_tipo?: string | null })?.ot_tipo;
+        const pendiente = await isOtPendienteRevision(
+          supabase,
+          otNumero,
+          otTipo,
+          result.data.pasos
+        );
+        setPendienteRevision(pendiente);
+      } else {
+        setPendienteRevision(false);
+      }
     } catch (e) {
       console.error("[Hoja de ruta] load", e);
       setError(e instanceof Error ? e.message : "No se pudo cargar la hoja de ruta.");
       setLoadResult(null);
+      setPendienteRevision(false);
     } finally {
       setLoading(false);
     }
@@ -409,6 +439,136 @@ export function HojaRutaOtDialog({
     [supabase],
   );
 
+  // Bloque 6 — Cargar perfil del usuario para permisos
+  const loadProfile = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setProfile(null);
+        return;
+      }
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("id, role, puede_cerrar_ot, puede_reabrir_ot")
+        .eq("id", user.id)
+        .maybeSingle();
+      setProfile(prof as ProfileConPermisos | null);
+    } catch (e) {
+      console.error("[Hoja de ruta] load profile", e);
+      setProfile(null);
+    }
+  }, [supabase]);
+
+  // Bloque 6 — Cerrar OT y enviar a histórico
+  const cerrarOt = useCallback(
+    async (formData: CierreOtFormData) => {
+      if (!otNumero || loadResult?.kind !== "ot") return;
+      
+      setCerrandoOt(true);
+      try {
+        const snapshot = await fetchHojaRutaOt(supabase, otNumero);
+        if (!snapshot) throw new Error("No se pudo cargar el snapshot de la OT.");
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("No hay sesión activa.");
+
+        // Cargar datos adicionales de despacho (campos no incluidos en snapshot)
+        const { data: despRow } = await supabase
+          .from("produccion_ot_despachadas")
+          .select("referencia_id, tipo_engomado, codigo_caja_embalaje, fsc")
+          .eq("ot_numero", otNumero)
+          .order("despachado_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        // Extraer datos planos del snapshot para las columnas de prod_ot_producidas
+        const desp = snapshot.despacho;
+        
+        // Extraer horas reales de ejecuciones + datos_proceso
+        let horasPrepImpresion: number | null = null;
+        let horasTirajeImpresion: number | null = null;
+        let horasPrepTroquelado: number | null = null;
+        let horasTirajeTroquelado: number | null = null;
+        
+        for (const paso of snapshot.pasos) {
+          const dp = paso.datosProceso as Record<string, unknown> | null;
+          const procesId = paso.procesoId;
+          
+          // Impresión (offset=1, digital=2)
+          if (procesId === 1 || procesId === 2) {
+            horasPrepImpresion = (dp?.horas_entrada_real as number) ?? null;
+            horasTirajeImpresion = (dp?.horas_impresion_real as number) ?? null;
+          }
+          // Troquelado (3)
+          if (procesId === 3) {
+            horasPrepTroquelado = (dp?.horas_preparacion_real as number) ?? null;
+            horasTirajeTroquelado = (dp?.horas_tiraje_real as number) ?? null;
+          }
+        }
+
+        // Cantidad producida: buscar en ejecuciones
+        let cantidadProducida: number | null = null;
+        for (const paso of snapshot.pasos) {
+          if (paso.ejecucion?.cantidadUnidades != null) {
+            cantidadProducida = paso.ejecucion.cantidadUnidades;
+            break;
+          }
+        }
+
+        // INSERT en prod_ot_producidas
+        const { error: insertError } = await supabase.from("prod_ot_producidas").insert({
+          ot_numero: otNumero,
+          ot_id: snapshot.otId ?? null,
+          referencia_id: despRow?.referencia_id ?? null,
+          referencia_minerva: null, // TODO: obtener si está disponible
+          referencia_cliente: null, // TODO: obtener si está disponible
+          cliente: snapshot.cliente,
+          trabajo: snapshot.trabajo,
+          cantidad_pedida: snapshot.cantidad,
+          cantidad_producida: cantidadProducida,
+          material: desp?.material ?? null,
+          gramaje: desp?.gramaje ?? null,
+          formato: desp?.tamanoHoja ?? null,
+          tintas: desp?.tintas ?? null,
+          troquel: desp?.troquel ?? null,
+          poses: desp?.poses ?? null,
+          acabado_pral: desp?.acabadoPral ?? null,
+          tipo_engomado: despRow?.tipo_engomado ?? null,
+          codigo_caja_embalaje: despRow?.codigo_caja_embalaje ?? null,
+          estuches_por_bulto: null, // No disponible en snapshot actual
+          fsc: despRow?.fsc ?? false,
+          horas_prep_impresion_reales: horasPrepImpresion,
+          horas_tiraje_impresion_reales: horasTirajeImpresion,
+          horas_prep_troquelado_reales: horasPrepTroquelado,
+          horas_tiraje_troquelado_reales: horasTirajeTroquelado,
+          // Engomado: NULL — no mapear el campo único "tiempo"
+          horas_prep_engomado_reales: null,
+          horas_tiraje_engomado_reales: null,
+          snapshot,
+          snapshot_version: 1,
+          version: 1,
+          cerrada_por: user.id,
+          observaciones_revision: formData.observacionesRevision || null,
+          excluido_de_promedios: formData.excluidoDePromedios,
+          motivo_exclusion: formData.excluidoDePromedios ? formData.motivoExclusion : null,
+        });
+
+        if (insertError) throw insertError;
+
+        toast.success(`OT ${otNumero} cerrada y enviada a histórico.`);
+        setCierreDialogOpen(false);
+        await load(); // Recargar para que el botón desaparezca
+      } catch (e) {
+        console.error("[Hoja de ruta] cerrar OT", e);
+        const msg = errorMessageFromUnknown(e, "No se pudo cerrar la OT.");
+        toast.error(msg);
+      } finally {
+        setCerrandoOt(false);
+      }
+    },
+    [otNumero, loadResult, supabase, load],
+  );
+
   useEffect(() => {
     if (open && otNumero) void load();
     if (!open) {
@@ -416,14 +576,51 @@ export function HojaRutaOtDialog({
       setDrillHijaOt(null);
       setHijaData(null);
       setError(null);
+      setPendienteRevision(false);
     }
   }, [open, otNumero, load]);
+
+  useEffect(() => {
+    if (open) void loadProfile();
+  }, [open, loadProfile]);
 
   const isContenedorView = loadResult?.kind === "contenedor" && !drillHijaOt;
   const canExportPdf =
     (drillHijaOt && hijaData) ||
     loadResult?.kind === "ot" ||
     (loadResult?.kind === "contenedor" && loadResult.hijas.length > 0);
+
+  // Bloque 6 — Mostrar botón de cierre solo si puede y está pendiente
+  const puedeVerBotonCierre = puedeCerrarOt(profile) && pendienteRevision && loadResult?.kind === "ot";
+
+  // Checklist para el diálogo de cierre
+  const checklist = useMemo((): CierrePrevioChecklistData => {
+    if (loadResult?.kind !== "ot") {
+      return {
+        pasosFinalizados: false,
+        cantidadProducida: false,
+        horasCoherentes: false,
+        incidenciasRevisadas: false,
+        embalajeInformado: false,
+      };
+    }
+    const data = loadResult.data;
+    const pasosOk = data.pasos.length > 0 && data.pasos.every(p => 
+      String(p.estado ?? "").trim().toLowerCase() === "finalizado"
+    );
+    const cantidadOk = data.pasos.some(p => p.ejecucion?.cantidadUnidades != null);
+    const horasOk = data.pasos.some(p => p.ejecucion?.horasReales != null && p.ejecucion.horasReales > 0);
+    const incidenciasOk = !data.pasos.some(p => p.ejecucion?.incidencia);
+    const embalajeOk = true; // Aviso no bloqueante; datos de embalaje se obtienen en el cierre
+    
+    return {
+      pasosFinalizados: pasosOk,
+      cantidadProducida: cantidadOk,
+      horasCoherentes: horasOk,
+      incidenciasRevisadas: incidenciasOk,
+      embalajeInformado: embalajeOk,
+    };
+  }, [loadResult]);
 
   const handlePdfExport = useCallback(async () => {
     if (drillHijaOt && hijaData) {
@@ -555,6 +752,18 @@ export function HojaRutaOtDialog({
 
         <DialogFooter className="shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-3 sm:flex-row sm:px-5">
           <div className="flex flex-wrap gap-2">
+            {puedeVerBotonCierre ? (
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                onClick={() => setCierreDialogOpen(true)}
+                className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+              >
+                <Archive className="size-4" />
+                Cerrar y enviar a histórico
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="outline"
@@ -641,6 +850,18 @@ export function HojaRutaOtDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* Bloque 6 — Diálogo de cierre */}
+      {puedeVerBotonCierre ? (
+        <CierreOtDialog
+          open={cierreDialogOpen}
+          onOpenChange={setCierreDialogOpen}
+          otNumero={otNumero ?? ""}
+          checklist={checklist}
+          onConfirm={cerrarOt}
+          saving={cerrandoOt}
+        />
+      ) : null}
     </Dialog>
   );
 }
