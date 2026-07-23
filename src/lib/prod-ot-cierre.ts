@@ -233,7 +233,8 @@ function dp(paso: HojaRutaPaso | undefined): Record<string, unknown> | null {
 
 /**
  * Cantidad producida final: preferir engomado (estuches/cantidad),
- * luego la última ejecución con cantidadUnidades > 0.
+ * luego el último paso con señal positiva (ejecución o datos_proceso).
+ * Cubre OTs sin engomado (p.ej. manipulado con `unidades`, troquel con hojas×poses).
  * NO tomar el primer 0 de CTP/guillotina (bug del MVP inicial).
  */
 export function extractCantidadProducida(pasos: HojaRutaPaso[]): number | null {
@@ -247,8 +248,26 @@ export function extractCantidadProducida(pasos: HojaRutaPaso[]): number | null {
 
   let lastPositive: number | null = null;
   for (const paso of pasos) {
-    const n = asNum(paso.ejecucion?.cantidadUnidades);
-    if (n != null && n > 0) lastPositive = n;
+    const d = dp(paso);
+    const poses = asNum(d?.poses);
+    const hojasTroq = asNum(d?.hojas_troqueladas);
+    const fromHojasTroq =
+      hojasTroq != null && hojasTroq > 0
+        ? hojasTroq * (poses != null && poses > 0 ? poses : 1)
+        : null;
+    const candidates = [
+      asNum(paso.ejecucion?.cantidadUnidades),
+      asNum(d?.estuches_engomados),
+      asNum(d?.cantidad_total),
+      asNum(d?.unidades),
+      fromHojasTroq,
+    ];
+    for (const n of candidates) {
+      if (n != null && n > 0) {
+        lastPositive = n;
+        break;
+      }
+    }
   }
   return lastPositive;
 }

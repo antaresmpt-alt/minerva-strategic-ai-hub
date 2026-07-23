@@ -16,6 +16,7 @@ import {
   type PipelineRowView,
   type PipelineStepView,
 } from "@/lib/pipeline/pipeline-data";
+import { esOtSimple } from "@/lib/prod-ot-cierre";
 import {
   fetchContenedorProgressByPadre,
   fetchHijasByPadreNumeros,
@@ -35,6 +36,7 @@ const TABLE_PASOS = "prod_ot_pasos";
 const TABLE_EJECUCIONES = "prod_mesa_ejecuciones";
 const TABLE_EXTERNOS = "prod_seguimiento_externos";
 const TABLE_POOL = "prod_planificacion_pool";
+const TABLE_PRODUCIDAS = "prod_ot_producidas";
 
 const ACTIVE_EJECUCION_ORDER = new Map<string, number>([
   ["en_curso", 0],
@@ -285,6 +287,19 @@ export async function fetchPipelineRows(
       });
 
   if (visibleOtNumeros.length === 0) return [];
+
+  const archivadasRows = await fetchAllInChunks(visibleOtNumeros, 100, async (chunk) => {
+    const { data, error } = await supabase
+      .from(TABLE_PRODUCIDAS)
+      .select("ot_numero")
+      .in("ot_numero", chunk)
+      .is("reabierta_at", null);
+    if (error) throw error;
+    return (data ?? []) as { ot_numero: string }[];
+  });
+  const archivadas = new Set(
+    archivadasRows.map((r) => str(r.ot_numero)).filter(Boolean) as string[],
+  );
 
   const contenedorNumeros = visibleOtNumeros.filter(
     (ot) => otMetaByNum.get(ot)?.otTipo === "contenedor",
@@ -607,6 +622,11 @@ export async function fetchPipelineRows(
     const poolEstado = str(poolByOt.get(otNumero)?.estado_pool)?.toLowerCase();
     if (poolEstado === "cerrada" && !row.badges.includes("cerrada")) {
       row.badges.push("cerrada");
+    }
+    const itinerarioOk =
+      row.pasos.length > 0 && row.pasos.every((p) => p.estadoPaso === "finalizado");
+    if (esOtSimple(otTipo) && itinerarioOk && !archivadas.has(otNumero)) {
+      row.badges.push("pendiente_revision");
     }
     if (cumplimientoPct != null) {
       if (cumplimientoPct >= 100) row.badges.push("cumplimiento_ok");

@@ -89,6 +89,19 @@ test("computePipelineBadges detecta externo activo", () => {
   assert.ok(badges.includes("externo_activo"));
 });
 
+test("computePipelineBadges marca cerrada cuando todos finalizados", () => {
+  const badges = computePipelineBadges({
+    pasos: [
+      mkStep({ pasoId: "a", orden: 1, estadoPaso: "finalizado" }),
+      mkStep({ pasoId: "b", orden: 2, estadoPaso: "finalizado" }),
+    ],
+    fechaCompromiso: null,
+    riesgo: "ok",
+  });
+  assert.ok(badges.includes("cerrada"));
+  assert.ok(!badges.includes("pendiente_revision"));
+});
+
 test("computePipelineRisk devuelve overdue y warning", () => {
   const pasosAbiertos = [mkStep({ pasoId: "z", orden: 1, estadoPaso: "disponible" })];
   const overdue = computePipelineRisk(

@@ -7,6 +7,7 @@ export type PipelineBadge =
   | "bloqueado"
   | "en_riesgo"
   | "cerrada"
+  | "pendiente_revision"
   | "cumplimiento_ok"
   | "cumplimiento_warning"
   | "cumplimiento_bajo"

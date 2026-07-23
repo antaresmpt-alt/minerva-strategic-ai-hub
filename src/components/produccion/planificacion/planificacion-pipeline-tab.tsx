@@ -106,6 +106,7 @@ export function PlanificacionPipelineTab() {
   const [quickBloqueado, setQuickBloqueado] = useState(false);
   const [quickExternoActivo, setQuickExternoActivo] = useState(false);
   const [quickSinItinerario, setQuickSinItinerario] = useState(false);
+  const [quickPendienteRevision, setQuickPendienteRevision] = useState(false);
   const [compactMode, setCompactMode] = useState(false);
   const [showAnalyticsColumns, setShowAnalyticsColumns] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -147,6 +148,7 @@ export function PlanificacionPipelineTab() {
     if (searchParams.get("quickBloqueado") === "1") setQuickBloqueado(true);
     if (searchParams.get("quickExternoActivo") === "1") setQuickExternoActivo(true);
     if (searchParams.get("quickSinItinerario") === "1") setQuickSinItinerario(true);
+    if (searchParams.get("quickPendienteRevision") === "1") setQuickPendienteRevision(true);
     if (searchParams.get("compact") === "1") setCompactMode(true);
     if (searchParams.get("analyticsCols") === "1") setShowAnalyticsColumns(true);
     const otQ = searchParams.get("ot");
@@ -190,6 +192,7 @@ export function PlanificacionPipelineTab() {
     setOrDelete("quickBloqueado", quickBloqueado ? "1" : null);
     setOrDelete("quickExternoActivo", quickExternoActivo ? "1" : null);
     setOrDelete("quickSinItinerario", quickSinItinerario ? "1" : null);
+    setOrDelete("quickPendienteRevision", quickPendienteRevision ? "1" : null);
     setOrDelete("compact", compactMode ? "1" : null);
     setOrDelete("analyticsCols", showAnalyticsColumns ? "1" : null);
     setOrDelete("ot", detailOpen ? selectedOtNumero : null);
@@ -207,6 +210,7 @@ export function PlanificacionPipelineTab() {
     pathname,
     quickBloqueado,
     quickExternoActivo,
+    quickPendienteRevision,
     quickRiesgo,
     quickSinItinerario,
     router,
@@ -251,9 +255,17 @@ export function PlanificacionPipelineTab() {
       if (quickBloqueado && !row.badges.includes("bloqueado")) return false;
       if (quickExternoActivo && !row.badges.includes("externo_activo")) return false;
       if (quickSinItinerario && !row.badges.includes("sin_itinerario")) return false;
+      if (quickPendienteRevision && !row.badges.includes("pendiente_revision")) return false;
       return true;
     });
-  }, [quickBloqueado, quickExternoActivo, quickRiesgo, quickSinItinerario, rows]);
+  }, [
+    quickBloqueado,
+    quickExternoActivo,
+    quickPendienteRevision,
+    quickRiesgo,
+    quickSinItinerario,
+    rows,
+  ]);
 
   const loadHijasForContenedor = useCallback(
     async (padreOt: string) => {
@@ -319,7 +331,10 @@ export function PlanificacionPipelineTab() {
     const enMarcha = visibleRows.filter((r) => r.pasoActual?.estadoPaso === "en_marcha").length;
     const enRiesgo = visibleRows.filter((r) => r.riesgo !== "ok").length;
     const bloqueadas = visibleRows.filter((r) => r.badges.includes("bloqueado")).length;
-    return { total, enMarcha, enRiesgo, bloqueadas };
+    const pendientesRevision = visibleRows.filter((r) =>
+      r.badges.includes("pendiente_revision"),
+    ).length;
+    return { total, enMarcha, enRiesgo, bloqueadas, pendientesRevision };
   }, [visibleRows]);
 
   const sectionStats = useMemo(() => {
@@ -385,6 +400,7 @@ export function PlanificacionPipelineTab() {
     if (quickBloqueado) parts.push("quick_bloqueado=si");
     if (quickExternoActivo) parts.push("quick_externo=si");
     if (quickSinItinerario) parts.push("quick_sin_itinerario=si");
+    if (quickPendienteRevision) parts.push("quick_pendiente_revision=si");
     return parts.join(" · ");
   }, [
     estadoPasoActual,
@@ -392,6 +408,7 @@ export function PlanificacionPipelineTab() {
     onlyIncidencias,
     quickBloqueado,
     quickExternoActivo,
+    quickPendienteRevision,
     quickRiesgo,
     quickSinItinerario,
     search,
@@ -531,10 +548,23 @@ export function PlanificacionPipelineTab() {
             >
               Sin itinerario
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={quickPendienteRevision ? "default" : "outline"}
+              className={
+                quickPendienteRevision
+                  ? "h-8 bg-teal-700 text-white hover:bg-teal-800"
+                  : "h-8"
+              }
+              onClick={() => setQuickPendienteRevision((v) => !v)}
+            >
+              Pendientes de revisión
+            </Button>
           </div>
           {!compactMode ? (
             <>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
                 <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
                   <p className="text-[11px] text-slate-500">OTs visibles</p>
                   <p className="text-sm font-semibold text-[#002147]">{kpis.total}</p>
@@ -550,6 +580,12 @@ export function PlanificacionPipelineTab() {
                 <div className="rounded-md border border-slate-200 bg-amber-50 px-3 py-2">
                   <p className="text-[11px] text-amber-700">Bloqueadas</p>
                   <p className="text-sm font-semibold text-amber-900">{kpis.bloqueadas}</p>
+                </div>
+                <div className="rounded-md border border-slate-200 bg-teal-50 px-3 py-2">
+                  <p className="text-[11px] text-teal-700">Pend. revisión</p>
+                  <p className="text-sm font-semibold text-teal-900">
+                    {kpis.pendientesRevision}
+                  </p>
                 </div>
               </div>
               <div className="grid gap-2 lg:grid-cols-2">
@@ -856,7 +892,11 @@ export function PlanificacionPipelineTab() {
                               {row.badges.map((b) => (
                                 <span
                                   key={b}
-                                className={`inline-flex items-center gap-1 rounded-md bg-slate-100 text-slate-700 ${compactMode ? "px-1 py-0 text-[9px]" : "px-1.5 py-0.5 text-[10px]"}`}
+                                  className={`inline-flex items-center gap-1 rounded-md ${
+                                    b === "pendiente_revision"
+                                      ? "bg-teal-100 text-teal-800"
+                                      : "bg-slate-100 text-slate-700"
+                                  } ${compactMode ? "px-1 py-0 text-[9px]" : "px-1.5 py-0.5 text-[10px]"}`}
                                 >
                                   <AlertTriangle className="size-3" />
                                   {b}
