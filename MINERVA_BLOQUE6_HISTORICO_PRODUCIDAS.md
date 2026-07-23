@@ -5,7 +5,7 @@
 > Complementa a `MINERVA_BRIEFING.md`, `MINERVA_CONTEXTO_TECNICO.md` y `FASES_HOJA_RUTA_DIGITAL.md`.
 >
 > Fecha: 13 de junio de 2026.
-> Actualizado: 23 jul 2026 — Cierre MVP (estado derivado) + mapper columnas planas corregido (`buildProdOtProducidaInsert` en `prod-ot-cierre.ts`: IDs reales Troquel=10, cantidad desde engomado, embalaje/CTP/guillo/desbroce/fechas/totales). Tabla + UI cierre simples OK. Pendiente: pantalla Producidas, reabrir, Engomado prep/tiraje.
+> Actualizado: 23 jul 2026 — Pantalla `/produccion/producidas` (listado + snapshot lectura). Mapper planas OK. Pendiente: reabrir, Engomado prep/tiraje, recálculo promedios.
 
 ---
 
@@ -478,7 +478,7 @@ Estado historico (antes de Ola 3), para contexto:
 |-------|------|-----------|--------|--------|
 | 1 | **Fase 2**: boton "guardar en maestro" al despachar (solo vacios/confirmacion) | Nada | Bajo — no cambia prefill | ✅ Hecho |
 | 2 | Columnas `*_promedio` / `*_oficial` / `_muestra_n` / `promedios_actualizados_at` en `prod_referencias` | Nada (aditivo) | Bajo | Pendiente |
-| 3 | **Bloque 6**: `prod_ot_producidas` + cierre 2 fases + flag anomala | — | Bloque grande | ✅ Tabla + tipos + RLS + UI cierre MVP (simples, estado derivado). Mapper planas corregido 23 jul (Troquel id 10, cantidad engomado, embalaje). ⏭️ Pantalla Producidas / reabrir. |
+| 3 | **Bloque 6**: `prod_ot_producidas` + cierre 2 fases + flag anomala | — | Bloque grande | ✅ Tabla + cierre MVP + mapper + pantalla Producidas (`/produccion/producidas`). ⏭️ Reabrir / promedios. |
 | 4 | **Boton "Actualizar promedios"** en Maestro (lee historico, escribe `_promedio` + horas/millar §7.1.10) | Paso 3 | Medio | Pendiente (depende de 3) |
 | 5 | Prefill despacho desde maestro con **botones explicitos** + fix picker | Acuerdo con planta | Medio (cambio visible) | ✅ Hecho (Ola 3, no dependia de Bloque 6) |
 

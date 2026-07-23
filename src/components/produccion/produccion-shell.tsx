@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Anchor,
+  Archive,
   Boxes,
   FileCog,
   GitBranch,
@@ -60,6 +61,13 @@ const NAV_GROUPS: NavGroup[] = [
           p === "/produccion" ||
           p === "/produccion/ots" ||
           p.startsWith("/produccion/ots/"),
+      },
+      {
+        href: "/produccion/producidas",
+        label: "Producidas",
+        icon: Archive,
+        match: (p) =>
+          p === "/produccion/producidas" || p.startsWith("/produccion/producidas/"),
       },
       {
         href: "/produccion/muelle",
