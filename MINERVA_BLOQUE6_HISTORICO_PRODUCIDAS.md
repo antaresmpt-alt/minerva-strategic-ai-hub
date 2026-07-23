@@ -5,7 +5,7 @@
 > Complementa a `MINERVA_BRIEFING.md`, `MINERVA_CONTEXTO_TECNICO.md` y `FASES_HOJA_RUTA_DIGITAL.md`.
 >
 > Fecha: 13 de junio de 2026.
-> Actualizado: 23 jul 2026 — Pantalla `/produccion/producidas` (listado + snapshot lectura). Mapper planas OK. Pendiente: reabrir, Engomado prep/tiraje, recálculo promedios.
+> Actualizado: 23 jul 2026 — Reabrir OT + editar exclusión + Excel + fix PDF Dialog/Dropdown. Mapper y pantalla Producidas OK. Pendiente: Engomado prep/tiraje, recálculo promedios.
 
 ---
 

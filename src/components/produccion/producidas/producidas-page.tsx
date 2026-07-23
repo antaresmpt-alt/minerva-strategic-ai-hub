@@ -1,7 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Archive, Ban, Loader2, RefreshCw, Search } from "lucide-react";
+import {
+  Archive,
+  Ban,
+  FileSpreadsheet,
+  Loader2,
+  RefreshCw,
+  RotateCcw,
+  Search,
+} from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,12 +20,13 @@ import { ProducidaSnapshotDialog } from "@/components/produccion/producidas/prod
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { errorMessageFromUnknown } from "@/lib/error-message";
 import { fmtCantidad, fmtDate } from "@/lib/hoja-ruta/hoja-ruta-formatters";
+import { exportProducidasAExcel } from "@/lib/prod-ot-producidas-export";
 import type { ProdOtProducidaRow } from "@/types/prod-ot-producidas";
 
 const PAGE_SIZE = 500;
 
 const LIST_SELECT =
-  "id, ot_numero, ot_id, referencia_id, referencia_minerva, referencia_cliente, cliente, trabajo, cantidad_pedida, cantidad_producida, material, gramaje, formato, tintas, troquel, poses, acabado_pral, tipo_engomado, codigo_caja_embalaje, estuches_por_bulto, fsc, fecha_inicio_real, fecha_fin_real, fecha_cierre, horas_prep_impresion_reales, horas_tiraje_impresion_reales, horas_prep_troquelado_reales, horas_tiraje_troquelado_reales, horas_prep_engomado_reales, horas_tiraje_engomado_reales, horas_guillotina_reales, horas_ctp_reales, horas_desbroce_reales, horas_total_reales, merma_total, snapshot, snapshot_version, version, cerrada_por, cerrada_at, observaciones_revision, excluido_de_promedios, motivo_exclusion, reabierta_desde_id, created_at";
+  "id, ot_numero, ot_id, referencia_id, referencia_minerva, referencia_cliente, cliente, trabajo, cantidad_pedida, cantidad_producida, material, gramaje, formato, tintas, troquel, poses, acabado_pral, tipo_engomado, codigo_caja_embalaje, estuches_por_bulto, fsc, fecha_inicio_real, fecha_fin_real, fecha_cierre, horas_prep_impresion_reales, horas_tiraje_impresion_reales, horas_prep_troquelado_reales, horas_tiraje_troquelado_reales, horas_prep_engomado_reales, horas_tiraje_engomado_reales, horas_guillotina_reales, horas_ctp_reales, horas_desbroce_reales, horas_total_reales, merma_total, snapshot, snapshot_version, version, cerrada_por, cerrada_at, observaciones_revision, excluido_de_promedios, motivo_exclusion, reabierta_desde_id, reabierta_at, reabierta_por, created_at";
 
 export function ProducidasPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
@@ -88,6 +98,20 @@ export function ProducidasPage() {
     setDetailOpen(true);
   };
 
+  const handleRowUpdated = (updated: ProdOtProducidaRow) => {
+    setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+    setSelected(updated);
+  };
+
+  const handleExportExcel = () => {
+    try {
+      exportProducidasAExcel(filtered);
+      toast.success(`Exportadas ${filtered.length} filas a Excel.`);
+    } catch (e) {
+      toast.error(errorMessageFromUnknown(e, "No se pudo exportar Excel."));
+    }
+  };
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 p-4 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -100,16 +124,28 @@ export function ProducidasPage() {
             OTs cerradas con snapshot inmutable. Fuente para promedios del maestro (Bloque 6).
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={loading}
-          onClick={() => void load()}
-        >
-          <RefreshCw className={`mr-2 size-4 ${loading ? "animate-spin" : ""}`} />
-          Recargar
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={loading || filtered.length === 0}
+            onClick={handleExportExcel}
+          >
+            <FileSpreadsheet className="mr-2 size-4" />
+            Excel
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={loading}
+            onClick={() => void load()}
+          >
+            <RefreshCw className={`mr-2 size-4 ${loading ? "animate-spin" : ""}`} />
+            Recargar
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white p-3">
@@ -214,17 +250,26 @@ export function ProducidasPage() {
                       {fmtDate(r.cerrada_at)}
                     </td>
                     <td className="px-3 py-2">
-                      {r.excluido_de_promedios ? (
-                        <span
-                          className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800"
-                          title={r.motivo_exclusion ?? "Excluida de promedios"}
-                        >
-                          <Ban className="size-3" />
-                          Excl.
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-slate-400">—</span>
-                      )}
+                      <div className="flex flex-wrap gap-1">
+                        {r.excluido_de_promedios ? (
+                          <span
+                            className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800"
+                            title={r.motivo_exclusion ?? "Excluida de promedios"}
+                          >
+                            <Ban className="size-3" />
+                            Excl.
+                          </span>
+                        ) : null}
+                        {r.reabierta_at ? (
+                          <span className="inline-flex items-center gap-0.5 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-800">
+                            <RotateCcw className="size-3" />
+                            Reab.
+                          </span>
+                        ) : null}
+                        {!r.excluido_de_promedios && !r.reabierta_at ? (
+                          <span className="text-[10px] text-slate-400">—</span>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -238,6 +283,7 @@ export function ProducidasPage() {
         row={selected}
         open={detailOpen}
         onOpenChange={setDetailOpen}
+        onRowUpdated={handleRowUpdated}
       />
     </div>
   );

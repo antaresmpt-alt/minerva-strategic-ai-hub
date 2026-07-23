@@ -42,7 +42,8 @@ export function itinerarioCompleto(pasos: { estado: string | null }[]): boolean 
 
 /**
  * ¿Está esta OT ya archivada en prod_ot_producidas?
- * (cualquier version; en MVP solo existirá version=1)
+ * Archivada = existe al menos una fila con reabierta_at IS NULL
+ * (versiones reabiertas no cuentan como archivo activo).
  */
 export async function estaOtArchivada(
   supabase: SupabaseClient,
@@ -52,10 +53,89 @@ export async function estaOtArchivada(
     .from("prod_ot_producidas")
     .select("id")
     .eq("ot_numero", otNumero)
+    .is("reabierta_at", null)
     .limit(1)
     .maybeSingle();
   if (error) throw error;
   return data != null;
+}
+
+/**
+ * Última versión cerrada (mayor version) de una OT, o null.
+ */
+export async function fetchUltimaProducida(
+  supabase: SupabaseClient,
+  otNumero: string,
+): Promise<{ id: string; version: number; reabierta_at: string | null } | null> {
+  const { data, error } = await supabase
+    .from("prod_ot_producidas")
+    .select("id, version, reabierta_at")
+    .eq("ot_numero", otNumero)
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Resuelve version y reabierta_desde_id para el próximo cierre.
+ */
+export async function resolveNextCierreVersion(
+  supabase: SupabaseClient,
+  otNumero: string,
+): Promise<{ version: number; reabierta_desde_id: string | null }> {
+  const ultima = await fetchUltimaProducida(supabase, otNumero);
+  if (!ultima) return { version: 1, reabierta_desde_id: null };
+  return {
+    version: ultima.version + 1,
+    reabierta_desde_id: ultima.id,
+  };
+}
+
+/**
+ * Marca la fila como reabierta (OT vuelve a poder revisarse / recerrarse).
+ * Solo la última versión no reabierta debería reabrirse.
+ */
+export async function reabrirOtProducida(
+  supabase: SupabaseClient,
+  rowId: string,
+  userId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("prod_ot_producidas")
+    .update({
+      reabierta_at: new Date().toISOString(),
+      reabierta_por: userId,
+    })
+    .eq("id", rowId)
+    .is("reabierta_at", null);
+  if (error) throw error;
+}
+
+/**
+ * Actualiza metadatos de revisión (exclusión / observaciones) sin tocar snapshot.
+ */
+export async function updateProducidaRevisionMeta(
+  supabase: SupabaseClient,
+  rowId: string,
+  meta: {
+    excluido_de_promedios: boolean;
+    motivo_exclusion: string | null;
+    observaciones_revision: string | null;
+  },
+): Promise<void> {
+  const { error } = await supabase
+    .from("prod_ot_producidas")
+    .update({
+      excluido_de_promedios: meta.excluido_de_promedios,
+      motivo_exclusion: meta.excluido_de_promedios
+        ? meta.motivo_exclusion
+        : null,
+      observaciones_revision: meta.observaciones_revision,
+    })
+    .eq("id", rowId);
+  if (error) throw error;
 }
 
 /**
@@ -127,6 +207,7 @@ export type ProdOtProducidaFlatInsert = {
   observaciones_revision: string | null;
   excluido_de_promedios: boolean;
   motivo_exclusion: string | null;
+  reabierta_desde_id: string | null;
 };
 
 function asNum(v: unknown): number | null {
@@ -185,6 +266,7 @@ export function buildProdOtProducidaInsert(args: {
   excluidoDePromedios?: boolean;
   motivoExclusion?: string | null;
   version?: number;
+  reabiertaDesdeId?: string | null;
   nowIso?: string;
 }): ProdOtProducidaFlatInsert {
   const {
@@ -196,6 +278,7 @@ export function buildProdOtProducidaInsert(args: {
     excluidoDePromedios = false,
     motivoExclusion = null,
     version = 1,
+    reabiertaDesdeId = null,
   } = args;
   const nowIso = args.nowIso ?? new Date().toISOString();
   const pasos = snapshot.pasos;
@@ -301,6 +384,7 @@ export function buildProdOtProducidaInsert(args: {
     observaciones_revision: observacionesRevision || null,
     excluido_de_promedios: excluidoDePromedios,
     motivo_exclusion: excluidoDePromedios ? motivoExclusion || null : null,
+    reabierta_desde_id: reabiertaDesdeId,
   };
 }
 

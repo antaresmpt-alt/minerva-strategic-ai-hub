@@ -67,6 +67,7 @@ import {
   buildProdOtProducidaInsert,
   extractCantidadProducida,
   isOtPendienteRevision,
+  resolveNextCierreVersion,
 } from "@/lib/prod-ot-cierre";
 import { puedeCerrarOt, type ProfileConPermisos } from "@/lib/prod-ot-cierre-permisos";
 import { PROCESO_ENGOMADO_ID } from "@/lib/despacho-wizard-shared";
@@ -501,6 +502,8 @@ export function HojaRutaOtDialog({
           referenciaCliente = refRow?.referencia_cliente ?? null;
         }
 
+        const nextVer = await resolveNextCierreVersion(supabase, otNumero);
+
         const payload = buildProdOtProducidaInsert({
           otNumero,
           snapshot,
@@ -514,7 +517,8 @@ export function HojaRutaOtDialog({
           observacionesRevision: formData.observacionesRevision,
           excluidoDePromedios: formData.excluidoDePromedios,
           motivoExclusion: formData.motivoExclusion,
-          version: 1,
+          version: nextVer.version,
+          reabiertaDesdeId: nextVer.reabierta_desde_id,
         });
 
         const { error: insertError } = await supabase
@@ -611,19 +615,19 @@ export function HojaRutaOtDialog({
   }, [loadResult]);
 
   const handlePdfExport = useCallback(async () => {
-    if (drillHijaOt && hijaData) {
-      exportHojaRutaPdf(hijaData);
-      return;
-    }
-    if (loadResult?.kind === "ot") {
-      exportHojaRutaPdf(loadResult.data);
-      return;
-    }
-    if (loadResult?.kind !== "contenedor" || loadResult.hijas.length === 0) return;
-
-    setPdfExporting(true);
-    setError(null);
     try {
+      if (drillHijaOt && hijaData) {
+        exportHojaRutaPdf(hijaData);
+        return;
+      }
+      if (loadResult?.kind === "ot") {
+        exportHojaRutaPdf(loadResult.data);
+        return;
+      }
+      if (loadResult?.kind !== "contenedor" || loadResult.hijas.length === 0) return;
+
+      setPdfExporting(true);
+      setError(null);
       const hijasFull = await Promise.all(
         loadResult.hijas.map((h) => fetchHojaRutaOt(supabase, h.otNumero)),
       );
@@ -632,27 +636,29 @@ export function HojaRutaOtDialog({
         hijasFull.filter((h): h is HojaRutaData => h != null),
       );
     } catch (e) {
-      console.error("[Hoja de ruta] export PDF barco", e);
-      setError(errorMessageFromUnknown(e, "No se pudo generar el PDF del barco."));
+      console.error("[Hoja de ruta] export PDF", e);
+      const msg = errorMessageFromUnknown(e, "No se pudo generar el PDF.");
+      setError(msg);
+      toast.error(msg);
     } finally {
       setPdfExporting(false);
     }
   }, [drillHijaOt, hijaData, loadResult, supabase]);
 
   const handlePdfSimplificada = useCallback(async () => {
-    if (drillHijaOt && hijaData) {
-      exportHojaRutaCartelitaPdf(cartelitaInputFromHojaRuta(hijaData));
-      return;
-    }
-    if (loadResult?.kind === "ot") {
-      exportHojaRutaCartelitaPdf(cartelitaInputFromHojaRuta(loadResult.data));
-      return;
-    }
-    if (loadResult?.kind !== "contenedor" || loadResult.hijas.length === 0) return;
-
-    setPdfExporting(true);
-    setError(null);
     try {
+      if (drillHijaOt && hijaData) {
+        exportHojaRutaCartelitaPdf(cartelitaInputFromHojaRuta(hijaData));
+        return;
+      }
+      if (loadResult?.kind === "ot") {
+        exportHojaRutaCartelitaPdf(cartelitaInputFromHojaRuta(loadResult.data));
+        return;
+      }
+      if (loadResult?.kind !== "contenedor" || loadResult.hijas.length === 0) return;
+
+      setPdfExporting(true);
+      setError(null);
       const hijasFull = await Promise.all(
         loadResult.hijas.map((h) => fetchHojaRutaOt(supabase, h.otNumero)),
       );
@@ -663,9 +669,12 @@ export function HojaRutaOtDialog({
       exportHojaRutaCartelitaPdf(pack);
     } catch (e) {
       console.error("[Hoja de ruta] export PDF simplificada", e);
-      setError(
-        errorMessageFromUnknown(e, "No se pudo generar la hoja de ruta simplificada."),
+      const msg = errorMessageFromUnknown(
+        e,
+        "No se pudo generar la hoja de ruta simplificada.",
       );
+      setError(msg);
+      toast.error(msg);
     } finally {
       setPdfExporting(false);
     }
@@ -795,7 +804,12 @@ export function HojaRutaOtDialog({
                 <DropdownMenuItem
                   className="gap-2"
                   disabled={pdfExporting}
-                  onClick={() => void handlePdfExport()}
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    // Diferir: evita choque Dialog+DropdownMenu (focus trap) que
+                    // en algunos casos remonta/crashea la página al generar PDF.
+                    window.setTimeout(() => void handlePdfExport(), 0);
+                  }}
                 >
                   <FileText className="size-4 opacity-70" />
                   <div className="flex flex-col gap-0.5">
@@ -810,7 +824,10 @@ export function HojaRutaOtDialog({
                 <DropdownMenuItem
                   className="gap-2"
                   disabled={pdfExporting}
-                  onClick={() => void handlePdfSimplificada()}
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    window.setTimeout(() => void handlePdfSimplificada(), 0);
+                  }}
                 >
                   <Download className="size-4 opacity-70" />
                   <div className="flex flex-col gap-0.5">

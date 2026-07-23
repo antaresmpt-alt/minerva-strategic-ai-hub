@@ -102,5 +102,12 @@ export type ProdOtProducidaRow = {
    * Permite reconstruir la cadena completa de reaperturas.
    */
   reabierta_desde_id: string | null;
+  /**
+   * Si no null, esta versión fue reabierta: la OT deja de estar archivada
+   * hasta el próximo cierre (version + 1).
+   */
+  reabierta_at: string | null;
+  /** Usuario que ejecutó la reapertura. */
+  reabierta_por: string | null;
   created_at: string;
 };
