@@ -1,8 +1,19 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeOtTipo } from "@/lib/planificacion-contenedor-query";
+import {
+  PROCESO_CTP_ID,
+  PROCESO_DESBROCE_ID,
+  PROCESO_DIGITAL_ID,
+  PROCESO_ENGOMADO_ID,
+  PROCESO_GUILLOTINA_ID,
+  PROCESO_OFFSET_ID,
+  PROCESO_TROQUEL_ID,
+} from "@/lib/despacho-wizard-shared";
+import type { HojaRutaData, HojaRutaPaso } from "@/lib/hoja-ruta/hoja-ruta-query";
 
 /**
- * Bloque 6 MVP — Helper de estado derivado "pendiente de revisión".
+ * Bloque 6 MVP — Helper de estado derivado "pendiente de revisión" + mapper
+ * de columnas planas para prod_ot_producidas.
  *
  * Una OT está pendiente de revisión si:
  * 1. Es simple (ot_tipo null o 'simple') — contenedores/hijas tienen flujo distinto (Fase 8.4)
@@ -61,4 +72,274 @@ export async function isOtPendienteRevision(
   if (!itinerarioCompleto(pasos)) return false;
   const archivada = await estaOtArchivada(supabase, otNumero);
   return !archivada;
+}
+
+// ─── Mapper columnas planas ─────────────────────────────────────────────────
+
+export type DespachoExtrasCierre = {
+  referencia_id?: string | null;
+  tipo_engomado?: string | null;
+  /** Códigos desde prod_referencias si hay referencia_id */
+  referencia_minerva?: string | null;
+  referencia_cliente?: string | null;
+};
+
+export type ProdOtProducidaFlatInsert = {
+  ot_numero: string;
+  ot_id: string | null;
+  referencia_id: string | null;
+  referencia_minerva: string | null;
+  referencia_cliente: string | null;
+  cliente: string | null;
+  trabajo: string | null;
+  cantidad_pedida: number | null;
+  cantidad_producida: number | null;
+  material: string | null;
+  gramaje: number | null;
+  formato: string | null;
+  tintas: string | null;
+  troquel: string | null;
+  poses: number | null;
+  acabado_pral: string | null;
+  tipo_engomado: string | null;
+  codigo_caja_embalaje: string | null;
+  estuches_por_bulto: number | null;
+  fsc: boolean | null;
+  fecha_inicio_real: string | null;
+  fecha_fin_real: string | null;
+  fecha_cierre: string;
+  horas_prep_impresion_reales: number | null;
+  horas_tiraje_impresion_reales: number | null;
+  horas_prep_troquelado_reales: number | null;
+  horas_tiraje_troquelado_reales: number | null;
+  /** Siempre null hasta que Engomado separe prep/tiraje. */
+  horas_prep_engomado_reales: null;
+  horas_tiraje_engomado_reales: null;
+  horas_guillotina_reales: number | null;
+  horas_ctp_reales: number | null;
+  horas_desbroce_reales: number | null;
+  horas_total_reales: number | null;
+  merma_total: number | null;
+  snapshot: HojaRutaData;
+  snapshot_version: number;
+  version: number;
+  cerrada_por: string;
+  observaciones_revision: string | null;
+  excluido_de_promedios: boolean;
+  motivo_exclusion: string | null;
+};
+
+function asNum(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function asStr(v: unknown): string | null {
+  if (v == null) return null;
+  const s = String(v).trim();
+  return s ? s : null;
+}
+
+function pasoByProceso(pasos: HojaRutaPaso[], procesoId: number): HojaRutaPaso | undefined {
+  return pasos.find((p) => p.procesoId === procesoId);
+}
+
+function dp(paso: HojaRutaPaso | undefined): Record<string, unknown> | null {
+  if (!paso?.datosProceso || typeof paso.datosProceso !== "object") return null;
+  return paso.datosProceso as Record<string, unknown>;
+}
+
+/**
+ * Cantidad producida final: preferir engomado (estuches/cantidad),
+ * luego la última ejecución con cantidadUnidades > 0.
+ * NO tomar el primer 0 de CTP/guillotina (bug del MVP inicial).
+ */
+export function extractCantidadProducida(pasos: HojaRutaPaso[]): number | null {
+  const eng = pasoByProceso(pasos, PROCESO_ENGOMADO_ID);
+  const engDp = dp(eng);
+  const fromEng =
+    asNum(engDp?.estuches_engomados) ??
+    asNum(engDp?.cantidad_total) ??
+    asNum(eng?.ejecucion?.cantidadUnidades);
+  if (fromEng != null && fromEng > 0) return fromEng;
+
+  let lastPositive: number | null = null;
+  for (const paso of pasos) {
+    const n = asNum(paso.ejecucion?.cantidadUnidades);
+    if (n != null && n > 0) lastPositive = n;
+  }
+  return lastPositive;
+}
+
+/**
+ * Construye el payload de INSERT de prod_ot_producidas desde el snapshot
+ * de hoja de ruta (+ extras de despacho/referencia).
+ */
+export function buildProdOtProducidaInsert(args: {
+  otNumero: string;
+  snapshot: HojaRutaData;
+  userId: string;
+  despachoExtras?: DespachoExtrasCierre | null;
+  observacionesRevision?: string | null;
+  excluidoDePromedios?: boolean;
+  motivoExclusion?: string | null;
+  version?: number;
+  nowIso?: string;
+}): ProdOtProducidaFlatInsert {
+  const {
+    otNumero,
+    snapshot,
+    userId,
+    despachoExtras,
+    observacionesRevision = null,
+    excluidoDePromedios = false,
+    motivoExclusion = null,
+    version = 1,
+  } = args;
+  const nowIso = args.nowIso ?? new Date().toISOString();
+  const pasos = snapshot.pasos;
+  const desp = snapshot.despacho;
+
+  const imp =
+    pasoByProceso(pasos, PROCESO_OFFSET_ID) ?? pasoByProceso(pasos, PROCESO_DIGITAL_ID);
+  const troq = pasoByProceso(pasos, PROCESO_TROQUEL_ID);
+  const eng = pasoByProceso(pasos, PROCESO_ENGOMADO_ID);
+  const ctp = pasoByProceso(pasos, PROCESO_CTP_ID);
+  const guillo = pasoByProceso(pasos, PROCESO_GUILLOTINA_ID);
+  const desbroce = pasoByProceso(pasos, PROCESO_DESBROCE_ID);
+
+  const impDp = dp(imp);
+  const troqDp = dp(troq);
+  const engDp = dp(eng);
+  const ctpDp = dp(ctp);
+  const guilloDp = dp(guillo);
+  const desbroceDp = dp(desbroce);
+
+  const horasPrepImpresion = asNum(impDp?.horas_entrada_real);
+  const horasTirajeImpresion = asNum(impDp?.horas_impresion_real);
+  const horasPrepTroquelado = asNum(troqDp?.horas_preparacion_real);
+  const horasTirajeTroquelado = asNum(troqDp?.horas_tiraje_real);
+  // Engomado: NO mapear tiempo_real a tiraje (dato mezclado prep+tiraje).
+  const horasCtp = asNum(ctpDp?.horas_proceso);
+  const horasGuillotina = asNum(guilloDp?.horas_proceso);
+  const horasDesbroce = asNum(desbroceDp?.horas_proceso);
+
+  const partesHoras = [
+    horasPrepImpresion,
+    horasTirajeImpresion,
+    horasPrepTroquelado,
+    horasTirajeTroquelado,
+    horasCtp,
+    horasGuillotina,
+    horasDesbroce,
+    // tiempo_real engomado sí entra en total de ciclo (no en millar)
+    asNum(engDp?.tiempo_real),
+  ].filter((n): n is number => n != null);
+  const horasTotal = partesHoras.length > 0 ? partesHoras.reduce((a, b) => a + b, 0) : null;
+
+  const mermaImp = asNum(impDp?.hojas_merma) ?? 0;
+  const mermaTroq = asNum(troqDp?.hojas_merma) ?? 0;
+  const mermaTotal =
+    mermaImp > 0 || mermaTroq > 0 || impDp?.hojas_merma != null || troqDp?.hojas_merma != null
+      ? mermaImp + mermaTroq
+      : null;
+
+  let fechaInicio: string | null = null;
+  let fechaFin: string | null = null;
+  for (const paso of pasos) {
+    const ini = paso.ejecucion?.inicioRealAt ?? paso.fechaInicio;
+    const fin = paso.ejecucion?.finRealAt ?? paso.fechaFin;
+    if (ini && (!fechaInicio || ini < fechaInicio)) fechaInicio = ini;
+    if (fin && (!fechaFin || fin > fechaFin)) fechaFin = fin;
+  }
+
+  const tipoEngomado =
+    asStr(despachoExtras?.tipo_engomado) ?? asStr(engDp?.tipo_engomado);
+  const codigoCaja = asStr(engDp?.codigo_caja_embalaje);
+  const estuchesPorBulto = asNum(engDp?.estuches_por_bulto);
+
+  return {
+    ot_numero: otNumero,
+    ot_id: snapshot.otId ?? null,
+    referencia_id: despachoExtras?.referencia_id ?? null,
+    referencia_minerva: despachoExtras?.referencia_minerva ?? null,
+    referencia_cliente: despachoExtras?.referencia_cliente ?? null,
+    cliente: snapshot.cliente,
+    trabajo: snapshot.trabajo,
+    cantidad_pedida: snapshot.cantidad,
+    cantidad_producida: extractCantidadProducida(pasos),
+    material: desp?.material ?? null,
+    gramaje: desp?.gramaje ?? null,
+    formato: desp?.tamanoHoja ?? null,
+    tintas: desp?.tintas ?? null,
+    troquel: desp?.troquel ?? null,
+    poses: desp?.poses ?? null,
+    acabado_pral: desp?.acabadoPral ?? null,
+    tipo_engomado: tipoEngomado,
+    codigo_caja_embalaje: codigoCaja,
+    estuches_por_bulto: estuchesPorBulto,
+    fsc: null,
+    fecha_inicio_real: fechaInicio,
+    fecha_fin_real: fechaFin,
+    fecha_cierre: nowIso,
+    horas_prep_impresion_reales: horasPrepImpresion,
+    horas_tiraje_impresion_reales: horasTirajeImpresion,
+    horas_prep_troquelado_reales: horasPrepTroquelado,
+    horas_tiraje_troquelado_reales: horasTirajeTroquelado,
+    horas_prep_engomado_reales: null,
+    horas_tiraje_engomado_reales: null,
+    horas_guillotina_reales: horasGuillotina,
+    horas_ctp_reales: horasCtp,
+    horas_desbroce_reales: horasDesbroce,
+    horas_total_reales: horasTotal,
+    merma_total: mermaTotal,
+    snapshot,
+    snapshot_version: 1,
+    version,
+    cerrada_por: userId,
+    observaciones_revision: observacionesRevision || null,
+    excluido_de_promedios: excluidoDePromedios,
+    motivo_exclusion: excluidoDePromedios ? motivoExclusion || null : null,
+  };
+}
+
+/**
+ * Recalcula columnas planas desde el snapshot JSONB ya guardado
+ * (útil para backfill de filas cerradas con el mapper roto).
+ */
+export function flatColumnsFromSnapshot(
+  snapshot: HojaRutaData,
+  despachoExtras?: DespachoExtrasCierre | null,
+): Omit<
+  ProdOtProducidaFlatInsert,
+  | "snapshot"
+  | "snapshot_version"
+  | "version"
+  | "cerrada_por"
+  | "observaciones_revision"
+  | "excluido_de_promedios"
+  | "motivo_exclusion"
+  | "ot_numero"
+  | "fecha_cierre"
+> {
+  const built = buildProdOtProducidaInsert({
+    otNumero: snapshot.otNumero,
+    snapshot,
+    userId: "00000000-0000-0000-0000-000000000000",
+    despachoExtras,
+  });
+  const {
+    snapshot: _s,
+    snapshot_version: _sv,
+    version: _v,
+    cerrada_por: _c,
+    observaciones_revision: _o,
+    excluido_de_promedios: _e,
+    motivo_exclusion: _m,
+    ot_numero: _ot,
+    fecha_cierre: _fc,
+    ...flat
+  } = built;
+  return flat;
 }
