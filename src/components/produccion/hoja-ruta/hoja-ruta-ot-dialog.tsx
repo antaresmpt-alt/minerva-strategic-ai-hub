@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import {
   AlertTriangle,
   Archive,
-  ChevronDown,
   ChevronLeft,
   Download,
   ExternalLink,
@@ -25,14 +24,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { HojaRutaContenedorPanel } from "@/components/produccion/hoja-ruta/hoja-ruta-contenedor-panel";
 import {
   STEP_ACCENT_STYLES,
@@ -786,61 +777,36 @@ export function HojaRutaOtDialog({
               />
               Recargar
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                disabled={loading || hijaLoading || pdfExporting || !canExportPdf}
-                className="inline-flex h-8 items-center justify-center gap-1 rounded-md border border-input bg-background px-3 text-sm font-medium shadow-xs outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
-                title="Descargar PDF de la hoja de ruta"
-              >
-                <Download
-                  className={`size-4 ${pdfExporting ? "animate-pulse" : ""}`}
-                />
-                {pdfExporting ? "Generando…" : "PDF"}
-                <ChevronDown className="size-3.5 opacity-70" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="min-w-[240px]">
-                <DropdownMenuLabel>Tipo de PDF</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="gap-2"
-                  disabled={pdfExporting}
-                  onSelect={(e) => {
-                    e.preventDefault();
-                    // Diferir: evita choque Dialog+DropdownMenu (focus trap) que
-                    // en algunos casos remonta/crashea la página al generar PDF.
-                    window.setTimeout(() => void handlePdfExport(), 0);
-                  }}
-                >
-                  <FileText className="size-4 opacity-70" />
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-medium">Completa</span>
-                    <span className="text-muted-foreground text-xs">
-                      {isContenedorView
-                        ? "Resumen barco + anexo por hija"
-                        : "Itinerario con datos de proceso y ejecución"}
-                    </span>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="gap-2"
-                  disabled={pdfExporting}
-                  onSelect={(e) => {
-                    e.preventDefault();
-                    window.setTimeout(() => void handlePdfSimplificada(), 0);
-                  }}
-                >
-                  <Download className="size-4 opacity-70" />
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-medium">Simplificada (A5)</span>
-                    <span className="text-muted-foreground text-xs">
-                      {isContenedorView
-                        ? "Portada barco + 1 hoja por forma"
-                        : "Cartelita para planta (itinerario + firmas)"}
-                    </span>
-                  </div>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={loading || hijaLoading || pdfExporting || !canExportPdf}
+              onClick={() => void handlePdfExport()}
+              title={
+                isContenedorView
+                  ? "PDF completo: resumen barco + anexo por hija"
+                  : "PDF completo: itinerario con datos de proceso y ejecución"
+              }
+            >
+              <Download className={`mr-2 size-4 ${pdfExporting ? "animate-pulse" : ""}`} />
+              {pdfExporting ? "Generando…" : "PDF"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={loading || hijaLoading || pdfExporting || !canExportPdf}
+              onClick={() => void handlePdfSimplificada()}
+              title={
+                isContenedorView
+                  ? "PDF A5: portada barco + 1 hoja por forma"
+                  : "PDF A5: cartelita para planta"
+              }
+            >
+              <FileText className="mr-2 size-4" />
+              PDF A5
+            </Button>
           </div>
           <Button
             type="button"
