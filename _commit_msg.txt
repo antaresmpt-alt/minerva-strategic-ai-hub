@@ -1,7 +1,0 @@
-feat(bloque6): reabrir OT, editar exclusion, Excel y fix PDF
-
-- Migracion: reabierta_at/reabierta_por + UPDATE RLS (cerrar o reabrir)
-- estaOtArchivada solo cuenta filas con reabierta_at IS NULL
-- Cierre usa version = max+1 y reabierta_desde_id
-- UI Producidas: editar exclusion/obs + boton Reabrir + export Excel
-- PDF hoja de ruta: onSelect diferido + try/catch toast (evita crash Dialog/Dropdown)
