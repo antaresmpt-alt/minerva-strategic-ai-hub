@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
@@ -53,6 +54,17 @@ import {
   type CalendarioProduccionLinea,
 } from "@/lib/calendario-produccion";
 import {
+  CALENDARIO_AMBITOS,
+  CALENDARIO_AMBITO_LETRA,
+  CALENDARIO_AMBITO_PILL,
+  canEditCalendarioAmbito,
+  defaultCalendarioAmbitoFromRole,
+  isCalendarioAmbito,
+  labelCalendarioAmbito,
+  parseCalendarioAmbito,
+  type CalendarioAmbito,
+} from "@/lib/calendario-produccion-ambito";
+import {
   exportCalendarioProduccionDiaPdf,
   exportCalendarioProduccionListadoPdf,
   exportCalendarioProduccionMensualPdf,
@@ -82,18 +94,20 @@ const TABLE_MAESTRO = "prod_ots_general";
 const TABLE_DESPACHADAS = "produccion_ot_despachadas";
 
 const MIGRATION_HINT =
-  "Ejecuta la migración 20260717140000_prod_calendario_produccion_ot.sql en Supabase.";
+  "Ejecuta la migración 20260724140000_prod_calendario_produccion_ot_ambito.sql en Supabase.";
 const MIGRATION_HINT_NOTAS =
   "Ejecuta la migración 20260721120000_prod_calendario_produccion_nota.sql en Supabase.";
 
 const STORAGE_SHOW_SATURDAY = "cal-prod-show-saturday";
 const STORAGE_VISTA = "cal-prod-vista";
+const STORAGE_SOLO_MI_AMBITO = "cal-prod-solo-mi-ambito";
 
 type VistaCalendario = "mes" | "semana";
 
 type PortapapelesOt = {
   id: string;
   otNumero: string;
+  ambito: CalendarioAmbito;
   fromFecha: string;
   label: string;
 };
@@ -123,6 +137,8 @@ function DiaCelda({
   onOpenOt,
   progresoByOt,
   duplicatedOtSet,
+  ambitoActivo,
+  canEditActivo,
   variant = "mes",
 }: {
   dayNum: number;
@@ -132,6 +148,8 @@ function DiaCelda({
   onOpenOt: (otNumero: string) => void;
   progresoByOt: Map<string, CalendarioOtProgreso>;
   duplicatedOtSet: Set<string>;
+  ambitoActivo: CalendarioAmbito;
+  canEditActivo: boolean;
   /** Semana: tipografía mayor y más altura de celda. */
   variant?: "mes" | "semana";
 }) {
@@ -178,7 +196,7 @@ function DiaCelda({
           }
           onClick={onEditDay}
         >
-          + OT
+          {canEditActivo ? "+ OT" : "Ver día"}
         </button>
       ) : (
         <div
@@ -192,16 +210,24 @@ function DiaCelda({
             const progreso =
               progresoByOt.get(l.otNumero) ?? "sin_itinerario";
             const styles = PROGRESO_PILL_STYLES[progreso];
-            const isDuplicada = duplicatedOtSet.has(l.otNumero);
+            const isDuplicada = duplicatedOtSet.has(`${l.ambito}:${l.otNumero}`);
+            const isForeign = l.ambito !== ambitoActivo;
+            const ambitoPill = CALENDARIO_AMBITO_PILL[l.ambito];
             return (
               <button
                 key={l.id}
                 type="button"
-                title={`${l.label} — ${styles.title}`}
+                title={`${l.label} — ${styles.title}${
+                  isForeign
+                    ? ` · ${labelCalendarioAmbito(l.ambito)} (solo lectura)`
+                    : ""
+                }`}
                 className={cn(
                   "flex w-full items-center gap-1.5 rounded-md border border-slate-200/90 bg-white text-left shadow-xs",
                   "border-l-[3px] transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#002147]/40",
                   styles.border,
+                  ambitoPill.borderTint,
+                  isForeign && "opacity-75",
                   isSemana ? "px-2 py-1.5" : "px-1.5 py-1",
                 )}
                 onClick={(e) => {
@@ -209,6 +235,15 @@ function DiaCelda({
                   onOpenOt(l.otNumero);
                 }}
               >
+                <span
+                  className={cn(
+                    "shrink-0 rounded px-1 py-0.5 text-[10px] font-bold leading-none",
+                    ambitoPill.letraBadge,
+                  )}
+                  aria-label={labelCalendarioAmbito(l.ambito)}
+                >
+                  {CALENDARIO_AMBITO_LETRA[l.ambito]}
+                </span>
                 <span
                   className={cn(
                     "shrink-0 rounded px-1.5 py-0.5 font-mono font-bold tabular-nums",
@@ -251,6 +286,9 @@ function DiaCelda({
 
 export function CalendarioProduccionPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const now = useMemo(() => new Date(), []);
   const [year, setYear] = useState(now.getFullYear());
   const [monthIndex, setMonthIndex] = useState(now.getMonth());
@@ -268,6 +306,10 @@ export function CalendarioProduccionPage() {
   const [saving, setSaving] = useState(false);
   const [portapapeles, setPortapapeles] = useState<PortapapelesOt | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [ambitoActivo, setAmbitoActivo] = useState<CalendarioAmbito>("impresion");
+  const [soloMiAmbito, setSoloMiAmbito] = useState(false);
+  const ambitoInitDone = useRef(false);
 
   const [dayOpen, setDayOpen] = useState(false);
   const [dayYmd, setDayYmd] = useState<string | null>(null);
@@ -292,15 +334,66 @@ export function CalendarioProduccionPage() {
     otherYmd: string;
   } | null>(null);
 
+  const canEditActivo = canEditCalendarioAmbito(userRole, ambitoActivo);
+
   useEffect(() => {
     try {
       setShowSaturday(localStorage.getItem(STORAGE_SHOW_SATURDAY) === "1");
       const v = localStorage.getItem(STORAGE_VISTA);
       if (v === "semana" || v === "mes") setVista(v);
+      setSoloMiAmbito(localStorage.getItem(STORAGE_SOLO_MI_AMBITO) === "1");
     } catch {
       /* ignore */
     }
   }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const uid =
+        typeof user?.id === "string" && user.id.trim() ? user.id.trim() : null;
+      let role: string | null = null;
+      if (uid) {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", uid)
+          .maybeSingle();
+        role =
+          prof && typeof (prof as { role?: unknown }).role === "string"
+            ? String((prof as { role: string }).role).trim() || null
+            : null;
+      }
+      if (!mounted) return;
+      setUserRole(role);
+      if (!ambitoInitDone.current) {
+        const fromUrl = parseCalendarioAmbito(searchParams.get("ambito"));
+        const next = fromUrl ?? defaultCalendarioAmbitoFromRole(role);
+        setAmbitoActivo(next);
+        ambitoInitDone.current = true;
+      }
+    })().catch(() => {
+      if (mounted) setUserRole(null);
+    });
+    return () => {
+      mounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al montar / supabase
+  }, [supabase]);
+
+  useEffect(() => {
+    if (!ambitoInitDone.current) return;
+    const next = new URLSearchParams(searchParams.toString());
+    if (ambitoActivo === "impresion") next.delete("ambito");
+    else next.set("ambito", ambitoActivo);
+    const qs = next.toString();
+    const cur = searchParams.toString();
+    if (qs === cur) return;
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [ambitoActivo, pathname, router, searchParams]);
 
   const semanasMes = useMemo(
     () => buildSemanasLaboralesMes(year, monthIndex, { includeSaturday: showSaturday }),
@@ -318,10 +411,20 @@ export function CalendarioProduccionPage() {
     return monthRangeYmd(year, monthIndex);
   }, [vista, weekMonday, showSaturday, year, monthIndex]);
 
+  const rowsVisibles = useMemo(() => {
+    if (soloMiAmbito) {
+      return rows.filter((r) => {
+        const a = isCalendarioAmbito(r.ambito) ? r.ambito : "impresion";
+        return a === ambitoActivo;
+      });
+    }
+    return rows;
+  }, [rows, soloMiAmbito, ambitoActivo]);
+
   const entradasByDay = useMemo(() => {
-    const all = entradasPorDia(rows, tituloByOt);
+    const all = entradasPorDia(rowsVisibles, tituloByOt);
     return filtrarEntradasPorTexto(all, filtro);
-  }, [rows, tituloByOt, filtro]);
+  }, [rowsVisibles, tituloByOt, filtro]);
 
   const notasByDay = useMemo(() => {
     const map = new Map<string, ProdCalendarioProduccionNotaRow[]>();
@@ -338,22 +441,30 @@ export function CalendarioProduccionPage() {
     return map;
   }, [notasRows]);
 
+  /** Duplicada = misma OT en 2+ días dentro del mismo ámbito (rango cargado). */
   const duplicatedOtSet = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const r of rows) {
+    for (const r of rowsVisibles) {
       const ot = String(r.ot_numero ?? "").trim();
       if (!ot) continue;
-      counts.set(ot, (counts.get(ot) ?? 0) + 1);
+      const a = isCalendarioAmbito(r.ambito) ? r.ambito : "impresion";
+      const key = `${a}:${ot}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     return new Set(
-      [...counts.entries()].filter(([, n]) => n > 1).map(([ot]) => ot),
+      [...counts.entries()].filter(([, n]) => n > 1).map(([k]) => k),
     );
-  }, [rows]);
+  }, [rowsVisibles]);
 
   const dayLineas = useMemo(() => {
     if (!dayYmd) return [];
     return entradasByDay.get(dayYmd) ?? [];
   }, [dayYmd, entradasByDay]);
+
+  const dayLineasEditables = useMemo(
+    () => dayLineas.filter((l) => l.ambito === ambitoActivo),
+    [dayLineas, ambitoActivo],
+  );
 
   const dayNotas = useMemo(() => {
     if (!dayYmd) return [];
@@ -367,7 +478,9 @@ export function CalendarioProduccionPage() {
         await Promise.all([
           supabase
             .from(TABLE)
-            .select("id, fecha, ot_numero, orden, notas, created_by, created_at, updated_at")
+            .select(
+              "id, fecha, ot_numero, ambito, orden, notas, created_by, created_at, updated_at",
+            )
             .gte("fecha", range.start)
             .lte("fecha", range.end)
             .order("fecha", { ascending: true })
@@ -398,7 +511,10 @@ export function CalendarioProduccionPage() {
         }
       }
 
-      const list = (data ?? []) as ProdCalendarioProduccionOtRow[];
+      const list = ((data ?? []) as ProdCalendarioProduccionOtRow[]).map((r) => ({
+        ...r,
+        ambito: isCalendarioAmbito(r.ambito) ? r.ambito : ("impresion" as const),
+      }));
       setRows(list);
       setNotasRows((notasData ?? []) as ProdCalendarioProduccionNotaRow[]);
 
@@ -481,6 +597,12 @@ export function CalendarioProduccionPage() {
   };
 
   const importExcel = async (file: File) => {
+    if (!canEditActivo) {
+      toast.error(
+        `No puedes importar en ámbito ${labelCalendarioAmbito(ambitoActivo)}.`,
+      );
+      return;
+    }
     setImporting(true);
     try {
       const buffer = await file.arrayBuffer();
@@ -501,11 +623,12 @@ export function CalendarioProduccionPage() {
         const chunk = parsed.slice(i, i + chunkSize).map((r) => ({
           fecha: r.fecha,
           ot_numero: r.ot_numero,
+          ambito: ambitoActivo,
           orden: r.orden,
           created_by: user?.id ?? null,
         }));
         const { error } = await supabase.from(TABLE).upsert(chunk, {
-          onConflict: "fecha,ot_numero",
+          onConflict: "fecha,ot_numero,ambito",
         });
         if (error) throw error;
       }
@@ -523,7 +646,9 @@ export function CalendarioProduccionPage() {
         /* ignore */
       }
 
-      toast.success(`${parsed.length} OTs importadas desde Excel.`);
+      toast.success(
+        `${parsed.length} OTs importadas en ${labelCalendarioAmbito(ambitoActivo)}.`,
+      );
       await load();
     } catch (e) {
       toast.error(errorMessageFromUnknown(e, "No se pudo importar el Excel."));
@@ -583,11 +708,22 @@ export function CalendarioProduccionPage() {
   const insertOtToDay = useCallback(
     async (hit: OtSearchHit) => {
       if (!dayYmd) return;
+      if (!canEditCalendarioAmbito(userRole, ambitoActivo)) {
+        toast.error(
+          `No puedes añadir OTs en ${labelCalendarioAmbito(ambitoActivo)}.`,
+        );
+        return;
+      }
       const ot = String(hit.num_pedido ?? "").trim();
       if (!ot) return;
       setSaving(true);
       try {
-        const existing = rows.filter((r) => r.fecha.slice(0, 10) === dayYmd);
+        const existing = rows.filter(
+          (r) =>
+            r.fecha.slice(0, 10) === dayYmd &&
+            (isCalendarioAmbito(r.ambito) ? r.ambito : "impresion") ===
+              ambitoActivo,
+        );
         const nextOrden =
           existing.length === 0
             ? 0
@@ -600,12 +736,15 @@ export function CalendarioProduccionPage() {
         const { error } = await supabase.from(TABLE).insert({
           fecha: dayYmd,
           ot_numero: ot,
+          ambito: ambitoActivo,
           orden: nextOrden,
           created_by: user?.id ?? null,
         });
         if (error) {
           if (error.code === "23505") {
-            toast.message(`La OT ${ot} ya está en este día.`);
+            toast.message(
+              `La OT ${ot} ya está en este día (${labelCalendarioAmbito(ambitoActivo)}).`,
+            );
             return;
           }
           throw error;
@@ -616,7 +755,7 @@ export function CalendarioProduccionPage() {
           next.set(ot, hit.titulo ?? null);
           return next;
         });
-        toast.success(`OT ${ot} añadida.`);
+        toast.success(`OT ${ot} añadida (${labelCalendarioAmbito(ambitoActivo)}).`);
         setOtQuery("");
         setOtHits([]);
         await load();
@@ -626,11 +765,17 @@ export function CalendarioProduccionPage() {
         setSaving(false);
       }
     },
-    [dayYmd, load, rows, supabase],
+    [ambitoActivo, dayYmd, load, rows, supabase, userRole],
   );
 
   const addOtToDay = async (hit: OtSearchHit) => {
     if (!dayYmd) return;
+    if (!canEditActivo) {
+      toast.error(
+        `No puedes añadir OTs en ${labelCalendarioAmbito(ambitoActivo)}.`,
+      );
+      return;
+    }
     const ot = String(hit.num_pedido ?? "").trim();
     if (!ot) return;
 
@@ -638,17 +783,22 @@ export function CalendarioProduccionPage() {
       rows.some(
         (r) =>
           r.fecha.slice(0, 10) === dayYmd &&
-          String(r.ot_numero ?? "").trim() === ot,
+          String(r.ot_numero ?? "").trim() === ot &&
+          (isCalendarioAmbito(r.ambito) ? r.ambito : "impresion") ===
+            ambitoActivo,
       )
     ) {
-      toast.message(`La OT ${ot} ya está en este día.`);
+      toast.message(
+        `La OT ${ot} ya está en este día (${labelCalendarioAmbito(ambitoActivo)}).`,
+      );
       return;
     }
 
     const otherRow = rows.find(
       (r) =>
         String(r.ot_numero ?? "").trim() === ot &&
-        r.fecha.slice(0, 10) !== dayYmd,
+        r.fecha.slice(0, 10) !== dayYmd &&
+        (isCalendarioAmbito(r.ambito) ? r.ambito : "impresion") === ambitoActivo,
     );
 
     if (otherRow) {
@@ -665,7 +815,7 @@ export function CalendarioProduccionPage() {
       }
 
       toast.message(
-        `La OT ${ot} ya está planificada el ${fechaDiaLabel(otherYmd)}.`,
+        `La OT ${ot} ya está planificada el ${fechaDiaLabel(otherYmd)} (${labelCalendarioAmbito(ambitoActivo)}).`,
       );
     }
 
@@ -761,6 +911,16 @@ export function CalendarioProduccionPage() {
   };
 
   const removeEntrada = async (id: string) => {
+    const row = rows.find((r) => r.id === id);
+    const ambitoRow = row
+      ? isCalendarioAmbito(row.ambito)
+        ? row.ambito
+        : "impresion"
+      : null;
+    if (ambitoRow && !canEditCalendarioAmbito(userRole, ambitoRow)) {
+      toast.error("No puedes quitar pastillas de otro ámbito.");
+      return;
+    }
     setSaving(true);
     try {
       const { error, count } = await supabase
@@ -786,19 +946,24 @@ export function CalendarioProduccionPage() {
 
   const cortarEntrada = (linea: CalendarioProduccionLinea) => {
     if (!dayYmd) return;
+    if (!canEditCalendarioAmbito(userRole, linea.ambito)) {
+      toast.error("No puedes cortar pastillas de otro ámbito.");
+      return;
+    }
     setPortapapeles({
       id: linea.id,
       otNumero: linea.otNumero,
+      ambito: linea.ambito,
       fromFecha: dayYmd,
       label: linea.label,
     });
     toast.message(`OT ${linea.otNumero} cortada. Abre otro día y pega.`);
   };
 
-  /** Subir/bajar OT dentro del mismo día (campo `orden`). */
+  /** Subir/bajar OT dentro del mismo día (solo ámbito activo editable). */
   const moverEntradaEnDia = async (id: string, direction: -1 | 1) => {
-    if (!dayYmd) return;
-    const list = dayLineas;
+    if (!dayYmd || !canEditActivo) return;
+    const list = dayLineasEditables;
     const idx = list.findIndex((l) => l.id === id);
     const swapIdx = idx + direction;
     if (idx < 0 || swapIdx < 0 || swapIdx >= list.length) return;
@@ -835,6 +1000,16 @@ export function CalendarioProduccionPage() {
 
   const pegarEnDia = async () => {
     if (!dayYmd || !portapapeles) return;
+    if (!canEditCalendarioAmbito(userRole, portapapeles.ambito)) {
+      toast.error("No puedes pegar pastillas de otro ámbito.");
+      return;
+    }
+    if (portapapeles.ambito !== ambitoActivo) {
+      toast.message(
+        `Cambia el ámbito a ${labelCalendarioAmbito(portapapeles.ambito)} para pegar.`,
+      );
+      return;
+    }
     if (portapapeles.fromFecha === dayYmd) {
       toast.message("Ya está en este día.");
       setPortapapeles(null);
@@ -842,7 +1017,12 @@ export function CalendarioProduccionPage() {
     }
     setSaving(true);
     try {
-      const existing = rows.filter((r) => r.fecha.slice(0, 10) === dayYmd);
+      const existing = rows.filter(
+        (r) =>
+          r.fecha.slice(0, 10) === dayYmd &&
+          (isCalendarioAmbito(r.ambito) ? r.ambito : "impresion") ===
+            portapapeles.ambito,
+      );
       const nextOrden =
         existing.length === 0
           ? 0
@@ -958,7 +1138,13 @@ export function CalendarioProduccionPage() {
       entradasByDay,
       notasByDay,
       includeSaturday: showSaturday,
-      filtroTexto: filtro,
+      filtroTexto: [
+        labelCalendarioAmbito(ambitoActivo),
+        soloMiAmbito ? "solo mi ámbito" : "con otros ámbitos",
+        filtro.trim(),
+      ]
+        .filter(Boolean)
+        .join(" · "),
     });
   };
 
@@ -969,25 +1155,32 @@ export function CalendarioProduccionPage() {
       entradasByDay,
       notasByDay,
       includeSaturday: showSaturday,
-      filtroTexto: filtro,
+      filtroTexto: [
+        labelCalendarioAmbito(ambitoActivo),
+        soloMiAmbito ? "solo mi ámbito" : "con otros ámbitos",
+        filtro.trim(),
+      ]
+        .filter(Boolean)
+        .join(" · "),
       tituloSemana: semanaLabelEs(weekMonday, showSaturday),
     });
   };
 
   const exportListado = () => {
+    const ambitoTag = labelCalendarioAmbito(ambitoActivo);
     if (vista === "semana") {
       const dias = semanaActual
         .filter((c): c is { ymd: string; dayNum: number } => c != null)
         .map((c) => ({ ymd: c.ymd, titulo: fechaDiaLabel(c.ymd) }));
       const ymd = `${weekMonday.getFullYear()}-${String(weekMonday.getMonth() + 1).padStart(2, "0")}-${String(weekMonday.getDate()).padStart(2, "0")}`;
       exportCalendarioProduccionListadoPdf({
-        titulo: "Calendario Producción — Listado semana",
+        titulo: `Calendario Producción — ${ambitoTag} — Listado semana`,
         subtitulo: semanaLabelEs(weekMonday, showSaturday),
         dias,
         entradasByDay,
         notasByDay,
         filtroTexto: filtro,
-        filenameStem: `calendario-produccion-semana-${ymd}`,
+        filenameStem: `calendario-produccion-${ambitoActivo}-semana-${ymd}`,
       });
       return;
     }
@@ -999,13 +1192,13 @@ export function CalendarioProduccionPage() {
       }
     }
     exportCalendarioProduccionListadoPdf({
-      titulo: "Calendario Producción — Listado mes",
+      titulo: `Calendario Producción — ${ambitoTag} — Listado mes`,
       subtitulo: mesAnioLabel(year, monthIndex),
       dias,
       entradasByDay,
       notasByDay,
       filtroTexto: filtro,
-      filenameStem: `calendario-produccion-${year}-${String(monthIndex + 1).padStart(2, "0")}`,
+      filenameStem: `calendario-produccion-${ambitoActivo}-${year}-${String(monthIndex + 1).padStart(2, "0")}`,
     });
   };
 
@@ -1013,10 +1206,19 @@ export function CalendarioProduccionPage() {
     if (!dayYmd) return;
     exportCalendarioProduccionDiaPdf({
       ymd: dayYmd,
-      tituloDia: fechaDiaLabel(dayYmd),
+      tituloDia: `${fechaDiaLabel(dayYmd)} · ${labelCalendarioAmbito(ambitoActivo)}`,
       lineas: dayLineas,
       notas: dayNotas,
     });
+  };
+
+  const setSoloMiAmbitoPersist = (v: boolean) => {
+    setSoloMiAmbito(v);
+    try {
+      localStorage.setItem(STORAGE_SOLO_MI_AMBITO, v ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
   };
 
   const cabecera = useMemo(() => {
@@ -1032,12 +1234,40 @@ export function CalendarioProduccionPage() {
             Calendario Producción
           </h2>
           <p className="text-xs text-slate-600">
-            Coloca OTs por día. Vista mes o semana (como el Excel de
-            programación). Pastilla = OT + trabajo; clic para resumen e
-            itinerario.
+            Mapa mental por ámbito (I/D/T/E). No valida orden entre secciones.
+            {canEditActivo
+              ? ` Editando ${labelCalendarioAmbito(ambitoActivo)}.`
+              : ` Solo lectura en ${labelCalendarioAmbito(ambitoActivo)}.`}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-1.5 text-xs text-slate-700">
+            <span className="font-medium">Ámbito</span>
+            <select
+              className="h-7 rounded-md border border-slate-300 bg-white px-2 text-xs"
+              value={ambitoActivo}
+              onChange={(e) => {
+                const v = parseCalendarioAmbito(e.target.value);
+                if (v) setAmbitoActivo(v);
+              }}
+              aria-label="Ámbito del calendario"
+            >
+              {CALENDARIO_AMBITOS.map((a) => (
+                <option key={a} value={a}>
+                  {CALENDARIO_AMBITO_LETRA[a]} · {labelCalendarioAmbito(a)}
+                  {canEditCalendarioAmbito(userRole, a) ? "" : " (ver)"}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700">
+            <input
+              type="checkbox"
+              checked={soloMiAmbito}
+              onChange={(e) => setSoloMiAmbitoPersist(e.target.checked)}
+            />
+            Solo mi ámbito
+          </label>
           <div className="inline-flex rounded-md border border-slate-200 p-0.5">
             <Button
               type="button"
@@ -1111,9 +1341,13 @@ export function CalendarioProduccionPage() {
             type="button"
             variant="outline"
             size="sm"
-            disabled={importing}
+            disabled={importing || !canEditActivo}
             onClick={() => fileInputRef.current?.click()}
-            title="Importar pestaña planificador del Excel de programación"
+            title={
+              canEditActivo
+                ? `Importar pestaña planificador → ${labelCalendarioAmbito(ambitoActivo)}`
+                : "Sin permiso de escritura en este ámbito"
+            }
           >
             {importing ? (
               <Loader2 className="mr-1 size-4 animate-spin" />
@@ -1237,6 +1471,8 @@ export function CalendarioProduccionPage() {
                       variant="semana"
                       progresoByOt={progresoByOt}
                       duplicatedOtSet={duplicatedOtSet}
+                      ambitoActivo={ambitoActivo}
+                      canEditActivo={canEditActivo}
                     />
                   ) : (
                     <div
@@ -1258,6 +1494,8 @@ export function CalendarioProduccionPage() {
                         variant="mes"
                         progresoByOt={progresoByOt}
                         duplicatedOtSet={duplicatedOtSet}
+                        ambitoActivo={ambitoActivo}
+                        canEditActivo={canEditActivo}
                       />
                     ) : (
                       <div
@@ -1276,12 +1514,18 @@ export function CalendarioProduccionPage() {
           <DialogHeader>
             <DialogTitle>OTs y notas del día</DialogTitle>
             <DialogDescription>
-              {dayYmd ? fechaDiaLabel(dayYmd) : ""}
+              {dayYmd ? fechaDiaLabel(dayYmd) : ""} ·{" "}
+              {labelCalendarioAmbito(ambitoActivo)}
+              {!canEditActivo ? " (solo lectura de pastillas)" : ""}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
-            {portapapeles && dayYmd && portapapeles.fromFecha !== dayYmd ? (
+            {portapapeles &&
+            dayYmd &&
+            portapapeles.fromFecha !== dayYmd &&
+            canEditActivo &&
+            portapapeles.ambito === ambitoActivo ? (
               <Button
                 type="button"
                 variant="default"
@@ -1296,19 +1540,28 @@ export function CalendarioProduccionPage() {
             ) : null}
 
             <div>
-              <Label className="text-xs">Añadir OT</Label>
+              <Label className="text-xs">
+                Añadir OT ({labelCalendarioAmbito(ambitoActivo)})
+              </Label>
               <Input
                 className="mt-1"
                 placeholder="Buscar nº OT, cliente o trabajo…"
                 value={otQuery}
                 onChange={(e) => setOtQuery(e.target.value)}
+                disabled={!canEditActivo}
               />
+              {!canEditActivo ? (
+                <p className="mt-1 text-xs text-amber-800">
+                  No puedes añadir OTs en este ámbito. Cambia el desplegable o
+                  pide a admin/gerencia.
+                </p>
+              ) : null}
               {searchingOt ? (
                 <p className="mt-1 flex items-center gap-1 text-xs text-slate-500">
                   <Loader2 className="size-3 animate-spin" /> Buscando…
                 </p>
               ) : null}
-              {otHits.length > 0 ? (
+              {otHits.length > 0 && canEditActivo ? (
                 <ul className="mt-2 max-h-40 overflow-y-auto rounded-md border border-slate-200">
                   {otHits.map((h) => (
                     <li key={h.num_pedido}>
@@ -1411,13 +1664,21 @@ export function CalendarioProduccionPage() {
                   ) : null}
 
                   <ul className="space-y-1">
-                  {dayLineas.map((l, idx) => (
+                  {dayLineas.map((l) => {
+                    const editable =
+                      canEditActivo && l.ambito === ambitoActivo;
+                    const editIdx = dayLineasEditables.findIndex(
+                      (x) => x.id === l.id,
+                    );
+                    return (
                     <li
                       key={l.id}
                       className={`flex items-start justify-between gap-2 rounded-md border bg-white px-2 py-1.5 ${
                         portapapeles?.id === l.id
                           ? "border-amber-400 bg-amber-50/80"
-                          : "border-slate-200"
+                          : l.ambito !== ambitoActivo
+                            ? "border-slate-200 opacity-80"
+                            : "border-slate-200"
                       }`}
                     >
                       <button
@@ -1426,19 +1687,33 @@ export function CalendarioProduccionPage() {
                         onClick={() => void openDetalle(l.otNumero)}
                       >
                         <span className="font-semibold text-[#002147]">
+                          <span
+                            className={cn(
+                              "mr-1 inline-block rounded px-1 py-0.5 text-[10px] font-bold text-white",
+                              CALENDARIO_AMBITO_PILL[l.ambito].letraBadge,
+                            )}
+                          >
+                            {CALENDARIO_AMBITO_LETRA[l.ambito]}
+                          </span>
                           {l.otNumero}
+                          {l.ambito !== ambitoActivo ? (
+                            <span className="ml-1 text-[10px] font-normal text-slate-500">
+                              (ref.)
+                            </span>
+                          ) : null}
                         </span>
                         <span className="mt-0.5 block truncate text-xs text-slate-600">
                           {l.trabajo ?? "—"}
                         </span>
                       </button>
+                      {editable ? (
                       <div className="flex shrink-0 items-center gap-0.5">
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0 text-[#002147]"
-                          disabled={saving || idx === 0}
+                          disabled={saving || editIdx <= 0}
                           title="Subir"
                           onClick={() => void moverEntradaEnDia(l.id, -1)}
                         >
@@ -1449,7 +1724,11 @@ export function CalendarioProduccionPage() {
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0 text-[#002147]"
-                          disabled={saving || idx === dayLineas.length - 1}
+                          disabled={
+                            saving ||
+                            editIdx < 0 ||
+                            editIdx >= dayLineasEditables.length - 1
+                          }
                           title="Bajar"
                           onClick={() => void moverEntradaEnDia(l.id, 1)}
                         >
@@ -1478,8 +1757,10 @@ export function CalendarioProduccionPage() {
                           <Trash2 className="size-3.5" />
                         </Button>
                       </div>
+                      ) : null}
                     </li>
-                  ))}
+                    );
+                  })}
                   </ul>
                 </div>
               )}

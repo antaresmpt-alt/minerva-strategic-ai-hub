@@ -1,16 +1,19 @@
+import type { CalendarioAmbito } from "@/lib/calendario-produccion-ambito";
+import type { CalendarioPasoResumen } from "@/lib/calendario-produccion-progreso";
+
 /** Fila de `public.prod_calendario_produccion_ot`. */
 export type ProdCalendarioProduccionOtRow = {
   id: string;
   fecha: string;
   ot_numero: string;
+  /** impresion | digital | troquelado | engomado */
+  ambito: CalendarioAmbito;
   orden: number;
   notas: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
 };
-
-import type { CalendarioPasoResumen } from "@/lib/calendario-produccion-progreso";
 
 /** Detalle enriquecido maestro + despacho + itinerario para el mini modal. */
 export type CalendarioProduccionOtDetalle = {

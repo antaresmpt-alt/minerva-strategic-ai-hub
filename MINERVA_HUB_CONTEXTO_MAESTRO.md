@@ -325,7 +325,7 @@ src/components/produccion/planificacion/
 
 17. **Bloque 10 — Presupuestos (23 jun 2026, diseño)**: **después** de cartelas (9) y antes de ventas/comercial (11+). Hoy las hijas se parten en **despacho** (8.2 puente); futuro: formas en presupuesto + **versión real** al copiar (estructura como se ejecutó, no solo teoría Optimus). Briefing: `MINERVA_BLOQUE10_PRESUPUESTOS.md`. Reunión planta jueves: `MINERVA_REUNION_HOJA_RUTA_JUEVES.md`.
 
-18. **Calendario Producción (17–18 jul 2026)**: planificador manual OTs (mapa mental Jordi/Carlos). **OTs → Calendario Producción**: Mes \| Semana; pastillas 1 línea (OT + trabajo); color por progreso itinerario; mini-modal + hoja de ruta; botones **PDF grid** / **PDF listado** (papel); import Excel `planificador`; cortar/pegar. **No** auto desde `fecha_entrega`. Tabla `prod_calendario_produccion_ot`. Detalle §15.11–15.12 Bloque 9.
+18. **Calendario Producción (17–18 jul + multi-ámbito 24 jul)**: planificador manual OTs. **Ámbitos** Impresión/Digital/Troquelado/Engomado (`ambito` + letra I/D/T/E); escritura solo admin/gerencia todos, `produccion`→Impresión, sección→la suya; RLS por ámbito. Cruzado read-only. **No** auto desde `fecha_entrega`. Fase 2: semáforo itinerario. Tabla `prod_calendario_produccion_ot`. Detalle §15.11–15.13 Bloque 9.
 
 19. **Cartelas impresión (18 jul 2026)**: **1 copia** por palet (antes 2). Confirmado Emma/Ramón.
 

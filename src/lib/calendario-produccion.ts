@@ -1,4 +1,9 @@
 import type { ProdCalendarioProduccionOtRow } from "@/types/prod-calendario-produccion-ot";
+import {
+  CALENDARIO_AMBITO_LETRA,
+  isCalendarioAmbito,
+  type CalendarioAmbito,
+} from "@/lib/calendario-produccion-ambito";
 import { ymdFromParts } from "@/lib/etiquetas-calendario-mensual";
 
 export {
@@ -16,6 +21,7 @@ export {
 export type CalendarioProduccionLinea = {
   id: string;
   otNumero: string;
+  ambito: CalendarioAmbito;
   /** Texto corto en celda: OT · trabajo */
   label: string;
   trabajo: string | null;
@@ -39,9 +45,12 @@ export function truncateTrabajo(raw: string | null | undefined, max = 42): strin
 export function labelCalendarioProduccionOt(
   otNumero: string,
   trabajo: string | null | undefined,
+  ambito?: CalendarioAmbito | null,
 ): string {
   const ot = String(otNumero ?? "").trim() || "—";
-  return `${ot} · ${truncateTrabajo(trabajo)}`;
+  const letra =
+    ambito && isCalendarioAmbito(ambito) ? `${CALENDARIO_AMBITO_LETRA[ambito]}·` : "";
+  return `${letra}${ot} · ${truncateTrabajo(trabajo)}`;
 }
 
 export function entradasPorDia(
@@ -54,12 +63,16 @@ export function entradasPorDia(
     if (!key) continue;
     const ot = String(r.ot_numero ?? "").trim();
     if (!ot) continue;
+    const ambito: CalendarioAmbito = isCalendarioAmbito(r.ambito)
+      ? r.ambito
+      : "impresion";
     const trabajo = tituloByOt.get(ot) ?? null;
     const list = map.get(key) ?? [];
     list.push({
       id: r.id,
       otNumero: ot,
-      label: labelCalendarioProduccionOt(ot, trabajo),
+      ambito,
+      label: labelCalendarioProduccionOt(ot, trabajo, ambito),
       trabajo,
       orden: r.orden,
     });
@@ -69,6 +82,7 @@ export function entradasPorDia(
     list.sort((a, b) => {
       const o = a.orden - b.orden;
       if (o !== 0) return o;
+      if (a.ambito !== b.ambito) return a.ambito.localeCompare(b.ambito);
       return a.otNumero.localeCompare(b.otNumero, "es", { numeric: true });
     });
   }

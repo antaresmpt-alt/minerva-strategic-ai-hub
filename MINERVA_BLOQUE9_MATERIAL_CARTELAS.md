@@ -1739,6 +1739,7 @@ Archivos: `src/lib/hoja-ruta/hoja-ruta-pdf.ts`, `hoja-ruta-formatters.ts`.
 
 ##### 15.12.2 PDF — grid + listado por día
 
+
 | Export | Formato | Uso |
 |--------|--------|-----|
 | **PDF grid** | Landscape A4 (mes o semana) | Vista como pantalla; útil en pantalla / overview |
@@ -1781,4 +1782,24 @@ Emma (jueves) + Ramón (viernes): **ya no se imprimen 2 copias** por palet, solo
 |------|-----------|-------|
 | Derivar OT → imp. externa post-despacho | Alta | §15.6.12 |
 | Plan engomado desde salida troquel | Media | Badge 2080 vs plan 4400 |
+
+#### 15.13 Sesión 24 jul 2026 — Calendario multi-ámbito (Fase 1)
+
+Mapa mental por sección (Carlos Impresión, Rita Digital, Antonio Troquel, Gabri Engomado).
+
+| Pieza | Detalle |
+|-------|---------|
+| Columna | `prod_calendario_produccion_ot.ambito` (`impresion`\|`digital`\|`troquelado`\|`engomado`) |
+| Unique | `(fecha, ot_numero, ambito)` — misma OT en varios ámbitos/días |
+| Migración | `20260724140000_prod_calendario_produccion_ot_ambito.sql` (aplicada en prod) |
+| Backfill | Filas existentes → `impresion` |
+| UI | Desplegable ámbito + toggle «Solo mi ámbito»; pastilla con letra I/D/T/E |
+| Cruzado | Otros ámbitos visibles en solo lectura (opacity); no cortar/pegar/borrar |
+| Escritura | **admin/gerencia** = todos; **produccion** = solo Impresión; roles sección = el suyo |
+| RLS | `calendario_produccion_can_write_ambito()` / `can_read()` — no solo UI |
+| Import Excel | Va al ámbito activo |
+| Fase 1 ≠ verdad | **No** valida orden Impresión→Troquel; tablón visual. Semáforo itinerario = Fase 2 |
+| Lib | `src/lib/calendario-produccion-ambito.ts` |
+
+**Presentar a planta:** «Esto es un tablón para organizar el mes mirando el mapa de los demás; no bloquea si troquelas antes de imprimir. Cuando el semáforo esté, confirmaremos si el paso ya está listo en Minerva.»
 | Feedback Jordi colores pastilla | Baja | Ya usable; afinar si pide |

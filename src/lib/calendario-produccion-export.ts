@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 
 import type { CalendarioProduccionLinea } from "@/lib/calendario-produccion";
+import { CALENDARIO_AMBITO_LETRA } from "@/lib/calendario-produccion-ambito";
 import type { ProdCalendarioProduccionNotaRow } from "@/types/prod-calendario-produccion-nota";
 import {
   diasLaborablesCabecera,
@@ -16,6 +17,11 @@ const BORDER: [number, number, number] = [203, 213, 225];
 const MARGIN = 8;
 const HEADER_H = 20;
 const COL_HEADER_H = 6;
+
+function otPdfLabel(l: CalendarioProduccionLinea): string {
+  const letra = l.ambito ? CALENDARIO_AMBITO_LETRA[l.ambito] : "";
+  return letra ? `${letra}·${l.otNumero}` : l.otNumero;
+}
 
 function pageW(doc: jsPDF): number {
   return doc.internal.pageSize.getWidth();
@@ -231,7 +237,8 @@ export function exportCalendarioProduccionDiaPdf(params: {
       }
       doc.setTextColor(...NAVY);
       doc.setFont("helvetica", "bold");
-      doc.text(l.otNumero, MARGIN, y);
+      doc.text(otPdfLabel(l), MARGIN, y);
+
       doc.setFont("helvetica", "normal");
       doc.setTextColor(0, 0, 0);
       const trabajo = l.trabajo?.trim() || "—";
@@ -347,7 +354,7 @@ export function exportCalendarioProduccionSemanaPdf(params: {
       doc.setTextColor(...NAVY);
       doc.setFont("helvetica", "bold");
       const otW = Math.min(18, colW * 0.28);
-      doc.text(l.otNumero, x + 1.5, ty);
+      doc.text(otPdfLabel(l), x + 1.5, ty);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(...SLATE);
       const trabajo = (l.trabajo?.trim() || "—").slice(0, 80);
@@ -496,7 +503,7 @@ export function exportCalendarioProduccionListadoPdf(params: {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
       doc.setTextColor(...NAVY);
-      doc.text(l.otNumero, MARGIN + 2, y);
+      doc.text(otPdfLabel(l), MARGIN + 2, y);
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
