@@ -135,11 +135,12 @@ export const SEMAFORO_PILL_STYLES: Record<
     title: "Listo: paso del ámbito disponible / en marcha",
     dot: "bg-emerald-500",
   },
+  /** Navy sólido — no confundir con el verde «listo». */
   hecho: {
-    otBadge: "bg-emerald-200 text-emerald-950",
-    border: "border-l-emerald-700",
+    otBadge: "bg-[#002147] text-white",
+    border: "border-l-[#002147]",
     title: "Hecho: paso(s) del ámbito finalizado(s)",
-    dot: "bg-emerald-700",
+    dot: "bg-[#002147]",
   },
 };
 

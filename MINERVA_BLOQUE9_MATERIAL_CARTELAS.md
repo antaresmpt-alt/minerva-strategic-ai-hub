@@ -1800,8 +1800,9 @@ Mapa mental por sección (Carlos Impresión, Rita Digital, Antonio Troquel, Gabr
 | Escritura | **admin/gerencia** = todos; **produccion** = solo Impresión; roles sección = el suyo |
 | RLS | `calendario_produccion_can_write_ambito()` / `can_read()` — no solo UI |
 | Import Excel | Va al ámbito activo |
-| Semáforo (Fase 2) | Pastilla coloreada por estado del **paso del ámbito** en itinerario Minerva (`esperando` / `listo` / `hecho` / `sin_paso`). **No** mueve fechas ni crea pastillas |
+| Semáforo (Fase 2) | Pastilla coloreada por estado del **paso del ámbito** en itinerario Minerva. **No** mueve fechas ni crea pastillas |
+| Colores semáforo | **ámbar** = esperando · **verde** = listo · **navy `#002147`** = hecho · **gris** = sin paso (verde oscuro descartado: se confundía con listo) |
 | Lib | `calendario-produccion-ambito.ts`, `calendario-produccion-progreso.ts` (`semaforoForAmbito`, `fetchItinerarioCalendarioByOtNumeros`) |
 
-**Presentar a planta:** «Tablón por sección (I/D/T/E). Los checks eligen qué mapas miras (Antonio I+T, Gabri T+E…). El color del nº OT dice si *tu* paso ya está listo en Minerva; no te cambia el día del calendario.»
-| Feedback Jordi colores pastilla | Baja | Badge I pasado a sky-600 (1.1) |
+**Presentar a planta:** «Tablón por sección (I/D/T/E). Los checks eligen qué mapas miras (Antonio I+T, Gabri T+E…). Verde = puedes tirar; navy = ese paso ya está cerrado en Minerva; ámbar = aún no te toca.»
+| Feedback colores | ✅ | Badge I sky-600; hecho→navy vs listo→verde (24 jul) |
