@@ -46,8 +46,8 @@ export const CALENDARIO_AMBITO_PILL: Record<
   { letraBadge: string; borderTint: string }
 > = {
   impresion: {
-    letraBadge: "bg-[#002147] text-white",
-    borderTint: "ring-1 ring-[#002147]/25",
+    letraBadge: "bg-sky-600 text-white",
+    borderTint: "ring-1 ring-sky-400/50",
   },
   digital: {
     letraBadge: "bg-violet-700 text-white",
@@ -124,4 +124,53 @@ export function canReadCalendarioProduccion(
 
 export function labelCalendarioAmbito(ambito: CalendarioAmbito): string {
   return CALENDARIO_AMBITO_LABEL[ambito];
+}
+
+/** Set de ámbitos visibles en la rejilla (checks). */
+export type CalendarioAmbitoVisibility = Record<CalendarioAmbito, boolean>;
+
+export function defaultCalendarioAmbitoVisibility(
+  preferido: CalendarioAmbito,
+): CalendarioAmbitoVisibility {
+  return {
+    impresion: preferido === "impresion",
+    digital: preferido === "digital",
+    troquelado: preferido === "troquelado",
+    engomado: preferido === "engomado",
+  };
+}
+
+/** Visibilidad amplia al abrir (todos ON) — útil para gerencia. */
+export function allCalendarioAmbitoVisibilityOn(): CalendarioAmbitoVisibility {
+  return {
+    impresion: true,
+    digital: true,
+    troquelado: true,
+    engomado: true,
+  };
+}
+
+export function parseCalendarioAmbitoVisibility(
+  raw: string | null | undefined,
+): CalendarioAmbitoVisibility | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<Record<string, boolean>>;
+    const out = allCalendarioAmbitoVisibilityOn();
+    for (const a of CALENDARIO_AMBITOS) {
+      if (typeof parsed[a] === "boolean") out[a] = parsed[a]!;
+    }
+    if (!CALENDARIO_AMBITOS.some((a) => out[a])) {
+      return null;
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+export function serializeCalendarioAmbitoVisibility(
+  v: CalendarioAmbitoVisibility,
+): string {
+  return JSON.stringify(v);
 }

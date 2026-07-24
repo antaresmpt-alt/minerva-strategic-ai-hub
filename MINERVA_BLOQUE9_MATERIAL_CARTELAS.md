@@ -1783,7 +1783,7 @@ Emma (jueves) + Ramón (viernes): **ya no se imprimen 2 copias** por palet, solo
 | Derivar OT → imp. externa post-despacho | Alta | §15.6.12 |
 | Plan engomado desde salida troquel | Media | Badge 2080 vs plan 4400 |
 
-#### 15.13 Sesión 24 jul 2026 — Calendario multi-ámbito (Fase 1)
+#### 15.13 Sesión 24 jul 2026 — Calendario multi-ámbito (Fase 1 + 1.1 + 2)
 
 Mapa mental por sección (Carlos Impresión, Rita Digital, Antonio Troquel, Gabri Engomado).
 
@@ -1793,13 +1793,15 @@ Mapa mental por sección (Carlos Impresión, Rita Digital, Antonio Troquel, Gabr
 | Unique | `(fecha, ot_numero, ambito)` — misma OT en varios ámbitos/días |
 | Migración | `20260724140000_prod_calendario_produccion_ot_ambito.sql` (aplicada en prod) |
 | Backfill | Filas existentes → `impresion` |
-| UI | Desplegable ámbito + toggle «Solo mi ámbito»; pastilla con letra I/D/T/E |
+| UI escritura | Desplegable ámbito (`?ambito=`) — destino de altas/cortes |
+| Visibilidad (1.1) | 4 checks I/D/T/E (+ Solo / Todos); persiste `localStorage` `cal-prod-ambito-vis` |
+| Badge I | `bg-sky-600` (legible); D violeta, T ámbar, E teal |
 | Cruzado | Otros ámbitos visibles en solo lectura (opacity); no cortar/pegar/borrar |
 | Escritura | **admin/gerencia** = todos; **produccion** = solo Impresión; roles sección = el suyo |
 | RLS | `calendario_produccion_can_write_ambito()` / `can_read()` — no solo UI |
 | Import Excel | Va al ámbito activo |
-| Fase 1 ≠ verdad | **No** valida orden Impresión→Troquel; tablón visual. Semáforo itinerario = Fase 2 |
-| Lib | `src/lib/calendario-produccion-ambito.ts` |
+| Semáforo (Fase 2) | Pastilla coloreada por estado del **paso del ámbito** en itinerario Minerva (`esperando` / `listo` / `hecho` / `sin_paso`). **No** mueve fechas ni crea pastillas |
+| Lib | `calendario-produccion-ambito.ts`, `calendario-produccion-progreso.ts` (`semaforoForAmbito`, `fetchItinerarioCalendarioByOtNumeros`) |
 
-**Presentar a planta:** «Esto es un tablón para organizar el mes mirando el mapa de los demás; no bloquea si troquelas antes de imprimir. Cuando el semáforo esté, confirmaremos si el paso ya está listo en Minerva.»
-| Feedback Jordi colores pastilla | Baja | Ya usable; afinar si pide |
+**Presentar a planta:** «Tablón por sección (I/D/T/E). Los checks eligen qué mapas miras (Antonio I+T, Gabri T+E…). El color del nº OT dice si *tu* paso ya está listo en Minerva; no te cambia el día del calendario.»
+| Feedback Jordi colores pastilla | Baja | Badge I pasado a sky-600 (1.1) |
