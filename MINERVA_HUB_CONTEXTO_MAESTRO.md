@@ -244,7 +244,7 @@ src/components/produccion/planificacion/
 | 3.8 | Pruebas campo CTP/externos/desbroce | ✅ Implementado (11 jun, merge main 16 jun) |
 | 4 | PDF acompañante desde HojaRutaOtDialog | ✅ Beta implementada (11 jun) |
 | 5 | Integración Etiquetas ↔ Hoja de Ruta | ⏳ Pendiente |
-| 6 | Producidas/Histórico + cierre OT | ✅ **MVP operativo** (23 jul): cierre/reabrir simples, `/produccion/producidas`, Pipeline pendientes, club cierre. ⏭️ Prep/tiraje engomado, promedios maestro, cierre contenedor — `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` §0 |
+| 6 | Producidas/Histórico + cierre OT | ✅ **MVP operativo** (23 jul) + **engomado prep/tiraje** (27 jul). ⏭️ Promedios maestro, cierre contenedor — `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` §0 |
 | 7 | Expedición/Albarán | ⏳ Pendiente (depende B6 + Odoo) |
 | 8 | Formatos de hoja + formas + componentes (OT contenedor/hijas) | 🔄 En curso — **FORMATO ✅** + **8.0 ✅** + **8.1 ✅** + **8.1.1 ✅**; 8.2–8.4 pendiente — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` |
 | 9 | Material, cartelas de palet y stock libre | ✅ **9.0–9.6d + 9.4 A/B/C** + Calendario Producción (§15.12, 18 jul) — pastillas, PDF grid/listado, cartela **1 copia**. **Pendiente:** derivar OT a imp. externa (§15.6.12) |
@@ -253,8 +253,8 @@ src/components/produccion/planificacion/
 
 ## 🔜 Tareas pendientes inmediatas
 
-### Retomar aquí (23 jul 2026 — post Bloque 6 MVP)
-- [ ] **Bloque 6.x — Engomado prep/tiraje** en UI ejecución (hoy columnas NULL; ver §7.1.10 del briefing B6)
+### Retomar aquí (27 jul 2026 — post engomado prep/tiraje)
+- [x] **Bloque 6.x — Engomado prep/tiraje** en ejecución + despacho + histórico (27 jul, `2f6b696`)
 - [ ] **Bloque 6.x — Promedios maestro**: columnas `*_promedio` + botón «Actualizar promedios» (§7.1.9 pasos 2+4)
 - [ ] **Bloque 6.x** (opcional): comparar versiones OT; UX Pipeline «Listo para cerrar»
 - [ ] **Fase 8.4**: cierre OT contenedor/hijas (depende B6 + Bloque 8)
@@ -283,7 +283,7 @@ src/components/produccion/planificacion/
 - [ ] Afinar diseño del PDF acompañante tras feedback real de planta/dirección
 
 ### Siguiente bloque grande
-- **Bloque 6.x** (continuación): engomado prep/tiraje + promedios maestro — handoff en `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` §0
+- **Bloque 6.x** (continuación): promedios maestro — handoff en `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` §0
 - **Bloque 8.2+ / 8.4**: wizard contenedor + cierre hijas
 - **Bloque 7**: expedición / albarán (depende Odoo)
 
@@ -301,7 +301,7 @@ src/components/produccion/planificacion/
 
 5. **Etiquetas: flujo independiente** (no integrar en motor datos_proceso). Solo sincronización unidireccional al cierre.
 
-6. **Bloque 6 lifecycle de cierre (MVP 23 jul ✅)**: estado `pendiente_revision` **derivado** (no columna OT) → revisión humana → INSERT `prod_ot_producidas`. Reapertura versiona. Recálculo maestro = bajo demanda (aún pendiente UI). Detalle: briefing B6 §0.
+6. **Bloque 6 lifecycle de cierre (MVP 23 jul ✅; engomado prep/tiraje 27 jul ✅)**: estado `pendiente_revision` **derivado** (no columna OT) → revisión humana → INSERT `prod_ot_producidas`. Reapertura versiona. Engomado captura prep + tiraje (como impresión/troquel); guillotina/CTP/desbroce = un solo campo horas. Recálculo maestro = bajo demanda (aún pendiente UI). Detalle: briefing B6 §0.
 
 7. **Odoo en el horizonte**: cuando llegue, la integración vía API/JSON será limpia. Minerva Hub captura datos de producción; Odoo para gestión/contabilidad. Albarán (Bloque 7) depende de esta decisión.
 

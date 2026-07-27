@@ -5,8 +5,8 @@
 > Complementa a `MINERVA_BRIEFING.md`, `MINERVA_CONTEXTO_TECNICO.md` y `FASES_HOJA_RUTA_DIGITAL.md`.
 >
 > Fecha: 13 de junio de 2026.
-> Actualizado: 23 jul 2026 (noche) — **MVP cierre/histórico operativo en planta.** Handoff §0.
-> Pendiente próxima sesión: Engomado prep/tiraje UI, promedios maestro (§7.1.9 pasos 2+4), cierre contenedor/hijas (8.4), comparar versiones.
+> Actualizado: 27 jul 2026 — Engomado prep/tiraje en ejecución + despacho + histórico (`2f6b696`). Handoff §0.
+> Pendiente próxima sesión: promedios maestro (§7.1.9 pasos 2+4), cierre contenedor/hijas (8.4), comparar versiones.
 
 ---
 
@@ -62,14 +62,24 @@ Documento de arranque para la **siguiente sesión**. El MVP de Bloque 6 (opción
 
 Admin/gerencia pueden cerrar/reabrir **siempre** por rol; el resto necesita `puede_cerrar_ot` / `puede_reabrir_ot`.
 
+### ✅ Sesión 27 jul 2026 — Engomado prep / tiraje
+
+| Pieza | Detalle |
+|-------|---------|
+| UI ejecución | `ENGOMADO_CAMPOS`: `horas_preparacion` + `horas_tiraje` (previsto/real), como troquel. Legacy `tiempo_*` solo lectura en OTs antiguas |
+| Despacho | Columnas `horas_engomado_preparacion` / `horas_engomado_tiraje`; total en `horas_estimadas_engomado`. Wizard + edición OT despachadas |
+| Migración | `20260727140000_produccion_ot_despachadas_engomado_horas_split.sql` (aplicada en prod) |
+| Cierre histórico | `prod-ot-cierre.ts` mapea a `horas_prep_engomado_reales` / `horas_tiraje_engomado_reales` |
+| Mesa / HR | `planificacion-ejecucion-horas.ts`, `hoja-ruta-horas.ts` — split + fallback legacy |
+| Fuera de alcance | Guillotina / CTP / desbroce siguen con **un solo** campo de horas |
+
 ### ⏭️ Próxima sesión (prioridad sugerida)
 
-1. ~~**Engomado prep vs tiraje en UI de ejecución**~~ — ✅ 27 jul 2026: ejecución + despacho (wizard y edición OT despachadas) + histórico.
-2. **Promedios maestro** (§7.1.9 pasos 2 + 4): columnas `*_promedio` / `_muestra_n` / `promedios_actualizados_at` + botón «Actualizar promedios» en Maestro (excluye `excluido_de_promedios`).
-3. **Cierre contenedor / hijas** (Fase 8.4) — fuera del MVP simple.
-4. **Comparar versiones** de la misma OT (v1 vs v2 tras reabrir) en UI Producidas.
-5. **UX Pipeline** (opcional): en pendientes de revisión, mostrar «Listo para cerrar» / último paso en lugar de "—" en Paso actual.
-6. **Calidad datos al cierre**: avisar fuerte si producida ≫ pedida (ej. 99906: 1000→2100) o gramaje 0; no bloquea MVP.
+1. **Promedios maestro** (§7.1.9 pasos 2 + 4): columnas `*_promedio` / `_muestra_n` / `promedios_actualizados_at` + botón «Actualizar promedios» en Maestro (excluye `excluido_de_promedios`).
+2. **Cierre contenedor / hijas** (Fase 8.4) — fuera del MVP simple.
+3. **Comparar versiones** de la misma OT (v1 vs v2 tras reabrir) en UI Producidas.
+4. **UX Pipeline** (opcional): en pendientes de revisión, mostrar «Listo para cerrar» / último paso en lugar de "—" en Paso actual.
+5. **Calidad datos al cierre**: avisar fuerte si producida ≫ pedida (ej. 99906: 1000→2100) o gramaje 0; no bloquea MVP.
 
 ### Decisiones ya cerradas (no reabrir en brainstorm)
 

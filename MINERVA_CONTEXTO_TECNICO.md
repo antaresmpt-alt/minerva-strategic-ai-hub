@@ -1302,6 +1302,11 @@ export type DatosProcesoTroquelado = {
 export type DatosProcesoEngomado = {
   estuches_realizar?: number;
   tipo_engomado?: string;
+  horas_preparacion_previsto?: number;
+  horas_preparacion_real?: number;
+  horas_tiraje_previsto?: number;
+  horas_tiraje_real?: number;
+  /** Legacy — OTs cerradas antes del split prep/tiraje (27 jul 2026). */
   tiempo_previsto?: number;
   tiempo_real?: number;
   estuches_engomados?: number;

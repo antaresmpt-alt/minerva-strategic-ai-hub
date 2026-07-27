@@ -68,7 +68,7 @@ La **Hoja de Ruta Digital** es el sistema que reemplaza la tradicional "hoja via
 #### **Engomado**
 - Nº estuches a realizar (número)
 - Tipo de engomado (select: lineal / automático / semiautomático / especial / 2 pases / 4 puntos / konica)
-- **Previsto/Real**: Tiempo (horas)
+- **Previsto/Real**: Horas preparación, Horas tiraje (✅ 27 jul 2026; legacy `tiempo_*` en OTs antiguas)
 - Nº estuches engomados (número)
 - Estuches por bulto (número)
 - Código caja embalaje (texto)
@@ -474,7 +474,7 @@ PDF compacto para acompañar la OT entre departamentos (sustituto papel de la ho
 
 ---
 
-## 📦 Bloque 6: Producidas / Histórico + Cierre de OT ⏳ **PENDIENTE**
+## 📦 Bloque 6: Producidas / Histórico + Cierre de OT ✅ **MVP + engomado prep/tiraje**
 
 **Objetivo**: Al dar una OT por terminada, congelar TODA su hoja de ruta en un histórico inmutable. Sirve para trazabilidad ("¿qué usamos la última vez?"), promedios para prefill y análisis.
 
@@ -571,7 +571,7 @@ PDF compacto para acompañar la OT entre departamentos (sustituto papel de la ho
 ✅ **Bloque 4 BETA IMPLEMENTADA** (11 jun 2026): PDF acompañante desde `HojaRutaOtDialog` (A4 vertical) con cabecera, itinerario, tarjetas por proceso, detalle de pausas, gráfico previsto/real por proceso, botones Recargar/PDF y placeholders Recalcular presupuesto/Ficha técnica.
 ✅ **Maestro troqueles etiquetas simplificado** (13 jun 2026): `prod_etiquetas_troqueles` — eliminadas columnas `cliente`/`trabajo` (migración `20260613142500_drop_etiquetas_troqueles_cliente_trabajo.sql` + UI/tipos/import-export/script). Dimensiones solo `dimensiones_texto` en el modal (sin ancho/alto/diámetro). `necesita_revision` conservado como checkbox. Fix UI: select "Estado" pisaba el campo de fecha (añadido `min-w-0`).
 ⏳ **Bloque 5 PENDIENTE**: Integración Etiquetas ↔ Hoja de Ruta (flujo Hugo)
-⏳ **Bloque 6 PENDIENTE**: Producidas/Histórico (`prod_ot_producidas`, snapshot híbrido) + lifecycle de cierre (pendiente_revision → producida) + recálculo maestro
+✅ **Bloque 6 MVP** (23 jul) + engomado prep/tiraje (27 jul): `prod_ot_producidas`, cierre/reabrir, Producidas, Pipeline pendientes. ⏭️ Promedios maestro.
 ⏳ **Bloque 7 PENDIENTE**: Expedición/Albarán (depende de Bloque 6 + decisión Odoo)
 🔄 **Bloque 8 EN CURSO** (17–18 jun 2026): **Fase FORMATO ✅** + **8.0 ✅** + **8.1 ✅** + **8.1.1 ✅**. Pendiente 8.2–8.4. Fuente de verdad: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
 📋 **Bloque 9 EN CURSO** (9 jul 2026): **9.0–9.6d operativo ✅** + semáforo pool ATP (9.4) + 9.3 ajuste/split + sync Optimus diff + pool «Ver cartelas» + muelle multi-línea + **9.9 IA Stock NL→SQL**. Pendiente: cierre OT sobrantes (Bloque 6), sync marcar agotados, 9.7 OCR. `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §15.9.
