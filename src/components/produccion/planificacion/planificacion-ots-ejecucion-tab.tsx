@@ -125,6 +125,8 @@ type DespachoInfo = {
   horasEntrada: number | null;
   horasTiraje: number | null;
   horasTroquelado: number | null;
+  horasEngomadoPrep: number | null;
+  horasEngomadoTiraje: number | null;
   horasEngomado: number | null;
   tipoEngomado: string | null;
   fechaEntrega: string | null;
@@ -819,6 +821,8 @@ export function PlanificacionOtsEjecucionTab({
             horas_entrada,
             horas_tiraje,
             horas_estimadas_troquelado,
+            horas_engomado_preparacion,
+            horas_engomado_tiraje,
             horas_estimadas_engomado,
             tipo_engomado
           `)
@@ -914,6 +918,8 @@ export function PlanificacionOtsEjecucionTab({
           horas_entrada?: number | null;
           horas_tiraje?: number | null;
           horas_estimadas_troquelado?: number | null;
+          horas_engomado_preparacion?: number | null;
+          horas_engomado_tiraje?: number | null;
           horas_estimadas_engomado?: number | null;
           tipo_engomado?: string | null;
         }>) {
@@ -942,6 +948,14 @@ export function PlanificacionOtsEjecucionTab({
             horasEntrada: typeof d.horas_entrada === "number" ? d.horas_entrada : null,
             horasTiraje: typeof d.horas_tiraje === "number" ? d.horas_tiraje : null,
             horasTroquelado: typeof d.horas_estimadas_troquelado === "number" ? d.horas_estimadas_troquelado : null,
+            horasEngomadoPrep:
+              typeof d.horas_engomado_preparacion === "number"
+                ? d.horas_engomado_preparacion
+                : null,
+            horasEngomadoTiraje:
+              typeof d.horas_engomado_tiraje === "number"
+                ? d.horas_engomado_tiraje
+                : null,
             horasEngomado: typeof d.horas_estimadas_engomado === "number" ? d.horas_estimadas_engomado : null,
             tipoEngomado: d.tipo_engomado ?? null,
             fechaEntrega: gen?.fechaEntrega ?? null,
@@ -982,6 +996,8 @@ export function PlanificacionOtsEjecucionTab({
               horas_entrada,
               horas_tiraje,
               horas_estimadas_troquelado,
+              horas_engomado_preparacion,
+              horas_engomado_tiraje,
               horas_estimadas_engomado,
               tipo_engomado
             `)
@@ -1069,6 +1085,8 @@ export function PlanificacionOtsEjecucionTab({
             horas_entrada?: number | null;
             horas_tiraje?: number | null;
             horas_estimadas_troquelado?: number | null;
+            horas_engomado_preparacion?: number | null;
+            horas_engomado_tiraje?: number | null;
             horas_estimadas_engomado?: number | null;
             tipo_engomado?: string | null;
           }>) {
@@ -1097,6 +1115,14 @@ export function PlanificacionOtsEjecucionTab({
               horasEntrada: typeof pd.horas_entrada === "number" ? pd.horas_entrada : null,
               horasTiraje: typeof pd.horas_tiraje === "number" ? pd.horas_tiraje : null,
               horasTroquelado: typeof pd.horas_estimadas_troquelado === "number" ? pd.horas_estimadas_troquelado : null,
+              horasEngomadoPrep:
+                typeof pd.horas_engomado_preparacion === "number"
+                  ? pd.horas_engomado_preparacion
+                  : null,
+              horasEngomadoTiraje:
+                typeof pd.horas_engomado_tiraje === "number"
+                  ? pd.horas_engomado_tiraje
+                  : null,
               horasEngomado: typeof pd.horas_estimadas_engomado === "number" ? pd.horas_estimadas_engomado : null,
               tipoEngomado: pd.tipo_engomado ?? null,
               fechaEntrega: gen?.fechaEntrega ?? null,
@@ -1945,7 +1971,20 @@ function ExecutionCard({
         base.estuches_engomados = despacho.cantidad;
         base.cantidad_total = despacho.cantidad;
       }
-      if (despacho.horasEngomado != null) base.tiempo_previsto = despacho.horasEngomado;
+      if (despacho.horasEngomadoPrep != null)
+        base.horas_preparacion_previsto = despacho.horasEngomadoPrep;
+      if (despacho.horasEngomadoTiraje != null)
+        base.horas_tiraje_previsto = despacho.horasEngomadoTiraje;
+      if (
+        despacho.horasEngomadoPrep == null &&
+        despacho.horasEngomadoTiraje == null &&
+        despacho.horasEngomado != null
+      ) {
+        base.horas_preparacion_previsto =
+          Math.round(despacho.horasEngomado * 0.3 * 10) / 10;
+        base.horas_tiraje_previsto =
+          Math.round(despacho.horasEngomado * 0.7 * 10) / 10;
+      }
       if (despacho.tipoEngomado) base.tipo_engomado = despacho.tipoEngomado;
     }
     if (pid === PROCESO_DESBROCE_ID) {

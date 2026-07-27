@@ -66,6 +66,10 @@ import {
 import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
 import { DespachoWizardDialog } from "@/components/produccion/ots/despacho-wizard-dialog";
 import {
+  horasEngomadoFromDespachoForm,
+  type DespachoFormState,
+} from "@/lib/despacho-wizard-shared";
+import {
   resolveRowOtTipo,
   sortRowsByOtNumero,
   useOtContenedorGroupedDisplay,
@@ -163,6 +167,8 @@ function synthesizeDespachoHijaRow(
     horas_tiraje: parent.horas_tiraje,
     horas_estimadas_troquelado: parent.horas_estimadas_troquelado,
     horas_estimadas_engomado: parent.horas_estimadas_engomado,
+    horas_engomado_preparacion: parent.horas_engomado_preparacion,
+    horas_engomado_tiraje: parent.horas_engomado_tiraje,
     tipo_engomado: parent.tipo_engomado,
     tintas: parent.tintas,
     notas: parent.notas,
@@ -301,6 +307,8 @@ type DespachoEditFormState = {
   horas_entrada: string;
   horas_tiraje: string;
   horas_estimadas_troquelado: string;
+  horas_engomado_preparacion: string;
+  horas_engomado_tiraje: string;
   horas_estimadas_engomado: string;
   tipo_engomado: string;
   troquel: string;
@@ -324,6 +332,8 @@ function emptyDespachoEditForm(): DespachoEditFormState {
     horas_entrada: "",
     horas_tiraje: "",
     horas_estimadas_troquelado: "",
+    horas_engomado_preparacion: "",
+    horas_engomado_tiraje: "",
     horas_estimadas_engomado: "",
     tipo_engomado: "",
     troquel: "",
@@ -413,7 +423,13 @@ function rowToEditForm(row: OtsDespachadasTableRow): DespachoEditFormState {
     horas_entrada: numStr(row.horas_entrada),
     horas_tiraje: numStr(row.horas_tiraje),
     horas_estimadas_troquelado: numStr(row.horas_estimadas_troquelado),
-    horas_estimadas_engomado: numStr(row.horas_estimadas_engomado),
+    horas_engomado_preparacion: numStr(row.horas_engomado_preparacion),
+    horas_engomado_tiraje: numStr(row.horas_engomado_tiraje),
+    horas_estimadas_engomado:
+      row.horas_engomado_preparacion != null ||
+      row.horas_engomado_tiraje != null
+        ? ""
+        : numStr(row.horas_estimadas_engomado),
     tipo_engomado: row.tipo_engomado?.trim() ?? "",
     troquel: row.troquel?.trim() ?? "",
     poses: row.poses != null && Number.isFinite(row.poses) ? String(row.poses) : "",
@@ -744,6 +760,8 @@ export function OtsDespachadasPage({
           horas_entrada: num(d.horas_entrada),
           horas_tiraje: num(d.horas_tiraje),
           horas_estimadas_troquelado: num(d.horas_estimadas_troquelado),
+          horas_engomado_preparacion: num(d.horas_engomado_preparacion),
+          horas_engomado_tiraje: num(d.horas_engomado_tiraje),
           horas_estimadas_engomado: num(d.horas_estimadas_engomado),
           tipo_engomado: (d.tipo_engomado as string | null) ?? null,
           tintas: (d.tintas as string | null) ?? null,
@@ -1355,6 +1373,9 @@ export function OtsDespachadasPage({
     if (!editRow) return;
     setEditSaving(true);
     try {
+      const engHoras = horasEngomadoFromDespachoForm(
+        editForm as DespachoFormState,
+      );
       const { error } = await supabase
         .from(TABLE_DESPACHADAS)
         .update({
@@ -1369,9 +1390,9 @@ export function OtsDespachadasPage({
           horas_estimadas_troquelado: parseOptionalDecimalInput(
             editForm.horas_estimadas_troquelado
           ),
-          horas_estimadas_engomado: parseOptionalDecimalInput(
-            editForm.horas_estimadas_engomado
-          ),
+          horas_engomado_preparacion: engHoras.prep,
+          horas_engomado_tiraje: engHoras.tiraje,
+          horas_estimadas_engomado: engHoras.total,
           tipo_engomado: editForm.tipo_engomado.trim() || null,
           troquel: editForm.troquel.trim() || null,
           poses: parseOptionalIntInput(editForm.poses),
@@ -1706,19 +1727,37 @@ export function OtsDespachadasPage({
               />
             </div>
             <div className="grid gap-1">
-              <Label htmlFor="edit-despacho-horas-engomado" className="text-xs">
-                Horas engomado estimadas
+              <Label htmlFor="edit-despacho-horas-engomado-prep" className="text-xs">
+                Horas prep. / arreglo engomado
               </Label>
               <Input
-                id="edit-despacho-horas-engomado"
+                id="edit-despacho-horas-engomado-prep"
                 className="h-8 text-xs"
                 type="number"
                 step="0.1"
-                value={editForm.horas_estimadas_engomado}
+                value={editForm.horas_engomado_preparacion}
                 onChange={(e) =>
                   setEditForm((f) => ({
                     ...f,
-                    horas_estimadas_engomado: e.target.value,
+                    horas_engomado_preparacion: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="edit-despacho-horas-engomado-tiraje" className="text-xs">
+                Horas tiraje engomado
+              </Label>
+              <Input
+                id="edit-despacho-horas-engomado-tiraje"
+                className="h-8 text-xs"
+                type="number"
+                step="0.1"
+                value={editForm.horas_engomado_tiraje}
+                onChange={(e) =>
+                  setEditForm((f) => ({
+                    ...f,
+                    horas_engomado_tiraje: e.target.value,
                   }))
                 }
               />

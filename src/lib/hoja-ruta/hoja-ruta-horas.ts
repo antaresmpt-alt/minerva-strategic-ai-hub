@@ -56,8 +56,13 @@ export function extractHorasPrevistoPaso(paso: HojaRutaPaso): number | null {
     return total > 0 ? total : null;
   }
   if (pid === PROCESO_ENGOMADO) {
-    const t = num(dp.tiempo_previsto);
-    return t != null && t > 0 ? t : null;
+    const total = sumNullable(
+      num(dp.horas_preparacion_previsto),
+      num(dp.horas_tiraje_previsto),
+    );
+    if (total > 0) return total;
+    const legacy = num(dp.tiempo_previsto);
+    return legacy != null && legacy > 0 ? legacy : null;
   }
   const generic =
     num(dp.horas_proceso) ?? num(dp.tiempo_total) ?? num(dp.tiempo_previsto);
@@ -89,8 +94,13 @@ export function extractHorasRealPaso(paso: HojaRutaPaso): number | null {
     return horasFromEjecucion(paso);
   }
   if (pid === PROCESO_ENGOMADO) {
-    const t = num(dp.tiempo_real);
-    if (t != null && t > 0) return t;
+    const total = sumNullable(
+      num(dp.horas_preparacion_real),
+      num(dp.horas_tiraje_real),
+    );
+    if (total > 0) return total;
+    const legacy = num(dp.tiempo_real);
+    if (legacy != null && legacy > 0) return legacy;
     return horasFromEjecucion(paso);
   }
   const generic = num(dp.horas_proceso) ?? num(dp.tiempo_real);

@@ -57,6 +57,9 @@ export type DespachoFormState = {
   horas_estimadas_troquelado: string;
   horas_troquel_preparacion: string;
   horas_troquel_tiraje: string;
+  horas_engomado_preparacion: string;
+  horas_engomado_tiraje: string;
+  /** Total legacy / derivado (prep + tiraje) para consultas que suman una columna. */
   horas_estimadas_engomado: string;
   tipo_engomado: string;
   troquel: string;
@@ -275,6 +278,8 @@ export function emptyDespachoForm(): DespachoFormState {
     horas_estimadas_troquelado: "",
     horas_troquel_preparacion: "",
     horas_troquel_tiraje: "",
+    horas_engomado_preparacion: "",
+    horas_engomado_tiraje: "",
     horas_estimadas_engomado: "",
     tipo_engomado: "",
     troquel: "",
@@ -329,6 +334,55 @@ export function parseOptionalDecimalInput(s: string): number | null {
   if (!t) return null;
   const n = Number(t.replace(",", "."));
   return Number.isFinite(n) ? n : null;
+}
+
+/** Horas engomado en despacho: prep + tiraje; total en `horas_estimadas_engomado`. */
+export function horasEngomadoFromDespachoForm(form: DespachoFormState): {
+  prep: number | null;
+  tiraje: number | null;
+  total: number | null;
+} {
+  const prep = parseOptionalDecimalInput(form.horas_engomado_preparacion);
+  const tiraje = parseOptionalDecimalInput(form.horas_engomado_tiraje);
+  if (prep != null || tiraje != null) {
+    const sum = (prep ?? 0) + (tiraje ?? 0);
+    return {
+      prep,
+      tiraje,
+      total: sum > 0 ? Math.round(sum * 100) / 100 : null,
+    };
+  }
+  const legacy = parseOptionalDecimalInput(form.horas_estimadas_engomado);
+  if (legacy != null && legacy > 0) {
+    return { prep: null, tiraje: null, total: legacy };
+  }
+  return { prep: null, tiraje: null, total: null };
+}
+
+/** Horas troquel en despacho (formulario wizard). */
+export function horasTroquelFromDespachoForm(form: DespachoFormState): {
+  prep: number | null;
+  tiraje: number | null;
+  total: number | null;
+} {
+  const prep =
+    parseOptionalDecimalInput(form.horas_troquel_preparacion) ??
+    parseOptionalDecimalInput(form.horas_estimadas_troquelado);
+  const tiraje = parseOptionalDecimalInput(form.horas_troquel_tiraje);
+  if (prep != null || tiraje != null) {
+    const sum = (prep ?? 0) + (tiraje ?? 0);
+    return {
+      prep,
+      tiraje,
+      total: sum > 0 ? Math.round(sum * 100) / 100 : null,
+    };
+  }
+  const legacy = parseOptionalDecimalInput(form.horas_estimadas_troquelado);
+  return {
+    prep: null,
+    tiraje: null,
+    total: legacy != null && legacy > 0 ? legacy : null,
+  };
 }
 
 export function numberOrZeroForDespacho(s: string): number {
@@ -657,8 +711,18 @@ export function buildDatosProcesoSeed(
     const payload: Record<string, unknown> = {};
     const tipo = form.tipo_engomado.trim();
     if (tipo) payload.tipo_engomado = tipo;
-    const tiempo = parseOptionalDecimalInput(form.horas_estimadas_engomado);
-    if (tiempo != null && tiempo > 0) payload.tiempo_previsto = tiempo;
+    const { prep, tiraje, total } = horasEngomadoFromDespachoForm(form);
+    if (prep != null) payload.horas_preparacion_previsto = prep;
+    if (tiraje != null) payload.horas_tiraje_previsto = tiraje;
+    if (
+      prep == null &&
+      tiraje == null &&
+      total != null &&
+      total > 0
+    ) {
+      payload.horas_preparacion_previsto = Math.round(total * 0.3 * 10) / 10;
+      payload.horas_tiraje_previsto = Math.round(total * 0.7 * 10) / 10;
+    }
     if (est != null && est.estuches > 0) payload.estuches_realizar = est.estuches;
     const caja = form.codigo_caja_embalaje.trim();
     if (caja) payload.codigo_caja_embalaje = caja;

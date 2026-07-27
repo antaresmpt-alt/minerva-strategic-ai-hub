@@ -15,6 +15,8 @@ export type OtsDespachadasTableRow = {
   horas_entrada: number | null;
   horas_tiraje: number | null;
   horas_estimadas_troquelado: number | null;
+  horas_engomado_preparacion: number | null;
+  horas_engomado_tiraje: number | null;
   horas_estimadas_engomado: number | null;
   /** Tipo de engomado marcado en despacho (catálogo + texto libre). */
   tipo_engomado: string | null;

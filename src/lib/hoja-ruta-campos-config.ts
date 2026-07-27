@@ -511,8 +511,17 @@ const ENGOMADO_CAMPOS: CampoDefinicion[] = [
     ],
   },
   {
-    id: 'tiempo',
-    label: 'Tiempo',
+    id: 'horas_preparacion',
+    label: 'Horas preparación',
+    tipo: 'number',
+    hasPrevistoReal: true,
+    min: 0,
+    suffix: 'h',
+    width: 'half',
+  },
+  {
+    id: 'horas_tiraje',
+    label: 'Horas tiraje',
     tipo: 'number',
     hasPrevistoReal: true,
     min: 0,
@@ -1205,6 +1214,11 @@ export type DatosProcesoTroquelado = {
 export type DatosProcesoEngomado = {
   estuches_realizar?: number;
   tipo_engomado?: string;
+  horas_preparacion_previsto?: number;
+  horas_preparacion_real?: number;
+  horas_tiraje_previsto?: number;
+  horas_tiraje_real?: number;
+  /** Legacy — itinerarios cerrados antes del split prep/tiraje. */
   tiempo_previsto?: number;
   tiempo_real?: number;
   estuches_engomados?: number;

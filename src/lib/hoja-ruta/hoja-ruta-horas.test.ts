@@ -42,7 +42,12 @@ describe("hoja-ruta-horas", () => {
   it("agrega previsto y real con desviación", () => {
     const resumen = computeHorasResumenOt([
       paso(16, { horas_proceso: 1.5 }),
-      paso(12, { tiempo_previsto: 2, tiempo_real: 2.5 }),
+      paso(12, {
+        horas_preparacion_previsto: 0.6,
+        horas_tiraje_previsto: 1.4,
+        horas_preparacion_real: 0.5,
+        horas_tiraje_real: 2,
+      }),
     ]);
     expect(resumen.previsto).toBeCloseTo(3.5);
     expect(resumen.real).toBeCloseTo(4);

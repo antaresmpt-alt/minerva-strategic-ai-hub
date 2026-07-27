@@ -13,7 +13,7 @@
  * Convención de columnas de horas (§7.1.10):
  *   - horas_prep_*  → tiempo de preparación/entrada (absoluto, estable por artículo).
  *   - horas_tiraje_* → tiempo de tiraje/producción (base para normalizar horas/millar).
- *   - horas_*_engomado_reales → NULLABLE mientras la tarjeta de Engomado no separe prep/tiraje.
+ *   - horas_*_engomado_reales → prep/tiraje desde ejecución (legacy `tiempo_real` solo en total OT).
  */
 export type ProdOtProducidaRow = {
   // ─── Identidad ────────────────────────────────────────────────────────────
@@ -59,9 +59,7 @@ export type ProdOtProducidaRow = {
   horas_tiraje_troquelado_reales: number | null;
 
   /**
-   * NULLABLE — La tarjeta de Engomado hoy captura un único campo "Tiempo"
-   * (prep + tiraje mezclados). No se mapea hasta que se separen los campos
-   * en la UI de ejecución. NULL = ausencia de dato, no dato incorrecto.
+   * NULL si la OT se cerró antes del split prep/tiraje en UI (solo `tiempo_real` legacy).
    */
   horas_prep_engomado_reales: number | null;
   /** NULLABLE — ver horas_prep_engomado_reales. */

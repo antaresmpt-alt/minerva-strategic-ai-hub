@@ -64,7 +64,7 @@ Admin/gerencia pueden cerrar/reabrir **siempre** por rol; el resto necesita `pue
 
 ### ⏭️ Próxima sesión (prioridad sugerida)
 
-1. **Engomado prep vs tiraje en UI de ejecución** — hoy `horas_prep_engomado_reales` / `horas_tiraje_*` quedan `NULL` a propósito; solo entra `tiempo_real` al total. Bloqueante para promedios §7.1.10.
+1. ~~**Engomado prep vs tiraje en UI de ejecución**~~ — ✅ 27 jul 2026: ejecución + despacho (wizard y edición OT despachadas) + histórico.
 2. **Promedios maestro** (§7.1.9 pasos 2 + 4): columnas `*_promedio` / `_muestra_n` / `promedios_actualizados_at` + botón «Actualizar promedios» en Maestro (excluye `excluido_de_promedios`).
 3. **Cierre contenedor / hijas** (Fase 8.4) — fuera del MVP simple.
 4. **Comparar versiones** de la misma OT (v1 vs v2 tras reabrir) en UI Producidas.

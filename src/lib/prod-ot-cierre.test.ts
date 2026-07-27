@@ -142,4 +142,24 @@ describe("buildProdOtProducidaInsert + referencia_id", () => {
     expect(row.cantidad_producida).toBe(6250);
     expect(row.tipo_engomado).toBe("Lineal");
   });
+
+  it("mapea horas prep/tiraje de engomado al histórico", () => {
+    const row = buildProdOtProducidaInsert({
+      otNumero: "99906",
+      snapshot: snapshot([
+        paso(PROCESO_ENGOMADO_ID, {
+          datosProceso: {
+            horas_preparacion_real: 0.4,
+            horas_tiraje_real: 1.6,
+            estuches_engomados: 1000,
+          },
+        }),
+      ]),
+      userId: "user-1",
+      nowIso: "2026-07-27T12:00:00.000Z",
+    });
+    expect(row.horas_prep_engomado_reales).toBe(0.4);
+    expect(row.horas_tiraje_engomado_reales).toBe(1.6);
+    expect(row.horas_total_reales).toBe(2);
+  });
 });

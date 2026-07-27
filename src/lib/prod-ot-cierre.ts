@@ -192,9 +192,8 @@ export type ProdOtProducidaFlatInsert = {
   horas_tiraje_impresion_reales: number | null;
   horas_prep_troquelado_reales: number | null;
   horas_tiraje_troquelado_reales: number | null;
-  /** Siempre null hasta que Engomado separe prep/tiraje. */
-  horas_prep_engomado_reales: null;
-  horas_tiraje_engomado_reales: null;
+  horas_prep_engomado_reales: number | null;
+  horas_tiraje_engomado_reales: number | null;
   horas_guillotina_reales: number | null;
   horas_ctp_reales: number | null;
   horas_desbroce_reales: number | null;
@@ -322,10 +321,18 @@ export function buildProdOtProducidaInsert(args: {
   const horasTirajeImpresion = asNum(impDp?.horas_impresion_real);
   const horasPrepTroquelado = asNum(troqDp?.horas_preparacion_real);
   const horasTirajeTroquelado = asNum(troqDp?.horas_tiraje_real);
-  // Engomado: NO mapear tiempo_real a tiraje (dato mezclado prep+tiraje).
+  const horasPrepEngomado = asNum(engDp?.horas_preparacion_real);
+  const horasTirajeEngomado = asNum(engDp?.horas_tiraje_real);
   const horasCtp = asNum(ctpDp?.horas_proceso);
   const horasGuillotina = asNum(guilloDp?.horas_proceso);
   const horasDesbroce = asNum(desbroceDp?.horas_proceso);
+
+  const legacyEngomadoTiempo = asNum(engDp?.tiempo_real);
+  const engomadoEnTotal =
+    horasPrepEngomado != null ||
+    horasTirajeEngomado != null
+      ? (horasPrepEngomado ?? 0) + (horasTirajeEngomado ?? 0)
+      : legacyEngomadoTiempo;
 
   const partesHoras = [
     horasPrepImpresion,
@@ -335,8 +342,7 @@ export function buildProdOtProducidaInsert(args: {
     horasCtp,
     horasGuillotina,
     horasDesbroce,
-    // tiempo_real engomado sí entra en total de ciclo (no en millar)
-    asNum(engDp?.tiempo_real),
+    engomadoEnTotal != null && engomadoEnTotal > 0 ? engomadoEnTotal : null,
   ].filter((n): n is number => n != null);
   const horasTotal = partesHoras.length > 0 ? partesHoras.reduce((a, b) => a + b, 0) : null;
 
@@ -389,8 +395,8 @@ export function buildProdOtProducidaInsert(args: {
     horas_tiraje_impresion_reales: horasTirajeImpresion,
     horas_prep_troquelado_reales: horasPrepTroquelado,
     horas_tiraje_troquelado_reales: horasTirajeTroquelado,
-    horas_prep_engomado_reales: null,
-    horas_tiraje_engomado_reales: null,
+    horas_prep_engomado_reales: horasPrepEngomado,
+    horas_tiraje_engomado_reales: horasTirajeEngomado,
     horas_guillotina_reales: horasGuillotina,
     horas_ctp_reales: horasCtp,
     horas_desbroce_reales: horasDesbroce,

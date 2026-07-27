@@ -85,6 +85,8 @@ import {
   hojasBrutasImpresionDespacho,
   hojasBrutasImpresionExternaDespacho,
   hojasNetasImpresionExternaDespacho,
+  horasEngomadoFromDespachoForm,
+  horasTroquelFromDespachoForm,
   integerOrZeroForDespacho,
   numHojasNetasDespachoGuardar,
   numberOrZeroForDespacho,
@@ -482,6 +484,16 @@ export function DespachoWizardDialog({
           d.horas_estimadas_troquelado == null
             ? ""
             : String(d.horas_estimadas_troquelado);
+        let horasEngomadoPrep = "";
+        let horasEngomadoTiraje = "";
+        let horasEngomadoTotal =
+          d.horas_estimadas_engomado == null
+            ? ""
+            : String(d.horas_estimadas_engomado);
+        if (d.horas_engomado_preparacion != null)
+          horasEngomadoPrep = String(d.horas_engomado_preparacion);
+        if (d.horas_engomado_tiraje != null)
+          horasEngomadoTiraje = String(d.horas_engomado_tiraje);
         let codigoCajaEmb = "";
         let udsEmbalaje = "";
 
@@ -506,6 +518,10 @@ export function DespachoWizardDialog({
                 horasTroquelTiraje = String(pd.horas_tiraje_previsto);
             }
             if (p.proceso_id === PROCESO_ENGOMADO_ID) {
+              if (pd.horas_preparacion_previsto != null)
+                horasEngomadoPrep = String(pd.horas_preparacion_previsto);
+              if (pd.horas_tiraje_previsto != null)
+                horasEngomadoTiraje = String(pd.horas_tiraje_previsto);
               if (typeof pd.codigo_caja_embalaje === "string")
                 codigoCajaEmb = pd.codigo_caja_embalaje;
               if (pd.unidades_por_paquete != null)
@@ -528,10 +544,9 @@ export function DespachoWizardDialog({
           horas_estimadas_troquelado: horasTroquelTotal,
           horas_troquel_preparacion: horasTroquelPrep,
           horas_troquel_tiraje: horasTroquelTiraje,
-          horas_estimadas_engomado:
-            d.horas_estimadas_engomado == null
-              ? ""
-              : String(d.horas_estimadas_engomado),
+          horas_engomado_preparacion: horasEngomadoPrep,
+          horas_engomado_tiraje: horasEngomadoTiraje,
+          horas_estimadas_engomado: horasEngomadoTotal,
           tipo_engomado: String(d.tipo_engomado ?? ""),
           troquel: String(d.troquel ?? ""),
           poses: d.poses == null ? "" : String(d.poses),
@@ -1731,13 +1746,9 @@ export function DespachoWizardDialog({
         }
       }
 
-      const prepTroquel = parseOptionalDecimalInput(form.horas_troquel_preparacion);
-      const tirajeTroquel = parseOptionalDecimalInput(form.horas_troquel_tiraje);
-      const horasTroquelTotal =
-        prepTroquel != null && tirajeTroquel != null
-          ? prepTroquel + tirajeTroquel
-          : prepTroquel ?? tirajeTroquel ??
-            parseOptionalDecimalInput(form.horas_estimadas_troquelado);
+      const troquelHoras = horasTroquelFromDespachoForm(form);
+      const horasTroquelTotal = troquelHoras.total;
+      const engomadoHoras = horasEngomadoFromDespachoForm(form);
 
       const dataToInsert = {
         ot_numero: selectedOt,
@@ -1754,9 +1765,9 @@ export function DespachoWizardDialog({
         horas_entrada: numberOrZeroForDespacho(form.horas_entrada),
         horas_tiraje: numberOrZeroForDespacho(form.horas_tiraje),
         horas_estimadas_troquelado: horasTroquelTotal,
-        horas_estimadas_engomado: parseOptionalDecimalInput(
-          form.horas_estimadas_engomado
-        ),
+        horas_engomado_preparacion: engomadoHoras.prep,
+        horas_engomado_tiraje: engomadoHoras.tiraje,
+        horas_estimadas_engomado: engomadoHoras.total,
         tipo_engomado: form.tipo_engomado.trim() || null,
         troquel: form.troquel.trim() || null,
         poses: integerOrZeroForDespacho(form.poses),
@@ -2506,19 +2517,37 @@ export function DespachoWizardDialog({
               </datalist>
             </div>
             <div className="grid gap-1">
-              <Label htmlFor="wiz-horas-engomado" className="text-xs">
-                Horas engomado estimadas
+              <Label htmlFor="wiz-horas-engomado-prep" className="text-xs">
+                Horas preparación / arreglo
               </Label>
               <Input
-                id="wiz-horas-engomado"
+                id="wiz-horas-engomado-prep"
                 className="h-8 text-xs"
                 type="number"
                 step="0.1"
-                value={form.horas_estimadas_engomado}
+                value={form.horas_engomado_preparacion}
                 onChange={(e) =>
                   setForm((f) => ({
                     ...f,
-                    horas_estimadas_engomado: e.target.value,
+                    horas_engomado_preparacion: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="wiz-horas-engomado-tiraje" className="text-xs">
+                Horas tiraje engomado
+              </Label>
+              <Input
+                id="wiz-horas-engomado-tiraje"
+                className="h-8 text-xs"
+                type="number"
+                step="0.1"
+                value={form.horas_engomado_tiraje}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    horas_engomado_tiraje: e.target.value,
                   }))
                 }
               />
@@ -3752,12 +3781,17 @@ export function DespachoWizardDialog({
                         {formatCtpRequisitosResumen(procesoDatos.ctp)}
                       </p>
                     ) : null}
-                    {form.tipo_engomado || form.horas_estimadas_engomado ? (
+                    {form.tipo_engomado ||
+                    form.horas_engomado_preparacion ||
+                    form.horas_engomado_tiraje ? (
                       <p>
                         <span className="text-slate-500">Engomado:</span>{" "}
                         {form.tipo_engomado || "—"}
-                        {form.horas_estimadas_engomado
-                          ? ` · ${form.horas_estimadas_engomado} h est.`
+                        {form.horas_engomado_preparacion
+                          ? ` · prep ${form.horas_engomado_preparacion} h`
+                          : ""}
+                        {form.horas_engomado_tiraje
+                          ? ` · tiraje ${form.horas_engomado_tiraje} h`
                           : ""}
                       </p>
                     ) : null}

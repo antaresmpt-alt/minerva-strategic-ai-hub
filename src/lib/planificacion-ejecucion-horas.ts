@@ -81,7 +81,10 @@ export function getCerrarProcesoHourFields(
     ];
   }
   if (procesoId === PROCESO_ENGOMADO) {
-    return [{ id: "tiempo_real", label: "Tiempo real" }];
+    return [
+      { id: "horas_preparacion_real", label: "Horas preparación (real)" },
+      { id: "horas_tiraje_real", label: "Horas tiraje (real)" },
+    ];
   }
   return [{ id: "horas_proceso", label: "Horas proceso (real)" }];
 }
@@ -136,7 +139,14 @@ export function applyHorasMesaToDatosProceso(
     return next;
   }
   if (procesoId === PROCESO_ENGOMADO) {
-    next.tiempo_real = roundHorasEjecucion(horasMesa);
+    const [prep, tir] = splitHorasMesa(
+      horasMesa,
+      num(datos.horas_preparacion_real),
+      num(datos.horas_tiraje_real),
+      0.3,
+    );
+    next.horas_preparacion_real = prep;
+    next.horas_tiraje_real = tir;
     return next;
   }
   next.horas_proceso = roundHorasEjecucion(horasMesa);
@@ -162,7 +172,11 @@ export function sumHorasDeclaradasDatosProceso(
     return t > 0 ? roundHorasEjecucion(t) : null;
   }
   if (procesoId === PROCESO_ENGOMADO) {
-    return num(datos.tiempo_real);
+    const t =
+      (num(datos.horas_preparacion_real) ?? 0) + (num(datos.horas_tiraje_real) ?? 0);
+    if (t > 0) return roundHorasEjecucion(t);
+    const legacy = num(datos.tiempo_real);
+    return legacy != null && legacy > 0 ? legacy : null;
   }
   return num(datos.horas_proceso);
 }
@@ -195,8 +209,14 @@ export function buildEjecucionHorasSyncPatch(
     return sync;
   }
   if (procesoId === PROCESO_ENGOMADO) {
-    const tReal = num(datos.tiempo_real);
-    if (tReal != null) sync.horas_reales_engomado = tReal;
+    const hPrep = num(datos.horas_preparacion_real);
+    const hTir = num(datos.horas_tiraje_real);
+    const totalEng = (hPrep ?? 0) + (hTir ?? 0);
+    if (totalEng > 0) sync.horas_reales_engomado = roundHorasEjecucion(totalEng);
+    else {
+      const legacy = num(datos.tiempo_real);
+      if (legacy != null && legacy > 0) sync.horas_reales_engomado = legacy;
+    }
     const estEng = num(datos.estuches_engomados);
     if (estEng != null) sync.cantidad_unidades = estEng;
     return sync;

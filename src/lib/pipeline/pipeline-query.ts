@@ -83,6 +83,8 @@ type DespRow = {
   poses: number | null;
   acabado_pral: string | null;
   horas_estimadas_troquelado: number | null;
+  horas_engomado_preparacion: number | null;
+  horas_engomado_tiraje: number | null;
   horas_estimadas_engomado: number | null;
 };
 

@@ -77,6 +77,8 @@ const DESPACHO_COLS = [
   "horas_tiraje",
   "horas_estimadas_troquelado",
   "horas_estimadas_engomado",
+  "horas_engomado_preparacion",
+  "horas_engomado_tiraje",
   "tipo_engomado",
   "troquel",
   "poses",
