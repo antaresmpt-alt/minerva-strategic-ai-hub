@@ -9,6 +9,7 @@ import {
   Loader2,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
   Upload,
   X,
@@ -41,6 +42,7 @@ import {
   type ArticuloDiffResult,
   type ArticuloImportRow,
 } from "@/lib/articulos-maestro-import";
+import { actualizarPromediosMaestro } from "@/lib/maestro-promedios-update";
 import {
   ARTICULO_TIPO_PRODUCTO_OPTIONS,
   type ProdReferenciaRow,
@@ -687,6 +689,9 @@ export function ArticulosMaestroPage() {
   const [importIncluirModificados, setImportIncluirModificados] = useState(true);
   const [importError, setImportError] = useState<string | null>(null);
 
+  // Promedios (Bloque 6.x Paso C)
+  const [updatingPromedios, setUpdatingPromedios] = useState(false);
+
   // ── Load ────────────────────────────────────────────────────────────────────
 
   const loadData = useCallback(async () => {
@@ -813,6 +818,47 @@ export function ArticulosMaestroPage() {
   const handleExportPdf = useCallback(() => {
     exportarArticulosAPdf(rowsFiltradas);
   }, [rowsFiltradas]);
+
+  // ── Promedios (§7.1.9 paso 4) ────────────────────────────────────────────────
+
+  const handleActualizarPromedios = useCallback(async () => {
+    const ok = window.confirm(
+      "¿Recalcular promedios desde el histórico de OTs producidas?\n\n" +
+        "Solo actualiza columnas *_promedio (nunca valores oficiales ni habituales).\n" +
+        "Puede tardar unos segundos si hay muchas OTs cerradas."
+    );
+    if (!ok) return;
+
+    setUpdatingPromedios(true);
+    try {
+      const result = await actualizarPromediosMaestro(supabase);
+      if (result.referenciasActualizadas === 0 && result.referenciasFallidas === 0) {
+        toast.message("Sin datos para promediar", {
+          description:
+            "No hay OTs en histórico con referencia y no excluidas de promedios.",
+        });
+      } else if (result.referenciasFallidas > 0) {
+        toast.warning(
+          `Promedios: ${result.referenciasActualizadas} OK, ${result.referenciasFallidas} con error`,
+          {
+            description: `OTs usadas: ${result.otsUsadas}. Revisar permisos RLS o IDs huérfanos.`,
+          }
+        );
+      } else {
+        toast.success(
+          `Promedios actualizados: ${result.referenciasActualizadas} referencias`,
+          { description: `Basado en ${result.otsUsadas} OTs del histórico.` }
+        );
+      }
+      await loadData();
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Error actualizando promedios"
+      );
+    } finally {
+      setUpdatingPromedios(false);
+    }
+  }, [supabase, loadData]);
 
   // ── Import ──────────────────────────────────────────────────────────────────
 
@@ -950,6 +996,21 @@ export function ArticulosMaestroPage() {
         >
           <FileSpreadsheet className="size-3.5" />
           Plantilla Excel
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void handleActualizarPromedios()}
+          disabled={updatingPromedios || loading}
+          className="gap-1.5"
+          title="Recalcula *_promedio desde prod_ot_producidas. No toca valores oficiales."
+        >
+          {updatingPromedios ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="size-3.5" />
+          )}
+          {updatingPromedios ? "Actualizando…" : "Actualizar promedios"}
         </Button>
       </div>
 
