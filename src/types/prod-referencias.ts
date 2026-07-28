@@ -133,6 +133,16 @@ export type ProdReferenciaRow = {
   updated_at: string | null;
 };
 
+/** Columnas de promedios/oficiales (Bloque 6.x): no van en Excel ni en formularios habituales. */
+export type ProdReferenciaPromediosKey = Extract<
+  keyof ProdReferenciaRow,
+  | "promedios_actualizados_at"
+  | "promedios_basados_en_n_ots"
+  | `${string}_promedio`
+  | `${string}_oficial`
+  | `${string}_muestra_n`
+>;
+
 /** Fila de `prod_despacho_materiales_lineas` (líneas de material flexibles del despacho). */
 export type ProdDespachoMaterialLineaRow = {
   id: string;

@@ -2,7 +2,11 @@ import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ProdReferenciaRow, ArticuloExcelRow } from "@/types/prod-referencias";
+import type {
+  ArticuloExcelRow,
+  ProdReferenciaPromediosKey,
+  ProdReferenciaRow,
+} from "@/types/prod-referencias";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -70,6 +74,7 @@ export type ArticuloImportRow = Omit<
   | "fsc"
   | "fsc_fecha_validacion"
   | "tipo_engomado_habitual"
+  | ProdReferenciaPromediosKey
 > & {
   __presentFields?: Partial<Record<keyof ArticuloImportDbRow, boolean>>;
 };
