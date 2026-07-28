@@ -5,8 +5,8 @@
 > Complementa a `MINERVA_BRIEFING.md`, `MINERVA_CONTEXTO_TECNICO.md` y `FASES_HOJA_RUTA_DIGITAL.md`.
 >
 > Fecha: 13 de junio de 2026.
-> Actualizado: 28 jul 2026 — Paso A promedios: columnas `*_promedio`/`*_oficial` en maestro. Handoff §0.
-> Pendiente próxima sesión: motor + botón «Actualizar promedios» (§7.1.9 pasos 4), cierre contenedor/hijas (8.4), comparar versiones.
+> Actualizado: 28 jul 2026 — Paso A columnas + Paso B motor promedios. Handoff §0.
+> Pendiente próxima sesión: botón «Actualizar promedios» (Paso C), cierre contenedor/hijas (8.4), comparar versiones.
 
 ---
 
@@ -75,7 +75,7 @@ Admin/gerencia pueden cerrar/reabrir **siempre** por rol; el resto necesita `pue
 
 ### ⏭️ Próxima sesión (prioridad sugerida)
 
-1. **Promedios maestro** — Paso A ✅ columnas. **Siguiente:** motor mediana/moda/millar + botón «Actualizar promedios» (§7.1.9 paso 4).
+1. **Promedios maestro** — Paso A ✅ columnas · Paso B ✅ motor (`maestro-promedios-calc.ts`). **Siguiente:** botón «Actualizar promedios» (Paso C).
 2. **Cierre contenedor / hijas** (Fase 8.4) — fuera del MVP simple.
 3. **Comparar versiones** de la misma OT (v1 vs v2 tras reabrir) en UI Producidas.
 4. **UX Pipeline** (opcional): en pendientes de revisión, mostrar «Listo para cerrar» / último paso en lugar de "—" en Paso actual.
@@ -570,7 +570,7 @@ Estado historico (antes de Ola 3), para contexto:
 | 1 | **Fase 2**: boton "guardar en maestro" al despachar (solo vacios/confirmacion) | Nada | Bajo — no cambia prefill | ✅ Hecho |
 | 2 | Columnas `*_promedio` / `*_oficial` / `_muestra_n` / `promedios_actualizados_at` en `prod_referencias` | Nada (aditivo) | Bajo | ✅ **28 jul 2026** — mig `20260728120000_prod_referencias_promedios_oficiales.sql` |
 | 3 | **Bloque 6**: `prod_ot_producidas` + cierre 2 fases + flag anomala | — | Bloque grande | ✅ Tabla + cierre/reabrir + Pipeline pendientes + mapper referencia/sin engomado. ⏭️ Promedios. |
-| 4 | **Boton "Actualizar promedios"** en Maestro (lee historico, escribe `_promedio` + horas/millar §7.1.10) | Paso 3 | Medio | Pendiente (depende de 3) |
+| 4 | **Boton "Actualizar promedios"** en Maestro (lee historico, escribe `_promedio` + horas/millar §7.1.10) | Paso 3 | Medio | 🔄 Motor ✅ (`maestro-promedios-calc.ts`); falta UI botón |
 | 5 | Prefill despacho desde maestro con **botones explicitos** + fix picker | Acuerdo con planta | Medio (cambio visible) | ✅ Hecho (Ola 3, no dependia de Bloque 6) |
 
 ### 7.1.10 Normalizacion de horas: entrada/preparacion vs tiraje por millar

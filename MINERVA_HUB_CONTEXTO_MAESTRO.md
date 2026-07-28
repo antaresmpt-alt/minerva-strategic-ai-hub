@@ -256,7 +256,8 @@ src/components/produccion/planificacion/
 ### Retomar aquí (27 jul 2026 — post engomado prep/tiraje)
 - [x] **Bloque 6.x — Engomado prep/tiraje** en ejecución + despacho + histórico (27 jul, `2f6b696`)
 - [x] **Bloque 6.x — Promedios maestro Paso A**: columnas `*_promedio` / `*_oficial` / `*_muestra_n` (28 jul)
-- [ ] **Bloque 6.x — Promedios maestro Paso B/C**: motor + botón «Actualizar promedios» (§7.1.9 paso 4)
+- [x] **Bloque 6.x — Promedios maestro Paso B**: motor mediana/moda/millar (`maestro-promedios-calc.ts`, tests)
+- [ ] **Bloque 6.x — Promedios maestro Paso C**: botón «Actualizar promedios» en Maestro (§7.1.9 paso 4)
 - [ ] **Bloque 6.x** (opcional): comparar versiones OT; UX Pipeline «Listo para cerrar»
 - [ ] **Fase 8.4**: cierre OT contenedor/hijas (depende B6 + Bloque 8)
 - [x] **Bloque 6 MVP**: cierre/reabrir + Producidas + Pipeline pendientes + club usuarios (23 jul) — handoff §0 en `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md`
