@@ -259,7 +259,7 @@ src/components/produccion/planificacion/
 - [x] **Bloque 6.x — Promedios maestro Paso B**: motor mediana/moda/millar (`maestro-promedios-calc.ts`, tests)
 - [x] **Bloque 6.x — Promedios maestro Paso C**: botón «Actualizar promedios» en Maestro (§7.1.9 paso 4)
 - [x] **Bloque 6.x — Promedios maestro Paso D**: prefill despacho oficial ?? promedio + panel promedios en Maestro
-- [ ] **Bloque 6.x** (opcional): comparar versiones OT; UX Pipeline «Listo para cerrar»
+- [ ] **Probar promedios** (manual): 1 OT × 4 réplicas — ver `PLAN_PRUEBA_PROMEDIOS_MAESTRO.md`
 - [ ] **Fase 8.4**: cierre OT contenedor/hijas (depende B6 + Bloque 8)
 - [x] **Bloque 6 MVP**: cierre/reabrir + Producidas + Pipeline pendientes + club usuarios (23 jul) — handoff §0 en `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md`
 

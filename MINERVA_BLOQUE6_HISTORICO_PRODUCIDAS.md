@@ -5,8 +5,9 @@
 > Complementa a `MINERVA_BRIEFING.md`, `MINERVA_CONTEXTO_TECNICO.md` y `FASES_HOJA_RUTA_DIGITAL.md`.
 >
 > Fecha: 13 de junio de 2026.
-> Actualizado: 28 jul 2026 — Pasos A–D promedios (columnas + motor + botón + prefill). Handoff §0.
+> Actualizado: 28 jul 2026 — Pasos A–D promedios + plan de prueba manual.
 > Pendiente próxima sesión: cierre contenedor/hijas (8.4), comparar versiones.
+> **Prueba promedios:** `PLAN_PRUEBA_PROMEDIOS_MAESTRO.md` (1 OT × 4 réplicas).
 
 ---
 
@@ -75,7 +76,7 @@ Admin/gerencia pueden cerrar/reabrir **siempre** por rol; el resto necesita `pue
 
 ### ⏭️ Próxima sesión (prioridad sugerida)
 
-1. **Promedios maestro** — Pasos A–D ✅ (columnas, motor, botón, prefill despacho + UX Maestro).
+1. **Promedios maestro** — Pasos A–D ✅. **Probar en planta/oficina:** `PLAN_PRUEBA_PROMEDIOS_MAESTRO.md` (1 OT × 4 réplicas).
 2. **Cierre contenedor / hijas** (Fase 8.4) — fuera del MVP simple.
 3. **Comparar versiones** de la misma OT (v1 vs v2 tras reabrir) en UI Producidas.
 4. **UX Pipeline** (opcional): en pendientes de revisión, mostrar «Listo para cerrar» / último paso en lugar de "—" en Paso actual.
@@ -639,6 +640,10 @@ Si cambian poses de forma estructural (p. ej. 4 → 8), el millar se desvia: ove
 
 Misma regla: el boton escribe solo `*_promedio`; nunca pisa `*_oficial`.
 Prefill = `oficial ?? promedio`. Guardar `muestra_n` y `promedios_actualizados_at`.
+
+#### Plan de prueba manual (oficina)
+
+Guía corta (1 OT base → 4 réplicas con horas distintas): **`PLAN_PRUEBA_PROMEDIOS_MAESTRO.md`**.
 
 #### Controles al calcular
 
