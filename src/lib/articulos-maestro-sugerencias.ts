@@ -18,6 +18,10 @@ import {
   CTP_REQUISITO_DEFS,
   type DespachoWizardCtpDatos,
 } from "@/lib/ctp-despacho";
+import {
+  maestroValorEfectivoTexto,
+  type MaestroPrefillReferenciaRow,
+} from "@/lib/maestro-prefill";
 
 export type {
   DefaultsProcesoMaestro,
@@ -522,7 +526,7 @@ export type MaestroPrefillFormPatch = Partial<
 
 /** Construye el patch de campos planos del formulario desde el maestro — solo vacíos. */
 export function buildFormPatchFromMaestro(
-  maestro: Pick<ProdReferenciaRow, MaestroSugerenciaKey>,
+  maestro: MaestroPrefillReferenciaRow,
   currentForm: DespachoFormState
 ): { patch: MaestroPrefillFormPatch; filledLabels: string[]; skippedLabels: string[] } {
   const patch: Record<string, string> = {};
@@ -532,7 +536,7 @@ export function buildFormPatchFromMaestro(
   for (const key of MAESTRO_SUGERENCIA_KEYS) {
     const formField = FORM_FIELD_FROM_MAESTRO[key];
     if (!formField) continue;
-    const maestroVal = currentMaestroValue(maestro, key);
+    const maestroVal = maestroValorEfectivoTexto(maestro, key);
     if (!maestroVal) continue;
     const currentVal = String(currentForm[formField] ?? "").trim();
     if (currentVal) {

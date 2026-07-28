@@ -51,6 +51,8 @@ const REFERENCIA_PICKER_SELECT_COLS = [
   "tintas_habituales",
   "acabado_habitual",
   "tipo_engomado_habitual",
+  "tipo_engomado_promedio",
+  "tipo_engomado_oficial",
   "caja_embalaje_habitual",
   "unidades_por_embalaje_habitual",
   "ruta_habitual",

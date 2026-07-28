@@ -44,6 +44,9 @@ import {
 } from "@/lib/articulos-maestro-import";
 import { actualizarPromediosMaestro } from "@/lib/maestro-promedios-update";
 import {
+  buildMaestroPromediosResumenLines,
+} from "@/lib/maestro-prefill";
+import {
   ARTICULO_TIPO_PRODUCTO_OPTIONS,
   type ProdReferenciaRow,
   type DefaultsProcesoMaestro,
@@ -265,6 +268,25 @@ function CompletitudBadge({ nivel }: { nivel: CompletitudNivel }) {
 
 // ─── Form dialog ──────────────────────────────────────────────────────────────
 
+function MaestroPromediosInfoPanel({ row }: { row: ProdReferenciaRow }) {
+  const lines = buildMaestroPromediosResumenLines(row);
+  if (lines.length === 0) {
+    return (
+      <p className="text-[11px] text-slate-500">
+        Sin promedios calculados todavía. Usa «Actualizar promedios» tras cerrar OTs en
+        histórico.
+      </p>
+    );
+  }
+  return (
+    <ul className="space-y-0.5 text-[11px] text-slate-600">
+      {lines.map((line) => (
+        <li key={line}>{line}</li>
+      ))}
+    </ul>
+  );
+}
+
 function ArticuloFormDialog({
   open,
   title,
@@ -275,6 +297,7 @@ function ArticuloFormDialog({
   onSave,
   onClose,
   showCodigo = true,
+  promediosRow,
 }: {
   open: boolean;
   title: string;
@@ -285,6 +308,7 @@ function ArticuloFormDialog({
   onSave: () => void;
   onClose: () => void;
   showCodigo?: boolean;
+  promediosRow?: ProdReferenciaRow | null;
 }) {
   const set = (k: keyof ArticuloForm, v: string | boolean | DefaultsProcesoMaestro) =>
     onFormChange({ ...form, [k]: v });
@@ -514,6 +538,17 @@ function ArticuloFormDialog({
               />
             </div>
           </div>
+
+          {promediosRow ? (
+            <>
+              <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                Promedios desde histórico (solo lectura)
+              </p>
+              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                <MaestroPromediosInfoPanel row={promediosRow} />
+              </div>
+            </>
+          ) : null}
 
           {/* Defaults por proceso (Ola 2) */}
           <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
@@ -1193,6 +1228,7 @@ export function ArticulosMaestroPage() {
         onSave={handleSaveEdit}
         onClose={() => setEditingRow(null)}
         showCodigo={false}
+        promediosRow={editingRow}
       />
 
       {/* Modal Import */}

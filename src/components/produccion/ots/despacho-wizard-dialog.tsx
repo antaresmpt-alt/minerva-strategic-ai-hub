@@ -58,9 +58,14 @@ import {
   hasAnySugerencia,
   hasAnyDefaultsProceso,
   upsertSugerenciasTecnicas,
-  type MaestroSugerenciaKey,
   type SugerenciaFieldDiff,
 } from "@/lib/articulos-maestro-sugerencias";
+import {
+  buildHorasFormPatchFromMaestro,
+  MAESTRO_PREFILL_REFERENCIA_SELECT,
+  maestroTipoEngomadoEfectivo,
+  type MaestroPrefillReferenciaRow,
+} from "@/lib/maestro-prefill";
 import {
   applyClonePrefill,
   buildDatosProcesoSeed,
@@ -132,7 +137,7 @@ import {
 } from "@/lib/hoja-ruta/hoja-ruta-cartelita-pdf";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
-import type { DefaultsProcesoMaestro, ProdReferenciaRow } from "@/types/prod-referencias";
+import type { ProdReferenciaRow } from "@/types/prod-referencias";
 
 export type DespachoWizardDialogProps = {
   open: boolean;
@@ -880,13 +885,15 @@ export function DespachoWizardDialog({
         if (!tipoEngomadoHabitual) {
           const { data: refRow } = await supabase
             .from("prod_referencias")
-            .select("tipo_engomado_habitual")
+            .select(
+              "tipo_engomado_habitual, tipo_engomado_promedio, tipo_engomado_oficial"
+            )
             .eq("id", refId)
             .maybeSingle();
-          tipoEngomadoHabitual = String(
-            (refRow as { tipo_engomado_habitual?: string | null } | null)
-              ?.tipo_engomado_habitual ?? ""
-          ).trim();
+          tipoEngomadoHabitual =
+            maestroTipoEngomadoEfectivo(
+              (refRow ?? {}) as MaestroPrefillReferenciaRow,
+            ) ?? "";
         }
 
         setForm((f) => {
@@ -941,9 +948,10 @@ export function DespachoWizardDialog({
   /** Prefill AUTOMÁTICO al elegir referencia — sigue siendo "último despacho" (sin cambios). */
   const handleReferenciaPicked = useCallback(
     (row: ProdReferenciaRow) => {
-      const tipoEngomadoHabitual =
-        (row as { tipo_engomado_habitual?: string | null }).tipo_engomado_habitual ?? null;
-      void applyUltimoTrabajoPrefill(row.id, row.codigo, tipoEngomadoHabitual);
+      const tipoEngomadoEfectivo = maestroTipoEngomadoEfectivo(
+        row as MaestroPrefillReferenciaRow,
+      );
+      void applyUltimoTrabajoPrefill(row.id, row.codigo, tipoEngomadoEfectivo);
     },
     [applyUltimoTrabajoPrefill]
   );
@@ -959,9 +967,7 @@ export function DespachoWizardDialog({
     try {
       const { data, error } = await supabase
         .from("prod_referencias")
-        .select(
-          "material_habitual, gramaje_habitual, poses_habitual, troquel_habitual, tintas_habituales, acabado_habitual, tipo_engomado_habitual, caja_embalaje_habitual, unidades_por_embalaje_habitual, ruta_habitual, defaults_proceso"
-        )
+        .select(MAESTRO_PREFILL_REFERENCIA_SELECT)
         .eq("id", refId)
         .maybeSingle();
       if (error) throw error;
@@ -969,19 +975,24 @@ export function DespachoWizardDialog({
         toast.info(`Referencia ${refCodigo} sin datos en el maestro todavía.`);
         return;
       }
-      const maestroRow = data as unknown as Pick<ProdReferenciaRow, MaestroSugerenciaKey> & {
-        defaults_proceso: DefaultsProcesoMaestro | null;
-      };
+      const maestroRow = data as unknown as MaestroPrefillReferenciaRow;
 
       const procesoIdsEnRuta = new Set(itinerarioSlots.map((s) => s.procesoId));
       const { patch: formPatch, filledLabels: formFilled } = buildFormPatchFromMaestro(
         maestroRow,
         form
       );
+      const cantidadPedido = integerOrZeroForDespacho(meta.cantidad);
+      const { patch: horasPatch, filledLabels: horasFilled } =
+        buildHorasFormPatchFromMaestro(
+          maestroRow,
+          { ...form, ...formPatch },
+          cantidadPedido > 0 ? cantidadPedido : null,
+        );
       const { patch: procesoPatch, filledLabels: procesoFilled } =
         buildProcesoDatosPatchFromMaestro(maestroRow.defaults_proceso, procesoDatos, procesoIdsEnRuta);
 
-      const allFilled = [...formFilled, ...procesoFilled];
+      const allFilled = [...formFilled, ...horasFilled, ...procesoFilled];
       if (allFilled.length === 0) {
         toast.info(
           `Maestro ${refCodigo}: nada nuevo que aportar (ya rellenado o maestro vacío).`
@@ -989,8 +1000,9 @@ export function DespachoWizardDialog({
         return;
       }
 
-      if (Object.keys(formPatch).length > 0) {
-        setForm((f) => ({ ...f, ...formPatch }));
+      const mergedFormPatch = { ...formPatch, ...horasPatch };
+      if (Object.keys(mergedFormPatch).length > 0) {
+        setForm((f) => ({ ...f, ...mergedFormPatch }));
       }
       if (Object.keys(procesoPatch).length > 0) {
         setProcesoDatos((pd) => ({ ...pd, ...procesoPatch }));
@@ -1001,7 +1013,7 @@ export function DespachoWizardDialog({
         e instanceof Error ? e.message : "No se pudo leer el maestro de artículos."
       );
     }
-  }, [form, itinerarioSlots, procesoDatos, supabase]);
+  }, [form, itinerarioSlots, meta.cantidad, procesoDatos, supabase]);
 
   const cloneFromOtAnterior = useCallback(
     async (otRaw: string) => {
@@ -2852,7 +2864,7 @@ export function DespachoWizardDialog({
                         Usar maestro
                       </Button>
                       <span className="text-[10px] text-slate-400">
-                        (solo rellenan campos vacíos, nunca pisan lo ya escrito)
+                        (oficial → promedio → habitual; solo campos vacíos)
                       </span>
                     </div>
                   ) : null}
