@@ -15,6 +15,7 @@
    - `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`
    - `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`
    - `MINERVA_BLOQUE10_PRESUPUESTOS.md` (futuro)
+   - `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` (idea — calendario lanza a planta)
 3. Añadir `MINERVA_CONTEXTO_TECNICO.md` solo si la IA necesita detalles técnicos del repo.
 4. Al cerrar una fase, actualizar este maestro + `FASES_HOJA_RUTA_DIGITAL.md`.
 
@@ -27,6 +28,7 @@
 | `MINERVA_BLOQUE*_*.md` | Brief específico de una fase activa o futura. |
 | `MINERVA_ROLES_Y_NAVEGACION.md` | Capa transversal: permisos (quién puede qué) + navegación (qué ve cada uno). Bloque futuro. |
 | `MINERVA_BLOQUE10_PRESUPUESTOS.md` | Bloque futuro: presupuestos, formas, versión real al copiar. |
+| `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` | Idea (28 jul): calendario OT como master de planificar + lanzar a máquina. |
 | `MINERVA_REUNION_HOJA_RUTA_JUEVES.md` | Guía reunión demo 98010 + preguntas §12. |
 | `MINERVA_BRIEFING.md` | Onboarding narrativo largo; útil, pero secundario frente a este maestro. |
 
@@ -260,6 +262,8 @@ src/components/produccion/planificacion/
 - [x] **Bloque 6.x — Promedios maestro Paso C**: botón «Actualizar promedios» en Maestro (§7.1.9 paso 4)
 - [x] **Bloque 6.x — Promedios maestro Paso D**: prefill despacho oficial ?? promedio + panel promedios en Maestro
 - [ ] **Probar promedios** (manual): 1 OT × 4 réplicas — ver `PLAN_PRUEBA_PROMEDIOS_MAESTRO.md`
+- [ ] **Bloque 11 (idea)**: Calendario como master de lanzamiento — `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md`
+- [ ] **Bloque 6.x** (opcional): comparar versiones OT; UX Pipeline «Listo para cerrar»
 - [ ] **Fase 8.4**: cierre OT contenedor/hijas (depende B6 + Bloque 8)
 - [x] **Bloque 6 MVP**: cierre/reabrir + Producidas + Pipeline pendientes + club usuarios (23 jul) — handoff §0 en `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md`
 
@@ -286,7 +290,8 @@ src/components/produccion/planificacion/
 - [ ] Afinar diseño del PDF acompañante tras feedback real de planta/dirección
 
 ### Siguiente bloque grande
-- **Bloque 6.x** (continuación): promedios maestro — handoff en `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` §0
+- **Bloque 6.x**: probar promedios (`PLAN_PRUEBA_PROMEDIOS_MAESTRO.md`)
+- **Bloque 11 (idea)**: calendario = master planificar + lanzar — `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md`
 - **Bloque 8.2+ / 8.4**: wizard contenedor + cierre hijas
 - **Bloque 7**: expedición / albarán (depende Odoo)
 
@@ -331,6 +336,8 @@ src/components/produccion/planificacion/
 18. **Calendario Producción (17–18 jul + multi-ámbito 24 jul)**: planificador manual OTs. **Ámbitos** Impresión/Digital/Troquelado/Engomado (`ambito` + letra I/D/T/E); escritura solo admin/gerencia todos, `produccion`→Impresión, sección→la suya; RLS por ámbito. Visibilidad con 4 checks (persistidos). Semáforo pastilla = estado del paso del ámbito en itinerario (ámbar esperando / verde listo / **navy hecho** / gris sin paso); **no** auto-mueve fechas. Tabla `prod_calendario_produccion_ot`. Detalle §15.11–15.13 Bloque 9.
 
 19. **Cartelas impresión (18 jul 2026)**: **1 copia** por palet (antes 2). Confirmado Emma/Ramón.
+
+20. **Bloque 11 — Calendario como master de lanzamiento (28 jul 2026, idea)**: Albert/Carlos quieren planificar **y lanzar** desde el calendario (no solo colocar pastillas). Flujo deseado: colocar OT en día/ámbito → pasar a mesa / lanzar → aparece en tareas maquinista → al cerrar, color “hecho” → siguiente ámbito (T/E…) listo en su calendario. Replanificar si el día no se ejecutó. **No implementar aún.** Brief: `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md`.
 
 ## 📁 Estructura de carpetas relevante
 
