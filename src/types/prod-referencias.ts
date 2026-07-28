@@ -77,6 +77,58 @@ export type ProdReferenciaRow = {
   /** Defaults de configuración por proceso (CTP, guillotina, externos). Solo campos estables. */
   defaults_proceso: DefaultsProcesoMaestro | null;
 
+  // ─── Bloque 6.x — promedios / oficial (§7.1) ───────────────────────────────
+  /** Último recálculo desde prod_ot_producidas. */
+  promedios_actualizados_at: string | null;
+  /** Nº de OTs usadas en el último recálculo (tras filtros). */
+  promedios_basados_en_n_ots: number | null;
+
+  material_promedio: string | null;
+  material_oficial: string | null;
+  troquel_promedio: string | null;
+  troquel_oficial: string | null;
+  tintas_promedio: string | null;
+  tintas_oficial: string | null;
+  acabado_promedio: string | null;
+  acabado_oficial: string | null;
+  tipo_engomado_promedio: string | null;
+  tipo_engomado_oficial: string | null;
+  caja_embalaje_promedio: string | null;
+  caja_embalaje_oficial: string | null;
+
+  poses_promedio: number | null;
+  poses_oficial: number | null;
+  poses_muestra_n: number | null;
+  gramaje_promedio: number | null;
+  gramaje_oficial: number | null;
+  gramaje_muestra_n: number | null;
+  unidades_por_embalaje_promedio: number | null;
+  unidades_por_embalaje_oficial: number | null;
+  unidades_por_embalaje_muestra_n: number | null;
+  merma_promedio: number | null;
+  merma_oficial: number | null;
+  merma_muestra_n: number | null;
+
+  horas_prep_impresion_promedio: number | null;
+  horas_prep_impresion_oficial: number | null;
+  horas_prep_impresion_muestra_n: number | null;
+  horas_prep_troquelado_promedio: number | null;
+  horas_prep_troquelado_oficial: number | null;
+  horas_prep_troquelado_muestra_n: number | null;
+  horas_prep_engomado_promedio: number | null;
+  horas_prep_engomado_oficial: number | null;
+  horas_prep_engomado_muestra_n: number | null;
+
+  horas_millar_impresion_promedio: number | null;
+  horas_millar_impresion_oficial: number | null;
+  horas_millar_impresion_muestra_n: number | null;
+  horas_millar_troquelado_promedio: number | null;
+  horas_millar_troquelado_oficial: number | null;
+  horas_millar_troquelado_muestra_n: number | null;
+  horas_millar_engomado_promedio: number | null;
+  horas_millar_engomado_oficial: number | null;
+  horas_millar_engomado_muestra_n: number | null;
+
   created_at: string | null;
   updated_at: string | null;
 };
