@@ -1,150 +1,111 @@
 # Plan de prueba — Promedios maestro (Bloque 6.x)
 
-> Prueba manual corta: **1 OT base → 4 réplicas** con horas ligeramente distintas.
 > Objetivo: validar mediana / moda / horas-millar → botón «Actualizar promedios» → prefill «Usar maestro».
+>
+> **Estado (30 jul 2026):** ✅ **Validado en planta/oficina** con M-00003 (ANSILIT) + OTs reales.
+> Ref. `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` §7.1 · `MINERVA_HUB_CONTEXTO_MAESTRO.md`
 
 ## UI Maestro (jul 2026)
 
 - Panel **Promedios desde histórico**: categóricos + tabla por proceso (impresión / troquel / engomado con prep+millar; **guillotina** y **desbroce** en horas absolutas).
-- Recálculo: **Actualizar todas** | **Actualizar filtrados** | **Actualizar seleccionados** (checkboxes) | **Recalcular este artículo** en el modal.
+- Recálculo: **Actualizar todas** | **Actualizar filtrados** | **Actualizar seleccionados** | **Recalcular este artículo**.
+- **PDF ficha A4** del artículo (modal + icono fila): identidad, habituales, promedios, defaults.
 - Migración: `horas_guillotina_*` / `horas_desbroce_*` en `prod_referencias`.
->
-> Fecha: 28 jul 2026 · Ref. `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` §7.1
 
 ---
 
-## 0. Datos de la tanda (rellenar)
+## 0. Tanda real ejecutada (30 jul 2026)
 
 | Campo | Valor |
 |-------|--------|
-| **OT base** (plantilla) | ________________ |
-| **Referencia Minerva** (mismo código en las 4) | ________________ |
-| **Cantidad pedida Q** (ideal: **igual** en las 4) | ________________ |
-| **Réplica 1** | OT nº ________ |
-| **Réplica 2** | OT nº ________ |
-| **Réplica 3** | OT nº ________ |
-| **Réplica 4** | OT nº ________ |
+| **Referencia Minerva** | **M-00003** (EU1052 ANSILIT) |
+| **Cantidad pedida Q** (histórico) | **3500** en las 3 OTs |
+| **OTs en Producidas** | **98003**, **98004**, **35265** (n=3, ninguna excluida) |
+| **OT prueba Q distinta** | **98014** (cabecera Optimus, Q=**8000**, sin despachar) |
 
-> Cuando tengas los 4 números, pégalos aquí (o pásamelos) y rellenamos la tabla de horas esperadas.
+### Horas reales (impresión / troquel / engomado) usadas en el motor
 
----
+| OT | Prep imp. | Tiraje imp. | Prep troq. | Tiraje troq. | Prep eng. | Tiraje eng. | Guillotina | Desbroce |
+|----|-----------|-------------|------------|--------------|-----------|-------------|------------|----------|
+| 35265 | 0,5 | 1,2 | 1,2 | 1,5 | 0,15 | 1,2 | 0,7 | 0,6 |
+| 98003 | 0,8 | 1,4 | 0,8 | 1,5 | 0,35 | 0,8 | 0,3 | 0,7 |
+| 98004 | 0,5* | 1,0 | 1,0 | 1,5 | 0,25 | 1,0 | 0,5 | 0,5 |
 
-## 1. Qué debe pasar (reglas a comprobar)
+\* 98004 tenía prep impresión = 5 h (teclado); parcheada a **0,5** en Producidas (trigger desactivado puntual).
 
-| Tipo | Cálculo | Ejemplo |
-|------|---------|---------|
-| **Categóricos** (material, troquel, tintas, engomado, caja…) | **Moda** (más frecuente) | 3× «Zenith» + 1× otro → Zenith |
-| **Numéricos** (poses, gramaje, merma, **prep** horas) | **Mediana** | Prep 0,4 / 0,5 / 0,6 / 0,8 → mediana = **0,55** |
-| **Tiraje** | Primero `horas_millar = H × 1000 / Q`, luego **mediana** de esos millar | Ver §3 |
-| Escritura | Solo columnas `*_promedio` + `promedios_*` | **Nunca** toca `*_oficial` ni `*_habitual` |
-| Prefill despacho | `oficial ?? promedio ?? habitual` | Botón «Usar maestro», solo campos **vacíos** |
+### Promedios esperados / obtenidos en M-00003 (n=3)
 
-Filtros del motor:
+| Campo | Esperado (mediana) | App / PDF |
+|-------|-------------------|-----------|
+| Prep impresión | **0,5** (no media 0,6) | ✅ 0,5 |
+| Millar impresión | mediana(0,343 / 0,400 / 0,286) = **0,343** | ✅ |
+| Prep troquel | **1** | ✅ |
+| Millar troquel | **0,429** (1,5×1000/3500) | ✅ |
+| Prep engomado | **0,25** | ✅ |
+| Millar engomado | **0,286** | ✅ |
+| Guillotina abs. | **0,5** | ✅ |
+| Desbroce abs. | **0,6** | ✅ |
+| Material / troquel / poses / caja / uds | moda | TPWHITE / TAM00534 / 4 / MN2L / 450 |
 
-- Solo filas en `prod_ot_producidas` con `excluido_de_promedios = false`
-- Con `referencia_id` relleno
-- **MAX(version)** por `ot_numero` (si reabres y vuelves a cerrar, cuenta la última)
+> **Mediana ≠ media:** con prep 0,5 / 0,8 / 0,5 la mediana es 0,5; la media sería 0,6.
 
----
+### Prefill «Usar maestro» con Q=8000 (OT 98014) — ✅ OK
 
-## 2. Preparación de las 4 OTs
+Tiraje = `millar × (Q/1000)` redondeado a 2 decimales:
 
-1. Elige **1 OT real** ya razonable (misma referencia, ruta simple).
-2. Crea / despacha **4 OTs nuevas** clonando esa (mismos datos técnicos + **misma referencia Minerva**).
-3. Ideal: **misma cantidad pedida Q** en las 4 (si no, el millar sigue siendo válido, pero la mediana de millar es más fácil de verificar a mano con Q fija).
-4. En ejecución, completa itinerario y pon **horas reales distintas** (prep + tiraje) — ver plantilla §3.
-5. Cierra las 4 a histórico (`prod_ot_producidas`). Comprueba en `/produccion/producidas` que:
-   - aparecen las 4
-   - `referencia_id` / código Minerva OK
-   - **no** están marcadas como excluidas de promedios
-
----
-
-## 3. Plantilla de horas (rellenar al probar)
-
-Usa impresión (o troquel/engomado — misma lógica). Ejemplo con **Q = 5000**:
-
-| OT | Prep impresión real (h) | Tiraje impresión real H (h) | Millar = H×1000/Q |
-|----|-------------------------|-----------------------------|-------------------|
-| R1 | 0,40 | 2,00 | 0,400 |
-| R2 | 0,50 | 2,40 | 0,480 |
-| R3 | 0,60 | 2,60 | 0,520 |
-| R4 | 0,80 | 3,00 | 0,600 |
-
-**Esperado tras «Actualizar promedios»** (n = 4):
-
-| Campo maestro | Esperado | Cómo se obtiene |
-|---------------|----------|-----------------|
-| `horas_prep_impresion_promedio` | **0,55** | mediana de 0,40 / 0,50 / 0,60 / 0,80 |
-| `horas_prep_impresion_muestra_n` | **4** | |
-| `horas_millar_impresion_promedio` | **0,5** | mediana de 0,40 / 0,48 / 0,52 / 0,60 |
-| `horas_millar_impresion_muestra_n` | **4** | |
-| `promedios_basados_en_n_ots` | **4** | |
-| `promedios_actualizados_at` | ahora | |
-
-> Sustituye los números por los tuyos reales y recalcula a mano (o pídeme que calcule cuando tengas la tabla).
-
-**Material / troquel / tintas:** deja 3 iguales y 1 distinta → la moda debe ser el valor mayoritario.
+| Proceso | Prep (absoluta) | Tiraje esperado | UI despacho |
+|---------|-----------------|-----------------|-------------|
+| Impresión | 0,5 | 0,343 × 8 = **2,74** | ✅ 0,5 / 2,74 |
+| Troquel | 1 | 0,429 × 8 = **3,43** | ✅ 1 / 3,43 |
+| Engomado | 0,25 | 0,286 × 8 = **2,29** | ✅ 0,25 / 2,29 |
 
 ---
 
-## 4. Checklist de prueba (orden)
+## 1. Qué debe pasar (reglas)
 
-### A. Histórico
-- [ ] Las 4 OTs cerradas visibles en Producidas
-- [ ] Misma referencia Minerva
-- [ ] Ninguna excluida de promedios
+| Tipo | Cálculo |
+|------|---------|
+| **Categóricos** | **Moda** |
+| **Numéricos / prep / guillotina / desbroce** | **Mediana** absoluta |
+| **Tiraje** | Mediana de `H × 1000 / Q` → en despacho: `millar × (Q'/1000)` |
+| Escritura | Solo `*_promedio` / `*_muestra_n` / meta — **nunca** oficial ni habitual |
+| Prefill | `oficial ?? promedio ?? habitual`, solo campos **vacíos** |
 
-### B. Botón Maestro
-- [ ] Ir a **Maestro de Artículos**
-- [ ] Pulsar **«Actualizar promedios»** → confirmar
-- [ ] Toast: referencias actualizadas / OTs usadas (esperable ≥ 1 ref, ≥ 4 OTs si solo hay estas)
-- [ ] Abrir el artículo → panel **«Promedios desde histórico»**: fecha + «4 OTs» (o n correcto)
-
-### C. Valores en BD / UI
-- [ ] Prep / millar coinciden con la mediana (§3)
-- [ ] Campos `*_habitual` **sin cambiar**
-- [ ] Campos `*_oficial` (si había alguno) **sin cambiar**
-
-### D. Prefill despacho (Paso D)
-- [ ] Abrir wizard despacho de una OT **nueva** con esa referencia
-- [ ] Dejar vacíos material / poses / horas…
-- [ ] **«Usar maestro»**
-- [ ] Rellena desde promedio (si no hay oficial)
-- [ ] Si cantidad del pedido = Q' → tiraje ≈ `millar × (Q'/1000)`
-  - Ej. millar 0,5 y Q' = 8000 → tiraje ≈ **4,0 h**
-- [ ] Campos ya rellenados a mano **no** se pisan
-
-### E. Exclusión (opcional, 2 min)
-- [ ] En Producidas, marcar 1 OT como excluida de promedios
-- [ ] Volver a **Actualizar promedios**
-- [ ] `promedios_basados_en_n_ots` = **3** y mediana recalculada sin esa OT
+Filtros: `excluido_de_promedios = false`, con `referencia_id`, **MAX(version)** por OT.
 
 ---
 
-## 5. Dónde mirar en código (si algo falla)
+## 2–4. Checklist genérico (plantilla)
+
+Sigue siendo válido para futuras referencias: 3–4 OTs misma Q → Actualizar promedios → PDF ficha → Usar maestro con otra Q.
+
+Checklist corta:
+
+- [x] OTs en Producidas con misma referencia
+- [x] Actualizar seleccionados / este artículo
+- [x] Panel + PDF ficha coinciden con mediana
+- [x] Habituales / oficiales no pisados
+- [x] Usar maestro escala tiraje con Q
+
+---
+
+## 5. Código
 
 | Pieza | Archivo |
 |-------|---------|
 | Motor | `src/lib/maestro-promedios-calc.ts` |
 | Escritura BD | `src/lib/maestro-promedios-update.ts` |
 | Prefill | `src/lib/maestro-prefill.ts` |
-| Botón Maestro | `articulos-maestro-page.tsx` |
+| PDF ficha | `src/lib/articulos-maestro-ficha-pdf.ts` |
+| UI Maestro | `articulos-maestro-page.tsx` |
 | «Usar maestro» | `despacho-wizard-dialog.tsx` |
 
-Tests unitarios: `npx vitest run src/lib/maestro-promedios-calc.test.ts src/lib/maestro-prefill.test.ts`
+Tests: `npx vitest run src/lib/maestro-promedios-calc.test.ts src/lib/maestro-prefill.test.ts src/lib/maestro-promedios-update.test.ts`
 
 ---
 
 ## 6. Resultado de esta tanda
 
-| Fecha | OT base | Réplicas | ¿OK? | Notas |
-|-------|---------|----------|------|-------|
-| | | | ☐ | |
-
----
-
-## Cómo usarlo conmigo
-
-1. Pásame: **OT base + 4 números de réplica + Q + tabla de horas reales** (prep/tiraje por proceso que quieras validar).
-2. Te devuelvo la **mediana/moda esperada** lista para contrastar con el Maestro tras pulsar el botón.
+| Fecha | Ref. | OTs | Q hist. | ¿OK? | Notas |
+|-------|------|-----|---------|------|-------|
+| 30 jul 2026 | M-00003 | 98003, 98004, 35265 | 3500 | ✅ | Prefill Q=8000 en **98014** OK; prep=mediana no media |

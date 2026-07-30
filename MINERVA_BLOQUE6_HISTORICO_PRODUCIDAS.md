@@ -72,15 +72,16 @@ Admin/gerencia pueden cerrar/reabrir **siempre** por rol; el resto necesita `pue
 | Migración | `20260727140000_produccion_ot_despachadas_engomado_horas_split.sql` (aplicada en prod) |
 | Cierre histórico | `prod-ot-cierre.ts` mapea a `horas_prep_engomado_reales` / `horas_tiraje_engomado_reales` |
 | Mesa / HR | `planificacion-ejecucion-horas.ts`, `hoja-ruta-horas.ts` — split + fallback legacy |
-| Fuera de alcance | Guillotina / CTP / desbroce siguen con **un solo** campo de horas |
+| Fuera de alcance (horas split) | Guillotina / CTP / desbroce siguen con **un solo** campo de horas en ejecución; **sí** entran en promedios maestro como mediana absoluta (30 jul) |
 
 ### ⏭️ Próxima sesión (prioridad sugerida)
 
-1. **Promedios maestro** — Pasos A–D ✅. **Probar en planta/oficina:** `PLAN_PRUEBA_PROMEDIOS_MAESTRO.md` (1 OT × 4 réplicas).
+1. **Promedios maestro** — ✅ Pasos A–D + UI + PDF ficha + **validación real 30 jul** (M-00003, Q=8000 en 98014). Ver `PLAN_PRUEBA_PROMEDIOS_MAESTRO.md`.
 2. **Cierre contenedor / hijas** (Fase 8.4) — fuera del MVP simple.
 3. **Comparar versiones** de la misma OT (v1 vs v2 tras reabrir) en UI Producidas.
 4. **UX Pipeline** (opcional): en pendientes de revisión, mostrar «Listo para cerrar» / último paso en lugar de "—" en Paso actual.
 5. **Calidad datos al cierre**: avisar fuerte si producida ≫ pedida (ej. 99906: 1000→2100) o gramaje 0; no bloquea MVP.
+6. **Backlog UX**: teclado numérico `.` en horas; clone despacho copia horas/embalaje; oficiales editables en Maestro.
 
 ### Decisiones ya cerradas (no reabrir en brainstorm)
 
@@ -572,7 +573,7 @@ Estado historico (antes de Ola 3), para contexto:
 | 2 | Columnas `*_promedio` / `*_oficial` / `_muestra_n` / `promedios_actualizados_at` en `prod_referencias` | Nada (aditivo) | Bajo | ✅ **28 jul 2026** — mig `20260728120000_prod_referencias_promedios_oficiales.sql` |
 | 3 | **Bloque 6**: `prod_ot_producidas` + cierre 2 fases + flag anomala | — | Bloque grande | ✅ Tabla + cierre/reabrir + Pipeline pendientes + mapper referencia/sin engomado. ⏭️ Promedios. |
 | 4 | **Boton "Actualizar promedios"** en Maestro (lee historico, escribe `_promedio` + horas/millar §7.1.10) | Paso 3 | Medio | ✅ **28 jul 2026** — `maestro-promedios-update.ts` + botón en Maestro; nunca toca `_oficial` |
-| 5 | Prefill despacho desde maestro con **botones explicitos** + fix picker | Acuerdo con planta | Medio (cambio visible) | ✅ Hecho (Ola 3). **Paso D (28 jul):** «Usar maestro» = oficial ?? promedio ?? habitual + horas prep/millar; panel promedios en edición Maestro |
+| 5 | Prefill despacho desde maestro con **botones explicitos** + fix picker | Acuerdo con planta | Medio (cambio visible) | ✅ Hecho (Ola 3). **Paso D (28 jul):** «Usar maestro» = oficial ?? promedio ?? habitual + horas prep/millar. **Validado 30 jul:** M-00003 + Q=8000 (98014). PDF ficha + panel + guillotina/desbroce promedios. |
 
 ### 7.1.10 Normalizacion de horas: entrada/preparacion vs tiraje por millar
 

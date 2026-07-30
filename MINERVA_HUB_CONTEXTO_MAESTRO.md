@@ -246,7 +246,7 @@ src/components/produccion/planificacion/
 | 3.8 | Pruebas campo CTP/externos/desbroce | ✅ Implementado (11 jun, merge main 16 jun) |
 | 4 | PDF acompañante desde HojaRutaOtDialog | ✅ Beta implementada (11 jun) |
 | 5 | Integración Etiquetas ↔ Hoja de Ruta | ⏳ Pendiente |
-| 6 | Producidas/Histórico + cierre OT | ✅ **MVP operativo** (23 jul) + **engomado prep/tiraje** (27 jul). ⏭️ Promedios maestro, cierre contenedor — `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` §0 |
+| 6 | Producidas/Histórico + cierre OT | ✅ **MVP + promedios maestro validados** (30 jul, M-00003 / Q=8000). ⏭️ Cierre contenedor — `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` §0 |
 | 7 | Expedición/Albarán | ⏳ Pendiente (depende B6 + Odoo) |
 | 8 | Formatos de hoja + formas + componentes (OT contenedor/hijas) | 🔄 En curso — **FORMATO ✅** + **8.0 ✅** + **8.1 ✅** + **8.1.1 ✅**; 8.2–8.4 pendiente — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` |
 | 9 | Material, cartelas de palet y stock libre | ✅ **9.0–9.6d + 9.4 A/B/C** + Calendario Producción (§15.12, 18 jul) — pastillas, PDF grid/listado, cartela **1 copia**. **Pendiente:** derivar OT a imp. externa (§15.6.12) |
@@ -262,11 +262,12 @@ src/components/produccion/planificacion/
 - [x] **Bloque 6.x — Promedios maestro Paso C**: botón «Actualizar promedios» en Maestro (§7.1.9 paso 4)
 - [x] **Bloque 6.x — Promedios maestro Paso D**: prefill despacho oficial ?? promedio + panel promedios en Maestro
 - [x] **Promedios UI ampliada (30 jul)**: panel completo por proceso (+ guillotina/desbroce absolutas); recálculo todas / filtrados / seleccionados / este artículo
-- [ ] **Probar promedios** (manual): 1 OT × 4 réplicas — ver `PLAN_PRUEBA_PROMEDIOS_MAESTRO.md`
+- [x] **Promedios validados (30 jul)**: M-00003 con OTs 98003/98004/35265; PDF ficha A4; prefill «Usar maestro» en **98014** (Q=8000) escala tiraje OK — `PLAN_PRUEBA_PROMEDIOS_MAESTRO.md`
+- [x] **Ejecución / despacho (30 jul)**: aliases troquel/engomado; desbroce editable; resumen despacho con prep/tiraje impresión+troquel
 - [ ] **UX inputs numéricos**: aceptar `.` del teclado numérico además de `,` (cierre proceso / horas reales) — reportado 30 jul al probar OT 98004
 - [ ] **Despacho clone/prefill**: clonar OT / «Usar último» no copia horas prep/tiraje ni caja embalaje/uds (solo campos técnicos en `DESPACHO_CLONE_*`) — reportado 30 jul al despachar 98003; valorar ampliar clone o Usar maestro
 - [ ] **Bloque 11 (idea)**: Calendario como master de lanzamiento — `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md`
-- [ ] **Bloque 6.x** (opcional): comparar versiones OT; UX Pipeline «Listo para cerrar»
+- [ ] **Bloque 6.x** (opcional): comparar versiones OT; UX Pipeline «Listo para cerrar»; oficiales editables en UI Maestro
 - [ ] **Fase 8.4**: cierre OT contenedor/hijas (depende B6 + Bloque 8)
 - [x] **Bloque 6 MVP**: cierre/reabrir + Producidas + Pipeline pendientes + club usuarios (23 jul) — handoff §0 en `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md`
 
@@ -293,7 +294,7 @@ src/components/produccion/planificacion/
 - [ ] Afinar diseño del PDF acompañante tras feedback real de planta/dirección
 
 ### Siguiente bloque grande
-- **Bloque 6.x**: probar promedios (`PLAN_PRUEBA_PROMEDIOS_MAESTRO.md`)
+- **Bloque 6.x**: promedios ✅ validados 30 jul (`PLAN_PRUEBA_PROMEDIOS_MAESTRO.md`); backlog teclado `.`/, y clone horas
 - **Bloque 11 (idea)**: calendario = master planificar + lanzar — `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md`
 - **Bloque 8.2+ / 8.4**: wizard contenedor + cierre hijas
 - **Bloque 7**: expedición / albarán (depende Odoo)
