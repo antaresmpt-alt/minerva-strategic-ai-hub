@@ -467,7 +467,7 @@ export function buildMaestroPromediosPanel(
       horasN: row.horas_prep_impresion_muestra_n,
       millar: row.horas_millar_impresion_promedio,
       millarN: row.horas_millar_impresion_muestra_n,
-      modo: "prep_millar",
+      modo: "prep_millar" as const,
     },
     {
       proceso: "Troquelado",
@@ -475,7 +475,7 @@ export function buildMaestroPromediosPanel(
       horasN: row.horas_prep_troquelado_muestra_n,
       millar: row.horas_millar_troquelado_promedio,
       millarN: row.horas_millar_troquelado_muestra_n,
-      modo: "prep_millar",
+      modo: "prep_millar" as const,
     },
     {
       proceso: "Engomado",
@@ -483,7 +483,7 @@ export function buildMaestroPromediosPanel(
       horasN: row.horas_prep_engomado_muestra_n,
       millar: row.horas_millar_engomado_promedio,
       millarN: row.horas_millar_engomado_muestra_n,
-      modo: "prep_millar",
+      modo: "prep_millar" as const,
     },
     {
       proceso: "Guillotina",
@@ -491,7 +491,7 @@ export function buildMaestroPromediosPanel(
       horasN: row.horas_guillotina_muestra_n,
       millar: null,
       millarN: null,
-      modo: "absolutas",
+      modo: "absolutas" as const,
     },
     {
       proceso: "Desbroce",
@@ -499,7 +499,7 @@ export function buildMaestroPromediosPanel(
       horasN: row.horas_desbroce_muestra_n,
       millar: null,
       millarN: null,
-      modo: "absolutas",
+      modo: "absolutas" as const,
     },
   ].filter(
     (h) =>
