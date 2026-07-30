@@ -1709,6 +1709,7 @@ Archivos: `src/lib/hoja-ruta/hoja-ruta-pdf.ts`, `hoja-ruta-formatters.ts`.
 | Derivar OT → imp. externa post-despacho | Alta | §15.6.12 (sigue pendiente) |
 | Feedback Jordi calendario | Media | Ajustes tras uso real planificador verano |
 | PDF semana | ✅ | Hecho 18 jul (§15.12) |
+| Marca hecho manual + PDF grid sin «…» | ✅ **30 jul** | `marcado_hecho` + filtro Solo pendientes; PDF reduce tipografía |
 | Marca hecho manual + PDF sin «…» | ✅ | 30 jul — `marcado_hecho` + filtro Solo pendientes; PDF grid reduce tipografía |
 
 ##### 15.11.4 Commits de referencia (17 jul 2026)
