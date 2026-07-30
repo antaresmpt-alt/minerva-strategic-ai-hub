@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Boxes,
   Download,
+  FileDown,
   FileText,
   FileSpreadsheet,
   Loader2,
@@ -43,6 +44,7 @@ import {
   type ArticuloImportRow,
 } from "@/lib/articulos-maestro-import";
 import { actualizarPromediosMaestro } from "@/lib/maestro-promedios-update";
+import { exportArticuloFichaPdf } from "@/lib/articulos-maestro-ficha-pdf";
 import { buildMaestroPromediosPanel } from "@/lib/maestro-prefill";
 import {
   ARTICULO_TIPO_PRODUCTO_OPTIONS,
@@ -204,6 +206,96 @@ function formToPayload(form: ArticuloForm) {
     fsc_fecha_validacion: form.fsc ? form.fsc_fecha_validacion.trim() || null : null,
     notas: form.notas.trim() || null,
     defaults_proceso: Object.keys(form.defaults_proceso).length > 0 ? form.defaults_proceso : null,
+  };
+}
+
+/** Combina el formulario abierto con promedios/meta guardados para la ficha PDF. */
+function buildFichaPdfRow(
+  form: ArticuloForm,
+  base: ProdReferenciaRow | null | undefined,
+): ProdReferenciaRow {
+  const payload = formToPayload(form);
+  return {
+    id: base?.id ?? "",
+    codigo: payload.codigo || "SIN-CODIGO",
+    referencia_cliente: payload.referencia_cliente,
+    descripcion: payload.descripcion,
+    cliente: payload.cliente,
+    tipo_producto: payload.tipo_producto,
+    subtipo: payload.subtipo,
+    activo: payload.activo,
+    formato_largo_mm: payload.formato_largo_mm,
+    formato_ancho_mm: payload.formato_ancho_mm,
+    formato_fondo_mm: payload.formato_fondo_mm,
+    material_habitual: payload.material_habitual,
+    gramaje_habitual: payload.gramaje_habitual,
+    poses_habitual: payload.poses_habitual,
+    troquel_habitual: payload.troquel_habitual,
+    tintas_habituales: payload.tintas_habituales,
+    acabado_habitual: payload.acabado_habitual,
+    ruta_habitual: payload.ruta_habitual,
+    tipo_engomado_habitual: payload.tipo_engomado_habitual,
+    caja_embalaje_habitual: payload.caja_embalaje_habitual,
+    unidades_por_embalaje_habitual: payload.unidades_por_embalaje_habitual,
+    fsc: payload.fsc,
+    fsc_fecha_validacion: payload.fsc_fecha_validacion,
+    ultima_ot_numero: base?.ultima_ot_numero ?? null,
+    ultima_ot_fecha: base?.ultima_ot_fecha ?? null,
+    total_repeticiones: base?.total_repeticiones ?? 0,
+    notas: payload.notas,
+    defaults_proceso: payload.defaults_proceso,
+    promedios_actualizados_at: base?.promedios_actualizados_at ?? null,
+    promedios_basados_en_n_ots: base?.promedios_basados_en_n_ots ?? null,
+    material_promedio: base?.material_promedio ?? null,
+    material_oficial: base?.material_oficial ?? null,
+    troquel_promedio: base?.troquel_promedio ?? null,
+    troquel_oficial: base?.troquel_oficial ?? null,
+    tintas_promedio: base?.tintas_promedio ?? null,
+    tintas_oficial: base?.tintas_oficial ?? null,
+    acabado_promedio: base?.acabado_promedio ?? null,
+    acabado_oficial: base?.acabado_oficial ?? null,
+    tipo_engomado_promedio: base?.tipo_engomado_promedio ?? null,
+    tipo_engomado_oficial: base?.tipo_engomado_oficial ?? null,
+    caja_embalaje_promedio: base?.caja_embalaje_promedio ?? null,
+    caja_embalaje_oficial: base?.caja_embalaje_oficial ?? null,
+    poses_promedio: base?.poses_promedio ?? null,
+    poses_oficial: base?.poses_oficial ?? null,
+    poses_muestra_n: base?.poses_muestra_n ?? null,
+    gramaje_promedio: base?.gramaje_promedio ?? null,
+    gramaje_oficial: base?.gramaje_oficial ?? null,
+    gramaje_muestra_n: base?.gramaje_muestra_n ?? null,
+    unidades_por_embalaje_promedio: base?.unidades_por_embalaje_promedio ?? null,
+    unidades_por_embalaje_oficial: base?.unidades_por_embalaje_oficial ?? null,
+    unidades_por_embalaje_muestra_n: base?.unidades_por_embalaje_muestra_n ?? null,
+    merma_promedio: base?.merma_promedio ?? null,
+    merma_oficial: base?.merma_oficial ?? null,
+    merma_muestra_n: base?.merma_muestra_n ?? null,
+    horas_prep_impresion_promedio: base?.horas_prep_impresion_promedio ?? null,
+    horas_prep_impresion_oficial: base?.horas_prep_impresion_oficial ?? null,
+    horas_prep_impresion_muestra_n: base?.horas_prep_impresion_muestra_n ?? null,
+    horas_prep_troquelado_promedio: base?.horas_prep_troquelado_promedio ?? null,
+    horas_prep_troquelado_oficial: base?.horas_prep_troquelado_oficial ?? null,
+    horas_prep_troquelado_muestra_n: base?.horas_prep_troquelado_muestra_n ?? null,
+    horas_prep_engomado_promedio: base?.horas_prep_engomado_promedio ?? null,
+    horas_prep_engomado_oficial: base?.horas_prep_engomado_oficial ?? null,
+    horas_prep_engomado_muestra_n: base?.horas_prep_engomado_muestra_n ?? null,
+    horas_millar_impresion_promedio: base?.horas_millar_impresion_promedio ?? null,
+    horas_millar_impresion_oficial: base?.horas_millar_impresion_oficial ?? null,
+    horas_millar_impresion_muestra_n: base?.horas_millar_impresion_muestra_n ?? null,
+    horas_millar_troquelado_promedio: base?.horas_millar_troquelado_promedio ?? null,
+    horas_millar_troquelado_oficial: base?.horas_millar_troquelado_oficial ?? null,
+    horas_millar_troquelado_muestra_n: base?.horas_millar_troquelado_muestra_n ?? null,
+    horas_millar_engomado_promedio: base?.horas_millar_engomado_promedio ?? null,
+    horas_millar_engomado_oficial: base?.horas_millar_engomado_oficial ?? null,
+    horas_millar_engomado_muestra_n: base?.horas_millar_engomado_muestra_n ?? null,
+    horas_guillotina_promedio: base?.horas_guillotina_promedio ?? null,
+    horas_guillotina_oficial: base?.horas_guillotina_oficial ?? null,
+    horas_guillotina_muestra_n: base?.horas_guillotina_muestra_n ?? null,
+    horas_desbroce_promedio: base?.horas_desbroce_promedio ?? null,
+    horas_desbroce_oficial: base?.horas_desbroce_oficial ?? null,
+    horas_desbroce_muestra_n: base?.horas_desbroce_muestra_n ?? null,
+    created_at: base?.created_at ?? null,
+    updated_at: base?.updated_at ?? null,
   };
 }
 
@@ -404,6 +496,19 @@ function ArticuloFormDialog({
 }) {
   const set = (k: keyof ArticuloForm, v: string | boolean | DefaultsProcesoMaestro) =>
     onFormChange({ ...form, [k]: v });
+
+  const handlePdfFicha = () => {
+    if (!form.codigo.trim()) {
+      toast.error("Indica un código antes de generar la ficha PDF.");
+      return;
+    }
+    try {
+      exportArticuloFichaPdf(buildFichaPdfRow(form, promediosRow));
+      toast.success(`PDF ficha · ${form.codigo.trim()}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo generar el PDF");
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -771,14 +876,28 @@ function ArticuloFormDialog({
           />
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>
-            Cancelar
+        <DialogFooter className="gap-2 sm:justify-between">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={handlePdfFicha}
+            disabled={saving || !form.codigo.trim()}
+            title="Descarga ficha técnica A4 (1 hoja) con habituales y promedios"
+          >
+            <FileDown className="size-3.5" />
+            PDF ficha
           </Button>
-          <Button size="sm" onClick={onSave} disabled={saving || !form.codigo.trim()}>
-            {saving && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
-            Guardar
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>
+              Cancelar
+            </Button>
+            <Button size="sm" onClick={onSave} disabled={saving || !form.codigo.trim()}>
+              {saving && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+              Guardar
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1392,14 +1511,34 @@ export function ArticulosMaestroPage() {
                     )}
                   </td>
                   <td className="px-3 py-2">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 px-2"
-                      onClick={() => openEdit(r)}
-                    >
-                      <Pencil className="size-3.5" />
-                    </Button>
+                    <div className="flex items-center justify-end gap-0.5">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2"
+                        title="PDF ficha A4"
+                        onClick={() => {
+                          try {
+                            exportArticuloFichaPdf(r);
+                            toast.success(`PDF ficha · ${r.codigo}`);
+                          } catch (e) {
+                            toast.error(
+                              e instanceof Error ? e.message : "No se pudo generar el PDF",
+                            );
+                          }
+                        }}
+                      >
+                        <FileDown className="size-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2"
+                        onClick={() => openEdit(r)}
+                      >
+                        <Pencil className="size-3.5" />
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
