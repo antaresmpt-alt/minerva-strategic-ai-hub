@@ -43,9 +43,7 @@ import {
   type ArticuloImportRow,
 } from "@/lib/articulos-maestro-import";
 import { actualizarPromediosMaestro } from "@/lib/maestro-promedios-update";
-import {
-  buildMaestroPromediosResumenLines,
-} from "@/lib/maestro-prefill";
+import { buildMaestroPromediosPanel } from "@/lib/maestro-prefill";
 import {
   ARTICULO_TIPO_PRODUCTO_OPTIONS,
   type ProdReferenciaRow,
@@ -268,22 +266,112 @@ function CompletitudBadge({ nivel }: { nivel: CompletitudNivel }) {
 
 // ─── Form dialog ──────────────────────────────────────────────────────────────
 
-function MaestroPromediosInfoPanel({ row }: { row: ProdReferenciaRow }) {
-  const lines = buildMaestroPromediosResumenLines(row);
-  if (lines.length === 0) {
+function MaestroPromediosInfoPanel({
+  row,
+  onRecalcularEste,
+  recalculando,
+}: {
+  row: ProdReferenciaRow;
+  onRecalcularEste?: () => void;
+  recalculando?: boolean;
+}) {
+  const panel = buildMaestroPromediosPanel(row);
+  if (!panel.hasData) {
     return (
-      <p className="text-[11px] text-slate-500">
-        Sin promedios calculados todavía. Usa «Actualizar promedios» tras cerrar OTs en
-        histórico.
-      </p>
+      <div className="space-y-2">
+        <p className="text-[11px] text-slate-500">
+          Sin promedios calculados todavía. Usa «Actualizar promedios» tras cerrar OTs en
+          histórico.
+        </p>
+        {onRecalcularEste ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1.5 text-[11px]"
+            disabled={recalculando}
+            onClick={onRecalcularEste}
+          >
+            {recalculando ? (
+              <Loader2 className="size-3 animate-spin" />
+            ) : (
+              <RefreshCw className="size-3" />
+            )}
+            Recalcular este artículo
+          </Button>
+        ) : null}
+      </div>
     );
   }
   return (
-    <ul className="space-y-0.5 text-[11px] text-slate-600">
-      {lines.map((line) => (
-        <li key={line}>{line}</li>
-      ))}
-    </ul>
+    <div className="space-y-2">
+      {panel.header ? (
+        <p className="text-[11px] font-medium text-slate-700">{panel.header}</p>
+      ) : null}
+      {(panel.categoricos.length > 0 || panel.numericos.length > 0) && (
+        <ul className="grid gap-0.5 text-[11px] text-slate-600 sm:grid-cols-2">
+          {[...panel.categoricos, ...panel.numericos].map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      )}
+      {panel.horas.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="border-b border-slate-200 text-left text-slate-500">
+                <th className="py-1 pr-2 font-medium">Proceso</th>
+                <th className="py-1 pr-2 font-medium">Prep / horas</th>
+                <th className="py-1 font-medium">Millar (tiraje)</th>
+              </tr>
+            </thead>
+            <tbody className="text-slate-700">
+              {panel.horas.map((h) => (
+                <tr key={h.proceso} className="border-b border-slate-100 last:border-0">
+                  <td className="py-1 pr-2 font-medium">{h.proceso}</td>
+                  <td className="py-1 pr-2 tabular-nums">
+                    {h.horas != null
+                      ? h.horasN != null
+                        ? `${h.horas} h (n=${h.horasN})`
+                        : `${h.horas} h`
+                      : "—"}
+                    {h.modo === "absolutas" ? (
+                      <span className="ml-1 text-[10px] text-slate-400">abs.</span>
+                    ) : null}
+                  </td>
+                  <td className="py-1 tabular-nums">
+                    {h.modo === "absolutas"
+                      ? "—"
+                      : h.millar != null
+                        ? h.millarN != null
+                          ? `${h.millar} (n=${h.millarN})`
+                          : String(h.millar)
+                        : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+      {onRecalcularEste ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-7 gap-1.5 text-[11px]"
+          disabled={recalculando}
+          onClick={onRecalcularEste}
+        >
+          {recalculando ? (
+            <Loader2 className="size-3 animate-spin" />
+          ) : (
+            <RefreshCw className="size-3" />
+          )}
+          Recalcular este artículo
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
@@ -298,6 +386,8 @@ function ArticuloFormDialog({
   onClose,
   showCodigo = true,
   promediosRow,
+  onRecalcularPromedios,
+  recalculandoPromedios,
 }: {
   open: boolean;
   title: string;
@@ -309,6 +399,8 @@ function ArticuloFormDialog({
   onClose: () => void;
   showCodigo?: boolean;
   promediosRow?: ProdReferenciaRow | null;
+  onRecalcularPromedios?: () => void;
+  recalculandoPromedios?: boolean;
 }) {
   const set = (k: keyof ArticuloForm, v: string | boolean | DefaultsProcesoMaestro) =>
     onFormChange({ ...form, [k]: v });
@@ -545,7 +637,11 @@ function ArticuloFormDialog({
                 Promedios desde histórico (solo lectura)
               </p>
               <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                <MaestroPromediosInfoPanel row={promediosRow} />
+                <MaestroPromediosInfoPanel
+                  row={promediosRow}
+                  onRecalcularEste={onRecalcularPromedios}
+                  recalculando={recalculandoPromedios}
+                />
               </div>
             </>
           ) : null}
@@ -726,6 +822,7 @@ export function ArticulosMaestroPage() {
 
   // Promedios (Bloque 6.x Paso C)
   const [updatingPromedios, setUpdatingPromedios] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // ── Load ────────────────────────────────────────────────────────────────────
 
@@ -856,44 +953,111 @@ export function ArticulosMaestroPage() {
 
   // ── Promedios (§7.1.9 paso 4) ────────────────────────────────────────────────
 
-  const handleActualizarPromedios = useCallback(async () => {
-    const ok = window.confirm(
-      "¿Recalcular promedios desde el histórico de OTs producidas?\n\n" +
-        "Solo actualiza columnas *_promedio (nunca valores oficiales ni habituales).\n" +
-        "Puede tardar unos segundos si hay muchas OTs cerradas."
-    );
-    if (!ok) return;
+  const runActualizarPromedios = useCallback(
+    async (referenciaIds: string[] | undefined, scopeLabel: string) => {
+      const confirmMsg =
+        referenciaIds && referenciaIds.length > 0
+          ? `¿Recalcular promedios de ${referenciaIds.length} artículo(s) (${scopeLabel})?\n\n` +
+            "Solo actualiza columnas *_promedio (nunca oficiales ni habituales)."
+          : "¿Recalcular promedios de TODAS las referencias con OTs en histórico?\n\n" +
+            "Solo actualiza columnas *_promedio (nunca valores oficiales ni habituales).\n" +
+            "Puede tardar unos segundos si hay muchas OTs cerradas.";
+      if (!window.confirm(confirmMsg)) return;
 
-    setUpdatingPromedios(true);
-    try {
-      const result = await actualizarPromediosMaestro(supabase);
-      if (result.referenciasActualizadas === 0 && result.referenciasFallidas === 0) {
-        toast.message("Sin datos para promediar", {
-          description:
-            "No hay OTs en histórico con referencia y no excluidas de promedios.",
-        });
-      } else if (result.referenciasFallidas > 0) {
-        toast.warning(
-          `Promedios: ${result.referenciasActualizadas} OK, ${result.referenciasFallidas} con error`,
-          {
-            description: `OTs usadas: ${result.otsUsadas}. Revisar permisos RLS o IDs huérfanos.`,
-          }
+      setUpdatingPromedios(true);
+      try {
+        const result = await actualizarPromediosMaestro(
+          supabase,
+          referenciaIds && referenciaIds.length > 0
+            ? { referenciaIds }
+            : undefined,
         );
-      } else {
-        toast.success(
-          `Promedios actualizados: ${result.referenciasActualizadas} referencias`,
-          { description: `Basado en ${result.otsUsadas} OTs del histórico.` }
+        if (result.referenciasActualizadas === 0 && result.referenciasFallidas === 0) {
+          toast.message("Sin datos para promediar", {
+            description:
+              "No hay OTs en histórico con referencia y no excluidas de promedios" +
+              (referenciaIds?.length ? " para la selección." : "."),
+          });
+        } else if (result.referenciasFallidas > 0) {
+          toast.warning(
+            `Promedios: ${result.referenciasActualizadas} OK, ${result.referenciasFallidas} con error`,
+            {
+              description: `OTs usadas: ${result.otsUsadas}. Revisar permisos RLS o IDs huérfanos.`,
+            },
+          );
+        } else {
+          toast.success(
+            `Promedios actualizados: ${result.referenciasActualizadas} referencias`,
+            { description: `Basado en ${result.otsUsadas} OTs del histórico.` },
+          );
+        }
+        await loadData();
+      } catch (e) {
+        toast.error(
+          e instanceof Error ? e.message : "Error actualizando promedios",
         );
+      } finally {
+        setUpdatingPromedios(false);
       }
-      await loadData();
-    } catch (e) {
-      toast.error(
-        e instanceof Error ? e.message : "Error actualizando promedios"
-      );
-    } finally {
-      setUpdatingPromedios(false);
+    },
+    [supabase, loadData],
+  );
+
+  const handleActualizarPromediosTodos = useCallback(() => {
+    void runActualizarPromedios(undefined, "todas");
+  }, [runActualizarPromedios]);
+
+  const handleActualizarPromediosSeleccion = useCallback(() => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) {
+      toast.message("Nada seleccionado", {
+        description: "Marca artículos en la tabla o usa «Actualizar filtrados».",
+      });
+      return;
     }
-  }, [supabase, loadData]);
+    void runActualizarPromedios(ids, "seleccionados");
+  }, [runActualizarPromedios, selectedIds]);
+
+  const handleActualizarPromediosFiltrados = useCallback(() => {
+    const ids = rowsFiltradas.map((r) => r.id);
+    if (ids.length === 0) {
+      toast.message("Filtro vacío", {
+        description: "No hay artículos visibles con el filtro actual.",
+      });
+      return;
+    }
+    void runActualizarPromedios(ids, "filtrados");
+  }, [runActualizarPromedios, rowsFiltradas]);
+
+  const handleRecalcularArticuloEditando = useCallback(() => {
+    if (!editingRow) return;
+    void runActualizarPromedios([editingRow.id], editingRow.codigo);
+  }, [editingRow, runActualizarPromedios]);
+
+  const allFilteredSelected =
+    rowsFiltradas.length > 0 &&
+    rowsFiltradas.every((r) => selectedIds.has(r.id));
+
+  const toggleSelectAllFiltered = useCallback(() => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allFilteredSelected) {
+        for (const r of rowsFiltradas) next.delete(r.id);
+      } else {
+        for (const r of rowsFiltradas) next.add(r.id);
+      }
+      return next;
+    });
+  }, [allFilteredSelected, rowsFiltradas]);
+
+  const toggleSelectOne = useCallback((id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
 
   // ── Import ──────────────────────────────────────────────────────────────────
 
@@ -1035,17 +1199,37 @@ export function ArticulosMaestroPage() {
         <Button
           size="sm"
           variant="outline"
-          onClick={() => void handleActualizarPromedios()}
+          onClick={() => void handleActualizarPromediosTodos()}
           disabled={updatingPromedios || loading}
           className="gap-1.5"
-          title="Recalcula *_promedio desde prod_ot_producidas. No toca valores oficiales."
+          title="Recalcula *_promedio de todas las referencias con histórico. No toca oficiales."
         >
           {updatingPromedios ? (
             <Loader2 className="size-3.5 animate-spin" />
           ) : (
             <RefreshCw className="size-3.5" />
           )}
-          {updatingPromedios ? "Actualizando…" : "Actualizar promedios"}
+          {updatingPromedios ? "Actualizando…" : "Actualizar todas"}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void handleActualizarPromediosFiltrados()}
+          disabled={updatingPromedios || loading || rowsFiltradas.length === 0}
+          className="gap-1.5"
+          title="Solo artículos visibles con el filtro actual."
+        >
+          Actualizar filtrados ({rowsFiltradas.length})
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void handleActualizarPromediosSeleccion()}
+          disabled={updatingPromedios || loading || selectedIds.size === 0}
+          className="gap-1.5"
+          title="Solo filas marcadas con checkbox."
+        >
+          Actualizar seleccionados ({selectedIds.size})
         </Button>
       </div>
 
@@ -1142,6 +1326,13 @@ export function ArticulosMaestroPage() {
           <table className="w-full text-xs">
             <thead className="border-b border-slate-200 bg-slate-50">
               <tr>
+                <th className="w-8 px-2 py-2">
+                  <Checkbox
+                    checked={allFilteredSelected}
+                    onCheckedChange={() => toggleSelectAllFiltered()}
+                    aria-label="Seleccionar todos los filtrados"
+                  />
+                </th>
                 <th className="px-3 py-2 text-left font-medium text-slate-500">Código</th>
                 <th className="px-3 py-2 text-left font-medium text-slate-500">Ref. cliente</th>
                 <th className="px-3 py-2 text-left font-medium text-slate-500">Descripción</th>
@@ -1160,6 +1351,13 @@ export function ArticulosMaestroPage() {
                   key={r.id}
                   className={`transition hover:bg-slate-50 ${!r.activo ? "opacity-50" : ""}`}
                 >
+                  <td className="px-2 py-2">
+                    <Checkbox
+                      checked={selectedIds.has(r.id)}
+                      onCheckedChange={(v) => toggleSelectOne(r.id, Boolean(v))}
+                      aria-label={`Seleccionar ${r.codigo}`}
+                    />
+                  </td>
                   <td className="px-3 py-2 font-mono font-medium text-[#002147]">{r.codigo}</td>
                   <td className="px-3 py-2 font-mono text-[#C69C2B]">
                     {r.referencia_cliente ?? <span className="text-slate-300">—</span>}
@@ -1228,7 +1426,13 @@ export function ArticulosMaestroPage() {
         onSave={handleSaveEdit}
         onClose={() => setEditingRow(null)}
         showCodigo={false}
-        promediosRow={editingRow}
+        promediosRow={
+          editingRow
+            ? (rows.find((r) => r.id === editingRow.id) ?? editingRow)
+            : null
+        }
+        onRecalcularPromedios={handleRecalcularArticuloEditando}
+        recalculandoPromedios={updatingPromedios}
       />
 
       {/* Modal Import */}

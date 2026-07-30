@@ -85,6 +85,8 @@ export const PROMEDIOS_MAESTRO_COLUMNAS_PROMEDIO = [
   "horas_millar_impresion_promedio",
   "horas_millar_troquelado_promedio",
   "horas_millar_engomado_promedio",
+  "horas_guillotina_promedio",
+  "horas_desbroce_promedio",
 ] as const;
 
 export type PromedioMaestroColumna =

@@ -358,57 +358,186 @@ export function formatPromediosActualizadosAt(
   });
 }
 
-/** Líneas legibles para panel Maestro (promedio + n global). */
-export function buildMaestroPromediosResumenLines(
+function fmtHorasProm(v: number | null | undefined, n: number | null | undefined): string | null {
+  if (v == null) return null;
+  return n != null ? `${v} h (n=${n})` : `${v} h`;
+}
+
+function fmtNumProm(v: number | null | undefined, n: number | null | undefined): string | null {
+  if (v == null) return null;
+  return n != null ? `${v} (n=${n})` : String(v);
+}
+
+export type MaestroPromediosHorasLinea = {
+  proceso: string;
+  /** Prep absoluta o horas totales (guillotina/desbroce). */
+  horas: number | null;
+  horasN: number | null;
+  /** Solo impresión / troquel / engomado. */
+  millar: number | null;
+  millarN: number | null;
+  modo: "prep_millar" | "absolutas";
+};
+
+/** Datos estructurados para el panel Maestro (tabla + categóricos). */
+export function buildMaestroPromediosPanel(
   row: Pick<
     ProdReferenciaRow,
     | "promedios_actualizados_at"
     | "promedios_basados_en_n_ots"
     | "material_promedio"
+    | "troquel_promedio"
+    | "tintas_promedio"
+    | "acabado_promedio"
+    | "tipo_engomado_promedio"
+    | "caja_embalaje_promedio"
     | "poses_promedio"
     | "poses_muestra_n"
-    | "horas_millar_impresion_promedio"
-    | "horas_millar_impresion_muestra_n"
+    | "gramaje_promedio"
+    | "gramaje_muestra_n"
+    | "unidades_por_embalaje_promedio"
+    | "unidades_por_embalaje_muestra_n"
+    | "merma_promedio"
+    | "merma_muestra_n"
     | "horas_prep_impresion_promedio"
     | "horas_prep_impresion_muestra_n"
+    | "horas_millar_impresion_promedio"
+    | "horas_millar_impresion_muestra_n"
+    | "horas_prep_troquelado_promedio"
+    | "horas_prep_troquelado_muestra_n"
+    | "horas_millar_troquelado_promedio"
+    | "horas_millar_troquelado_muestra_n"
+    | "horas_prep_engomado_promedio"
+    | "horas_prep_engomado_muestra_n"
+    | "horas_millar_engomado_promedio"
+    | "horas_millar_engomado_muestra_n"
+    | "horas_guillotina_promedio"
+    | "horas_guillotina_muestra_n"
+    | "horas_desbroce_promedio"
+    | "horas_desbroce_muestra_n"
   >,
-): string[] {
-  const lines: string[] = [];
+): {
+  header: string | null;
+  categoricos: string[];
+  numericos: string[];
+  horas: MaestroPromediosHorasLinea[];
+  hasData: boolean;
+} {
   const when = formatPromediosActualizadosAt(row.promedios_actualizados_at);
   const nGlobal = row.promedios_basados_en_n_ots;
+  let header: string | null = null;
   if (when) {
-    lines.push(
+    header =
       nGlobal != null && nGlobal > 0
         ? `Actualizado ${when} · ${nGlobal} OTs`
-        : `Actualizado ${when}`,
-    );
+        : `Actualizado ${when}`;
   } else if (nGlobal != null && nGlobal > 0) {
-    lines.push(`Basado en ${nGlobal} OTs`);
+    header = `Basado en ${nGlobal} OTs`;
   }
-  if (row.material_promedio) {
-    lines.push(`Material (prom.): ${row.material_promedio}`);
+
+  const categoricos: string[] = [];
+  if (row.material_promedio) categoricos.push(`Material: ${row.material_promedio}`);
+  if (row.troquel_promedio) categoricos.push(`Troquel: ${row.troquel_promedio}`);
+  if (row.tintas_promedio) categoricos.push(`Tintas: ${row.tintas_promedio}`);
+  if (row.acabado_promedio) categoricos.push(`Acabado: ${row.acabado_promedio}`);
+  if (row.tipo_engomado_promedio) {
+    categoricos.push(`Engomado: ${row.tipo_engomado_promedio}`);
   }
-  if (row.poses_promedio != null) {
-    const n = row.poses_muestra_n;
-    lines.push(
-      n != null ? `Poses (prom.): ${row.poses_promedio} (n=${n})` : `Poses (prom.): ${row.poses_promedio}`,
-    );
+  if (row.caja_embalaje_promedio) {
+    categoricos.push(`Caja: ${row.caja_embalaje_promedio}`);
   }
-  if (row.horas_prep_impresion_promedio != null) {
-    const n = row.horas_prep_impresion_muestra_n;
-    lines.push(
-      n != null
-        ? `Prep impresión (prom.): ${row.horas_prep_impresion_promedio} h (n=${n})`
-        : `Prep impresión (prom.): ${row.horas_prep_impresion_promedio} h`,
-    );
-  }
-  if (row.horas_millar_impresion_promedio != null) {
-    const n = row.horas_millar_impresion_muestra_n;
-    lines.push(
-      n != null
-        ? `Millar impresión (prom.): ${row.horas_millar_impresion_promedio} (n=${n})`
-        : `Millar impresión (prom.): ${row.horas_millar_impresion_promedio}`,
-    );
+
+  const numericos: string[] = [];
+  const poses = fmtNumProm(row.poses_promedio, row.poses_muestra_n);
+  if (poses) numericos.push(`Poses: ${poses}`);
+  const gramaje = fmtNumProm(row.gramaje_promedio, row.gramaje_muestra_n);
+  if (gramaje) numericos.push(`Gramaje: ${gramaje}`);
+  const uds = fmtNumProm(
+    row.unidades_por_embalaje_promedio,
+    row.unidades_por_embalaje_muestra_n,
+  );
+  if (uds) numericos.push(`Uds/caja: ${uds}`);
+  const merma = fmtNumProm(row.merma_promedio, row.merma_muestra_n);
+  if (merma) numericos.push(`Merma: ${merma}`);
+
+  const horas: MaestroPromediosHorasLinea[] = [
+    {
+      proceso: "Impresión",
+      horas: row.horas_prep_impresion_promedio,
+      horasN: row.horas_prep_impresion_muestra_n,
+      millar: row.horas_millar_impresion_promedio,
+      millarN: row.horas_millar_impresion_muestra_n,
+      modo: "prep_millar",
+    },
+    {
+      proceso: "Troquelado",
+      horas: row.horas_prep_troquelado_promedio,
+      horasN: row.horas_prep_troquelado_muestra_n,
+      millar: row.horas_millar_troquelado_promedio,
+      millarN: row.horas_millar_troquelado_muestra_n,
+      modo: "prep_millar",
+    },
+    {
+      proceso: "Engomado",
+      horas: row.horas_prep_engomado_promedio,
+      horasN: row.horas_prep_engomado_muestra_n,
+      millar: row.horas_millar_engomado_promedio,
+      millarN: row.horas_millar_engomado_muestra_n,
+      modo: "prep_millar",
+    },
+    {
+      proceso: "Guillotina",
+      horas: row.horas_guillotina_promedio,
+      horasN: row.horas_guillotina_muestra_n,
+      millar: null,
+      millarN: null,
+      modo: "absolutas",
+    },
+    {
+      proceso: "Desbroce",
+      horas: row.horas_desbroce_promedio,
+      horasN: row.horas_desbroce_muestra_n,
+      millar: null,
+      millarN: null,
+      modo: "absolutas",
+    },
+  ].filter(
+    (h) =>
+      h.horas != null ||
+      h.millar != null,
+  );
+
+  const hasData =
+    Boolean(header) ||
+    categoricos.length > 0 ||
+    numericos.length > 0 ||
+    horas.length > 0;
+
+  return { header, categoricos, numericos, horas, hasData };
+}
+
+/** Líneas legibles (compat / tests). Prefiere `buildMaestroPromediosPanel` en UI. */
+export function buildMaestroPromediosResumenLines(
+  row: Parameters<typeof buildMaestroPromediosPanel>[0],
+): string[] {
+  const panel = buildMaestroPromediosPanel(row);
+  const lines: string[] = [];
+  if (panel.header) lines.push(panel.header);
+  for (const c of panel.categoricos) lines.push(c);
+  for (const n of panel.numericos) lines.push(n);
+  for (const h of panel.horas) {
+    if (h.modo === "absolutas") {
+      const t = fmtHorasProm(h.horas, h.horasN);
+      if (t) lines.push(`${h.proceso}: ${t}`);
+    } else {
+      const prep = fmtHorasProm(h.horas, h.horasN);
+      const millar = fmtNumProm(h.millar, h.millarN);
+      const parts = [
+        prep ? `prep ${prep}` : null,
+        millar ? `millar ${millar}` : null,
+      ].filter(Boolean);
+      if (parts.length) lines.push(`${h.proceso}: ${parts.join(" · ")}`);
+    }
   }
   return lines;
 }

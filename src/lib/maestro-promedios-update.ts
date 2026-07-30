@@ -4,6 +4,9 @@
  * Lee `prod_ot_producidas`, aplica el motor (§7.1.5 / §7.1.10) y escribe
  * SOLO columnas `*_promedio` / `*_muestra_n` + metadatos.
  * Nunca toca `*_oficial` ni `*_habitual`.
+ *
+ * Ámbito opcional: `referenciaIds` limita a esas referencias (selección /
+ * filtro / un solo artículo). Sin IDs → todas las que tengan histórico.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -18,7 +21,12 @@ const UPDATE_CONCURRENCY = 8;
 
 /** Columnas mínimas para el motor (evita traer snapshot JSONB). */
 export const PROMEDIOS_PRODUCIDAS_SELECT =
-  "id, ot_numero, referencia_id, version, excluido_de_promedios, cantidad_pedida, material, gramaje, tintas, troquel, poses, acabado_pral, tipo_engomado, codigo_caja_embalaje, estuches_por_bulto, merma_total, horas_prep_impresion_reales, horas_tiraje_impresion_reales, horas_prep_troquelado_reales, horas_tiraje_troquelado_reales, horas_prep_engomado_reales, horas_tiraje_engomado_reales";
+  "id, ot_numero, referencia_id, version, excluido_de_promedios, cantidad_pedida, material, gramaje, tintas, troquel, poses, acabado_pral, tipo_engomado, codigo_caja_embalaje, estuches_por_bulto, merma_total, horas_prep_impresion_reales, horas_tiraje_impresion_reales, horas_prep_troquelado_reales, horas_tiraje_troquelado_reales, horas_prep_engomado_reales, horas_tiraje_engomado_reales, horas_guillotina_reales, horas_desbroce_reales";
+
+export type ActualizarPromediosOptions = {
+  /** Si se informa, solo recalcula estas referencias. */
+  referenciaIds?: readonly string[];
+};
 
 export type ActualizarPromediosResult = {
   actualizadoAt: string;
@@ -63,6 +71,10 @@ export function buildPromediosDbUpdate(
     horas_millar_troquelado_muestra_n: patch.horas_millar_troquelado_muestra_n,
     horas_millar_engomado_promedio: patch.horas_millar_engomado_promedio,
     horas_millar_engomado_muestra_n: patch.horas_millar_engomado_muestra_n,
+    horas_guillotina_promedio: patch.horas_guillotina_promedio,
+    horas_guillotina_muestra_n: patch.horas_guillotina_muestra_n,
+    horas_desbroce_promedio: patch.horas_desbroce_promedio,
+    horas_desbroce_muestra_n: patch.horas_desbroce_muestra_n,
   };
 }
 
@@ -109,15 +121,25 @@ async function mapPool<T, R>(
 }
 
 /**
- * Recalcula promedios para todas las referencias con OTs en histórico
- * (no excluidas, MAX(version) por OT) y escribe solo capas `_promedio`.
+ * Recalcula promedios y escribe solo capas `_promedio`.
+ * @param options.referenciaIds — si hay IDs, solo esas referencias.
  */
 export async function actualizarPromediosMaestro(
   supabase: SupabaseClient,
+  options?: ActualizarPromediosOptions,
 ): Promise<ActualizarPromediosResult> {
   const actualizadoAt = new Date().toISOString();
   const filas = await fetchAllProducidasForPromedios(supabase);
-  const results = computePromediosByReferencia(filas);
+  let results = computePromediosByReferencia(filas);
+
+  const filterIds = options?.referenciaIds
+    ?.map((id) => String(id).trim())
+    .filter(Boolean);
+  if (filterIds && filterIds.length > 0) {
+    const wanted = new Set(filterIds);
+    results = results.filter((r) => wanted.has(r.referenciaId));
+  }
+
   const otsUsadas = results.reduce((acc, r) => acc + r.nOts, 0);
 
   const errores: ActualizarPromediosResult["errores"] = [];

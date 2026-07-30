@@ -30,6 +30,10 @@ const EMPTY_PATCH: MaestroPromediosPatch = {
   horas_millar_troquelado_muestra_n: null,
   horas_millar_engomado_promedio: null,
   horas_millar_engomado_muestra_n: null,
+  horas_guillotina_promedio: null,
+  horas_guillotina_muestra_n: null,
+  horas_desbroce_promedio: null,
+  horas_desbroce_muestra_n: null,
 };
 
 describe("buildPromediosDbUpdate", () => {

@@ -40,6 +40,8 @@ export type ProducidaPromediosInput = Pick<
   | "horas_tiraje_troquelado_reales"
   | "horas_prep_engomado_reales"
   | "horas_tiraje_engomado_reales"
+  | "horas_guillotina_reales"
+  | "horas_desbroce_reales"
 >;
 
 /** Patch listo para UPDATE de `prod_referencias` (solo capas `_promedio`). */
@@ -71,6 +73,11 @@ export type MaestroPromediosPatch = {
   horas_millar_troquelado_muestra_n: number | null;
   horas_millar_engomado_promedio: number | null;
   horas_millar_engomado_muestra_n: number | null;
+  /** Mediana absoluta (no millar). */
+  horas_guillotina_promedio: number | null;
+  horas_guillotina_muestra_n: number | null;
+  horas_desbroce_promedio: number | null;
+  horas_desbroce_muestra_n: number | null;
 };
 
 export type MaestroPromediosResult = {
@@ -211,6 +218,8 @@ export function computePromediosPatchForRows(
       computeHorasMillar(r.horas_tiraje_engomado_reales, r.cantidad_pedida),
     ),
   );
+  const guillotina = medianWithN(rows.map((r) => r.horas_guillotina_reales));
+  const desbroce = medianWithN(rows.map((r) => r.horas_desbroce_reales));
 
   const poses = medianWithN(rows.map((r) => r.poses));
   const gramaje = medianWithN(rows.map((r) => r.gramaje));
@@ -245,6 +254,10 @@ export function computePromediosPatchForRows(
     horas_millar_troquelado_muestra_n: millarTroq.n,
     horas_millar_engomado_promedio: millarEng.value,
     horas_millar_engomado_muestra_n: millarEng.n,
+    horas_guillotina_promedio: guillotina.value,
+    horas_guillotina_muestra_n: guillotina.n,
+    horas_desbroce_promedio: desbroce.value,
+    horas_desbroce_muestra_n: desbroce.n,
   };
 }
 

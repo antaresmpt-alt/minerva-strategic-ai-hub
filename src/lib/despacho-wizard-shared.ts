@@ -694,9 +694,14 @@ export function buildDatosProcesoSeed(
       parseOptionalDecimalInput(form.horas_troquel_preparacion) ??
       parseOptionalDecimalInput(form.horas_estimadas_troquelado);
     const tiraje = parseOptionalDecimalInput(form.horas_troquel_tiraje);
+    const poses = integerOrZeroForDespacho(form.poses) || null;
     return {
       troquel: form.troquel.trim() || null,
-      num_figuras: integerOrZeroForDespacho(form.poses) || null,
+      // Canonical keys for ejecución form (hoja-ruta-campos-config).
+      poses,
+      hojas_troquelar: hojas,
+      // Legacy aliases kept for older readers / reports.
+      num_figuras: poses,
       hojas_a_troquelar: hojas,
       horas_preparacion_previsto: prep ?? null,
       horas_tiraje_previsto: tiraje ?? null,
@@ -727,7 +732,11 @@ export function buildDatosProcesoSeed(
     const caja = form.codigo_caja_embalaje.trim();
     if (caja) payload.codigo_caja_embalaje = caja;
     const udsEmb = integerOrZeroForDespacho(form.unidades_por_embalaje);
-    if (udsEmb > 0) payload.unidades_por_paquete = udsEmb;
+    if (udsEmb > 0) {
+      // Canonical engomado form field (+ legacy alias used in older seeds).
+      payload.estuches_por_bulto = udsEmb;
+      payload.unidades_por_paquete = udsEmb;
+    }
     return Object.keys(payload).length > 0 ? payload : null;
   }
   if (PROCESO_EXTERNO_IDS.has(procesoId)) {
@@ -789,8 +798,14 @@ export function buildDatosProcesoSeedForForma(
 
   if (procesoId === PROCESO_TROQUEL_ID) {
     const merged = { ...base };
-    if (brutasForma > 0) merged.hojas_a_troquelar = brutasForma;
-    if (posesTroquel > 0) merged.num_figuras = posesTroquel;
+    if (brutasForma > 0) {
+      merged.hojas_troquelar = brutasForma;
+      merged.hojas_a_troquelar = brutasForma;
+    }
+    if (posesTroquel > 0) {
+      merged.poses = posesTroquel;
+      merged.num_figuras = posesTroquel;
+    }
     return Object.keys(merged).length > 0 ? merged : null;
   }
 

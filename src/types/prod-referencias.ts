@@ -129,6 +129,14 @@ export type ProdReferenciaRow = {
   horas_millar_engomado_oficial: number | null;
   horas_millar_engomado_muestra_n: number | null;
 
+  /** Mediana absoluta de horas de guillotina / desbroce (dirección). */
+  horas_guillotina_promedio: number | null;
+  horas_guillotina_oficial: number | null;
+  horas_guillotina_muestra_n: number | null;
+  horas_desbroce_promedio: number | null;
+  horas_desbroce_oficial: number | null;
+  horas_desbroce_muestra_n: number | null;
+
   created_at: string | null;
   updated_at: string | null;
 };

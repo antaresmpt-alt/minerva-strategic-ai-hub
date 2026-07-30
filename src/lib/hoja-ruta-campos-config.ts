@@ -543,7 +543,7 @@ const ENGOMADO_CAMPOS: CampoDefinicion[] = [
     tipo: 'select',
     width: 'half',
     options: [], // Se rellena dinámicamente desde prod_cajas_embalaje.
-    hint: 'Al elegirla se propone bultos/palet por defecto (editable).',
+    hint: 'Al elegirla se propone bultos/palet del catálogo. Estuches/bulto vienen del despacho (uds/caja).',
   },
   {
     id: 'estuches_por_bulto',
@@ -1027,7 +1027,7 @@ const DESBROCE_CAMPOS: CampoDefinicion[] = [
     min: 0,
     width: 'half',
     emphasis: 'real',
-    hint: 'Calculado: hojas × poses.',
+    hint: 'Por defecto: hojas × poses. Puedes ajustarlo si hay merma o diferencia real.',
   },
   {
     id: 'horas_proceso',

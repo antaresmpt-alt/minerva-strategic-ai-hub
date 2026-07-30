@@ -1742,7 +1742,8 @@ Handoff y backlog: `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` **§0**.
 |---------|-----------------|
 | `src/lib/hoja-ruta-campos-config.ts` | Config-driven: definición de campos por proceso (ver sección 3). Incluye `formatInputField` / `formatOutputField` por proceso (Fase FORMATO). |
 | `src/types/planificacion-mesa.ts` | Tipos de la mesa/ejecución (ver sección 4). Campos `formatoAnterior` / `formatoAnteriorOrigenNombre` en `MesaEjecucion`. |
-| `src/components/produccion/planificacion/planificacion-ots-ejecucion-tab.tsx` | Tarjeta de ejecución: prefill cantidad + **formato encadenado**, derivaciones (`computeDerivedDatosProceso`), semáforos, banner "Formato pliego de entrada", persistencia en todas las acciones. |
+| `src/components/produccion/planificacion/planificacion-ots-ejecucion-tab.tsx` | Tarjeta de ejecución: prefill cantidad + **formato encadenado**, derivaciones (`computeDerivedDatosProceso`), semáforos, banner "Formato pliego de entrada", persistencia en todas las acciones. En troquel (`proceso_id=10`): `enrichTroquelDatosProceso` normaliza aliases (`num_figuras`→`poses`, `hojas_a_troquelar`→`hojas_troquelar`) y rellena corte/pinza/expulsor desde catálogo aunque el seed de despacho ya exista. |
+| `src/lib/despacho-wizard-shared.ts` | Seed de `datos_proceso` al despachar. Troquel escribe claves canónicas del formulario (`poses`, `hojas_troquelar`) y mantiene aliases legacy. |
 | `src/utils/supabase/client.ts` | Cliente browser Supabase **singleton** (evita contención de lock GoTrue al abrir Pool + Pipeline). |
 
 ### Páginas de Producción (`src/app/produccion/*/page.tsx`)

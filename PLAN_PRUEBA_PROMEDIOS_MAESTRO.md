@@ -2,6 +2,12 @@
 
 > Prueba manual corta: **1 OT base → 4 réplicas** con horas ligeramente distintas.
 > Objetivo: validar mediana / moda / horas-millar → botón «Actualizar promedios» → prefill «Usar maestro».
+
+## UI Maestro (jul 2026)
+
+- Panel **Promedios desde histórico**: categóricos + tabla por proceso (impresión / troquel / engomado con prep+millar; **guillotina** y **desbroce** en horas absolutas).
+- Recálculo: **Actualizar todas** | **Actualizar filtrados** | **Actualizar seleccionados** (checkboxes) | **Recalcular este artículo** en el modal.
+- Migración: `horas_guillotina_*` / `horas_desbroce_*` en `prod_referencias`.
 >
 > Fecha: 28 jul 2026 · Ref. `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` §7.1
 

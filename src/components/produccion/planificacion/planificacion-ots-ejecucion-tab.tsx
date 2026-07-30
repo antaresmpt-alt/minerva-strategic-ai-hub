@@ -245,6 +245,99 @@ function isDatoProcesoEmpty(value: unknown): boolean {
   return false;
 }
 
+/**
+ * Troquel ejecución form expects poses / hojas_troquelar / pinza / etc.
+ * Despacho seed historically wrote num_figuras / hojas_a_troquelar only,
+ * and skipped catalog fill when datos_proceso was already non-empty.
+ */
+function enrichTroquelDatosProceso(
+  datos: DatosProcesoGenerico,
+  despacho: DespachoInfo | null | undefined,
+  salidaProcesoAnterior: number | null | undefined,
+): DatosProcesoGenerico {
+  const next: DatosProcesoGenerico = { ...datos };
+
+  if (isDatoProcesoEmpty(next.poses) && !isDatoProcesoEmpty(next.num_figuras)) {
+    next.poses = next.num_figuras;
+  }
+
+  if (despacho) {
+    if (isDatoProcesoEmpty(next.troquel) && despacho.troquel) {
+      next.troquel = despacho.troquel;
+    }
+    if (isDatoProcesoEmpty(next.poses) && despacho.poses != null) {
+      next.poses = despacho.poses;
+    }
+    if (isDatoProcesoEmpty(next.tamano_corte) && despacho.tamanoCorte) {
+      next.tamano_corte = despacho.tamanoCorte;
+    }
+    if (isDatoProcesoEmpty(next.pinza) && despacho.pinza != null) {
+      next.pinza = despacho.pinza;
+    }
+    if (isDatoProcesoEmpty(next.expulsor) && despacho.expulsor) {
+      next.expulsor = despacho.expulsor;
+    }
+    if (isDatoProcesoEmpty(next.codigo_caucho) && despacho.cauchoAcrilico) {
+      next.codigo_caucho = despacho.cauchoAcrilico;
+    }
+  }
+
+  // Hojas plan: proceso anterior → alias seed → brutas despacho.
+  if (isDatoProcesoEmpty(next.hojas_troquelar)) {
+    const hojasDesdeAnterior =
+      salidaProcesoAnterior != null && Number.isFinite(salidaProcesoAnterior)
+        ? Math.max(0, Math.trunc(salidaProcesoAnterior))
+        : null;
+    if (hojasDesdeAnterior != null && hojasDesdeAnterior > 0) {
+      next.hojas_troquelar = hojasDesdeAnterior;
+    } else if (!isDatoProcesoEmpty(next.hojas_a_troquelar)) {
+      next.hojas_troquelar = next.hojas_a_troquelar;
+    } else if (despacho?.hojasBrutas != null && despacho.hojasBrutas > 0) {
+      next.hojas_troquelar = Math.max(0, Math.trunc(despacho.hojasBrutas));
+    }
+  }
+
+  return next;
+}
+
+/**
+ * Engomado: despacho seed wrote unidades_por_paquete; form expects estuches_por_bulto.
+ * Bultos/palet come from prod_cajas_embalaje.bultos_por_palet_default when caja is set.
+ */
+function enrichEngomadoDatosProceso(
+  datos: DatosProcesoGenerico,
+  cajasDefaultByCodigo: Map<string, number>,
+): DatosProcesoGenerico {
+  const next: DatosProcesoGenerico = { ...datos };
+
+  if (
+    isDatoProcesoEmpty(next.estuches_por_bulto) &&
+    !isDatoProcesoEmpty(next.unidades_por_paquete)
+  ) {
+    next.estuches_por_bulto = next.unidades_por_paquete;
+  }
+
+  const caja = String(next.codigo_caja_embalaje ?? "").trim();
+  if (caja && isDatoProcesoEmpty(next.bultos_por_palet)) {
+    const def = cajasDefaultByCodigo.get(caja);
+    if (def != null) next.bultos_por_palet = def;
+  }
+
+  const estuches =
+    toFiniteNum(next.estuches_engomados) ??
+    toFiniteNum(next.cantidad_total) ??
+    toFiniteNum(next.estuches_realizar);
+  const porBulto = toFiniteNum(next.estuches_por_bulto);
+  const bultosPorPalet = toFiniteNum(next.bultos_por_palet);
+  const reparto = computeEngomadoReparto(estuches, porBulto, bultosPorPalet);
+  if (reparto.bultos_completos != null) next.bultos_completos = reparto.bultos_completos;
+  if (reparto.pico != null) next.pico = reparto.pico;
+  if (reparto.bultos_totales != null) next.bultos_totales = reparto.bultos_totales;
+  if (reparto.palets != null) next.palets = reparto.palets;
+
+  return next;
+}
+
 function seedRealValuesFromPrevistos(
   procesoId: number | null | undefined,
   datos: DatosProcesoGenerico,
@@ -497,10 +590,20 @@ function computeDerivedDatosProceso(
   }
 
   if (procesoId === PROCESO_DESBROCE_ID) {
+    // Solo recalcular al cambiar hojas/poses; si editan estuches a mano, respetar.
+    if (
+      changedFieldId !== "hojas_entrada" &&
+      changedFieldId !== "poses"
+    ) {
+      return datos;
+    }
     const hojas = toFiniteNum(datos.hojas_entrada);
     const poses = toFiniteNum(datos.poses);
     if (hojas != null && poses != null && poses > 0) {
-      return { ...datos, estuches_desbrozados: Math.max(0, Math.floor(hojas * poses)) };
+      return {
+        ...datos,
+        estuches_desbrozados: Math.max(0, Math.floor(hojas * poses)),
+      };
     }
   }
 
@@ -1868,18 +1971,31 @@ function ExecutionCard({
     const pid = row.procesoId;
     if (Object.keys(existing).length > 0) {
       let seeded = seedRealValuesFromPrevistos(pid, existing);
+      if (pid === 10) {
+        seeded = enrichTroquelDatosProceso(
+          seeded,
+          despacho,
+          row.salidaProcesoAnterior,
+        );
+      }
+      if (pid === PROCESO_ENGOMADO) {
+        seeded = enrichEngomadoDatosProceso(seeded, cajasDefaultByCodigo);
+      }
       if (pid === PROCESO_ENGOMADO && row.salidaProcesoAnterior != null) {
         const prevUnit =
           PROCESO_CAMPOS_CONFIG[row.procesoAnteriorId ?? 0]?.outputUnit ?? "";
         if (prevUnit === "estuches") {
           const est = Math.max(0, Math.trunc(row.salidaProcesoAnterior));
           if (est > 0) {
-            seeded = {
-              ...seeded,
-              estuches_realizar: est,
-              estuches_engomados: est,
-              cantidad_total: est,
-            };
+            seeded = enrichEngomadoDatosProceso(
+              {
+                ...seeded,
+                estuches_realizar: est,
+                estuches_engomados: est,
+                cantidad_total: est,
+              },
+              cajasDefaultByCodigo,
+            );
           }
         }
       }
@@ -1924,33 +2040,28 @@ function ExecutionCard({
       if (despacho.horasTiraje != null) base.horas_impresion_previsto = despacho.horasTiraje;
     }
     if (pid === 10) {
-      if (despacho.troquel) base.troquel = despacho.troquel;
-      if (despacho.poses != null) base.poses = despacho.poses;
-      if (despacho.tamanoCorte) base.tamano_corte = despacho.tamanoCorte;
-      const hojasDesdeAnterior =
-        row.salidaProcesoAnterior != null && Number.isFinite(row.salidaProcesoAnterior)
-          ? Math.max(0, Math.trunc(row.salidaProcesoAnterior))
-          : null;
-      if (hojasDesdeAnterior != null && hojasDesdeAnterior > 0) {
-        base.hojas_troquelar = hojasDesdeAnterior;
-      }
-      if (despacho.pinza != null) base.pinza = despacho.pinza;
-      if (despacho.expulsor) base.expulsor = despacho.expulsor;
-      if (despacho.cauchoAcrilico) base.codigo_caucho = despacho.cauchoAcrilico;
-      const hojasEntrada =
-        row.salidaProcesoAnterior != null && Number.isFinite(row.salidaProcesoAnterior)
-          ? Math.max(0, Math.trunc(row.salidaProcesoAnterior))
-          : despacho.hojasBrutas != null
-            ? Math.max(0, Math.trunc(despacho.hojasBrutas))
-            : null;
+      Object.assign(
+        base,
+        enrichTroquelDatosProceso({}, despacho, row.salidaProcesoAnterior),
+      );
+      const hojasEntrada = toFiniteNum(base.hojas_troquelar);
       if (hojasEntrada != null && hojasEntrada > 0) {
-        base.hojas_troquelar = hojasEntrada;
-        base.hojas_troqueladas = hojasEntrada;
-        base.hojas_merma = 0;
+        if (isDatoProcesoEmpty(base.hojas_troqueladas)) {
+          base.hojas_troqueladas = hojasEntrada;
+        }
+        if (isDatoProcesoEmpty(base.hojas_merma)) {
+          base.hojas_merma = 0;
+        }
       }
       if (despacho.horasTroquelado != null) {
-        base.horas_preparacion_previsto = Math.round(despacho.horasTroquelado * 0.3 * 10) / 10;
-        base.horas_tiraje_previsto = Math.round(despacho.horasTroquelado * 0.7 * 10) / 10;
+        if (isDatoProcesoEmpty(base.horas_preparacion_previsto)) {
+          base.horas_preparacion_previsto =
+            Math.round(despacho.horasTroquelado * 0.3 * 10) / 10;
+        }
+        if (isDatoProcesoEmpty(base.horas_tiraje_previsto)) {
+          base.horas_tiraje_previsto =
+            Math.round(despacho.horasTroquelado * 0.7 * 10) / 10;
+        }
       }
     }
     if (pid === 12) {
@@ -1986,6 +2097,7 @@ function ExecutionCard({
           Math.round(despacho.horasEngomado * 0.7 * 10) / 10;
       }
       if (despacho.tipoEngomado) base.tipo_engomado = despacho.tipoEngomado;
+      Object.assign(base, enrichEngomadoDatosProceso(base, cajasDefaultByCodigo));
     }
     if (pid === PROCESO_DESBROCE_ID) {
       if (hijaComponentes.length > 0) {
@@ -2026,6 +2138,26 @@ function ExecutionCard({
       aplicarPrefillFormatoEncadenado(pid, base, row.formatoAnterior),
     );
   });
+
+  // Si el catálogo de cajas llega después del primer paint, completar bultos/palet y alias uds.
+  useEffect(() => {
+    if (row.procesoId !== PROCESO_ENGOMADO) return;
+    if (cajasDefaultByCodigo.size === 0) return;
+    setDatosProcesoLocal((prev) => {
+      const next = enrichEngomadoDatosProceso(prev, cajasDefaultByCodigo);
+      if (
+        next.estuches_por_bulto === prev.estuches_por_bulto &&
+        next.bultos_por_palet === prev.bultos_por_palet &&
+        next.bultos_completos === prev.bultos_completos &&
+        next.pico === prev.pico &&
+        next.bultos_totales === prev.bultos_totales &&
+        next.palets === prev.palets
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, [row.procesoId, cajasDefaultByCodigo]);
 
   const hasCamposConfig = useMemo(
     () => row.procesoId != null && getCamposConfigByProcesoId(row.procesoId) != null,

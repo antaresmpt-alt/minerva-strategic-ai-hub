@@ -41,6 +41,8 @@ function row(
       overrides.horas_tiraje_troquelado_reales ?? null,
     horas_prep_engomado_reales: overrides.horas_prep_engomado_reales ?? null,
     horas_tiraje_engomado_reales: overrides.horas_tiraje_engomado_reales ?? null,
+    horas_guillotina_reales: overrides.horas_guillotina_reales ?? null,
+    horas_desbroce_reales: overrides.horas_desbroce_reales ?? null,
   };
 }
 
@@ -165,6 +167,29 @@ describe("computePromediosPatchForRows", () => {
     expect(patch.horas_millar_impresion_muestra_n).toBe(3);
     expect(patch.poses_promedio).toBe(4);
     expect(patch.poses_muestra_n).toBe(3);
+  });
+
+  it("mediana absoluta guillotina y desbroce", () => {
+    const patch = computePromediosPatchForRows([
+      row({
+        ot_numero: "1",
+        referencia_id: "ref-a",
+        version: 1,
+        horas_guillotina_reales: 0.3,
+        horas_desbroce_reales: 0.5,
+      }),
+      row({
+        ot_numero: "2",
+        referencia_id: "ref-a",
+        version: 1,
+        horas_guillotina_reales: 0.5,
+        horas_desbroce_reales: 0.7,
+      }),
+    ]);
+    expect(patch.horas_guillotina_promedio).toBe(0.4);
+    expect(patch.horas_guillotina_muestra_n).toBe(2);
+    expect(patch.horas_desbroce_promedio).toBe(0.6);
+    expect(patch.horas_desbroce_muestra_n).toBe(2);
   });
 
   it("muestra_n de millar ignora OTs sin tiraje o sin Q", () => {

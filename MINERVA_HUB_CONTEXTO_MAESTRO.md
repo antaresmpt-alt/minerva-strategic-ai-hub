@@ -261,6 +261,7 @@ src/components/produccion/planificacion/
 - [x] **Bloque 6.x — Promedios maestro Paso B**: motor mediana/moda/millar (`maestro-promedios-calc.ts`, tests)
 - [x] **Bloque 6.x — Promedios maestro Paso C**: botón «Actualizar promedios» en Maestro (§7.1.9 paso 4)
 - [x] **Bloque 6.x — Promedios maestro Paso D**: prefill despacho oficial ?? promedio + panel promedios en Maestro
+- [x] **Promedios UI ampliada (30 jul)**: panel completo por proceso (+ guillotina/desbroce absolutas); recálculo todas / filtrados / seleccionados / este artículo
 - [ ] **Probar promedios** (manual): 1 OT × 4 réplicas — ver `PLAN_PRUEBA_PROMEDIOS_MAESTRO.md`
 - [ ] **UX inputs numéricos**: aceptar `.` del teclado numérico además de `,` (cierre proceso / horas reales) — reportado 30 jul al probar OT 98004
 - [ ] **Despacho clone/prefill**: clonar OT / «Usar último» no copia horas prep/tiraje ni caja embalaje/uds (solo campos técnicos en `DESPACHO_CLONE_*`) — reportado 30 jul al despachar 98003; valorar ampliar clone o Usar maestro
