@@ -26,6 +26,8 @@ export type CalendarioProduccionLinea = {
   label: string;
   trabajo: string | null;
   orden: number;
+  /** Marca manual «hecho» (no depende del itinerario). */
+  marcadoHecho: boolean;
 };
 
 function ymdKey(iso: string | null | undefined): string | null {
@@ -75,6 +77,7 @@ export function entradasPorDia(
       label: labelCalendarioProduccionOt(ot, trabajo, ambito),
       trabajo,
       orden: r.orden,
+      marcadoHecho: Boolean(r.marcado_hecho),
     });
     map.set(key, list);
   }
@@ -103,6 +106,20 @@ export function filtrarEntradasPorTexto(
         (l.trabajo ?? "").toLowerCase().includes(needle) ||
         l.label.toLowerCase().includes(needle),
     );
+    if (filtered.length > 0) out.set(ymd, filtered);
+  }
+  return out;
+}
+
+/** Si `soloPendientes`, oculta pastillas con marcadoHecho. */
+export function filtrarEntradasSoloPendientes(
+  byDay: Map<string, CalendarioProduccionLinea[]>,
+  soloPendientes: boolean,
+): Map<string, CalendarioProduccionLinea[]> {
+  if (!soloPendientes) return byDay;
+  const out = new Map<string, CalendarioProduccionLinea[]>();
+  for (const [ymd, list] of byDay) {
+    const filtered = list.filter((l) => !l.marcadoHecho);
     if (filtered.length > 0) out.set(ymd, filtered);
   }
   return out;

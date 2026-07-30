@@ -10,6 +10,10 @@ export type ProdCalendarioProduccionOtRow = {
   ambito: CalendarioAmbito;
   orden: number;
   notas: string | null;
+  /** Marca operativa manual (independiente del semáforo HR). */
+  marcado_hecho: boolean;
+  marcado_hecho_at: string | null;
+  marcado_hecho_por: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

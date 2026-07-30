@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -45,6 +46,7 @@ import {
   entradasPorDia,
   fechaDiaLabel,
   filtrarEntradasPorTexto,
+  filtrarEntradasSoloPendientes,
   mesAnioLabel,
   mondayOfWeek,
   monthRangeYmd,
@@ -141,6 +143,7 @@ function DiaCelda({
   notas,
   onEditDay,
   onOpenOt,
+  onToggleMarcadoHecho,
   itinerarioByOt,
   duplicatedOtSet,
   ambitoActivo,
@@ -152,6 +155,7 @@ function DiaCelda({
   notas: ProdCalendarioProduccionNotaRow[];
   onEditDay: () => void;
   onOpenOt: (otNumero: string) => void;
+  onToggleMarcadoHecho: (linea: CalendarioProduccionLinea) => void;
   itinerarioByOt: Map<string, CalendarioItinerarioOt>;
   duplicatedOtSet: Set<string>;
   ambitoActivo: CalendarioAmbito;
@@ -219,62 +223,102 @@ function DiaCelda({
             const isDuplicada = duplicatedOtSet.has(`${l.ambito}:${l.otNumero}`);
             const isForeign = l.ambito !== ambitoActivo;
             const ambitoPill = CALENDARIO_AMBITO_PILL[l.ambito];
+            const canToggle = canEditActivo && !isForeign;
             return (
-              <button
+              <div
                 key={l.id}
-                type="button"
                 title={`${l.label} — ${labelCalendarioAmbito(l.ambito)}: ${styles.title}${
                   isForeign ? " · solo lectura" : ""
-                }`}
+                }${l.marcadoHecho ? " · Hecho (marca manual)" : ""}`}
                 className={cn(
-                  "flex w-full items-center gap-1.5 rounded-md border border-slate-200/90 bg-white text-left shadow-xs",
-                  "border-l-[3px] transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#002147]/40",
+                  "flex w-full items-center gap-1 rounded-md border border-slate-200/90 bg-white text-left shadow-xs",
+                  "border-l-[3px] transition-colors",
                   styles.border,
                   ambitoPill.borderTint,
                   isForeign && "opacity-75",
-                  isSemana ? "px-2 py-1.5" : "px-1.5 py-1",
+                  l.marcadoHecho && "bg-slate-50/90 opacity-60",
+                  isSemana ? "px-1.5 py-1.5" : "px-1 py-1",
                 )}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenOt(l.otNumero);
-                }}
               >
-                <span
+                <button
+                  type="button"
                   className={cn(
-                    "size-1.5 shrink-0 rounded-full",
-                    styles.dot,
+                    "flex min-w-0 flex-1 items-center gap-1.5 rounded-sm text-left",
+                    "hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#002147]/40",
                   )}
-                  aria-hidden
-                />
-                <span
-                  className={cn(
-                    "shrink-0 rounded px-1 py-0.5 text-[10px] font-bold leading-none",
-                    ambitoPill.letraBadge,
-                  )}
-                  aria-label={labelCalendarioAmbito(l.ambito)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenOt(l.otNumero);
+                  }}
                 >
-                  {CALENDARIO_AMBITO_LETRA[l.ambito]}
-                </span>
-                <span
+                  <span
+                    className={cn(
+                      "size-1.5 shrink-0 rounded-full",
+                      styles.dot,
+                    )}
+                    aria-hidden
+                  />
+                  <span
+                    className={cn(
+                      "shrink-0 rounded px-1 py-0.5 text-[10px] font-bold leading-none",
+                      ambitoPill.letraBadge,
+                    )}
+                    aria-label={labelCalendarioAmbito(l.ambito)}
+                  >
+                    {CALENDARIO_AMBITO_LETRA[l.ambito]}
+                  </span>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded px-1.5 py-0.5 font-mono font-bold tabular-nums",
+                      isDuplicada ? "bg-pink-100 text-pink-900" : styles.otBadge,
+                      isSemana ? "text-[13px]" : "text-[12px]",
+                      l.marcadoHecho && "line-through decoration-slate-400",
+                    )}
+                  >
+                    {l.otNumero}
+                  </span>
+                  <span
+                    className={cn(
+                      "min-w-0 flex-1 truncate font-medium text-[#002147]",
+                      isSemana
+                        ? "text-[13px] leading-snug"
+                        : "text-[11px] leading-tight",
+                      l.marcadoHecho && "text-slate-500",
+                    )}
+                  >
+                    {l.trabajo?.trim() || "—"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  disabled={!canToggle}
+                  title={
+                    canToggle
+                      ? l.marcadoHecho
+                        ? "Quitar marca hecho (manual)"
+                        : "Marcar hecho (manual)"
+                      : "Solo lectura en este ámbito"
+                  }
+                  aria-label={
+                    l.marcadoHecho ? "Quitar marca hecho" : "Marcar hecho"
+                  }
+                  aria-pressed={l.marcadoHecho}
                   className={cn(
-                    "shrink-0 rounded px-1.5 py-0.5 font-mono font-bold tabular-nums",
-                    isDuplicada ? "bg-pink-100 text-pink-900" : styles.otBadge,
-                    isSemana ? "text-[13px]" : "text-[12px]",
+                    "flex size-5 shrink-0 items-center justify-center rounded border transition-colors",
+                    l.marcadoHecho
+                      ? "border-emerald-600 bg-emerald-600 text-white"
+                      : "border-slate-300 bg-white text-transparent hover:border-emerald-500 hover:text-emerald-500",
+                    !canToggle && "cursor-not-allowed opacity-40",
                   )}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!canToggle) return;
+                    onToggleMarcadoHecho(l);
+                  }}
                 >
-                  {l.otNumero}
-                </span>
-                <span
-                  className={cn(
-                    "min-w-0 flex-1 truncate font-medium text-[#002147]",
-                    isSemana
-                      ? "text-[13px] leading-snug"
-                      : "text-[11px] leading-tight",
-                  )}
-                >
-                  {l.trabajo?.trim() || "—"}
-                </span>
-              </button>
+                  <Check className="size-3" strokeWidth={3} />
+                </button>
+              </div>
             );
           })}
           {notas.map((n) => (
@@ -314,6 +358,7 @@ export function CalendarioProduccionPage() {
     () => new Map(),
   );
   const [filtro, setFiltro] = useState("");
+  const [soloPendientes, setSoloPendientes] = useState(false);
   const [saving, setSaving] = useState(false);
   const [portapapeles, setPortapapeles] = useState<PortapapelesOt | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -446,8 +491,9 @@ export function CalendarioProduccionPage() {
 
   const entradasByDay = useMemo(() => {
     const all = entradasPorDia(rowsVisibles, tituloByOt);
-    return filtrarEntradasPorTexto(all, filtro);
-  }, [rowsVisibles, tituloByOt, filtro]);
+    const byTexto = filtrarEntradasPorTexto(all, filtro);
+    return filtrarEntradasSoloPendientes(byTexto, soloPendientes);
+  }, [rowsVisibles, tituloByOt, filtro, soloPendientes]);
 
   const notasByDay = useMemo(() => {
     const map = new Map<string, ProdCalendarioProduccionNotaRow[]>();
@@ -502,7 +548,7 @@ export function CalendarioProduccionPage() {
           supabase
             .from(TABLE)
             .select(
-              "id, fecha, ot_numero, ambito, orden, notas, created_by, created_at, updated_at",
+              "id, fecha, ot_numero, ambito, orden, notas, marcado_hecho, marcado_hecho_at, marcado_hecho_por, created_by, created_at, updated_at",
             )
             .gte("fecha", range.start)
             .lte("fecha", range.end)
@@ -537,6 +583,9 @@ export function CalendarioProduccionPage() {
       const list = ((data ?? []) as ProdCalendarioProduccionOtRow[]).map((r) => ({
         ...r,
         ambito: isCalendarioAmbito(r.ambito) ? r.ambito : ("impresion" as const),
+        marcado_hecho: Boolean(r.marcado_hecho),
+        marcado_hecho_at: r.marcado_hecho_at ?? null,
+        marcado_hecho_por: r.marcado_hecho_por ?? null,
       }));
       setRows(list);
       setNotasRows((notasData ?? []) as ProdCalendarioProduccionNotaRow[]);
@@ -1024,6 +1073,54 @@ export function CalendarioProduccionPage() {
     }
   };
 
+  const toggleMarcadoHecho = useCallback(
+    async (linea: CalendarioProduccionLinea) => {
+      if (!canEditActivo || linea.ambito !== ambitoActivo) {
+        toast.error("No puedes marcar pastillas de otro ámbito.");
+        return;
+      }
+      const next = !linea.marcadoHecho;
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const uid =
+        typeof user?.id === "string" && user.id.trim() ? user.id.trim() : null;
+
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === linea.id
+            ? {
+                ...r,
+                marcado_hecho: next,
+                marcado_hecho_at: next ? new Date().toISOString() : null,
+                marcado_hecho_por: next ? uid : null,
+              }
+            : r,
+        ),
+      );
+
+      const { error } = await supabase
+        .from(TABLE)
+        .update({
+          marcado_hecho: next,
+          marcado_hecho_at: next ? new Date().toISOString() : null,
+          marcado_hecho_por: next ? uid : null,
+        })
+        .eq("id", linea.id);
+      if (error) {
+        toast.error(errorMessageFromUnknown(error, "No se pudo marcar la OT."));
+        await load();
+        return;
+      }
+      toast.success(
+        next
+          ? `OT ${linea.otNumero} marcada como hecha`
+          : `OT ${linea.otNumero}: marca hecha quitada`,
+      );
+    },
+    [ambitoActivo, canEditActivo, load, supabase],
+  );
+
   const pegarEnDia = async () => {
     if (!dayYmd || !portapapeles) return;
     if (!canEditCalendarioAmbito(userRole, portapapeles.ambito)) {
@@ -1167,6 +1264,7 @@ export function CalendarioProduccionPage() {
       filtroTexto: [
         labelCalendarioAmbito(ambitoActivo),
         visibilidadLabel,
+        soloPendientes ? "solo pendientes" : "",
         filtro.trim(),
       ]
         .filter(Boolean)
@@ -1184,6 +1282,7 @@ export function CalendarioProduccionPage() {
       filtroTexto: [
         labelCalendarioAmbito(ambitoActivo),
         visibilidadLabel,
+        soloPendientes ? "solo pendientes" : "",
         filtro.trim(),
       ]
         .filter(Boolean)
@@ -1478,6 +1577,15 @@ export function CalendarioProduccionPage() {
           <input
             type="checkbox"
             className="size-3.5 rounded border-slate-300"
+            checked={soloPendientes}
+            onChange={(e) => setSoloPendientes(e.target.checked)}
+          />
+          Solo pendientes
+        </label>
+        <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
+          <input
+            type="checkbox"
+            className="size-3.5 rounded border-slate-300"
             checked={showSaturday}
             onChange={(e) => {
               const v = e.target.checked;
@@ -1493,14 +1601,14 @@ export function CalendarioProduccionPage() {
         </label>
         <div
           className="flex flex-wrap items-center gap-2 text-[10px] text-slate-500"
-          title="Color del nº OT según el paso del ámbito de la pastilla en el itinerario"
+          title="Semáforo = itinerario HR. Check verde = marca manual de Carlos/área (independiente)."
         >
           <span className="font-medium text-slate-600">Semáforo:</span>
           {(
             [
               ["esperando", "Esperando"],
               ["listo", "Listo"],
-              ["hecho", "Hecho"],
+              ["hecho", "Hecho HR"],
               ["sin_paso", "Sin paso"],
             ] as const
           ).map(([key, label]) => (
@@ -1511,6 +1619,12 @@ export function CalendarioProduccionPage() {
               {label}
             </span>
           ))}
+          <span className="inline-flex items-center gap-1 border-l border-slate-200 pl-2">
+            <span className="flex size-3.5 items-center justify-center rounded border border-emerald-600 bg-emerald-600 text-white">
+              <Check className="size-2.5" strokeWidth={3} />
+            </span>
+            Hecho manual
+          </span>
         </div>
       </div>
 
@@ -1565,6 +1679,7 @@ export function CalendarioProduccionPage() {
                       notas={notasByDay.get(celda.ymd) ?? []}
                       onEditDay={() => openDay(celda.ymd)}
                       onOpenOt={(ot) => void openDetalle(ot)}
+                      onToggleMarcadoHecho={(l) => void toggleMarcadoHecho(l)}
                       variant="semana"
                       itinerarioByOt={itinerarioByOt}
                       duplicatedOtSet={duplicatedOtSet}
@@ -1588,6 +1703,7 @@ export function CalendarioProduccionPage() {
                         notas={notasByDay.get(celda.ymd) ?? []}
                         onEditDay={() => openDay(celda.ymd)}
                         onOpenOt={(ot) => void openDetalle(ot)}
+                        onToggleMarcadoHecho={(l) => void toggleMarcadoHecho(l)}
                         variant="mes"
                         itinerarioByOt={itinerarioByOt}
                         duplicatedOtSet={duplicatedOtSet}
@@ -1783,7 +1899,12 @@ export function CalendarioProduccionPage() {
                         className="min-w-0 flex-1 text-left text-sm hover:underline"
                         onClick={() => void openDetalle(l.otNumero)}
                       >
-                        <span className="font-semibold text-[#002147]">
+                        <span
+                          className={cn(
+                            "font-semibold text-[#002147]",
+                            l.marcadoHecho && "text-slate-500 line-through",
+                          )}
+                        >
                           <span
                             className={cn(
                               "mr-1 inline-block rounded px-1 py-0.5 text-[10px] font-bold text-white",
@@ -1805,6 +1926,26 @@ export function CalendarioProduccionPage() {
                       </button>
                       {editable ? (
                       <div className="flex shrink-0 items-center gap-0.5">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className={cn(
+                            "h-7 w-7 p-0",
+                            l.marcadoHecho
+                              ? "bg-emerald-600 text-white hover:bg-emerald-700 hover:text-white"
+                              : "text-[#002147]",
+                          )}
+                          disabled={saving}
+                          title={
+                            l.marcadoHecho
+                              ? "Quitar marca hecho (manual)"
+                              : "Marcar hecho (manual)"
+                          }
+                          onClick={() => void toggleMarcadoHecho(l)}
+                        >
+                          <Check className="size-3.5" strokeWidth={3} />
+                        </Button>
                         <Button
                           type="button"
                           variant="ghost"
