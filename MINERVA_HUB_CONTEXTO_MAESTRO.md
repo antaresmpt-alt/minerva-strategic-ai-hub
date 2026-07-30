@@ -262,6 +262,7 @@ src/components/produccion/planificacion/
 - [x] **Bloque 6.x — Promedios maestro Paso C**: botón «Actualizar promedios» en Maestro (§7.1.9 paso 4)
 - [x] **Bloque 6.x — Promedios maestro Paso D**: prefill despacho oficial ?? promedio + panel promedios en Maestro
 - [ ] **Probar promedios** (manual): 1 OT × 4 réplicas — ver `PLAN_PRUEBA_PROMEDIOS_MAESTRO.md`
+- [ ] **UX inputs numéricos**: aceptar `.` del teclado numérico además de `,` (cierre proceso / horas reales) — reportado 30 jul al probar OT 98004
 - [ ] **Bloque 11 (idea)**: Calendario como master de lanzamiento — `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md`
 - [ ] **Bloque 6.x** (opcional): comparar versiones OT; UX Pipeline «Listo para cerrar»
 - [ ] **Fase 8.4**: cierre OT contenedor/hijas (depende B6 + Bloque 8)
