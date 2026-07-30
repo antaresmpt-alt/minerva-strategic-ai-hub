@@ -3740,15 +3740,23 @@ export function DespachoWizardDialog({
                           : ""}
                       </p>
                     ) : null}
-                    {procesoDatos.impresion.hojas_netas ? (
+                    {procesoDatos.impresion.hojas_netas ||
+                    form.horas_entrada ||
+                    form.horas_tiraje ? (
                       <p>
                         <span className="text-slate-500">Impresión netas:</span>{" "}
-                        {procesoDatos.impresion.hojas_netas}
+                        {procesoDatos.impresion.hojas_netas || "—"}
                         {procesoDatos.impresion.hojas_brutas
                           ? ` (de ${procesoDatos.impresion.hojas_brutas} brutas)`
                           : ""}
                         {procesoDatos.impresion.formato_hojas
                           ? ` · ${procesoDatos.impresion.formato_hojas}`
+                          : ""}
+                        {form.horas_entrada
+                          ? ` · prep ${form.horas_entrada} h`
+                          : ""}
+                        {form.horas_tiraje
+                          ? ` · tiraje ${form.horas_tiraje} h`
                           : ""}
                       </p>
                     ) : null}
@@ -3782,11 +3790,22 @@ export function DespachoWizardDialog({
                         × {estuchesEstimados.poses})
                       </p>
                     ) : null}
-                    <p>
-                      <span className="text-slate-500">Troquel:</span>{" "}
-                      {form.troquel || "—"}
-                      {form.poses ? ` · ${form.poses} poses` : ""}
-                    </p>
+                    {form.troquel ||
+                    form.poses ||
+                    form.horas_troquel_preparacion ||
+                    form.horas_troquel_tiraje ? (
+                      <p>
+                        <span className="text-slate-500">Troquel:</span>{" "}
+                        {form.troquel || "—"}
+                        {form.poses ? ` · ${form.poses} poses` : ""}
+                        {form.horas_troquel_preparacion
+                          ? ` · prep ${form.horas_troquel_preparacion} h`
+                          : ""}
+                        {form.horas_troquel_tiraje
+                          ? ` · tiraje ${form.horas_troquel_tiraje} h`
+                          : ""}
+                      </p>
+                    ) : null}
                     {formatCtpRequisitosResumen(procesoDatos.ctp) ? (
                       <p className="sm:col-span-2">
                         <span className="text-slate-500">CTP:</span>{" "}
