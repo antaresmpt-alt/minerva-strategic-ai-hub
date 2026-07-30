@@ -1326,10 +1326,12 @@ export function ArticulosMaestroPage() {
           <table className="w-full text-xs">
             <thead className="border-b border-slate-200 bg-slate-50">
               <tr>
-                <th className="w-8 px-2 py-2">
-                  <Checkbox
+                <th className="sticky left-0 z-10 w-11 min-w-[2.75rem] bg-slate-50 px-2 py-2 text-center">
+                  <input
+                    type="checkbox"
+                    className="size-4 cursor-pointer accent-[#002147]"
                     checked={allFilteredSelected}
-                    onCheckedChange={() => toggleSelectAllFiltered()}
+                    onChange={() => toggleSelectAllFiltered()}
                     aria-label="Seleccionar todos los filtrados"
                   />
                 </th>
@@ -1349,12 +1351,14 @@ export function ArticulosMaestroPage() {
               {rowsFiltradas.map((r) => (
                 <tr
                   key={r.id}
-                  className={`transition hover:bg-slate-50 ${!r.activo ? "opacity-50" : ""}`}
+                  className={`group transition hover:bg-slate-50 ${!r.activo ? "opacity-50" : ""}`}
                 >
-                  <td className="px-2 py-2">
-                    <Checkbox
+                  <td className="sticky left-0 z-10 bg-white px-2 py-2 text-center group-hover:bg-slate-50">
+                    <input
+                      type="checkbox"
+                      className="size-4 cursor-pointer accent-[#002147]"
                       checked={selectedIds.has(r.id)}
-                      onCheckedChange={(v) => toggleSelectOne(r.id, Boolean(v))}
+                      onChange={(e) => toggleSelectOne(r.id, e.target.checked)}
                       aria-label={`Seleccionar ${r.codigo}`}
                     />
                   </td>
