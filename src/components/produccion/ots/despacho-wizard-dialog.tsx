@@ -84,6 +84,7 @@ import {
   emptyForma,
   estuchesEstimadosDespacho,
   extractDespachoCloneExtrasFromPasos,
+  formatOtHistorialLabel,
   formatSupabaseErrorMessage,
   FORMAS_MAX_WARNING,
   formatFechaEntregaCorta,
@@ -942,9 +943,13 @@ export function DespachoWizardDialog({
             referencia_codigo: refCodigo,
           };
           let next = data
-            ? applyClonePrefill(base, data as Record<string, unknown>).next
+            ? applyClonePrefill(base, data as Record<string, unknown>, {
+                mode: "overwrite",
+              }).next
             : base;
-          next = applyCloneExtrasPrefill(next, extras).next;
+          next = applyCloneExtrasPrefill(next, extras, {
+            mode: "overwrite",
+          }).next;
           if (!next.tipo_engomado && tipoEngomadoHabitual) {
             return { ...next, tipo_engomado: tipoEngomadoHabitual };
           }
@@ -957,22 +962,15 @@ export function DespachoWizardDialog({
           return;
         }
         toast.success(
-          `Datos heredados de la referencia ${refCodigo} (solo campos vacíos).`
+          `Datos del último trabajo (${sourceOt || refCodigo}): sobrescribe técnicos.`
         );
         if (!sourceOt) return;
         const slots = await loadItinerarioFromOtNumero(sourceOt);
         if (slots.length === 0) return;
-        let applied = false;
-        setItinerarioSlots((prev) => {
-          if (prev.length > 0) return prev;
-          applied = true;
-          return slots;
-        });
-        if (applied) {
-          toast.success(
-            `Itinerario heredado de la OT ${sourceOt} (${slots.length} procesos).`
-          );
-        }
+        setItinerarioSlots(slots);
+        toast.success(
+          `Itinerario heredado de la OT ${sourceOt} (${slots.length} procesos).`
+        );
       } catch (e) {
         toast.error(
           e instanceof Error ? e.message : "No se pudo clonar de la referencia."
@@ -1084,23 +1082,21 @@ export function DespachoWizardDialog({
           const cloned = applyClonePrefill(
             base,
             data as Record<string, unknown>,
+            { mode: "overwrite" },
           ).next;
-          return applyCloneExtrasPrefill(cloned, extras).next;
+          return applyCloneExtrasPrefill(cloned, extras, {
+            mode: "overwrite",
+          }).next;
         });
-        toast.success(`Datos heredados de la OT ${ot} (solo campos vacíos).`);
+        toast.success(
+          `Datos heredados de la OT ${ot} (sobrescribe técnicos).`
+        );
         const slots = await loadItinerarioFromOtNumero(ot);
         if (slots.length === 0) return;
-        let applied = false;
-        setItinerarioSlots((prev) => {
-          if (prev.length > 0) return prev;
-          applied = true;
-          return slots;
-        });
-        if (applied) {
-          toast.success(
-            `Itinerario heredado de la OT ${ot} (${slots.length} procesos).`
-          );
-        }
+        setItinerarioSlots(slots);
+        toast.success(
+          `Itinerario heredado de la OT ${ot} (${slots.length} procesos).`
+        );
       } catch (e) {
         toast.error(
           e instanceof Error ? e.message : "No se pudo clonar de la OT anterior."
@@ -1387,14 +1383,14 @@ export function DespachoWizardDialog({
           )
           .eq("referencia_id", referenciaId)
           .order("despachado_at", { ascending: false })
-          .limit(8);
+          .limit(5);
         if (error) throw error;
         if (cancelled) return;
         const activeOt = seleccion?.num_pedido?.trim() ?? "";
         setReferenciaHistorial(
           ((data ?? []) as ReferenciaHistorialRow[])
             .filter((row) => row.ot_numero.trim() !== activeOt)
-            .slice(0, 6)
+            .slice(0, 3)
         );
       } catch (e) {
         console.error(e);
@@ -2878,7 +2874,7 @@ export function DespachoWizardDialog({
                   {form.referencia_id ? (
                     <div className="flex flex-wrap items-center gap-2 lg:col-span-2">
                       <span className="text-[11px] text-slate-500">
-                        Prefill aplicado: último trabajo (por defecto). También puedes:
+                        Prefill por defecto: último trabajo (sobrescribe técnicos). También:
                       </span>
                       <Button
                         type="button"
@@ -2906,7 +2902,7 @@ export function DespachoWizardDialog({
                         Usar maestro
                       </Button>
                       <span className="text-[10px] text-slate-400">
-                        (oficial → promedio → habitual; solo campos vacíos)
+                        (maestro: solo campos vacíos · oficial → promedio → habitual)
                       </span>
                     </div>
                   ) : null}
@@ -2948,7 +2944,7 @@ export function DespachoWizardDialog({
                       </Button>
                     </div>
                     <p className="text-[11px] text-slate-500">
-                      Solo rellena campos vacíos del formulario actual.
+                      Sobrescribe campos técnicos del formulario (material, horas, embalaje…).
                     </p>
                   </div>
                   {form.referencia_id ? (
@@ -2977,10 +2973,13 @@ export function DespachoWizardDialog({
                           {referenciaHistorial.map((h) => (
                             <div
                               key={h.ot_numero}
-                              className="grid gap-1 rounded border border-slate-100 bg-slate-50 px-2 py-1 text-[11px] text-slate-700 sm:grid-cols-[72px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.8fr)]"
+                              className="grid gap-1 rounded border border-slate-100 bg-slate-50 px-2 py-1 text-[11px] text-slate-700 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.8fr)]"
                             >
                               <span className="font-mono font-semibold text-[#002147]">
-                                {h.ot_numero}
+                                {formatOtHistorialLabel(
+                                  h.ot_numero,
+                                  h.despachado_at,
+                                )}
                               </span>
                               <span className="truncate">
                                 {h.material || "—"}
@@ -3847,6 +3846,31 @@ export function DespachoWizardDialog({
                           ? ` · tiraje ${form.horas_troquel_tiraje} h`
                           : ""}
                       </p>
+                    ) : null}
+                    {form.referencia_id ? (
+                      <div>
+                        <p className="text-slate-500">
+                          Últimas OTs (muestras):
+                        </p>
+                        {referenciaHistorialLoading ? (
+                          <p className="text-[11px] text-slate-400">Cargando…</p>
+                        ) : referenciaHistorial.length === 0 ? (
+                          <p className="text-[11px] text-slate-400">
+                            Sin despachos anteriores.
+                          </p>
+                        ) : (
+                          <ul className="mt-0.5 space-y-0.5 font-mono text-[12px] font-medium text-[#002147]">
+                            {referenciaHistorial.map((h) => (
+                              <li key={h.ot_numero}>
+                                {formatOtHistorialLabel(
+                                  h.ot_numero,
+                                  h.despachado_at,
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
                     ) : null}
                     {formatCtpRequisitosResumen(procesoDatos.ctp) ? (
                       <p className="sm:col-span-2">

@@ -364,16 +364,19 @@ const DESPACHO_EDIT_CLONE_SELECT =
 
 function applyEditClonePrefill(
   form: DespachoEditFormState,
-  source: Record<string, unknown>
+  source: Record<string, unknown>,
+  opts?: { mode?: "empty" | "overwrite" },
 ): DespachoEditFormState {
+  const mode = opts?.mode ?? "empty";
   const next = { ...form };
   for (const field of DESPACHO_EDIT_CLONE_FIELDS) {
-    const current = String(next[field] ?? "").trim();
-    if (current) continue;
     const raw = source[field];
     if (raw == null) continue;
     const valueStr = String(raw).trim();
     if (!valueStr) continue;
+    const current = String(next[field] ?? "").trim();
+    if (mode === "empty" && current) continue;
+    if (mode === "overwrite" && current === valueStr) continue;
     next[field] = valueStr;
   }
   return next;
@@ -1270,7 +1273,9 @@ export function OtsDespachadasPage({
             referencia_codigo: row.codigo,
           };
           return data
-            ? applyEditClonePrefill(base, data as Record<string, unknown>)
+            ? applyEditClonePrefill(base, data as Record<string, unknown>, {
+                mode: "overwrite",
+              })
             : base;
         });
         if (!data) {
@@ -1280,11 +1285,10 @@ export function OtsDespachadasPage({
           return;
         }
         toast.success(
-          `Datos heredados de la referencia ${row.codigo} (solo campos vacíos).`
+          `Datos del último trabajo (${row.codigo}): sobrescribe técnicos.`
         );
-        // Itinerario: solo si la OT en edición permite reemplazo y está vacía.
+        // Itinerario: solo si la OT en edición permite reemplazo.
         if (!editCanReplaceItinerario) return;
-        if (editItinerarioSlots.length > 0) return;
         const sourceOt = String(
           (data as { ot_numero?: string | null }).ot_numero ?? ""
         ).trim();
@@ -1342,13 +1346,15 @@ export function OtsDespachadasPage({
               ot_anterior_numero: ot,
               ot_anterior_id: resolvedId ?? f.ot_anterior_id,
             },
-            data as Record<string, unknown>
+            data as Record<string, unknown>,
+            { mode: "overwrite" },
           )
         );
-        toast.success(`Datos heredados de la OT ${ot} (solo campos vacíos).`);
-        // Itinerario: solo si la OT en edición permite reemplazo y está vacía.
+        toast.success(
+          `Datos heredados de la OT ${ot} (sobrescribe técnicos).`
+        );
+        // Itinerario: solo si la OT en edición permite reemplazo.
         if (!editCanReplaceItinerario) return;
-        if (editItinerarioSlots.length > 0) return;
         const slots = await loadEditItinerarioFromOtNumero(ot);
         if (slots.length === 0) return;
         setEditItinerarioSlots(slots);

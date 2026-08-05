@@ -265,7 +265,8 @@ src/components/produccion/planificacion/
 - [x] **Promedios validados (30 jul)**: M-00003 con OTs 98003/98004/35265; PDF ficha A4; prefill «Usar maestro» en **98014** (Q=8000) escala tiraje OK — `PLAN_PRUEBA_PROMEDIOS_MAESTRO.md`
 - [x] **Ejecución / despacho (30 jul)**: aliases troquel/engomado; desbroce editable; resumen despacho con prep/tiraje impresión+troquel
 - [x] **UX inputs numéricos**: aceptar `.` y `,` en horas (cierre proceso / datos proceso / despacho) — `DecimalInput` + `parseDecimalLoose` (5 ago)
-- [x] **Despacho clone/prefill**: «Usar último» / clonar OT copia horas prep/tiraje + caja/uds embalaje (solo campos vacíos) — `DESPACHO_CLONE_*` + extras desde `prod_ot_pasos` (5 ago)
+- [x] **Despacho clone/prefill**: «Usar último» / clonar OT **sobrescribe** técnicos (material, horas, caja…) + itinerario; «Usar maestro» sigue solo vacíos (5 ago)
+- [x] **Resumen despacho**: 3 últimas OTs de la referencia como `OT XXXXX — mes / año` (buscar muestras en disco) (5 ago)
 - [x] **Oficiales editables en Maestro** (5 ago): prep/millar impresión·troquel·engomado + guillotina/desbroce abs.; «Actualizar promedios» no las toca
 - [ ] **Bloque 11 (idea)**: Calendario como master de lanzamiento — `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md`
 - [ ] **Bloque 6.x** (opcional resto): comparar versiones OT; UX Pipeline «Listo para cerrar»

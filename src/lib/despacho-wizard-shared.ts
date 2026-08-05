@@ -374,7 +374,9 @@ export function extractDespachoCloneExtrasFromPasos(
 export function applyCloneExtrasPrefill(
   form: DespachoFormState,
   extras: DespachoCloneExtras,
+  opts?: { mode?: "empty" | "overwrite" },
 ): { next: DespachoFormState; filled: number } {
+  const mode = opts?.mode ?? "empty";
   const next = { ...form };
   let filled = 0;
   for (const [key, raw] of Object.entries(extras) as Array<
@@ -384,7 +386,8 @@ export function applyCloneExtrasPrefill(
     const valueStr = String(raw).trim();
     if (!valueStr) continue;
     const current = String(next[key] ?? "").trim();
-    if (current) continue;
+    if (mode === "empty" && current) continue;
+    if (mode === "overwrite" && current === valueStr) continue;
     next[key] = valueStr;
     filled += 1;
   }
@@ -393,21 +396,67 @@ export function applyCloneExtrasPrefill(
 
 export function applyClonePrefill(
   form: DespachoFormState,
-  source: Record<string, unknown>
+  source: Record<string, unknown>,
+  opts?: { mode?: "empty" | "overwrite" },
 ): { next: DespachoFormState; filled: number } {
+  const mode = opts?.mode ?? "empty";
   const next = { ...form };
   let filled = 0;
   for (const field of DESPACHO_CLONE_FIELDS) {
-    const current = String(next[field] ?? "").trim();
-    if (current) continue;
     const raw = source[field];
     if (raw == null) continue;
     const valueStr = String(raw).trim();
     if (!valueStr) continue;
+    const current = String(next[field] ?? "").trim();
+    if (mode === "empty" && current) continue;
+    if (mode === "overwrite" && current === valueStr) continue;
     next[field] = valueStr;
     filled += 1;
   }
   return { next, filled };
+}
+
+/** Mes/año corto ES desde `despachado_at` (ej. "jul / 2026"). */
+export function formatDespachoMesAnio(
+  value: string | null | undefined,
+): string {
+  const s = String(value ?? "").trim();
+  if (!s) return "";
+  const MESES = [
+    "ene",
+    "feb",
+    "mar",
+    "abr",
+    "may",
+    "jun",
+    "jul",
+    "ago",
+    "sep",
+    "oct",
+    "nov",
+    "dic",
+  ] as const;
+  const iso = s.match(/^(\d{4})-(\d{2})/);
+  if (iso) {
+    const monthIdx = Number(iso[2]) - 1;
+    if (monthIdx >= 0 && monthIdx <= 11) {
+      return `${MESES[monthIdx]} / ${iso[1]}`;
+    }
+  }
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${MESES[d.getMonth()]} / ${d.getFullYear()}`;
+}
+
+/** Etiqueta compacta para historial de muestras: "OT 98004 — jul / 2026". */
+export function formatOtHistorialLabel(
+  otNumero: string,
+  despachadoAt: string | null | undefined,
+): string {
+  const ot = String(otNumero ?? "").trim();
+  if (!ot) return "";
+  const mes = formatDespachoMesAnio(despachadoAt);
+  return mes ? `OT ${ot} — ${mes}` : `OT ${ot}`;
 }
 
 export function parseOptionalDecimalInput(s: string): number | null {
