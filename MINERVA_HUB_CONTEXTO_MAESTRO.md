@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 23 jul 2026 (Bloque 6 MVP cierre/histórico operativo; handoff en `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` §0)
+> Última actualización: 5 ago 2026 (UX decimales + clone despacho horas/embalaje + oficiales Maestro; PDF OK etiquetas digital)
 
 ---
 
@@ -264,10 +264,11 @@ src/components/produccion/planificacion/
 - [x] **Promedios UI ampliada (30 jul)**: panel completo por proceso (+ guillotina/desbroce absolutas); recálculo todas / filtrados / seleccionados / este artículo
 - [x] **Promedios validados (30 jul)**: M-00003 con OTs 98003/98004/35265; PDF ficha A4; prefill «Usar maestro» en **98014** (Q=8000) escala tiraje OK — `PLAN_PRUEBA_PROMEDIOS_MAESTRO.md`
 - [x] **Ejecución / despacho (30 jul)**: aliases troquel/engomado; desbroce editable; resumen despacho con prep/tiraje impresión+troquel
-- [ ] **UX inputs numéricos**: aceptar `.` del teclado numérico además de `,` (cierre proceso / horas reales) — reportado 30 jul al probar OT 98004
-- [ ] **Despacho clone/prefill**: clonar OT / «Usar último» no copia horas prep/tiraje ni caja embalaje/uds (solo campos técnicos en `DESPACHO_CLONE_*`) — reportado 30 jul al despachar 98003; valorar ampliar clone o Usar maestro
+- [x] **UX inputs numéricos**: aceptar `.` y `,` en horas (cierre proceso / datos proceso / despacho) — `DecimalInput` + `parseDecimalLoose` (5 ago)
+- [x] **Despacho clone/prefill**: «Usar último» / clonar OT copia horas prep/tiraje + caja/uds embalaje (solo campos vacíos) — `DESPACHO_CLONE_*` + extras desde `prod_ot_pasos` (5 ago)
+- [x] **Oficiales editables en Maestro** (5 ago): prep/millar impresión·troquel·engomado + guillotina/desbroce abs.; «Actualizar promedios» no las toca
 - [ ] **Bloque 11 (idea)**: Calendario como master de lanzamiento — `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md`
-- [ ] **Bloque 6.x** (opcional): comparar versiones OT; UX Pipeline «Listo para cerrar»; oficiales editables en UI Maestro
+- [ ] **Bloque 6.x** (opcional resto): comparar versiones OT; UX Pipeline «Listo para cerrar»
 - [ ] **Fase 8.4**: cierre OT contenedor/hijas (depende B6 + Bloque 8)
 - [x] **Bloque 6 MVP**: cierre/reabrir + Producidas + Pipeline pendientes + club usuarios (23 jul) — handoff §0 en `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md`
 
@@ -294,7 +295,7 @@ src/components/produccion/planificacion/
 - [ ] Afinar diseño del PDF acompañante tras feedback real de planta/dirección
 
 ### Siguiente bloque grande
-- **Bloque 6.x**: promedios ✅ validados 30 jul (`PLAN_PRUEBA_PROMEDIOS_MAESTRO.md`); backlog teclado `.`/, y clone horas
+- **Bloque 6.x**: promedios ✅ validados 30 jul; UX `.`/, + clone horas/embalaje + oficiales Maestro ✅ (5 ago)
 - **Bloque 11 (idea)**: calendario = master planificar + lanzar — `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md`
 - **Bloque 8.2+ / 8.4**: wizard contenedor + cierre hijas
 - **Bloque 7**: expedición / albarán (depende Odoo)

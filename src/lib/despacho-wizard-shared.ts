@@ -6,6 +6,7 @@ import {
   parseCtpWizardFromDatosProceso,
   type DespachoWizardCtpDatos,
 } from "@/lib/ctp-despacho";
+import { parseDecimalLoose } from "@/lib/parse-decimal-input";
 
 export type { DespachoWizardCtpDatos };
 
@@ -305,10 +306,90 @@ export const DESPACHO_CLONE_FIELDS = [
   "acabado_pral",
   "tipo_engomado",
   "notas",
+  "horas_entrada",
+  "horas_tiraje",
+  "horas_estimadas_troquelado",
+  "horas_engomado_preparacion",
+  "horas_engomado_tiraje",
+  "horas_estimadas_engomado",
 ] as const;
 
 export const DESPACHO_CLONE_SELECT =
-  "tintas, material, tamano_hoja, gramaje, troquel, poses, acabado_pral, tipo_engomado, notas, despachado_at";
+  "tintas, material, tamano_hoja, gramaje, troquel, poses, acabado_pral, tipo_engomado, notas, horas_entrada, horas_tiraje, horas_estimadas_troquelado, horas_engomado_preparacion, horas_engomado_tiraje, horas_estimadas_engomado, despachado_at";
+
+/** Extras de pasos (split troquel/engomado + embalaje) no siempre en cabecera despacho. */
+export type DespachoCloneExtras = Partial<
+  Pick<
+    DespachoFormState,
+    | "horas_entrada"
+    | "horas_tiraje"
+    | "horas_troquel_preparacion"
+    | "horas_troquel_tiraje"
+    | "horas_engomado_preparacion"
+    | "horas_engomado_tiraje"
+    | "codigo_caja_embalaje"
+    | "unidades_por_embalaje"
+  >
+>;
+
+export function extractDespachoCloneExtrasFromPasos(
+  pasos: Array<{ proceso_id: number; datos_proceso?: unknown }>,
+): DespachoCloneExtras {
+  const extras: DespachoCloneExtras = {};
+  for (const p of pasos) {
+    const raw = p.datos_proceso;
+    if (!raw || typeof raw !== "object") continue;
+    const pd = raw as Record<string, unknown>;
+    if (
+      p.proceso_id === PROCESO_OFFSET_ID ||
+      p.proceso_id === PROCESO_DIGITAL_ID
+    ) {
+      if (pd.horas_entrada_previsto != null)
+        extras.horas_entrada = String(pd.horas_entrada_previsto);
+      if (pd.horas_impresion_previsto != null)
+        extras.horas_tiraje = String(pd.horas_impresion_previsto);
+    }
+    if (p.proceso_id === PROCESO_TROQUEL_ID) {
+      if (pd.horas_preparacion_previsto != null)
+        extras.horas_troquel_preparacion = String(pd.horas_preparacion_previsto);
+      if (pd.horas_tiraje_previsto != null)
+        extras.horas_troquel_tiraje = String(pd.horas_tiraje_previsto);
+    }
+    if (p.proceso_id === PROCESO_ENGOMADO_ID) {
+      if (pd.horas_preparacion_previsto != null)
+        extras.horas_engomado_preparacion = String(pd.horas_preparacion_previsto);
+      if (pd.horas_tiraje_previsto != null)
+        extras.horas_engomado_tiraje = String(pd.horas_tiraje_previsto);
+      if (typeof pd.codigo_caja_embalaje === "string" && pd.codigo_caja_embalaje.trim())
+        extras.codigo_caja_embalaje = pd.codigo_caja_embalaje.trim();
+      const uds =
+        pd.estuches_por_bulto ?? pd.unidades_por_paquete ?? pd.unidades_por_embalaje;
+      if (uds != null && String(uds).trim())
+        extras.unidades_por_embalaje = String(uds);
+    }
+  }
+  return extras;
+}
+
+export function applyCloneExtrasPrefill(
+  form: DespachoFormState,
+  extras: DespachoCloneExtras,
+): { next: DespachoFormState; filled: number } {
+  const next = { ...form };
+  let filled = 0;
+  for (const [key, raw] of Object.entries(extras) as Array<
+    [keyof DespachoCloneExtras, string | undefined]
+  >) {
+    if (raw == null) continue;
+    const valueStr = String(raw).trim();
+    if (!valueStr) continue;
+    const current = String(next[key] ?? "").trim();
+    if (current) continue;
+    next[key] = valueStr;
+    filled += 1;
+  }
+  return { next, filled };
+}
 
 export function applyClonePrefill(
   form: DespachoFormState,
@@ -330,10 +411,7 @@ export function applyClonePrefill(
 }
 
 export function parseOptionalDecimalInput(s: string): number | null {
-  const t = s.trim();
-  if (!t) return null;
-  const n = Number(t.replace(",", "."));
-  return Number.isFinite(n) ? n : null;
+  return parseDecimalLoose(s);
 }
 
 /** Horas engomado en despacho: prep + tiraje; total en `horas_estimadas_engomado`. */
@@ -386,8 +464,7 @@ export function horasTroquelFromDespachoForm(form: DespachoFormState): {
 }
 
 export function numberOrZeroForDespacho(s: string): number {
-  const n = Number(String(s).trim().replace(",", "."));
-  return Number.isFinite(n) ? n : 0;
+  return parseDecimalLoose(s) ?? 0;
 }
 
 export function integerOrZeroForDespacho(s: string): number {

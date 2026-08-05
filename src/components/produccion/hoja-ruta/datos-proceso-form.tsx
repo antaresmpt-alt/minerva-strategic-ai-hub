@@ -9,6 +9,7 @@ import {
   type DensidadTinta,
 } from "@/lib/hoja-ruta-campos-config";
 import { Input } from "@/components/ui/input";
+import { DecimalInput } from "@/components/ui/decimal-input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -370,20 +371,19 @@ function CampoInput({ campo, label, value, onChange, readonly, tone = "normal" }
     );
   }
 
-  // NUMBER
+  // NUMBER (text + inputMode decimal: acepta `.` y `,` al teclear)
   if (campo.tipo === "number") {
+    const numValue =
+      typeof value === "number" && Number.isFinite(value) ? value : undefined;
     return (
       <div className="space-y-1">
         <Label htmlFor={campo.id} className={labelClassName}>{labelWithRequired}</Label>
         <div className="flex items-center gap-2">
-          <Input
+          <DecimalInput
             id={campo.id}
-            type="number"
             placeholder={campo.placeholder}
-            value={(value as number | undefined) ?? ""}
-            onChange={(e) =>
-              onChange(e.target.value === "" ? undefined : Number(e.target.value))
-            }
+            value={numValue}
+            onValueChange={(n) => onChange(n)}
             min={campo.min}
             max={campo.max}
             step={campo.step}

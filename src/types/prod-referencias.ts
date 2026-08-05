@@ -141,7 +141,7 @@ export type ProdReferenciaRow = {
   updated_at: string | null;
 };
 
-/** Columnas de promedios/oficiales (Bloque 6.x): no van en Excel ni en formularios habituales. */
+/** Columnas de promedios/oficiales (Bloque 6.x). Oficiales de horas sí van en el formulario Maestro. */
 export type ProdReferenciaPromediosKey = Extract<
   keyof ProdReferenciaRow,
   | "promedios_actualizados_at"

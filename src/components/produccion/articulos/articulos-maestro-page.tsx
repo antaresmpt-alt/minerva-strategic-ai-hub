@@ -46,6 +46,7 @@ import {
 import { actualizarPromediosMaestro } from "@/lib/maestro-promedios-update";
 import { exportArticuloFichaPdf } from "@/lib/articulos-maestro-ficha-pdf";
 import { buildMaestroPromediosPanel } from "@/lib/maestro-prefill";
+import { parseDecimalLoose } from "@/lib/parse-decimal-input";
 import {
   ARTICULO_TIPO_PRODUCTO_OPTIONS,
   type ProdReferenciaRow,
@@ -106,6 +107,15 @@ type ArticuloForm = {
   notas: string;
   /** Ola 2: configuración por proceso. Se maneja directamente como objeto, no como campos de texto. */
   defaults_proceso: DefaultsProcesoMaestro;
+  /** Horas oficiales (dirección); no las sobrescribe «Actualizar promedios». */
+  horas_prep_impresion_oficial: string;
+  horas_millar_impresion_oficial: string;
+  horas_prep_troquelado_oficial: string;
+  horas_millar_troquelado_oficial: string;
+  horas_prep_engomado_oficial: string;
+  horas_millar_engomado_oficial: string;
+  horas_guillotina_oficial: string;
+  horas_desbroce_oficial: string;
 };
 
 const EMPTY_FORM: ArticuloForm = {
@@ -133,7 +143,19 @@ const EMPTY_FORM: ArticuloForm = {
   fsc_fecha_validacion: "",
   notas: "",
   defaults_proceso: {},
+  horas_prep_impresion_oficial: "",
+  horas_millar_impresion_oficial: "",
+  horas_prep_troquelado_oficial: "",
+  horas_millar_troquelado_oficial: "",
+  horas_prep_engomado_oficial: "",
+  horas_millar_engomado_oficial: "",
+  horas_guillotina_oficial: "",
+  horas_desbroce_oficial: "",
 };
+
+function numToFormStr(v: number | null | undefined): string {
+  return v != null && Number.isFinite(v) ? String(v) : "";
+}
 
 function formatImportError(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -173,14 +195,19 @@ function rowToForm(row: ProdReferenciaRow): ArticuloForm {
     fsc_fecha_validacion: row.fsc_fecha_validacion ?? "",
     notas: row.notas ?? "",
     defaults_proceso: (row.defaults_proceso as DefaultsProcesoMaestro | null) ?? {},
+    horas_prep_impresion_oficial: numToFormStr(row.horas_prep_impresion_oficial),
+    horas_millar_impresion_oficial: numToFormStr(row.horas_millar_impresion_oficial),
+    horas_prep_troquelado_oficial: numToFormStr(row.horas_prep_troquelado_oficial),
+    horas_millar_troquelado_oficial: numToFormStr(row.horas_millar_troquelado_oficial),
+    horas_prep_engomado_oficial: numToFormStr(row.horas_prep_engomado_oficial),
+    horas_millar_engomado_oficial: numToFormStr(row.horas_millar_engomado_oficial),
+    horas_guillotina_oficial: numToFormStr(row.horas_guillotina_oficial),
+    horas_desbroce_oficial: numToFormStr(row.horas_desbroce_oficial),
   };
 }
 
 function formToPayload(form: ArticuloForm) {
-  const parseNum = (v: string) => {
-    const n = Number(v.trim().replace(",", "."));
-    return v.trim() && Number.isFinite(n) ? n : null;
-  };
+  const parseNum = (v: string) => parseDecimalLoose(v);
   return {
     codigo: form.codigo.trim(),
     referencia_cliente: form.referencia_cliente.trim() || null,
@@ -206,6 +233,14 @@ function formToPayload(form: ArticuloForm) {
     fsc_fecha_validacion: form.fsc ? form.fsc_fecha_validacion.trim() || null : null,
     notas: form.notas.trim() || null,
     defaults_proceso: Object.keys(form.defaults_proceso).length > 0 ? form.defaults_proceso : null,
+    horas_prep_impresion_oficial: parseNum(form.horas_prep_impresion_oficial),
+    horas_millar_impresion_oficial: parseNum(form.horas_millar_impresion_oficial),
+    horas_prep_troquelado_oficial: parseNum(form.horas_prep_troquelado_oficial),
+    horas_millar_troquelado_oficial: parseNum(form.horas_millar_troquelado_oficial),
+    horas_prep_engomado_oficial: parseNum(form.horas_prep_engomado_oficial),
+    horas_millar_engomado_oficial: parseNum(form.horas_millar_engomado_oficial),
+    horas_guillotina_oficial: parseNum(form.horas_guillotina_oficial),
+    horas_desbroce_oficial: parseNum(form.horas_desbroce_oficial),
   };
 }
 
@@ -271,28 +306,28 @@ function buildFichaPdfRow(
     merma_oficial: base?.merma_oficial ?? null,
     merma_muestra_n: base?.merma_muestra_n ?? null,
     horas_prep_impresion_promedio: base?.horas_prep_impresion_promedio ?? null,
-    horas_prep_impresion_oficial: base?.horas_prep_impresion_oficial ?? null,
+    horas_prep_impresion_oficial: payload.horas_prep_impresion_oficial,
     horas_prep_impresion_muestra_n: base?.horas_prep_impresion_muestra_n ?? null,
     horas_prep_troquelado_promedio: base?.horas_prep_troquelado_promedio ?? null,
-    horas_prep_troquelado_oficial: base?.horas_prep_troquelado_oficial ?? null,
+    horas_prep_troquelado_oficial: payload.horas_prep_troquelado_oficial,
     horas_prep_troquelado_muestra_n: base?.horas_prep_troquelado_muestra_n ?? null,
     horas_prep_engomado_promedio: base?.horas_prep_engomado_promedio ?? null,
-    horas_prep_engomado_oficial: base?.horas_prep_engomado_oficial ?? null,
+    horas_prep_engomado_oficial: payload.horas_prep_engomado_oficial,
     horas_prep_engomado_muestra_n: base?.horas_prep_engomado_muestra_n ?? null,
     horas_millar_impresion_promedio: base?.horas_millar_impresion_promedio ?? null,
-    horas_millar_impresion_oficial: base?.horas_millar_impresion_oficial ?? null,
+    horas_millar_impresion_oficial: payload.horas_millar_impresion_oficial,
     horas_millar_impresion_muestra_n: base?.horas_millar_impresion_muestra_n ?? null,
     horas_millar_troquelado_promedio: base?.horas_millar_troquelado_promedio ?? null,
-    horas_millar_troquelado_oficial: base?.horas_millar_troquelado_oficial ?? null,
+    horas_millar_troquelado_oficial: payload.horas_millar_troquelado_oficial,
     horas_millar_troquelado_muestra_n: base?.horas_millar_troquelado_muestra_n ?? null,
     horas_millar_engomado_promedio: base?.horas_millar_engomado_promedio ?? null,
-    horas_millar_engomado_oficial: base?.horas_millar_engomado_oficial ?? null,
+    horas_millar_engomado_oficial: payload.horas_millar_engomado_oficial,
     horas_millar_engomado_muestra_n: base?.horas_millar_engomado_muestra_n ?? null,
     horas_guillotina_promedio: base?.horas_guillotina_promedio ?? null,
-    horas_guillotina_oficial: base?.horas_guillotina_oficial ?? null,
+    horas_guillotina_oficial: payload.horas_guillotina_oficial,
     horas_guillotina_muestra_n: base?.horas_guillotina_muestra_n ?? null,
     horas_desbroce_promedio: base?.horas_desbroce_promedio ?? null,
-    horas_desbroce_oficial: base?.horas_desbroce_oficial ?? null,
+    horas_desbroce_oficial: payload.horas_desbroce_oficial,
     horas_desbroce_muestra_n: base?.horas_desbroce_muestra_n ?? null,
     created_at: base?.created_at ?? null,
     updated_at: base?.updated_at ?? null,
@@ -750,6 +785,74 @@ function ArticuloFormDialog({
               </div>
             </>
           ) : null}
+
+          <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            Horas oficiales (dirección)
+          </p>
+          <p className="text-[10px] text-slate-400">
+            Prefieren sobre el promedio al despachar («Usar maestro»). «Actualizar
+            promedios» no las sobrescribe. Vacío = usar promedio/habitual.
+          </p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {(
+              [
+                {
+                  key: "horas_prep_impresion_oficial" as const,
+                  label: "Prep impresión (h)",
+                  hint: promediosRow?.horas_prep_impresion_promedio,
+                },
+                {
+                  key: "horas_millar_impresion_oficial" as const,
+                  label: "Millar impresión",
+                  hint: promediosRow?.horas_millar_impresion_promedio,
+                },
+                {
+                  key: "horas_prep_troquelado_oficial" as const,
+                  label: "Prep troquel (h)",
+                  hint: promediosRow?.horas_prep_troquelado_promedio,
+                },
+                {
+                  key: "horas_millar_troquelado_oficial" as const,
+                  label: "Millar troquel",
+                  hint: promediosRow?.horas_millar_troquelado_promedio,
+                },
+                {
+                  key: "horas_prep_engomado_oficial" as const,
+                  label: "Prep engomado (h)",
+                  hint: promediosRow?.horas_prep_engomado_promedio,
+                },
+                {
+                  key: "horas_millar_engomado_oficial" as const,
+                  label: "Millar engomado",
+                  hint: promediosRow?.horas_millar_engomado_promedio,
+                },
+                {
+                  key: "horas_guillotina_oficial" as const,
+                  label: "Guillotina (h abs.)",
+                  hint: promediosRow?.horas_guillotina_promedio,
+                },
+                {
+                  key: "horas_desbroce_oficial" as const,
+                  label: "Desbroce (h abs.)",
+                  hint: promediosRow?.horas_desbroce_promedio,
+                },
+              ] as const
+            ).map((f) => (
+              <div key={f.key} className="grid gap-1">
+                <Label className="text-xs">{f.label}</Label>
+                <Input
+                  className="h-8 text-xs"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder={
+                    f.hint != null ? `prom. ${f.hint}` : "—"
+                  }
+                  value={form[f.key]}
+                  onChange={(e) => set(f.key, e.target.value)}
+                />
+              </div>
+            ))}
+          </div>
 
           {/* Defaults por proceso (Ola 2) */}
           <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">

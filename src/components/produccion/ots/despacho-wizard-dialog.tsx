@@ -67,6 +67,7 @@ import {
   type MaestroPrefillReferenciaRow,
 } from "@/lib/maestro-prefill";
 import {
+  applyCloneExtrasPrefill,
   applyClonePrefill,
   buildDatosProcesoSeed,
   buildDatosProcesoSeedForForma,
@@ -82,6 +83,7 @@ import {
   emptyDespachoWizardProcesoDatos,
   emptyForma,
   estuchesEstimadosDespacho,
+  extractDespachoCloneExtrasFromPasos,
   formatSupabaseErrorMessage,
   FORMAS_MAX_WARNING,
   formatFechaEntregaCorta,
@@ -864,6 +866,36 @@ export function DespachoWizardDialog({
     [supabase]
   );
 
+  const loadCloneExtrasFromOtNumero = useCallback(
+    async (otNumero: string) => {
+      const ot = String(otNumero ?? "").trim();
+      if (!ot) return {};
+      const { data: masterRow, error: masterErr } = await supabase
+        .from(TABLE_OTS)
+        .select("id")
+        .eq("num_pedido", ot)
+        .maybeSingle();
+      if (masterErr) throw masterErr;
+      const masterId =
+        typeof (masterRow as { id?: string | null } | null)?.id === "string"
+          ? String((masterRow as { id?: string | null }).id)
+          : null;
+      if (!masterId) return {};
+      const { data: pasosRows, error: pasosErr } = await supabase
+        .from(TABLE_OT_PASOS)
+        .select("proceso_id, datos_proceso")
+        .eq("ot_id", masterId);
+      if (pasosErr) throw pasosErr;
+      return extractDespachoCloneExtrasFromPasos(
+        (pasosRows ?? []) as Array<{
+          proceso_id: number;
+          datos_proceso?: unknown;
+        }>,
+      );
+    },
+    [supabase],
+  );
+
   /**
    * Ola 3: extraído de handleReferenciaPicked para poder reusarlo desde el
    * botón explícito "Usar último trabajo", además del prefill automático
@@ -896,15 +928,23 @@ export function DespachoWizardDialog({
             ) ?? "";
         }
 
+        const sourceOt = String(
+          (data as { ot_numero?: string | null } | null)?.ot_numero ?? ""
+        ).trim();
+        const extras = sourceOt
+          ? await loadCloneExtrasFromOtNumero(sourceOt)
+          : {};
+
         setForm((f) => {
           const base: DespachoFormState = {
             ...f,
             referencia_id: refId,
             referencia_codigo: refCodigo,
           };
-          const next = data
+          let next = data
             ? applyClonePrefill(base, data as Record<string, unknown>).next
             : base;
+          next = applyCloneExtrasPrefill(next, extras).next;
           if (!next.tipo_engomado && tipoEngomadoHabitual) {
             return { ...next, tipo_engomado: tipoEngomadoHabitual };
           }
@@ -919,9 +959,6 @@ export function DespachoWizardDialog({
         toast.success(
           `Datos heredados de la referencia ${refCodigo} (solo campos vacíos).`
         );
-        const sourceOt = String(
-          (data as { ot_numero?: string | null }).ot_numero ?? ""
-        ).trim();
         if (!sourceOt) return;
         const slots = await loadItinerarioFromOtNumero(sourceOt);
         if (slots.length === 0) return;
@@ -942,7 +979,7 @@ export function DespachoWizardDialog({
         );
       }
     },
-    [loadItinerarioFromOtNumero, supabase]
+    [loadCloneExtrasFromOtNumero, loadItinerarioFromOtNumero, supabase]
   );
 
   /** Prefill AUTOMÁTICO al elegir referencia — sigue siendo "último despacho" (sin cambios). */
@@ -1020,13 +1057,14 @@ export function DespachoWizardDialog({
       const ot = String(otRaw ?? "").trim();
       if (!ot) return;
       try {
-        const [{ data: masterRow }, { data, error }] = await Promise.all([
+        const [{ data: masterRow }, { data, error }, extras] = await Promise.all([
           supabase.from(TABLE_OTS).select("id").eq("num_pedido", ot).maybeSingle(),
           supabase
             .from(TABLE_OT_DESPACHADAS)
             .select(DESPACHO_CLONE_SELECT)
             .eq("ot_numero", ot)
             .maybeSingle(),
+          loadCloneExtrasFromOtNumero(ot),
         ]);
         if (error) throw error;
         if (!data) {
@@ -1043,7 +1081,11 @@ export function DespachoWizardDialog({
             ot_anterior_numero: ot,
             ot_anterior_id: resolvedId ?? f.ot_anterior_id,
           };
-          return applyClonePrefill(base, data as Record<string, unknown>).next;
+          const cloned = applyClonePrefill(
+            base,
+            data as Record<string, unknown>,
+          ).next;
+          return applyCloneExtrasPrefill(cloned, extras).next;
         });
         toast.success(`Datos heredados de la OT ${ot} (solo campos vacíos).`);
         const slots = await loadItinerarioFromOtNumero(ot);
@@ -1065,7 +1107,7 @@ export function DespachoWizardDialog({
         );
       }
     },
-    [loadItinerarioFromOtNumero, supabase]
+    [loadCloneExtrasFromOtNumero, loadItinerarioFromOtNumero, supabase]
   );
 
   const sugerenciasMaestro = useMemo(
@@ -2141,8 +2183,8 @@ export function DespachoWizardDialog({
               <Input
                 id="wiz-horas-entrada"
                 className="h-8 text-xs"
-                type="number"
-                step="0.1"
+                type="text"
+                inputMode="decimal"
                 value={form.horas_entrada}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, horas_entrada: e.target.value }))
@@ -2156,8 +2198,8 @@ export function DespachoWizardDialog({
               <Input
                 id="wiz-horas-tiraje"
                 className="h-8 text-xs"
-                type="number"
-                step="0.1"
+                type="text"
+                inputMode="decimal"
                 value={form.horas_tiraje}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, horas_tiraje: e.target.value }))
@@ -2413,8 +2455,8 @@ export function DespachoWizardDialog({
               <Input
                 id="wiz-horas-troquel-prep"
                 className="h-8 text-xs"
-                type="number"
-                step="0.1"
+                type="text"
+                inputMode="decimal"
                 value={form.horas_troquel_preparacion}
                 onChange={(e) =>
                   setForm((f) => ({
@@ -2431,8 +2473,8 @@ export function DespachoWizardDialog({
               <Input
                 id="wiz-horas-troquel-tiraje"
                 className="h-8 text-xs"
-                type="number"
-                step="0.1"
+                type="text"
+                inputMode="decimal"
                 value={form.horas_troquel_tiraje}
                 onChange={(e) =>
                   setForm((f) => ({
@@ -2535,8 +2577,8 @@ export function DespachoWizardDialog({
               <Input
                 id="wiz-horas-engomado-prep"
                 className="h-8 text-xs"
-                type="number"
-                step="0.1"
+                type="text"
+                inputMode="decimal"
                 value={form.horas_engomado_preparacion}
                 onChange={(e) =>
                   setForm((f) => ({
@@ -2553,8 +2595,8 @@ export function DespachoWizardDialog({
               <Input
                 id="wiz-horas-engomado-tiraje"
                 className="h-8 text-xs"
-                type="number"
-                step="0.1"
+                type="text"
+                inputMode="decimal"
                 value={form.horas_engomado_tiraje}
                 onChange={(e) =>
                   setForm((f) => ({

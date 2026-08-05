@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { DecimalInput } from "@/components/ui/decimal-input";
 import { Label } from "@/components/ui/label";
 import { CartelaCierreBlock } from "@/components/produccion/planificacion/cartela-cierre-block";
 import {
@@ -70,9 +70,11 @@ export function CerrarProcesoDialog({
     primerConsumoId != null &&
     primerConsumoId !== procesoId;
 
-  const updateField = (fieldId: string, raw: string) => {
-    const parsed = Number(raw.replace(",", "."));
-    const value = Number.isFinite(parsed) && parsed >= 0 ? roundHorasEjecucion(parsed) : undefined;
+  const updateField = (fieldId: string, n: number | undefined) => {
+    const value =
+      n != null && Number.isFinite(n) && n >= 0
+        ? roundHorasEjecucion(n)
+        : undefined;
     onDatosChange({ ...datosDraft, [fieldId]: value });
   };
 
@@ -125,18 +127,18 @@ export function CerrarProcesoDialog({
               <Label htmlFor={`cerrar-${f.id}`} className="text-xs text-slate-600">
                 {f.label}
               </Label>
-              <Input
+              <DecimalInput
                 id={`cerrar-${f.id}`}
-                type="number"
                 min={0}
                 step={0.05}
                 className="mt-1"
                 value={
-                  datosDraft[f.id] != null && datosDraft[f.id] !== ""
-                    ? String(datosDraft[f.id])
-                    : ""
+                  typeof datosDraft[f.id] === "number" &&
+                  Number.isFinite(datosDraft[f.id] as number)
+                    ? (datosDraft[f.id] as number)
+                    : undefined
                 }
-                onChange={(e) => updateField(f.id, e.target.value)}
+                onValueChange={(n) => updateField(f.id, n)}
               />
             </div>
           ))}
