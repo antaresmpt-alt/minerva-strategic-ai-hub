@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   applyClonePrefill,
   emptyDespachoForm,
+  extractDespachoCloneFromPasos,
   formatDespachoMesAnio,
   formatOtHistorialLabel,
+  PROCESO_CTP_ID,
 } from "@/lib/despacho-wizard-shared";
 
 describe("formatOtHistorialLabel", () => {
@@ -37,5 +39,37 @@ describe("applyClonePrefill overwrite", () => {
       { mode: "empty" },
     );
     expect(next.material).toBe("ZENITH");
+  });
+});
+
+describe("extractDespachoCloneFromPasos CTP", () => {
+  it("extrae checks CTP del paso 16", () => {
+    const { ctp, extras } = extractDespachoCloneFromPasos([
+      {
+        proceso_id: PROCESO_CTP_ID,
+        datos_proceso: {
+          requiere_prueba_digital: true,
+          requiere_pdf_x_ok: true,
+          requiere_gestion_troquel: true,
+        },
+      },
+      {
+        proceso_id: 12,
+        datos_proceso: { codigo_caja_embalaje: "MN2L", estuches_por_bulto: 450 },
+      },
+    ]);
+    expect(ctp).not.toBeNull();
+    expect(ctp!.prueba_digital).toBe(true);
+    expect(ctp!.pdf_x_ok).toBe(true);
+    expect(ctp!.gestion_troquel).toBe(true);
+    expect(ctp!.prueba_gmg).toBe(false);
+    expect(extras.codigo_caja_embalaje).toBe("MN2L");
+  });
+
+  it("ctp null si la OT no tenía paso CTP", () => {
+    const { ctp } = extractDespachoCloneFromPasos([
+      { proceso_id: 1, datos_proceso: { horas_entrada_previsto: 0.5 } },
+    ]);
+    expect(ctp).toBeNull();
   });
 });
