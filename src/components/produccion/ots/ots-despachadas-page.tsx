@@ -1307,7 +1307,6 @@ export function OtsDespachadasPage({
     },
     [
       editCanReplaceItinerario,
-      editItinerarioSlots.length,
       loadEditItinerarioFromOtNumero,
       supabase,
     ]
@@ -1369,7 +1368,6 @@ export function OtsDespachadasPage({
     },
     [
       editCanReplaceItinerario,
-      editItinerarioSlots.length,
       loadEditItinerarioFromOtNumero,
       supabase,
     ]
