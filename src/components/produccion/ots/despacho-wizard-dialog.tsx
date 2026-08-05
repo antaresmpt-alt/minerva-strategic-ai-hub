@@ -83,7 +83,7 @@ import {
   emptyDespachoWizardProcesoDatos,
   emptyForma,
   estuchesEstimadosDespacho,
-  extractDespachoCloneExtrasFromPasos,
+  extractDespachoCloneFromPasos,
   formatOtHistorialLabel,
   formatSupabaseErrorMessage,
   FORMAS_MAX_WARNING,
@@ -867,10 +867,11 @@ export function DespachoWizardDialog({
     [supabase]
   );
 
-  const loadCloneExtrasFromOtNumero = useCallback(
+  const loadCloneFromPasosOtNumero = useCallback(
     async (otNumero: string) => {
+      const empty = { extras: {}, ctp: null as null };
       const ot = String(otNumero ?? "").trim();
-      if (!ot) return {};
+      if (!ot) return empty;
       const { data: masterRow, error: masterErr } = await supabase
         .from(TABLE_OTS)
         .select("id")
@@ -881,13 +882,13 @@ export function DespachoWizardDialog({
         typeof (masterRow as { id?: string | null } | null)?.id === "string"
           ? String((masterRow as { id?: string | null }).id)
           : null;
-      if (!masterId) return {};
+      if (!masterId) return empty;
       const { data: pasosRows, error: pasosErr } = await supabase
         .from(TABLE_OT_PASOS)
         .select("proceso_id, datos_proceso")
         .eq("ot_id", masterId);
       if (pasosErr) throw pasosErr;
-      return extractDespachoCloneExtrasFromPasos(
+      return extractDespachoCloneFromPasos(
         (pasosRows ?? []) as Array<{
           proceso_id: number;
           datos_proceso?: unknown;
@@ -932,9 +933,9 @@ export function DespachoWizardDialog({
         const sourceOt = String(
           (data as { ot_numero?: string | null } | null)?.ot_numero ?? ""
         ).trim();
-        const extras = sourceOt
-          ? await loadCloneExtrasFromOtNumero(sourceOt)
-          : {};
+        const fromPasos = sourceOt
+          ? await loadCloneFromPasosOtNumero(sourceOt)
+          : { extras: {}, ctp: null };
 
         setForm((f) => {
           const base: DespachoFormState = {
@@ -947,7 +948,7 @@ export function DespachoWizardDialog({
                 mode: "overwrite",
               }).next
             : base;
-          next = applyCloneExtrasPrefill(next, extras, {
+          next = applyCloneExtrasPrefill(next, fromPasos.extras, {
             mode: "overwrite",
           }).next;
           if (!next.tipo_engomado && tipoEngomadoHabitual) {
@@ -955,6 +956,9 @@ export function DespachoWizardDialog({
           }
           return next;
         });
+        if (fromPasos.ctp) {
+          setProcesoDatos((prev) => ({ ...prev, ctp: fromPasos.ctp! }));
+        }
         if (!data) {
           toast.info(
             `Referencia ${refCodigo} sin histórico todavía: nada que heredar.`
@@ -977,7 +981,7 @@ export function DespachoWizardDialog({
         );
       }
     },
-    [loadCloneExtrasFromOtNumero, loadItinerarioFromOtNumero, supabase]
+    [loadCloneFromPasosOtNumero, loadItinerarioFromOtNumero, supabase]
   );
 
   /** Prefill AUTOMÁTICO al elegir referencia — sigue siendo "último despacho" (sin cambios). */
@@ -1055,15 +1059,16 @@ export function DespachoWizardDialog({
       const ot = String(otRaw ?? "").trim();
       if (!ot) return;
       try {
-        const [{ data: masterRow }, { data, error }, extras] = await Promise.all([
-          supabase.from(TABLE_OTS).select("id").eq("num_pedido", ot).maybeSingle(),
-          supabase
-            .from(TABLE_OT_DESPACHADAS)
-            .select(DESPACHO_CLONE_SELECT)
-            .eq("ot_numero", ot)
-            .maybeSingle(),
-          loadCloneExtrasFromOtNumero(ot),
-        ]);
+        const [{ data: masterRow }, { data, error }, fromPasos] =
+          await Promise.all([
+            supabase.from(TABLE_OTS).select("id").eq("num_pedido", ot).maybeSingle(),
+            supabase
+              .from(TABLE_OT_DESPACHADAS)
+              .select(DESPACHO_CLONE_SELECT)
+              .eq("ot_numero", ot)
+              .maybeSingle(),
+            loadCloneFromPasosOtNumero(ot),
+          ]);
         if (error) throw error;
         if (!data) {
           toast.info(`La OT ${ot} no tiene despacho registrado para clonar.`);
@@ -1084,10 +1089,13 @@ export function DespachoWizardDialog({
             data as Record<string, unknown>,
             { mode: "overwrite" },
           ).next;
-          return applyCloneExtrasPrefill(cloned, extras, {
+          return applyCloneExtrasPrefill(cloned, fromPasos.extras, {
             mode: "overwrite",
           }).next;
         });
+        if (fromPasos.ctp) {
+          setProcesoDatos((prev) => ({ ...prev, ctp: fromPasos.ctp! }));
+        }
         toast.success(
           `Datos heredados de la OT ${ot} (sobrescribe técnicos).`
         );
@@ -1103,7 +1111,7 @@ export function DespachoWizardDialog({
         );
       }
     },
-    [loadCloneExtrasFromOtNumero, loadItinerarioFromOtNumero, supabase]
+    [loadCloneFromPasosOtNumero, loadItinerarioFromOtNumero, supabase]
   );
 
   const sugerenciasMaestro = useMemo(

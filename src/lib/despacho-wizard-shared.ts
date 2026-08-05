@@ -371,6 +371,31 @@ export function extractDespachoCloneExtrasFromPasos(
   return extras;
 }
 
+/** CTP + extras de horas/embalaje desde pasos de una OT fuente. */
+export type DespachoCloneFromPasos = {
+  extras: DespachoCloneExtras;
+  /** `null` si la OT fuente no tenía paso CTP (no tocar el CTP actual). */
+  ctp: DespachoWizardCtpDatos | null;
+};
+
+export function extractDespachoCloneFromPasos(
+  pasos: Array<{ proceso_id: number; datos_proceso?: unknown }>,
+): DespachoCloneFromPasos {
+  const extras = extractDespachoCloneExtrasFromPasos(pasos);
+  let ctp: DespachoWizardCtpDatos | null = null;
+  for (const p of pasos) {
+    if (p.proceso_id !== PROCESO_CTP_ID) continue;
+    const raw = p.datos_proceso;
+    ctp = parseCtpWizardFromDatosProceso(
+      raw && typeof raw === "object"
+        ? (raw as Record<string, unknown>)
+        : null,
+    );
+    break;
+  }
+  return { extras, ctp };
+}
+
 export function applyCloneExtrasPrefill(
   form: DespachoFormState,
   extras: DespachoCloneExtras,
