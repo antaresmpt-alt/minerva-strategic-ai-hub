@@ -306,6 +306,7 @@ export function EtiquetasHojaRutaTab() {
   );
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [togglingMaquina, setTogglingMaquina] = useState<string | null>(null);
+  const [togglingPdfOkId, setTogglingPdfOkId] = useState<string | null>(null);
   const [compactMode, setCompactMode] = useState(readStoredCompactMode);
   const [muelleDetailRow, setMuelleDetailRow] =
     useState<ProdEtiquetasHojaRutaRow | null>(null);
@@ -706,6 +707,54 @@ export function EtiquetasHojaRutaTab() {
         return;
       }
       toast.success(next ? "Marcada como finalizada." : "Reabierta.");
+    },
+    [supabase]
+  );
+
+  const togglePdfOk = useCallback(
+    async (r: ProdEtiquetasHojaRutaRow, next: boolean) => {
+      setTogglingPdfOkId(r.id);
+      const prev = {
+        pdf_ok: r.pdf_ok,
+        fecha_pdf_ok: r.fecha_pdf_ok,
+      };
+      const fechaPdfOk = next ? ymdLocal() : null;
+
+      setRows((list) =>
+        list.map((x) =>
+          x.id === r.id
+            ? { ...x, pdf_ok: next, fecha_pdf_ok: fechaPdfOk }
+            : x
+        )
+      );
+
+      const { error } = await supabase
+        .from(TABLE)
+        .update({
+          pdf_ok: next,
+          fecha_pdf_ok: fechaPdfOk,
+        })
+        .eq("id", r.id);
+
+      setTogglingPdfOkId(null);
+
+      if (error) {
+        setRows((list) =>
+          list.map((x) =>
+            x.id === r.id
+              ? {
+                  ...x,
+                  pdf_ok: prev.pdf_ok,
+                  fecha_pdf_ok: prev.fecha_pdf_ok,
+                }
+              : x
+          )
+        );
+        toast.error("No se pudo actualizar PDF OK", {
+          description: error.message,
+        });
+        return;
+      }
     },
     [supabase]
   );
@@ -1203,6 +1252,9 @@ export function EtiquetasHojaRutaTab() {
                     {label}
                   </TableHead>
                 ))}
+                <TableHead className="w-14 px-1 text-center text-[10px] font-semibold text-[#002147]">
+                  PDF
+                </TableHead>
                 <TableHead className="whitespace-nowrap font-semibold text-[#002147]">
                   Troquel
                 </TableHead>
@@ -1349,6 +1401,23 @@ export function EtiquetasHojaRutaTab() {
                       </label>
                     </TableCell>
                   ))}
+                  <TableCell className="px-1 text-center align-middle">
+                    <label
+                      className="inline-flex cursor-pointer flex-col items-center justify-center gap-0.5 py-0.5"
+                      title="PDF aprobado para imprimir (informativo)"
+                    >
+                      <input
+                        type="checkbox"
+                        className="size-3.5 cursor-pointer rounded border-slate-300 accent-[#002147] disabled:opacity-50"
+                        checked={Boolean(r.pdf_ok)}
+                        disabled={togglingPdfOkId === r.id}
+                        aria-label={`PDF OK OT ${r.ot_numero}`}
+                        onChange={(e) => {
+                          void togglePdfOk(r, e.target.checked);
+                        }}
+                      />
+                    </label>
+                  </TableCell>
                   <TableCell
                     className={cn(
                       "max-w-[7rem] truncate",

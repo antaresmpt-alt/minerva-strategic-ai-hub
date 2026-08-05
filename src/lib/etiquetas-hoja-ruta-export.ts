@@ -118,6 +118,7 @@ function rowToCells(
     r.bobinas != null ? String(r.bobinas) : "—",
     r.etiquetas != null ? String(r.etiquetas) : "—",
     r.cajas_restantes ?? "—",
+    fmtDateEsShort(r.fecha_pdf_ok),
     r.finalizado ? "Sí" : "No",
   ];
 }
@@ -146,6 +147,7 @@ const EXCEL_HEADERS = [
   "Bobinas",
   "Etiquetas",
   "Cajas restantes",
+  "F. OK PDF",
   "Finalizado",
 ];
 
@@ -169,6 +171,7 @@ const PDF_HEADERS = [
   "Etq",
   "Mts",
   "Resto",
+  "F. OK PDF",
   "Fin.",
 ] as const;
 
@@ -176,13 +179,13 @@ const PDF_PLAZO_COL = 8;
 const PDF_I_COL = 10;
 const PDF_T_COL = 11;
 const PDF_N_COL = 12;
-const PDF_FIN_COL = 19;
+const PDF_FIN_COL = 20;
 
 const PDF_MARGIN = { left: 8, right: 8 } as const;
 
 /** Pesos relativos; el ancho total se reparte en toda la página. */
 const PDF_COL_WEIGHTS: number[] = [
-  9, 24, 44, 14, 8, 11, 11, 5, 5, 18, 10, 10, 10, 11, 6, 6, 7, 8, 12, 5,
+  9, 24, 44, 14, 8, 11, 11, 5, 5, 18, 10, 10, 10, 11, 6, 6, 7, 8, 12, 10, 5,
 ];
 
 const PDF_COL_WEIGHT_SUM = PDF_COL_WEIGHTS.reduce((a, b) => a + b, 0);
@@ -282,6 +285,7 @@ function rowToPdfBody(
         })
       : "—",
     pdfTxt(r.cajas_restantes),
+    fmtDateEsShort(r.fecha_pdf_ok),
     "",
   ];
 }

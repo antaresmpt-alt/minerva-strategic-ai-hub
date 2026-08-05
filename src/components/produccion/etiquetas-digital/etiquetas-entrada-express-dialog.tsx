@@ -90,6 +90,10 @@ type ExpressForm = {
   fecha_fin_konica: string;
   fecha_fin_troqueladora: string;
   fecha_fin_numeradora: string;
+  /** Hugo: PDF aprobado para imprimir (informativo). */
+  pdf_ok: boolean;
+  /** Hugo: fecha (YYYY-MM-DD) en la que marcó PDF OK. */
+  fecha_pdf_ok: string;
   metros_impresion: string;
   troquel_id: string;
   troquel_utillaje: string;
@@ -118,6 +122,8 @@ function emptyForm(): ExpressForm {
     fecha_fin_konica: "",
     fecha_fin_troqueladora: "",
     fecha_fin_numeradora: "",
+    pdf_ok: false,
+    fecha_pdf_ok: "",
     metros_impresion: "",
     troquel_id: "",
     troquel_utillaje: "",
@@ -341,6 +347,10 @@ export function EtiquetasEntradaExpressDialog({
           },
           parseOptionalDecimal(form.metros_impresion)
         ),
+        pdf_ok: form.pdf_ok,
+        fecha_pdf_ok: form.pdf_ok
+          ? form.fecha_pdf_ok.trim() || todayYmd()
+          : null,
         troquel_id: form.troquel_id ? Number(form.troquel_id) : null,
         troquel_utillaje: form.troquel_utillaje.trim() || null,
         fecha_fin_produccion: form.finalizado ? todayYmd() : null,
@@ -612,6 +622,23 @@ export function EtiquetasEntradaExpressDialog({
                 {label}
               </label>
             ))}
+            <label className="flex cursor-pointer items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                className="size-4 rounded border-slate-300"
+                checked={form.pdf_ok}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  const today = todayYmdLocal();
+                  setForm((f) => ({
+                    ...f,
+                    pdf_ok: checked,
+                    fecha_pdf_ok: checked ? today : "",
+                  }));
+                }}
+              />
+              PDF OK
+            </label>
           </div>
 
           <p className="text-[11px] text-slate-500 sm:col-span-2">

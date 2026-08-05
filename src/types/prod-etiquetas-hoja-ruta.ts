@@ -20,6 +20,10 @@ export type ProdEtiquetasHojaRutaRow = {
   fecha_fin_troqueladora: string | null;
   /** Fin numeración → calendario `N-{ot_numero}`. */
   fecha_fin_numeradora: string | null;
+  /** Hugo: PDF aprobado para imprimir (informativo). */
+  pdf_ok: boolean;
+  /** Hugo: fecha (YYYY-MM-DD) en la que marcó PDF OK. */
+  fecha_pdf_ok: string | null;
   /** Metros de papel consumidos en impresión Konica (se solicita al marcar konica = true). */
   metros_impresion: number | null;
   /** Relación opcional con el catálogo de troqueles de etiquetas. */
