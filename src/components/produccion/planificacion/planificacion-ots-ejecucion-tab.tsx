@@ -47,6 +47,7 @@ import {
 } from "@/lib/planificacion-ambito";
 import { useSysParametrosSobreproduccion } from "@/hooks/use-sys-parametros-sobreproduccion";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { fetchAllInChunks } from "@/lib/supabase-query-chunks";
 import { cn } from "@/lib/utils";
 import {
   getCamposConfigByProcesoId,
@@ -938,13 +939,16 @@ export function PlanificacionOtsEjecucionTab({
       const executionIds = execRows.map((r) => r.id);
       const pauseMap = new Map<string, MesaEjecucionPausa[]>();
       if (executionIds.length > 0) {
-        const { data: pauseData, error: pauseErr } = await supabase
-          .from(TABLE_EJECUCIONES_PAUSAS)
-          .select("id, ejecucion_id, paused_at, resumed_at, motivo_id, observaciones_pausa, minutos_pausa, created_at, sys_motivos_pausa(slug,label,categoria,color_hex)")
-          .in("ejecucion_id", executionIds)
-          .order("paused_at", { ascending: false });
-        if (pauseErr) throw pauseErr;
-        for (const p of (pauseData ?? []) as unknown as PausaRow[]) {
+        const pauseData = await fetchAllInChunks(executionIds, 80, async (chunk) => {
+          const { data, error } = await supabase
+            .from(TABLE_EJECUCIONES_PAUSAS)
+            .select("id, ejecucion_id, paused_at, resumed_at, motivo_id, observaciones_pausa, minutos_pausa, created_at, sys_motivos_pausa(slug,label,categoria,color_hex)")
+            .in("ejecucion_id", chunk)
+            .order("paused_at", { ascending: false });
+          if (error) throw error;
+          return (data ?? []) as unknown as PausaRow[];
+        });
+        for (const p of pauseData) {
           const executionId = String(p.ejecucion_id ?? "").trim();
           if (!executionId) continue;
           const motivo = pickMotivoJoin(p.sys_motivos_pausa);
@@ -973,9 +977,11 @@ export function PlanificacionOtsEjecucionTab({
       const hijaComponentesMap: Record<string, HijaComponenteRow[]> = {};
 
       if (otNumeros.length > 0) {
-        const { data: despData } = await supabase
-          .from(TABLE_DESPACHO)
-          .select(`
+        const [despData, generalData, materialesData] = await Promise.all([
+          fetchAllInChunks(otNumeros, 100, async (chunk) => {
+            const { data, error } = await supabase
+              .from(TABLE_DESPACHO)
+              .select(`
             ot_numero,
             material,
             gramaje,
@@ -994,19 +1000,31 @@ export function PlanificacionOtsEjecucionTab({
             horas_estimadas_engomado,
             tipo_engomado
           `)
-          .in("ot_numero", otNumeros);
-        const { data: generalData } = await supabase
-          .from(TABLE_OTS_GENERAL)
-          .select("num_pedido, cliente, cantidad, titulo, fecha_entrega, ot_tipo, ot_padre_numero, tipo_hija, forma_descripcion")
-          .in("num_pedido", otNumeros);
-        const { data: materialesData } = await supabase
-          .from(TABLE_DESPACHO_MATERIALES_LINEAS)
-          .select("ot_numero, tipo, descripcion, orden, soporte_impresion")
-          .in("ot_numero", otNumeros)
-          .order("ot_numero", { ascending: true })
-          .order("orden", { ascending: true });
+              .in("ot_numero", chunk);
+            if (error) throw error;
+            return data ?? [];
+          }),
+          fetchAllInChunks(otNumeros, 100, async (chunk) => {
+            const { data, error } = await supabase
+              .from(TABLE_OTS_GENERAL)
+              .select("num_pedido, cliente, cantidad, titulo, fecha_entrega, ot_tipo, ot_padre_numero, tipo_hija, forma_descripcion")
+              .in("num_pedido", chunk);
+            if (error) throw error;
+            return data ?? [];
+          }),
+          fetchAllInChunks(otNumeros, 100, async (chunk) => {
+            const { data, error } = await supabase
+              .from(TABLE_DESPACHO_MATERIALES_LINEAS)
+              .select("ot_numero, tipo, descripcion, orden, soporte_impresion")
+              .in("ot_numero", chunk)
+              .order("ot_numero", { ascending: true })
+              .order("orden", { ascending: true });
+            if (error) throw error;
+            return data ?? [];
+          }),
+        ]);
         const generalMap = new Map<string, { cliente: string | null; cantidad: number | null; titulo: string | null; fechaEntrega: string | null }>();
-        for (const g of (generalData ?? []) as Array<{ 
+        for (const g of generalData as Array<{ 
           num_pedido?: string; 
           cliente?: string | null; 
           cantidad?: number | null; 
@@ -1034,7 +1052,7 @@ export function PlanificacionOtsEjecucionTab({
           }
         }
         const materialesByOt = new Map<string, MaterialLineaInfo[]>();
-        for (const m of (materialesData ?? []) as Array<{
+        for (const m of materialesData as Array<{
           ot_numero?: string | null;
           tipo?: string | null;
           descripcion?: string | null;
@@ -1055,24 +1073,27 @@ export function PlanificacionOtsEjecucionTab({
         }
         const troquelNums = [
           ...new Set(
-            ((despData ?? []) as Array<{ troquel?: string | null }>)
+            (despData as Array<{ troquel?: string | null }>)
               .map((d) => String(d.troquel ?? "").trim())
               .filter(Boolean),
           ),
         ];
         const troquelMap = new Map<string, ReturnType<typeof mapTroquelRow>>();
         if (troquelNums.length > 0) {
-          const { data: troqData, error: troqErr } = await supabase
-            .from(TABLE_TROQUELES)
-            .select("num_troquel,mides,num_figuras,figuras_hoja,pinza,expulsion,num_expulsion,caucho_acrilico")
-            .in("num_troquel", troquelNums);
-          if (troqErr) throw troqErr;
-          for (const t of (troqData ?? []) as TroquelInfoRow[]) {
+          const troqData = await fetchAllInChunks(troquelNums, 100, async (chunk) => {
+            const { data, error } = await supabase
+              .from(TABLE_TROQUELES)
+              .select("num_troquel,mides,num_figuras,figuras_hoja,pinza,expulsion,num_expulsion,caucho_acrilico")
+              .in("num_troquel", chunk);
+            if (error) throw error;
+            return (data ?? []) as TroquelInfoRow[];
+          });
+          for (const t of troqData) {
             const key = normalizeTroquelKey(t.num_troquel);
             if (key) troquelMap.set(key, mapTroquelRow(t));
           }
         }
-        for (const d of (despData ?? []) as Array<{
+        for (const d of despData as Array<{
           ot_numero?: string;
           material?: string | null;
           gramaje?: number | null;
@@ -1148,9 +1169,11 @@ export function PlanificacionOtsEjecucionTab({
           ),
         ];
         if (padresNeeded.length > 0) {
-          const { data: padreDespData } = await supabase
-            .from(TABLE_DESPACHO)
-            .select(`
+          const [padreDespData, padreGeneralData, padreMaterialesData] = await Promise.all([
+            fetchAllInChunks(padresNeeded, 100, async (chunk) => {
+              const { data, error } = await supabase
+                .from(TABLE_DESPACHO)
+                .select(`
               ot_numero,
               material,
               gramaje,
@@ -1169,20 +1192,32 @@ export function PlanificacionOtsEjecucionTab({
               horas_estimadas_engomado,
               tipo_engomado
             `)
-            .in("ot_numero", padresNeeded);
-          const { data: padreGeneralData } = await supabase
-            .from(TABLE_OTS_GENERAL)
-            .select("num_pedido, cliente, titulo, fecha_entrega")
-            .in("num_pedido", padresNeeded);
-          const { data: padreMaterialesData } = await supabase
-            .from(TABLE_DESPACHO_MATERIALES_LINEAS)
-            .select("ot_numero, tipo, descripcion, orden, soporte_impresion")
-            .in("ot_numero", padresNeeded)
-            .order("ot_numero", { ascending: true })
-            .order("orden", { ascending: true });
+                .in("ot_numero", chunk);
+              if (error) throw error;
+              return data ?? [];
+            }),
+            fetchAllInChunks(padresNeeded, 100, async (chunk) => {
+              const { data, error } = await supabase
+                .from(TABLE_OTS_GENERAL)
+                .select("num_pedido, cliente, titulo, fecha_entrega")
+                .in("num_pedido", chunk);
+              if (error) throw error;
+              return data ?? [];
+            }),
+            fetchAllInChunks(padresNeeded, 100, async (chunk) => {
+              const { data, error } = await supabase
+                .from(TABLE_DESPACHO_MATERIALES_LINEAS)
+                .select("ot_numero, tipo, descripcion, orden, soporte_impresion")
+                .in("ot_numero", chunk)
+                .order("ot_numero", { ascending: true })
+                .order("orden", { ascending: true });
+              if (error) throw error;
+              return data ?? [];
+            }),
+          ]);
 
           const padreGeneralMap = new Map<string, { cliente: string | null; titulo: string | null; fechaEntrega: string | null }>();
-          for (const pg of (padreGeneralData ?? []) as Array<{
+          for (const pg of padreGeneralData as Array<{
             num_pedido?: string;
             cliente?: string | null;
             titulo?: string | null;
@@ -1199,7 +1234,7 @@ export function PlanificacionOtsEjecucionTab({
           }
 
           const padreMaterialesByOt = new Map<string, MaterialLineaInfo[]>();
-          for (const pm of (padreMaterialesData ?? []) as Array<{
+          for (const pm of padreMaterialesData as Array<{
             ot_numero?: string | null;
             tipo?: string | null;
             descripcion?: string | null;
@@ -1221,25 +1256,29 @@ export function PlanificacionOtsEjecucionTab({
 
           const padreTroquelNums = [
             ...new Set(
-              ((padreDespData ?? []) as Array<{ troquel?: string | null }>)
+              (padreDespData as Array<{ troquel?: string | null }>)
                 .map((d) => String(d.troquel ?? "").trim())
                 .filter(Boolean),
             ),
           ];
           const padreTroquelMap = new Map<string, ReturnType<typeof mapTroquelRow>>();
           if (padreTroquelNums.length > 0) {
-            const { data: troqData } = await supabase
-              .from(TABLE_TROQUELES)
-              .select("num_troquel,mides,num_figuras,figuras_hoja,pinza,expulsion,num_expulsion,caucho_acrilico")
-              .in("num_troquel", padreTroquelNums);
-            for (const t of (troqData ?? []) as TroquelInfoRow[]) {
+            const troqData = await fetchAllInChunks(padreTroquelNums, 100, async (chunk) => {
+              const { data, error } = await supabase
+                .from(TABLE_TROQUELES)
+                .select("num_troquel,mides,num_figuras,figuras_hoja,pinza,expulsion,num_expulsion,caucho_acrilico")
+                .in("num_troquel", chunk);
+              if (error) throw error;
+              return (data ?? []) as TroquelInfoRow[];
+            });
+            for (const t of troqData) {
               const key = normalizeTroquelKey(t.num_troquel);
               if (key) padreTroquelMap.set(key, mapTroquelRow(t));
             }
           }
 
           const padreDespachoMap: Record<string, DespachoInfo> = {};
-          for (const pd of (padreDespData ?? []) as Array<{
+          for (const pd of padreDespData as Array<{
             ot_numero?: string;
             material?: string | null;
             gramaje?: number | null;
@@ -1319,13 +1358,17 @@ export function PlanificacionOtsEjecucionTab({
           return meta?.otTipo === "hija" && meta?.tipoHija === "forma";
         });
         if (hijasForma.length > 0) {
-          const { data: compData } = await supabase
-            .from(TABLE_HIJA_COMPONENTES)
-            .select("ot_hija_numero, referencia_codigo, referencia_descripcion, poses_en_forma, cantidad_objetivo, orden")
-            .in("ot_hija_numero", hijasForma)
-            .order("ot_hija_numero", { ascending: true })
-            .order("orden", { ascending: true });
-          for (const c of (compData ?? []) as Array<{
+          const compData = await fetchAllInChunks(hijasForma, 100, async (chunk) => {
+            const { data, error } = await supabase
+              .from(TABLE_HIJA_COMPONENTES)
+              .select("ot_hija_numero, referencia_codigo, referencia_descripcion, poses_en_forma, cantidad_objetivo, orden")
+              .in("ot_hija_numero", chunk)
+              .order("ot_hija_numero", { ascending: true })
+              .order("orden", { ascending: true });
+            if (error) throw error;
+            return data ?? [];
+          });
+          for (const c of compData as Array<{
             ot_hija_numero?: string | null;
             referencia_codigo?: string | null;
             referencia_descripcion?: string | null;
@@ -1368,15 +1411,31 @@ export function PlanificacionOtsEjecucionTab({
         ),
       ];
       if (otIds.length > 0) {
-        const { data: pasosItinerarioData, error: pasosItinerarioErr } = await supabase
-          .from(TABLE_OT_PASOS)
-          .select("id, ot_id, proceso_id, estado, datos_proceso, orden")
-          .in("ot_id", otIds)
-          .order("ot_id")
-          .order("orden", { ascending: true });
-        if (pasosItinerarioErr) throw pasosItinerarioErr;
+        const [pasosItinerarioData, pasosData] = await Promise.all([
+          fetchAllInChunks(otIds, 80, async (chunk) => {
+            const { data, error } = await supabase
+              .from(TABLE_OT_PASOS)
+              .select("id, ot_id, proceso_id, estado, datos_proceso, orden")
+              .in("ot_id", chunk)
+              .order("ot_id")
+              .order("orden", { ascending: true });
+            if (error) throw error;
+            return data ?? [];
+          }),
+          fetchAllInChunks(otIds, 80, async (chunk) => {
+            const { data, error } = await supabase
+              .from(TABLE_OT_PASOS)
+              .select("ot_id, proceso_id, estado, datos_proceso, orden")
+              .in("ot_id", chunk)
+              .eq("estado", "finalizado")
+              .order("ot_id")
+              .order("orden", { ascending: false });
+            if (error) throw error;
+            return data ?? [];
+          }),
+        ]);
 
-        for (const p of (pasosItinerarioData ?? []) as Array<{
+        for (const p of pasosItinerarioData as Array<{
           id: string;
           ot_id: string;
           proceso_id: number | null;
@@ -1422,17 +1481,8 @@ export function PlanificacionOtsEjecucionTab({
 
         // Para cada ejecución activa, buscamos el último paso completado de la misma OT
         // cuyo proceso_id sea compatible como entrada (inputFromProcessIds del proceso actual)
-        const { data: pasosData, error: pasosErr } = await supabase
-          .from(TABLE_OT_PASOS)
-          .select("ot_id, proceso_id, estado, datos_proceso, orden")
-          .in("ot_id", otIds)
-          .eq("estado", "finalizado")
-          .order("ot_id")
-          .order("orden", { ascending: false });
-        if (pasosErr) throw pasosErr;
-
         const pasosPorOtId = new Map<string, Array<{ proceso_id: number | null; datos_proceso: Record<string, unknown> | null; orden: number | null }>>();
-        for (const p of (pasosData ?? []) as Array<{ ot_id: string; proceso_id: number | null; estado: string; datos_proceso: Record<string, unknown> | null; orden: number | null }>) {
+        for (const p of pasosData as Array<{ ot_id: string; proceso_id: number | null; estado: string; datos_proceso: Record<string, unknown> | null; orden: number | null }>) {
           const otId = String(p.ot_id ?? "").trim();
           if (!otId) continue;
           const list = pasosPorOtId.get(otId) ?? [];

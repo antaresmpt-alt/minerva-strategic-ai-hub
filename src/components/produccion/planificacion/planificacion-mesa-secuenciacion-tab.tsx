@@ -109,6 +109,7 @@ import {
 } from "@/lib/planificacion-ia-validate";
 import { useHubStore } from "@/lib/store";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { fetchAllInChunks } from "@/lib/supabase-query-chunks";
 import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
 import { cn } from "@/lib/utils";
 import type {
@@ -711,14 +712,17 @@ export function PlanificacionMesaSecuenciacionTab() {
       }
     >();
     if (activeExecutionIds.length > 0) {
-      const { data: pauseData, error: pauseErr } = await supabase
-        .from("prod_mesa_ejecuciones_pausas")
-        .select("ejecucion_id, paused_at, observaciones_pausa, sys_motivos_pausa(label,categoria,color_hex)")
-        .in("ejecucion_id", activeExecutionIds)
-        .is("resumed_at", null)
-        .order("paused_at", { ascending: false });
-      if (pauseErr) throw pauseErr;
-      for (const p of (pauseData ?? []) as Array<Record<string, unknown>>) {
+      const pauseData = await fetchAllInChunks(activeExecutionIds, 80, async (chunk) => {
+        const { data, error } = await supabase
+          .from("prod_mesa_ejecuciones_pausas")
+          .select("ejecucion_id, paused_at, observaciones_pausa, sys_motivos_pausa(label,categoria,color_hex)")
+          .in("ejecucion_id", chunk)
+          .is("resumed_at", null)
+          .order("paused_at", { ascending: false });
+        if (error) throw error;
+        return (data ?? []) as Array<Record<string, unknown>>;
+      });
+      for (const p of pauseData) {
         const executionId = String(p.ejecucion_id ?? "").trim();
         if (!executionId || openPauseByExecutionId.has(executionId)) continue;
         const motivoJoin = Array.isArray(p.sys_motivos_pausa)
@@ -749,15 +753,44 @@ export function PlanificacionMesaSecuenciacionTab() {
       string,
       { entrada: number; tiraje: number; troquelado: number; engomado: number }
     >();
+    const otTituloCantidadByNum = new Map<
+      string,
+      { trabajo: string; cantidadOt: number | null }
+    >();
     if (otsList.length > 0) {
-      const { data: despData, error: despErr } = await supabase
-        .from(TABLE_DESPACHADAS)
-        .select(
-          "ot_numero, horas_entrada, horas_tiraje, horas_estimadas_troquelado, horas_estimadas_engomado, num_hojas_brutas"
-        )
-        .in("ot_numero", otsList);
-      if (despErr) throw despErr;
-      for (const d of (despData ?? []) as Array<Record<string, unknown>>) {
+      const [despData, resumenEjecData, ogData] = await Promise.all([
+        fetchAllInChunks(otsList, 100, async (chunk) => {
+          const { data, error } = await supabase
+            .from(TABLE_DESPACHADAS)
+            .select(
+              "ot_numero, horas_entrada, horas_tiraje, horas_estimadas_troquelado, horas_estimadas_engomado, num_hojas_brutas",
+            )
+            .in("ot_numero", chunk);
+          if (error) throw error;
+          return (data ?? []) as Array<Record<string, unknown>>;
+        }),
+        fetchAllInChunks(otsList, 100, async (chunk) => {
+          const { data, error } = await supabase
+            .from(TABLE_EJECUCIONES)
+            .select(
+              "ot_numero, horas_reales_entrada, horas_reales_tiraje, horas_reales_troquelado, horas_reales_engomado",
+            )
+            .in("ot_numero", chunk)
+            .eq("estado_ejecucion", "finalizada");
+          if (error && !isMissingColumnError(error)) throw error;
+          return (data ?? []) as Array<Record<string, unknown>>;
+        }),
+        fetchAllInChunks(otsList, 100, async (chunk) => {
+          const { data, error } = await supabase
+            .from(TABLE_OTS_GENERAL)
+            .select("num_pedido, titulo, cantidad")
+            .in("num_pedido", chunk);
+          if (error) throw error;
+          return (data ?? []) as Array<Record<string, unknown>>;
+        }),
+      ]);
+
+      for (const d of despData) {
         const ot = String(d.ot_numero ?? "").trim();
         if (!ot) continue;
         const prev = fallbackByOt.get(ot) ?? { horas: 0, numHojas: 0 };
@@ -766,15 +799,7 @@ export function PlanificacionMesaSecuenciacionTab() {
         fallbackByOt.set(ot, prev);
       }
 
-      const { data: resumenEjecData, error: resumenEjecErr } = await supabase
-        .from(TABLE_EJECUCIONES)
-        .select(
-          "ot_numero, horas_reales_entrada, horas_reales_tiraje, horas_reales_troquelado, horas_reales_engomado",
-        )
-        .in("ot_numero", otsList)
-        .eq("estado_ejecucion", "finalizada");
-      if (resumenEjecErr && !isMissingColumnError(resumenEjecErr)) throw resumenEjecErr;
-      for (const row of (resumenEjecData ?? []) as Array<Record<string, unknown>>) {
+      for (const row of resumenEjecData) {
         const ot = String(row.ot_numero ?? "").trim();
         if (!ot) continue;
         const prev = resumenHorasPreviasByOt.get(ot) ?? {
@@ -789,18 +814,8 @@ export function PlanificacionMesaSecuenciacionTab() {
         prev.engomado += Math.max(0, parseNum(row.horas_reales_engomado));
         resumenHorasPreviasByOt.set(ot, prev);
       }
-    }
-    const otTituloCantidadByNum = new Map<
-      string,
-      { trabajo: string; cantidadOt: number | null }
-    >();
-    if (otsList.length > 0) {
-      const { data: ogData, error: ogErr } = await supabase
-        .from(TABLE_OTS_GENERAL)
-        .select("num_pedido, titulo, cantidad")
-        .in("num_pedido", otsList);
-      if (ogErr) throw ogErr;
-      for (const o of (ogData ?? []) as Array<Record<string, unknown>>) {
+
+      for (const o of ogData) {
         const k = String(o.num_pedido ?? "").trim();
         if (!k) continue;
         otTituloCantidadByNum.set(k, {
@@ -953,16 +968,18 @@ export function PlanificacionMesaSecuenciacionTab() {
     // ocultar OT ya planificada en CUALQUIER máquina de ese mismo tipo.
     let otsPlacedAnywhere = new Set<string>();
     if (tipoEfectivo) {
-      const { data: mesaPlacedRows, error: mpErr } = await supabase
-        .from(TABLE_MESA)
-        .select("ot_numero, maquina_id")
-        .in("estado_mesa", POOL_BLOCKING_MESA_ESTADOS as unknown as string[])
-        .in("ot_numero", poolOts);
-      if (mpErr) throw mpErr;
-      const rawPlaced = (mesaPlacedRows ?? []) as Array<{
-        ot_numero?: string | null;
-        maquina_id?: string | null;
-      }>;
+      const rawPlaced = await fetchAllInChunks(poolOts, 100, async (chunk) => {
+        const { data, error } = await supabase
+          .from(TABLE_MESA)
+          .select("ot_numero, maquina_id")
+          .in("estado_mesa", POOL_BLOCKING_MESA_ESTADOS as unknown as string[])
+          .in("ot_numero", chunk);
+        if (error) throw error;
+        return (data ?? []) as Array<{
+          ot_numero?: string | null;
+          maquina_id?: string | null;
+        }>;
+      });
       const mids = new Set<string>();
       for (const row of rawPlaced) {
         const mid = String(row.maquina_id ?? "").trim();
@@ -970,14 +987,17 @@ export function PlanificacionMesaSecuenciacionTab() {
       }
       const tipoByMaquinaId = new Map<string, PlanificacionTipoMaquina>();
       if (mids.size > 0) {
-        const { data: maqs, error: maqPlErr } = await supabase
-          .from(TABLE_MAQUINAS)
-          .select("id, tipo_maquina")
-          .in("id", [...mids]);
-        if (maqPlErr) throw maqPlErr;
-        for (const m of maqs ?? []) {
-          const id = String((m as { id?: string | null }).id ?? "").trim();
-          const rawT = String((m as { tipo_maquina?: string | null }).tipo_maquina ?? "").trim();
+        const maqs = await fetchAllInChunks([...mids], 100, async (chunk) => {
+          const { data, error } = await supabase
+            .from(TABLE_MAQUINAS)
+            .select("id, tipo_maquina")
+            .in("id", chunk);
+          if (error) throw error;
+          return (data ?? []) as Array<{ id?: string | null; tipo_maquina?: string | null }>;
+        });
+        for (const m of maqs) {
+          const id = String(m.id ?? "").trim();
+          const rawT = String(m.tipo_maquina ?? "").trim();
           if (!id) continue;
           if ((PLANIFICACION_TIPOS_MAQUINA as readonly string[]).includes(rawT)) {
             tipoByMaquinaId.set(id, rawT as PlanificacionTipoMaquina);
@@ -998,20 +1018,21 @@ export function PlanificacionMesaSecuenciacionTab() {
         }
       }
     } else {
-      let placedQuery = supabase
-        .from(TABLE_MESA)
-        .select("ot_numero")
-        .in("estado_mesa", POOL_BLOCKING_MESA_ESTADOS as unknown as string[])
-        .in("ot_numero", poolOts);
-      if (selectedMaquinaId) {
-        placedQuery = placedQuery.or(`maquina_id.eq.${selectedMaquinaId},maquina_id.is.null`);
-      }
-      const { data: placedData, error: placedErr } = await placedQuery;
-      if (placedErr) throw placedErr;
+      const placedData = await fetchAllInChunks(poolOts, 100, async (chunk) => {
+        let placedQuery = supabase
+          .from(TABLE_MESA)
+          .select("ot_numero")
+          .in("estado_mesa", POOL_BLOCKING_MESA_ESTADOS as unknown as string[])
+          .in("ot_numero", chunk);
+        if (selectedMaquinaId) {
+          placedQuery = placedQuery.or(`maquina_id.eq.${selectedMaquinaId},maquina_id.is.null`);
+        }
+        const { data, error } = await placedQuery;
+        if (error) throw error;
+        return (data ?? []) as Array<{ ot_numero: string | null }>;
+      });
       otsPlacedAnywhere = new Set(
-        ((placedData ?? []) as Array<{ ot_numero: string | null }>)
-          .map((x) => String(x.ot_numero ?? "").trim())
-          .filter(Boolean),
+        placedData.map((x) => String(x.ot_numero ?? "").trim()).filter(Boolean),
       );
     }
     const visibleRows = rows.filter((r) => !otsPlacedAnywhere.has(String(r.ot_numero ?? "").trim()));
@@ -1019,14 +1040,27 @@ export function PlanificacionMesaSecuenciacionTab() {
     const otsList = visibleRows.map((r) => String(r.ot_numero ?? "").trim()).filter(Boolean);
     if (otsList.length === 0) return [] as PoolOT[];
 
-    // Datos técnicos (despachadas) para tarjetas: agregamos por OT.
-    const { data: despData, error: despErr } = await supabase
-      .from(TABLE_DESPACHADAS)
-      .select(
-        "ot_numero, tintas, material, num_hojas_brutas, horas_entrada, horas_tiraje, horas_estimadas_troquelado, horas_estimadas_engomado, acabado_pral",
-      )
-      .in("ot_numero", otsList);
-    if (despErr) throw despErr;
+    // Datos técnicos (despachadas) + comerciales en paralelo
+    const [despData, otsData] = await Promise.all([
+      fetchAllInChunks(otsList, 100, async (chunk) => {
+        const { data, error } = await supabase
+          .from(TABLE_DESPACHADAS)
+          .select(
+            "ot_numero, tintas, material, num_hojas_brutas, horas_entrada, horas_tiraje, horas_estimadas_troquelado, horas_estimadas_engomado, acabado_pral",
+          )
+          .in("ot_numero", chunk);
+        if (error) throw error;
+        return (data ?? []) as Array<Record<string, unknown>>;
+      }),
+      fetchAllInChunks(otsList, 100, async (chunk) => {
+        const { data, error } = await supabase
+          .from(TABLE_OTS_GENERAL)
+          .select("num_pedido, cliente, fecha_entrega, titulo, cantidad")
+          .in("num_pedido", chunk);
+        if (error) throw error;
+        return (data ?? []) as Array<Record<string, unknown>>;
+      }),
+    ]);
 
     const despAgg = new Map<
       string,
@@ -1038,7 +1072,7 @@ export function PlanificacionMesaSecuenciacionTab() {
         acabadoPral: string;
       }
     >();
-    for (const d of (despData ?? []) as Array<Record<string, unknown>>) {
+    for (const d of despData) {
       const ot = String(d.ot_numero ?? "").trim();
       if (!ot) continue;
       const horas = horasByTipo(d);
@@ -1064,12 +1098,6 @@ export function PlanificacionMesaSecuenciacionTab() {
       }
     }
 
-    // Datos comerciales (cliente, fecha entrega, etc.)
-    const { data: otsData, error: otsErr } = await supabase
-      .from(TABLE_OTS_GENERAL)
-      .select("num_pedido, cliente, fecha_entrega, titulo, cantidad")
-      .in("num_pedido", otsList);
-    if (otsErr) throw otsErr;
     const otsByNum = new Map<
       string,
       {
@@ -1079,7 +1107,7 @@ export function PlanificacionMesaSecuenciacionTab() {
         cantidadOt: number | null;
       }
     >();
-    for (const o of (otsData ?? []) as Array<Record<string, unknown>>) {
+    for (const o of otsData) {
       const ot = String(o.num_pedido ?? "").trim();
       if (!ot) continue;
       otsByNum.set(ot, {
