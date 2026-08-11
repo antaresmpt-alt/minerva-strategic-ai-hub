@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildProdOtProducidaContenedorInsert,
   buildProdOtProducidaInsert,
+  contenedorHijasItinerarioCompleto,
   extractCantidadProducida,
+  isContenedorCierreSnapshot,
 } from "@/lib/prod-ot-cierre";
 import type { HojaRutaData, HojaRutaPaso } from "@/lib/hoja-ruta/hoja-ruta-query";
 import {
@@ -161,5 +164,97 @@ describe("buildProdOtProducidaInsert + referencia_id", () => {
     expect(row.horas_prep_engomado_reales).toBe(0.4);
     expect(row.horas_tiraje_engomado_reales).toBe(1.6);
     expect(row.horas_total_reales).toBe(2);
+  });
+});
+
+describe("contenedorHijasItinerarioCompleto", () => {
+  it("exige todas las hijas con itinerario completo", () => {
+    expect(
+      contenedorHijasItinerarioCompleto([
+        { pasosCompletados: 3, pasosTotal: 3 },
+        { pasosCompletados: 2, pasosTotal: 2 },
+      ]),
+    ).toBe(true);
+    expect(
+      contenedorHijasItinerarioCompleto([
+        { pasosCompletados: 3, pasosTotal: 3 },
+        { pasosCompletados: 1, pasosTotal: 2 },
+      ]),
+    ).toBe(false);
+    expect(contenedorHijasItinerarioCompleto([])).toBe(false);
+    expect(
+      contenedorHijasItinerarioCompleto([{ pasosCompletados: 0, pasosTotal: 0 }]),
+    ).toBe(false);
+  });
+});
+
+describe("buildProdOtProducidaContenedorInsert", () => {
+  it("agrega horas y anida snapshot kind contenedor", () => {
+    const hijaA = snapshot([
+      paso(PROCESO_OFFSET_ID, {
+        datosProceso: { horas_entrada_real: 1, horas_impresion_real: 2 },
+      }),
+    ]);
+    hijaA.otNumero = "98010-01";
+    const hijaB = snapshot([
+      paso(PROCESO_OFFSET_ID, {
+        datosProceso: { horas_entrada_real: 0.5, horas_impresion_real: 1.5 },
+      }),
+    ]);
+    hijaB.otNumero = "98010-02";
+
+    const padre = snapshot([]);
+    padre.otNumero = "98010";
+    padre.cantidad = 6000;
+
+    const row = buildProdOtProducidaContenedorInsert({
+      padreOtNumero: "98010",
+      contenedor: {
+        padre,
+        progress: {
+          total: 2,
+          completadas: 2,
+          pct: 100,
+          pasosCompletados: 2,
+          pasosTotal: 2,
+          hijasCerradasPct: 100,
+          hijasItinerarioCompleto: true,
+        },
+        progressLabel: "2 hijas · 100%",
+        hijasResumen: [
+          {
+            otNumero: "98010-01",
+            formaDescripcion: null,
+            trabajo: null,
+            cantidad: 3000,
+            pasoActual: null,
+            pasos: [],
+            pasosCompletados: 1,
+            pasosTotal: 1,
+          },
+          {
+            otNumero: "98010-02",
+            formaDescripcion: null,
+            trabajo: null,
+            cantidad: 3000,
+            pasoActual: null,
+            pasos: [],
+            pasosCompletados: 1,
+            pasosTotal: 1,
+          },
+        ],
+      },
+      hijasSnapshots: [hijaA, hijaB],
+      userId: "user-1",
+      nowIso: "2026-08-11T12:00:00.000Z",
+    });
+
+    expect(row.ot_numero).toBe("98010");
+    expect(row.horas_prep_impresion_reales).toBe(1.5);
+    expect(row.horas_tiraje_impresion_reales).toBe(3.5);
+    expect(isContenedorCierreSnapshot(row.snapshot)).toBe(true);
+    if (isContenedorCierreSnapshot(row.snapshot)) {
+      expect(row.snapshot.hijas).toHaveLength(2);
+    }
   });
 });

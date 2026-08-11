@@ -6,7 +6,8 @@
 >
 > Fecha: 13 de junio de 2026.
 > Actualizado: 28 jul 2026 — Pasos A–D promedios + plan de prueba manual.
-> Pendiente próxima sesión: cierre contenedor/hijas (8.4), comparar versiones.
+> Pendiente próxima sesión: comparar versiones; convergencia física hijas = 8.5 (docs).
+> **8.4 cierre contenedor:** ✅ MVP 11 ago (snapshot barco en `prod_ot_producidas`).
 > **Prueba promedios:** `PLAN_PRUEBA_PROMEDIOS_MAESTRO.md` (1 OT × 4 réplicas).
 
 ---

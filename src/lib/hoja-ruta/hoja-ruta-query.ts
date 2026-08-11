@@ -115,6 +115,8 @@ export type HojaRutaDespacho = {
 export type HojaRutaData = {
   otNumero: string;
   otId: string | null;
+  /** Bloque 8: simple | contenedor | hija — para gate de cierre. */
+  otTipo?: string | null;
   cliente: string | null;
   trabajo: string | null;
   cantidad: number | null;
@@ -282,7 +284,7 @@ export async function fetchHojaRutaOt(
 
   const { data: otData, error: otErr } = await supabase
     .from(TABLE_OTS)
-    .select("id, num_pedido, cliente, titulo, cantidad, fecha_entrega, estado_desc")
+    .select("id, num_pedido, cliente, titulo, cantidad, fecha_entrega, estado_desc, ot_tipo")
     .eq("num_pedido", ot)
     .maybeSingle();
   if (otErr) throw otErr;
@@ -469,6 +471,7 @@ export async function fetchHojaRutaOt(
   return {
     otNumero: ot,
     otId,
+    otTipo: str(otRow?.ot_tipo),
     cliente: str(otRow?.cliente),
     trabajo: str(otRow?.titulo),
     cantidad: num(otRow?.cantidad),
@@ -547,6 +550,7 @@ export async function fetchHojaRutaContenedor(
     pasosCompletados: 0,
     pasosTotal: 0,
     hijasCerradasPct: null,
+    hijasItinerarioCompleto: false,
   };
   const progressLabel = formatContenedorProgressBadge(progress);
 

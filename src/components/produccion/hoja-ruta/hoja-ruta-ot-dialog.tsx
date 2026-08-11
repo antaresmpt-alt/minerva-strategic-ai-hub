@@ -55,8 +55,11 @@ import {
 import { exportHojaRutaContenedorPdf, exportHojaRutaPdf } from "@/lib/hoja-ruta/hoja-ruta-pdf";
 import { errorMessageFromUnknown } from "@/lib/error-message";
 import {
+  buildProdOtProducidaContenedorInsert,
   buildProdOtProducidaInsert,
   extractCantidadProducida,
+  isContenedorListoParaCerrar,
+  isContenedorPendienteRevision,
   isOtPendienteRevision,
   resolveNextCierreVersion,
 } from "@/lib/prod-ot-cierre";
@@ -395,14 +398,21 @@ export function HojaRutaOtDialog({
       const result = await fetchHojaRutaLoad(supabase, otNumero);
       setLoadResult(result);
       
-      // Bloque 6 — Verificar si está pendiente de revisión (solo OTs simples)
+      // Bloque 6 / 8.4 — pendiente de revisión (simple o contenedor listo)
       if (result?.kind === "ot") {
-        const otTipo = (result.data as unknown as { ot_tipo?: string | null })?.ot_tipo;
+        const otTipo = result.data.otTipo ?? null;
         const pendiente = await isOtPendienteRevision(
           supabase,
           otNumero,
           otTipo,
-          result.data.pasos
+          result.data.pasos,
+        );
+        setPendienteRevision(pendiente);
+      } else if (result?.kind === "contenedor") {
+        const pendiente = await isContenedorPendienteRevision(
+          supabase,
+          otNumero,
+          result.hijas,
         );
         setPendienteRevision(pendiente);
       } else {
@@ -456,27 +466,28 @@ export function HojaRutaOtDialog({
     }
   }, [supabase]);
 
-  // Bloque 6 — Cerrar OT y enviar a histórico
+  // Bloque 6 / 8.4 — Cerrar OT (simple o contenedor) y enviar a histórico
   const cerrarOt = useCallback(
     async (formData: CierreOtFormData) => {
-      if (!otNumero || loadResult?.kind !== "ot") return;
+      if (!otNumero || !loadResult) return;
+      if (loadResult.kind !== "ot" && loadResult.kind !== "contenedor") return;
+      // No cerrar desde drill-down de hija
+      if (drillHijaOt) return;
 
       setCerrandoOt(true);
       try {
-        const snapshot = await fetchHojaRutaOt(supabase, otNumero);
-        if (!snapshot) throw new Error("No se pudo cargar el snapshot de la OT.");
-
         const {
           data: { user },
         } = await supabase.auth.getUser();
         if (!user) throw new Error("No hay sesión activa.");
 
-        // Despacho: solo columnas que existen (referencia_id, tipo_engomado).
-        // Embalaje / cantidad / horas vienen del snapshot (datos_proceso).
+        const despOt =
+          loadResult.kind === "contenedor" ? loadResult.padre.otNumero : otNumero;
+
         const { data: despRow } = await supabase
           .from("produccion_ot_despachadas")
           .select("referencia_id, tipo_engomado")
-          .eq("ot_numero", otNumero)
+          .eq("ot_numero", despOt)
           .order("despachado_at", { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -494,23 +505,56 @@ export function HojaRutaOtDialog({
         }
 
         const nextVer = await resolveNextCierreVersion(supabase, otNumero);
+        const despachoExtras = {
+          referencia_id: despRow?.referencia_id ?? null,
+          tipo_engomado: despRow?.tipo_engomado ?? null,
+          referencia_minerva: referenciaMinerva,
+          referencia_cliente: referenciaCliente,
+        };
 
-        const payload = buildProdOtProducidaInsert({
-          otNumero,
-          snapshot,
-          userId: user.id,
-          despachoExtras: {
-            referencia_id: despRow?.referencia_id ?? null,
-            tipo_engomado: despRow?.tipo_engomado ?? null,
-            referencia_minerva: referenciaMinerva,
-            referencia_cliente: referenciaCliente,
-          },
-          observacionesRevision: formData.observacionesRevision,
-          excluidoDePromedios: formData.excluidoDePromedios,
-          motivoExclusion: formData.motivoExclusion,
-          version: nextVer.version,
-          reabiertaDesdeId: nextVer.reabierta_desde_id,
-        });
+        let payload;
+        if (loadResult.kind === "contenedor") {
+          if (!isContenedorListoParaCerrar(loadResult.hijas)) {
+            throw new Error("Aún hay hijas sin itinerario completo.");
+          }
+          const hijasSnapshots: HojaRutaData[] = [];
+          for (const h of loadResult.hijas) {
+            const snap = await fetchHojaRutaOt(supabase, h.otNumero);
+            if (!snap) throw new Error(`No se pudo cargar snapshot de hija ${h.otNumero}.`);
+            hijasSnapshots.push(snap);
+          }
+          payload = buildProdOtProducidaContenedorInsert({
+            padreOtNumero: otNumero,
+            contenedor: {
+              padre: loadResult.padre,
+              progress: loadResult.progress,
+              progressLabel: loadResult.progressLabel,
+              hijasResumen: loadResult.hijas,
+            },
+            hijasSnapshots,
+            userId: user.id,
+            despachoExtras,
+            observacionesRevision: formData.observacionesRevision,
+            excluidoDePromedios: formData.excluidoDePromedios,
+            motivoExclusion: formData.motivoExclusion,
+            version: nextVer.version,
+            reabiertaDesdeId: nextVer.reabierta_desde_id,
+          });
+        } else {
+          const snapshot = await fetchHojaRutaOt(supabase, otNumero);
+          if (!snapshot) throw new Error("No se pudo cargar el snapshot de la OT.");
+          payload = buildProdOtProducidaInsert({
+            otNumero,
+            snapshot,
+            userId: user.id,
+            despachoExtras,
+            observacionesRevision: formData.observacionesRevision,
+            excluidoDePromedios: formData.excluidoDePromedios,
+            motivoExclusion: formData.motivoExclusion,
+            version: nextVer.version,
+            reabiertaDesdeId: nextVer.reabierta_desde_id,
+          });
+        }
 
         const { error: insertError } = await supabase
           .from("prod_ot_producidas")
@@ -518,7 +562,11 @@ export function HojaRutaOtDialog({
 
         if (insertError) throw insertError;
 
-        toast.success(`OT ${otNumero} cerrada y enviada a histórico.`);
+        toast.success(
+          loadResult.kind === "contenedor"
+            ? `Barco ${otNumero} cerrado y enviado a histórico (${loadResult.hijas.length} hijas).`
+            : `OT ${otNumero} cerrada y enviada a histórico.`,
+        );
         setCierreDialogOpen(false);
         await load();
       } catch (e) {
@@ -529,7 +577,7 @@ export function HojaRutaOtDialog({
         setCerrandoOt(false);
       }
     },
-    [otNumero, loadResult, supabase, load],
+    [otNumero, loadResult, drillHijaOt, supabase, load],
   );
 
   useEffect(() => {
@@ -553,11 +601,32 @@ export function HojaRutaOtDialog({
     loadResult?.kind === "ot" ||
     (loadResult?.kind === "contenedor" && loadResult.hijas.length > 0);
 
-  // Bloque 6 — Mostrar botón de cierre solo si puede y está pendiente
-  const puedeVerBotonCierre = puedeCerrarOt(profile) && pendienteRevision && loadResult?.kind === "ot";
+  // Bloque 6 / 8.4 — botón de cierre en OT simple o vista barco (no drill hija)
+  const puedeVerBotonCierre =
+    puedeCerrarOt(profile) &&
+    pendienteRevision &&
+    !drillHijaOt &&
+    (loadResult?.kind === "ot" || loadResult?.kind === "contenedor");
 
   // Checklist para el diálogo de cierre
   const checklist = useMemo((): CierrePrevioChecklistData => {
+    if (loadResult?.kind === "contenedor") {
+      const hijasOk = isContenedorListoParaCerrar(loadResult.hijas);
+      const algunaCantidad = loadResult.hijas.some((h) => (h.cantidad ?? 0) > 0);
+      return {
+        pasosFinalizados: hijasOk,
+        cantidadProducida: algunaCantidad,
+        horasCoherentes: true,
+        incidenciasRevisadas: true,
+        embalajeInformado: true,
+        modoContenedor: true,
+        hijasTotal: loadResult.hijas.length,
+        hijasCompletas: loadResult.hijas.filter(
+          (h) => h.pasosTotal > 0 && h.pasosCompletados === h.pasosTotal,
+        ).length,
+        progressLabel: loadResult.progressLabel,
+      };
+    }
     if (loadResult?.kind !== "ot") {
       return {
         pasosFinalizados: false,
@@ -749,7 +818,9 @@ export function HojaRutaOtDialog({
                 className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
               >
                 <Archive className="size-4" />
-                Cerrar y enviar a histórico
+                {loadResult?.kind === "contenedor"
+                  ? "Cerrar barco y enviar a histórico"
+                  : "Cerrar y enviar a histórico"}
               </Button>
             ) : null}
             <Button

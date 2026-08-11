@@ -624,6 +624,12 @@ export async function fetchPipelineRows(
       row.pasos.length > 0 && row.pasos.every((p) => p.estadoPaso === "finalizado");
     if (esOtSimple(otTipo) && itinerarioOk && !archivadas.has(otNumero)) {
       row.badges.push("pendiente_revision");
+    } else if (otTipo === "contenedor" && !archivadas.has(otNumero)) {
+      // Fase 8.4: barco listo cuando todas las hijas tienen itinerario completo
+      const prog = contenedorProgressByPadre.get(otNumero);
+      if (prog?.hijasItinerarioCompleto) {
+        row.badges.push("pendiente_revision");
+      }
     }
     if (cumplimientoPct != null) {
       if (cumplimientoPct >= 100) row.badges.push("cumplimiento_ok");

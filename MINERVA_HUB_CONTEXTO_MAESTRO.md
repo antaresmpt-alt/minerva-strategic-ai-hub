@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 11 ago 2026 (Pipeline perf: chunks paralelos + filtros cliente + índices)
+> Última actualización: 11 ago 2026 (8.4 cierre contenedor MVP; 8.5 convergencia documentada)
 
 ---
 
@@ -237,9 +237,9 @@ src/components/produccion/planificacion/
 |--------|-------------|--------|
 | 1–4 | Motor HR, captura, HojaRutaOtDialog, PDF | ✅ **~100%** operativo (pulidos menores Digital/Guillotina/PDF) |
 | 5 | Etiquetas digital (Hugo) + puente Rita→Hugo | ✅ **Módulo más maduro** (meses en uso). ⏳ Solo falta lanzar OTs despachadas digital → hoja Hugo (o seguir entrada manual) |
-| 6 | Producidas / cierre OT | ✅ MVP + promedios + oficiales + clone. ⏳ Cierre **contenedor** (= 8.4 + snapshot barco); UX Pipeline «Listo para cerrar» |
+| 6 | Producidas / cierre OT | ✅ MVP + promedios + oficiales + clone. ✅ Cierre **contenedor** 8.4 (snapshot barco) |
 | 7 | Expedición / Albarán | ⏸ **Aparcado** hasta decisión Odoo |
-| 8 | Contenedor / formas / hijas | 🔄 FORMATO–8.1 ✅ · **8.2 wizard MVP ✅** · 8.3 parcial · **8.4 cierre barco ⏳** · 8.5/8.6 futuro (engomado/semáforo por componente) |
+| 8 | Contenedor / formas / hijas | 🔄 FORMATO–8.1 ✅ · **8.2 wizard MVP ✅** · 8.3 parcial · **8.4 cierre barco ✅** · **8.5 convergencia 📋 diseño** · 8.6 futuro |
 | 9 | Material, cartelas, stock, calendario prod. | ✅ 9.0–9.6d + 9.4. ⏳ Derivar OT→imp. externa (§15.6.12); plan engomado desde troquel; sobrantes al cierre; OCR 9.7 baja |
 | 10 | Presupuestos | ⏸ Futuro (más miga; tras Minerva estable) |
 | 11 | Calendario = master planificar / lanzar | 🔄 **Éxito de uso** (Carlos/Jordi). Ampliar con cuidado: planificar sí; lanzar suave (pool/mesa) + conflictos de máquina |
@@ -255,7 +255,8 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [x] **Pipeline**: modo **compacto por defecto** (+ preferencia localStorage; `?compact=0` = extendida) (11 ago)
 - [x] **Pipeline UX**: «Listo para cerrar» en pendientes de revisión (paso actual + badge) (11 ago)
 - [x] **Pipeline perf**: `fetchAllInChunks` concurrencia 5; olas desp→(arch∥ot∥pool∥hijas)→pasos→(ejec∥ext); filtros search/incidencias/externo/estado en cliente; índice `despachado_at` (11 ago)
-- [ ] **Fase 8.4**: cierre OT contenedor cuando **todas las hijas** terminan → `pendiente_revision` / producida + snapshot barco (regla MVP acordada Manel 11 ago)
+- [x] **Fase 8.4**: cierre OT contenedor cuando **todas las hijas** terminan → `pendiente_revision` / producida + snapshot barco (11 ago)
+- [x] **Fase 8.5 (docs)**: convergencia A/B/C + `modo_sync`/`proceso_join` + override solo Planning — sin implementar (11 ago)
 - [ ] **Bloque 9 §15.6.12**: derivar OT a impresión externa post-despacho
 - [ ] **Bloque 6.x** (opcional rápido): avisos calidad al cierre; comparar versiones OT
 - [ ] **Bloque 11** (con cuidado): planificar/mover desde calendario; lanzar ≠ pisar plan de otra máquina — `MINERVA_BLOQUE11_…`
@@ -271,18 +272,19 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 
 ### Prioridad media
 - [ ] Pulir Digital / Guillotina; PDF acompañante con feedback planta
-- [ ] 8.5 / 8.6 solo si barcos multi-ref diarios
+- [ ] 8.6 / engomado por ref. solo si barcos multi-ref diarios lo exigen
+- [ ] **8.5** convergencia B/C cuando un barco real lo pida (docs listos en Bloque 8)
 - [ ] 9.7 OCR albarán (baja); sobrantes al cierre (B6+B9)
 - [ ] Preguntas §12 planta (CTP hija) si hace falta antes de 8.4 fino
 
 ### Siguiente foco (orden sugerido 11 ago)
 1. ~~**Pipeline** (rápido + compacto + carga)~~ ✅ compacto + Listo para cerrar + perf fetch (11 ago)
-2. **8.4** cierre contenedor
+2. ~~**8.4** cierre contenedor~~ ✅ MVP (11 ago)
 3. **9** derivar a externa
-4. Afinados B6 / B11 suave (virtualizar tabla Pipeline solo si sigue lento)
+4. Afinados B6 / B11 suave (virtualizar Pipeline solo si sigue lento)
 5. **Bloque 12** al acercarse usuarios nuevos
 6. **B5** puente Rita→Hugo si sobra
-7. **B7 / B10** aparcados
+7. **8.5** convergencia (solo si un barco real lo exige) · **B7 / B10** aparcados
 
 ---
 
@@ -328,7 +330,7 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 
 20. **Bloque 11 — Calendario como master (28 jul idea · 11 ago matiz)**: quieren planificar **y** desplazar desde calendario; visión Albert de home ≠ Pipeline sino calendario. **Lanzar con cuidado:** preferible a pool/mesa sin pisar slots ajenos; o provisional + confirmar plan. **Conflictos de máquina/día** (Carlos día 9 vs Antonio ya tiene día 8) → bloquear o avisar fuerte. Brief: `MINERVA_BLOQUE11_…`.
 
-21. **Paralelo septiembre (11 ago 2026)**: no smoke fijo 10–20; por tanda de despacho elegir **~3 OTs** y seguir E2E en Minerva. Cierre contenedor MVP: **barco listo cuando todas las hijas terminan** (8.4).
+21. **Paralelo septiembre (11 ago 2026)**: no smoke fijo 10–20; por tanda de despacho elegir **~3 OTs** y seguir E2E en Minerva. Cierre contenedor MVP: **barco listo cuando todas las hijas terminan** (8.4) ✅. Convergencia física = 8.5 documentada, sin código aún.
 
 ## 📁 Estructura de carpetas relevante
 

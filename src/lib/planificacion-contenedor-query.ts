@@ -43,6 +43,11 @@ export type ContenedorProgress = {
   pasosTotal: number;
   /** % hijas cerradas (secundario) */
   hijasCerradasPct: number | null;
+  /**
+   * Fase 8.4: cada hija tiene ≥1 paso y todos finalizados.
+   * Criterio de «barco listo para cerrar» (más fiable que % pasos agregado).
+   */
+  hijasItinerarioCompleto: boolean;
 };
 
 type PasoEstadoRow = { ot_id?: string | null; estado?: string | null };
@@ -102,12 +107,14 @@ export function computeContenedorProgress(
       pasosCompletados: 0,
       pasosTotal: 0,
       hijasCerradasPct: null,
+      hijasItinerarioCompleto: false,
     };
   }
 
   let completadas = 0;
   let pasosCompletados = 0;
   let pasosTotal = 0;
+  let hijasItinerarioCompleto = true;
 
   for (const num of hijaNumeros) {
     const st = String(poolEstadoByOt.get(num) ?? "")
@@ -116,12 +123,15 @@ export function computeContenedorProgress(
     if (st === "cerrada") completadas += 1;
 
     const otId = numPedidoToOtId.get(num);
-    if (!otId) continue;
-    const pasos = pasosByOtId.get(otId) ?? [];
+    const pasos = otId ? (pasosByOtId.get(otId) ?? []) : [];
     pasosTotal += pasos.length;
-    pasosCompletados += pasos.filter(
+    const finalizados = pasos.filter(
       (p) => String(p.estado ?? "").trim().toLowerCase() === "finalizado",
     ).length;
+    pasosCompletados += finalizados;
+    if (pasos.length === 0 || finalizados !== pasos.length) {
+      hijasItinerarioCompleto = false;
+    }
   }
 
   return {
@@ -132,6 +142,7 @@ export function computeContenedorProgress(
     pct:
       pasosTotal > 0 ? Math.round((pasosCompletados / pasosTotal) * 100) : null,
     hijasCerradasPct: Math.round((completadas / total) * 100),
+    hijasItinerarioCompleto,
   };
 }
 

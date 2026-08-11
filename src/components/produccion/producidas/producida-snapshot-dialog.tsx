@@ -24,8 +24,10 @@ import {
 import { fmtCantidad, fmtDate } from "@/lib/hoja-ruta/hoja-ruta-formatters";
 import type { HojaRutaData } from "@/lib/hoja-ruta/hoja-ruta-query";
 import {
+  isContenedorCierreSnapshot,
   reabrirOtProducida,
   updateProducidaRevisionMeta,
+  type ContenedorCierreSnapshot,
 } from "@/lib/prod-ot-cierre";
 import {
   puedeCerrarOt,
@@ -36,11 +38,19 @@ import { errorMessageFromUnknown } from "@/lib/error-message";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { ProdOtProducidaRow } from "@/types/prod-ot-producidas";
 
-function parseSnapshot(raw: unknown): HojaRutaData | null {
+function parseSnapshot(
+  raw: unknown,
+):
+  | { kind: "ot"; data: HojaRutaData }
+  | { kind: "contenedor"; data: ContenedorCierreSnapshot }
+  | null {
   if (!raw || typeof raw !== "object") return null;
+  if (isContenedorCierreSnapshot(raw)) {
+    return { kind: "contenedor", data: raw };
+  }
   const s = raw as Record<string, unknown>;
   if (!Array.isArray(s.pasos)) return null;
-  return raw as HojaRutaData;
+  return { kind: "ot", data: raw as HojaRutaData };
 }
 
 export function ProducidaSnapshotDialog({
@@ -55,7 +65,9 @@ export function ProducidaSnapshotDialog({
   /** Callback tras mutar metadatos / reapertura (refrescar listado). */
   onRowUpdated?: (row: ProdOtProducidaRow) => void;
 }) {
-  const snapshot = row ? parseSnapshot(row.snapshot) : null;
+  const parsed = row ? parseSnapshot(row.snapshot) : null;
+  const snapshot = parsed?.kind === "ot" ? parsed.data : null;
+  const contenedorSnap = parsed?.kind === "contenedor" ? parsed.data : null;
   const [profile, setProfile] = useState<ProfileConPermisos | null>(null);
   const [excluido, setExcluido] = useState(false);
   const [motivo, setMotivo] = useState("");
@@ -319,7 +331,50 @@ export function ProducidaSnapshotDialog({
                 </div>
               ) : null}
 
-              {snapshot ? (
+              {contenedorSnap ? (
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 px-3 py-2 text-sm text-emerald-900">
+                    Snapshot barco · {contenedorSnap.hijas.length} hijas
+                    {contenedorSnap.progressLabel
+                      ? ` · ${contenedorSnap.progressLabel}`
+                      : null}
+                  </div>
+                  <HojaRutaHeader data={contenedorSnap.padre} />
+                  <ul className="space-y-2 text-sm">
+                    {contenedorSnap.hijas.map((h) => (
+                      <li
+                        key={h.otNumero}
+                        className="rounded-md border border-slate-200 bg-white px-3 py-2"
+                      >
+                        <span className="font-mono font-semibold">{h.otNumero}</span>
+                        {h.trabajo ? (
+                          <span className="text-slate-600"> — {h.trabajo}</span>
+                        ) : null}
+                        <span className="ml-2 text-xs text-slate-500">
+                          {h.pasos.filter((p) => p.estado === "finalizado").length}/
+                          {h.pasos.length} pasos
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <details className="rounded-md border border-slate-200 p-3">
+                    <summary className="cursor-pointer text-sm font-medium text-slate-700">
+                      Detalle por hija
+                    </summary>
+                    <div className="mt-3 space-y-6">
+                      {contenedorSnap.hijas.map((h) => (
+                        <div key={`detail-${h.otNumero}`} className="space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Hija {h.otNumero}
+                          </p>
+                          <HojaRutaHeader data={h} />
+                          <HojaRutaPasosDetail data={h} showProximamente={false} />
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                </div>
+              ) : snapshot ? (
                 <>
                   <HojaRutaHeader data={snapshot} />
                   <HojaRutaPasosDetail data={snapshot} showProximamente={false} />

@@ -1,5 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { normalizeOtTipo } from "@/lib/planificacion-contenedor-query";
+import {
+  normalizeOtTipo,
+  type ContenedorProgress,
+} from "@/lib/planificacion-contenedor-query";
 import {
   PROCESO_CTP_ID,
   PROCESO_DESBROCE_ID,
@@ -9,19 +12,82 @@ import {
   PROCESO_OFFSET_ID,
   PROCESO_TROQUEL_ID,
 } from "@/lib/despacho-wizard-shared";
-import type { HojaRutaData, HojaRutaPaso } from "@/lib/hoja-ruta/hoja-ruta-query";
+import type {
+  HojaRutaData,
+  HojaRutaHijaResumen,
+  HojaRutaPaso,
+} from "@/lib/hoja-ruta/hoja-ruta-query";
 
 /**
  * Bloque 6 MVP — Helper de estado derivado "pendiente de revisión" + mapper
  * de columnas planas para prod_ot_producidas.
  *
- * Una OT está pendiente de revisión si:
- * 1. Es simple (ot_tipo null o 'simple') — contenedores/hijas tienen flujo distinto (Fase 8.4)
+ * Una OT simple está pendiente de revisión si:
+ * 1. Es simple (ot_tipo null o 'simple')
  * 2. Itinerario completo (todos los pasos en estado 'finalizado')
- * 3. Aún NO está archivada (sin fila en prod_ot_producidas)
+ * 3. Aún NO está archivada (sin fila activa en prod_ot_producidas)
  *
- * Esto es un estado DERIVADO; no hay columna prod_ots_general.estado_cierre en el MVP.
+ * Fase 8.4 — Un contenedor (barco) está pendiente de revisión si:
+ * 1. Tiene ≥1 hija
+ * 2. Todas las hijas tienen itinerario completo (pasos finalizados)
+ * 3. El padre aún NO está archivado
+ *
+ * Las hijas NO se archivan individualmente en el MVP 8.4.
+ * Esto es un estado DERIVADO; no hay columna prod_ots_general.estado_cierre.
  */
+
+export type ContenedorCierreSnapshot = {
+  kind: "contenedor";
+  padre: HojaRutaData;
+  progress: ContenedorProgress;
+  progressLabel: string;
+  hijasResumen: HojaRutaHijaResumen[];
+  /** Snapshot completo por hija (misma forma que cierre simple). */
+  hijas: HojaRutaData[];
+};
+
+export type ProdOtProducidaSnapshot = HojaRutaData | ContenedorCierreSnapshot;
+
+export function isContenedorCierreSnapshot(
+  snapshot: unknown,
+): snapshot is ContenedorCierreSnapshot {
+  if (!snapshot || typeof snapshot !== "object") return false;
+  const s = snapshot as Record<string, unknown>;
+  return s.kind === "contenedor" && Array.isArray(s.hijas);
+}
+
+/**
+ * ¿Todas las hijas del barco tienen itinerario completo?
+ * Criterio MVP 8.4: cada hija con pasosTotal > 0 y pasosCompletados === pasosTotal.
+ */
+export function contenedorHijasItinerarioCompleto(
+  hijas: Pick<HojaRutaHijaResumen, "pasosCompletados" | "pasosTotal">[],
+): boolean {
+  if (hijas.length === 0) return false;
+  return hijas.every((h) => h.pasosTotal > 0 && h.pasosCompletados === h.pasosTotal);
+}
+
+/**
+ * ¿El contenedor está listo para cerrar (sin mirar archivo)?
+ */
+export function isContenedorListoParaCerrar(
+  hijas: Pick<HojaRutaHijaResumen, "pasosCompletados" | "pasosTotal">[],
+): boolean {
+  return contenedorHijasItinerarioCompleto(hijas);
+}
+
+/**
+ * ¿Contenedor pendiente de revisión (listo para cerrar + no archivado)?
+ */
+export async function isContenedorPendienteRevision(
+  supabase: SupabaseClient,
+  padreOtNumero: string,
+  hijas: Pick<HojaRutaHijaResumen, "pasosCompletados" | "pasosTotal">[],
+): Promise<boolean> {
+  if (!isContenedorListoParaCerrar(hijas)) return false;
+  const archivada = await estaOtArchivada(supabase, padreOtNumero);
+  return !archivada;
+}
 
 /**
  * ¿Es esta OT "simple" (no contenedor/hija)?
@@ -140,7 +206,8 @@ export async function updateProducidaRevisionMeta(
 
 /**
  * ¿Está esta OT pendiente de revisión (lista para cerrar)?
- * Combina las tres condiciones: simple + itinerario completo + no archivada.
+ * Solo OTs simples. Contenedores → isContenedorPendienteRevision (8.4).
+ * Hijas nunca se cierran solas en el MVP.
  */
 export async function isOtPendienteRevision(
   supabase: SupabaseClient,
@@ -199,7 +266,7 @@ export type ProdOtProducidaFlatInsert = {
   horas_desbroce_reales: number | null;
   horas_total_reales: number | null;
   merma_total: number | null;
-  snapshot: HojaRutaData;
+  snapshot: ProdOtProducidaSnapshot;
   snapshot_version: number;
   version: number;
   cerrada_por: string;
@@ -402,6 +469,140 @@ export function buildProdOtProducidaInsert(args: {
     horas_desbroce_reales: horasDesbroce,
     horas_total_reales: horasTotal,
     merma_total: mermaTotal,
+    snapshot,
+    snapshot_version: 1,
+    version,
+    cerrada_por: userId,
+    observaciones_revision: observacionesRevision || null,
+    excluido_de_promedios: excluidoDePromedios,
+    motivo_exclusion: excluidoDePromedios ? motivoExclusion || null : null,
+    reabierta_desde_id: reabiertaDesdeId,
+  };
+}
+
+/**
+ * Fase 8.4 — INSERT de cierre del contenedor (barco).
+ * Flat columns: identidad comercial del padre + agregados de hijas.
+ * Snapshot JSONB anidado: padre + progreso + hoja completa por hija.
+ */
+export function buildProdOtProducidaContenedorInsert(args: {
+  padreOtNumero: string;
+  contenedor: {
+    padre: HojaRutaData;
+    progress: ContenedorProgress;
+    progressLabel: string;
+    hijasResumen: HojaRutaHijaResumen[];
+  };
+  hijasSnapshots: HojaRutaData[];
+  userId: string;
+  despachoExtras?: DespachoExtrasCierre | null;
+  observacionesRevision?: string | null;
+  excluidoDePromedios?: boolean;
+  motivoExclusion?: string | null;
+  version?: number;
+  reabiertaDesdeId?: string | null;
+  nowIso?: string;
+}): ProdOtProducidaFlatInsert {
+  const {
+    padreOtNumero,
+    contenedor,
+    hijasSnapshots,
+    userId,
+    despachoExtras,
+    observacionesRevision = null,
+    excluidoDePromedios = false,
+    motivoExclusion = null,
+    version = 1,
+    reabiertaDesdeId = null,
+  } = args;
+  const nowIso = args.nowIso ?? new Date().toISOString();
+  const padre = contenedor.padre;
+  const desp = padre.despacho;
+
+  const hijaFlats = hijasSnapshots.map((h) =>
+    buildProdOtProducidaInsert({
+      otNumero: h.otNumero,
+      snapshot: h,
+      userId,
+      nowIso,
+    }),
+  );
+
+  const sumNullable = (vals: (number | null)[]): number | null => {
+    const nums = vals.filter((v): v is number => v != null);
+    return nums.length > 0 ? nums.reduce((a, b) => a + b, 0) : null;
+  };
+
+  let fechaInicio: string | null = null;
+  let fechaFin: string | null = null;
+  for (const f of hijaFlats) {
+    if (f.fecha_inicio_real && (!fechaInicio || f.fecha_inicio_real < fechaInicio)) {
+      fechaInicio = f.fecha_inicio_real;
+    }
+    if (f.fecha_fin_real && (!fechaFin || f.fecha_fin_real > fechaFin)) {
+      fechaFin = f.fecha_fin_real;
+    }
+  }
+
+  const cantidadPedidaPadre = padre.cantidad;
+  const cantidadProducidaHijas = sumNullable(hijaFlats.map((f) => f.cantidad_producida));
+
+  const snapshot: ContenedorCierreSnapshot = {
+    kind: "contenedor",
+    padre,
+    progress: contenedor.progress,
+    progressLabel: contenedor.progressLabel,
+    hijasResumen: contenedor.hijasResumen,
+    hijas: hijasSnapshots,
+  };
+
+  return {
+    ot_numero: padreOtNumero,
+    ot_id: padre.otId ?? null,
+    referencia_id: despachoExtras?.referencia_id ?? null,
+    referencia_minerva: despachoExtras?.referencia_minerva ?? null,
+    referencia_cliente: despachoExtras?.referencia_cliente ?? null,
+    cliente: padre.cliente,
+    trabajo: padre.trabajo,
+    cantidad_pedida: cantidadPedidaPadre,
+    cantidad_producida: cantidadProducidaHijas,
+    material: desp?.material ?? null,
+    gramaje: desp?.gramaje ?? null,
+    formato: desp?.tamanoHoja ?? null,
+    tintas: desp?.tintas ?? null,
+    troquel: desp?.troquel ?? null,
+    poses: desp?.poses ?? null,
+    acabado_pral: desp?.acabadoPral ?? null,
+    tipo_engomado: asStr(despachoExtras?.tipo_engomado),
+    codigo_caja_embalaje: null,
+    estuches_por_bulto: null,
+    fsc: null,
+    fecha_inicio_real: fechaInicio,
+    fecha_fin_real: fechaFin,
+    fecha_cierre: nowIso,
+    horas_prep_impresion_reales: sumNullable(
+      hijaFlats.map((f) => f.horas_prep_impresion_reales),
+    ),
+    horas_tiraje_impresion_reales: sumNullable(
+      hijaFlats.map((f) => f.horas_tiraje_impresion_reales),
+    ),
+    horas_prep_troquelado_reales: sumNullable(
+      hijaFlats.map((f) => f.horas_prep_troquelado_reales),
+    ),
+    horas_tiraje_troquelado_reales: sumNullable(
+      hijaFlats.map((f) => f.horas_tiraje_troquelado_reales),
+    ),
+    horas_prep_engomado_reales: sumNullable(
+      hijaFlats.map((f) => f.horas_prep_engomado_reales),
+    ),
+    horas_tiraje_engomado_reales: sumNullable(
+      hijaFlats.map((f) => f.horas_tiraje_engomado_reales),
+    ),
+    horas_guillotina_reales: sumNullable(hijaFlats.map((f) => f.horas_guillotina_reales)),
+    horas_ctp_reales: sumNullable(hijaFlats.map((f) => f.horas_ctp_reales)),
+    horas_desbroce_reales: sumNullable(hijaFlats.map((f) => f.horas_desbroce_reales)),
+    horas_total_reales: sumNullable(hijaFlats.map((f) => f.horas_total_reales)),
+    merma_total: sumNullable(hijaFlats.map((f) => f.merma_total)),
     snapshot,
     snapshot_version: 1,
     version,

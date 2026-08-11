@@ -250,14 +250,18 @@ OT 35698 (contenedor)          ← 1 fila en pipeline/despacho por defecto
 
 ## 5. Punto de convergencia (no hardcodear “siempre desbroce”)
 
+> **Decisión 11 ago 2026:** **cierre del barco (8.4) ≠ convergencia física (8.5).**  
+> El cierre solo hace rollup de hijas terminales. La convergencia es sync/consumo entre hijas y **no se implementa aún** — diseño en § Fase 8.5 abajo.
+
 | Tipo de producto | Convergencia típica | Después |
 |------------------|---------------------|---------|
-| Estuche clásico (Caso A simplificado) | Tras **desbroce** | Engomado por referencia |
+| Estuche clásico (Caso A simplificado) | Tras **desbroce** (a menudo solo sync blando) | Engomado por referencia |
 | Blister multi-ref (Caso A) | Tras **troquelado/destroquelado** | Engomado/embalaje por referencia |
-| Folder cara+dorso (Caso B) | Tras **contracolado externo** | Troquelado conjunto → acabado |
-| Penjador (Caso C) | Varias (por componente y modelo) | Reglas por plantilla de producto |
+| Folder cara+dorso (Caso B) | Tras **contracolado externo** (patrón C) | Troquelado conjunto → acabado |
+| Kit componentes (perfumería) | A menudo **sin join** (patrón A) + B puntual | Cierre barco cuando las N hijas terminan |
+| Penjador (Caso C) | Varias (por componente y modelo) | Instancia, no plantilla rígida |
 
-**Diseño:** el contenedor (o plantilla de tipo de producto) debería poder indicar `punto_convergencia` (proceso o paso), no una regla fija global.
+**Diseño:** `modo_sync` + `proceso_join` en el **contenedor de esa OT** (instancia), no taxonomía de “tipos de trabajo” que dispare reglas automáticas.
 
 ---
 
@@ -556,15 +560,65 @@ Rama: `feature/bloque8.1-pool-mesa-ejecucion-fixes` (commit `2d9d3ab`).
 - Validar en planta desbroce **36204-01** con banner + prefill real.
 - Horas prep/tiraje por forma (Abraham) — sin cambio aún.
 
-### Fase 8.4 — Cierre del contenedor
+### Fase 8.4 — Cierre del contenedor ✅ **MVP 11 ago 2026**
 
-- Contenedor → `pendiente_revision` cuando todas las hijas cumplen su ruta (regla configurable).
-- Bloque 6: snapshot del **barco** + detalle de hijas en JSON.
+**Regla:** el barco pasa a `pendiente_revision` (derivado) cuando **todas las hijas** tienen itinerario completo (`pasosCompletados === pasosTotal` por hija, `hijasItinerarioCompleto`). Cierre humano → 1 fila en `prod_ot_producidas` del **padre** con snapshot `kind: "contenedor"` (padre + progreso + hoja completa por hija). Las hijas **no** se archivan individualmente en este MVP.
+
+| Pieza | Dónde |
+|-------|--------|
+| Criterio listo | `isContenedorListoParaCerrar` / `isContenedorPendienteRevision` (`prod-ot-cierre.ts`) |
+| Progress flag | `ContenedorProgress.hijasItinerarioCompleto` |
+| INSERT barco | `buildProdOtProducidaContenedorInsert` |
+| UI | `HojaRutaOtDialog` (botón en vista barco) + checklist |
+| Pipeline | badge `pendiente_revision` / «Listo para cerrar» también en contenedor |
+| Histórico | `ProducidaSnapshotDialog` renderiza snapshot anidado |
+
+**Fuera de MVP 8.4:** auto-cierre, archive por hija, reglas configurables más allá de “todas las hijas”.
+
+### Fase 8.5 — Convergencia entre hijas 📋 **diseño 11 ago 2026 (sin implementar)**
+
+Separar tres patrones (no un solo “CONVERGER”):
+
+| Patrón | Qué es | Ejemplo | Dirección futura |
+|--------|--------|---------|------------------|
+| **A. Rollup puro** | Las hijas no se juntan; el pedido está completo cuando todas terminan | Perfumería 5 piezas (en general) | Ya cubierto por **8.4** |
+| **B. Consumo entre hijas** | El output de una hija alimenta un paso de otra | Embellecedor engomado al interior | Reutilizar mentalidad Bloque 9 (origen = hija terminada); no inventar motor nuevo aún |
+| **C. Evento físico compartido** | Un mismo paso es el mismo evento para N hijas | Cara+dorso → contracolado MGA; 3 formas mismo lote | **Paso vinculado** (TAG UNION a nivel de **instancia** de itinerario) |
+
+#### Modelo de datos propuesto (cuando se implemente)
+
+En el **contenedor** (instancia OT, no plantilla reutilizable):
+
+- `modo_sync`: `ninguno` | `esperar_hermanas` | `opcional`
+- `proceso_join`: proceso/paso donde aplica el sync (p. ej. contracolado, desbroce)
+- Por hija en el join: `esperando_hermanas` | `adelantada` | `unida`
+
+#### Seguridad UX — “adelantar sin sync”
+
+Override **solo** desde:
+
+1. Planning / Pipeline del **barco** (acción consciente), o  
+2. Al liberar el paso join con confirmación explícita (“rompes el lote”).
+
+**Nunca** en el botón genérico de mesa del operario.
+
+#### Regla de modelado de hijas (casos reales)
+
+| Caso | Hijas | Notas |
+|------|-------|-------|
+| 3 formas mismo troquel / multi-ref | N hijas `forma` | Sync blando opcional; cierre = 8.4 |
+| Cara + dorso → externo → troquel | 2 hijas | Patrón **C** en el externo |
+| Cara + compacto/microcanal + dorso (MGA 3 capas) | 2 o 3 hijas según quién “lleva” el envío; compacto **no** es hija si solo viaja pegado | Material de la hija, no OT |
+| Pasteles tapa/base (cada una cartón+compacto) | **2 hijas** (no 4) | Contracolado *dentro* de cada hija |
+| Perfumería / kit | 1 hija por pieza con itinerario propio | Patrón A (+ B puntual si engoma una en otra) |
+
+**“Tipo de trabajo”:** etiqueta humana orientativa en UI — **no** dispara comportamiento automático.
+
+**Retomar 8.5** cuando un barco real en paralelo exija patrón B o C en código — no antes de septiembre salvo dolor claro.
 
 ### Fases posteriores (fuera del MVP Bloque 8)
 
-- **8.5** Engomado y embalaje por referencia/componente tras convergencia.
-- **8.6** Semáforo/proyección por componente.
+- **8.6** Engomado / embalaje / semáforo por referencia o componente tras convergencia (antes mezclado con “8.5”).
 - **8.7** Vista hoja de ruta / PDF del contenedor agregado. ✅ **23 jun 2026:** modal barco (progreso + hijas + drill-down) + PDF `hoja-ruta-barco-{OT}.pdf` (resumen + anexos por hija).
 
 #### 8.7.1 — Smoke test OT 35990 + refinamientos planificación ✅ **23 jun 2026 (tarde)**

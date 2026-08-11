@@ -22,6 +22,11 @@ export type CierrePrevioChecklistData = {
   horasCoherentes: boolean;
   incidenciasRevisadas: boolean;
   embalajeInformado: boolean;
+  /** Fase 8.4 — cierre de barco */
+  modoContenedor?: boolean;
+  hijasTotal?: number;
+  hijasCompletas?: number;
+  progressLabel?: string;
 };
 
 export type CierreOtFormData = {
@@ -82,8 +87,20 @@ export function CierreOtDialog({
             Cerrar y enviar a histórico
           </DialogTitle>
           <DialogDescription>
-            OT <span className="font-mono font-semibold text-slate-700">{otNumero}</span> · Revisión
-            previa al cierre
+            {checklist.modoContenedor ? (
+              <>
+                Barco <span className="font-mono font-semibold text-slate-700">{otNumero}</span>
+                {checklist.hijasTotal != null
+                  ? ` · ${checklist.hijasCompletas ?? 0}/${checklist.hijasTotal} hijas listas`
+                  : null}
+                {checklist.progressLabel ? ` · ${checklist.progressLabel}` : null}
+              </>
+            ) : (
+              <>
+                OT <span className="font-mono font-semibold text-slate-700">{otNumero}</span> ·
+                Revisión previa al cierre
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -95,7 +112,9 @@ export function CierreOtDialog({
               <div className="flex items-center gap-2">
                 <Checkbox checked={checklist.pasosFinalizados} disabled />
                 <span className={checklist.pasosFinalizados ? "text-slate-600" : "text-red-600"}>
-                  Todos los procesos finalizados
+                  {checklist.modoContenedor
+                    ? "Todas las hijas con itinerario completo"
+                    : "Todos los procesos finalizados"}
                 </span>
               </div>
               <div className="flex items-center gap-2">
