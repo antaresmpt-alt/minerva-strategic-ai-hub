@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 5 ago 2026 (UX decimales + clone despacho horas/embalaje + oficiales Maestro; PDF OK etiquetas digital)
+> Última actualización: 11 ago 2026 (mapa bloques 1–12; paralelo septiembre; Bloque 12 roles; Pipeline/8.4 prioridades)
 
 ---
 
@@ -15,7 +15,8 @@
    - `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`
    - `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`
    - `MINERVA_BLOQUE10_PRESUPUESTOS.md` (futuro)
-   - `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` (idea — calendario lanza a planta)
+   - `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` (calendario = master planificar/lanzar)
+   - `MINERVA_BLOQUE12_ROLES_PERMISOS_NAVEGACION.md` (landing por perfil — sept)
 3. Añadir `MINERVA_CONTEXTO_TECNICO.md` solo si la IA necesita detalles técnicos del repo.
 4. Al cerrar una fase, actualizar este maestro + `FASES_HOJA_RUTA_DIGITAL.md`.
 
@@ -26,9 +27,10 @@
 | `FASES_HOJA_RUTA_DIGITAL.md` | Roadmap detallado por bloques de Hoja de Ruta Digital. |
 | `MINERVA_CONTEXTO_TECNICO.md` | Detalle técnico: árbol, configs, tipos, migraciones, SQL y módulos clave. |
 | `MINERVA_BLOQUE*_*.md` | Brief específico de una fase activa o futura. |
-| `MINERVA_ROLES_Y_NAVEGACION.md` | Capa transversal: permisos (quién puede qué) + navegación (qué ve cada uno). Bloque futuro. |
+| `MINERVA_ROLES_Y_NAVEGACION.md` | Diseño fino permisos/navegación (complementa Bloque 12). |
+| `MINERVA_BLOQUE12_ROLES_PERMISOS_NAVEGACION.md` | Brief implementación: landing operario vs gestor. |
 | `MINERVA_BLOQUE10_PRESUPUESTOS.md` | Bloque futuro: presupuestos, formas, versión real al copiar. |
-| `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` | Idea (28 jul): calendario OT como master de planificar + lanzar a máquina. |
+| `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` | Calendario OT como master de planificar + lanzar (con cuidado). |
 | `MINERVA_REUNION_HOJA_RUTA_JUEVES.md` | Guía reunión demo 98010 + preguntas §12. |
 | `MINERVA_BRIEFING.md` | Onboarding narrativo largo; útil, pero secundario frente a este maestro. |
 
@@ -43,6 +45,8 @@ Software a medida para la planta de producción gráfica/impresión de la empres
 **Visión estratégica**: reemplazar Optimus + la hoja viajera en papel por una plataforma propia que cubra despacho, planificación, ejecución, Hoja de Ruta Digital, histórico de producidas, expedición y futura integración con Odoo.
 
 **Principio UX clave**: captura por excepción. El operario debe picar lo mínimo posible: prefill desde despacho/histórico, derivaciones automáticas, previsto vs real claramente separado y UI compacta usable en tablet.
+
+**Paralelo septiembre 2026 (decisión 11 ago):** Optimus + Minerva a la vez. No hace falta smoke de 10–20 OTs fijas: en cada tanda de despacho se eligen **~3 OTs** para seguimiento E2E en Minerva (compra → llegada → stock/cartela → lanzar → ejecutar → cierre). Ir puliendo; usuarios nuevos → Bloque 12 cuando toque.
 
 **Repo GitHub**: https://github.com/antaresmpt-alt/minerva-strategic-ai-hub  
 **Deploy**: Vercel (rama `main`)
@@ -106,12 +110,12 @@ Software a medida para la planta de producción gráfica/impresión de la empres
 - Módulo para gestionar proveedores externos
 - Integrado con el módulo de Hoja de Ruta (proceso "Externo" usa este módulo)
 
-### ✅ Etiquetas (Hugo)
+### ✅ Etiquetas (Hugo) — módulo más maduro
 - Tabla: `prod_etiquetas_hoja_ruta`
-- Flujo independiente: calendario I-/T-/N-, muelle, metros Konica
-- Procesos: KONICA (id 18), Troq_ETIQUETA (id 19), Num_ETIQUETA (id 20)
-- Entrada manual por diálogo express (pendiente auto-generación desde despacho)
-- **Maestro de troqueles de etiquetas**: tabla `prod_etiquetas_troqueles` (pestaña "Troqueles etiq."). Simplificado para Hugo (13 jun): eliminadas columnas `cliente`/`trabajo` (BD + UI); dimensiones solo como `dimensiones_texto` (sin ancho/alto/diámetro en el modal); se mantiene `necesita_revision` como checkbox interno.
+- Flujo independiente: calendario I-/T-/N-, muelle, metros Konica; **PDF OK** (ago 2026)
+- Procesos: KONICA (18), Troq_ETIQUETA (19), Num_ETIQUETA (20)
+- Entrada hoy: manual / express. **Pendiente Bloque 5:** Rita lanza OTs despachadas digital → auto-filas Hugo (no bloquea paralelo)
+- Maestro troqueles: `prod_etiquetas_troqueles` (sin cliente/trabajo desde 13 jun)
 
 ### ✅ Maestro de Artículos / Referencias
 - Tabla: `prod_referencias`
@@ -231,75 +235,53 @@ src/components/produccion/planificacion/
 
 | Bloque | Descripción | Estado |
 |--------|-------------|--------|
-| 1 | Motor de campos por proceso | ✅ Completado (3 jun) |
-| 2 | Captura desde ejecución | ✅ Completado (5 jun) |
-| 2.1 | Cabecera + Prefill + Limpieza UI | ✅ Completado (5 jun) |
-| 2.2 | Auto-enriquecimiento troquelado | ✅ Base implementada (6 jun) |
-| 2.5 | Encadenado salida→entrada + semáforo | ✅ Completado (6 jun) |
-| 3 | HojaRutaOtDialog componente único | ✅ Completado (enganchado en Pipeline, Despachadas, Planificación y Ejecución) |
-| 3.1 | Pulido Offset, Troquelado, Engomado | ✅ Completado (7-8 jun) |
-| 3.2 | Engomado: cajas embalaje + picos | ✅ Implementado (9 jun) |
-| 3.3 | Maestro: campos FSC | ✅ Implementado (9 jun) |
-| 3.5 | Tipo engomado parametrizado | ✅ Implementado (9 jun) |
-| 3.6 | Semáforo sobreproducción configurable | ✅ Implementado (9 jun) |
-| 3.7 | CTP + Desbroce + Manipulados+Retractilado | ✅ Implementado (9 jun) |
-| 3.8 | Pruebas campo CTP/externos/desbroce | ✅ Implementado (11 jun, merge main 16 jun) |
-| 4 | PDF acompañante desde HojaRutaOtDialog | ✅ Beta implementada (11 jun) |
-| 5 | Integración Etiquetas ↔ Hoja de Ruta | ⏳ Pendiente |
-| 6 | Producidas/Histórico + cierre OT | ✅ **MVP + promedios maestro validados** (30 jul, M-00003 / Q=8000). ⏭️ Cierre contenedor — `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` §0 |
-| 7 | Expedición/Albarán | ⏳ Pendiente (depende B6 + Odoo) |
-| 8 | Formatos de hoja + formas + componentes (OT contenedor/hijas) | 🔄 En curso — **FORMATO ✅** + **8.0 ✅** + **8.1 ✅** + **8.1.1 ✅**; 8.2–8.4 pendiente — ver `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` |
-| 9 | Material, cartelas de palet y stock libre | ✅ **9.0–9.6d + 9.4 A/B/C** + Calendario Producción (§15.12, 18 jul) — pastillas, PDF grid/listado, cartela **1 copia**. **Pendiente:** derivar OT a imp. externa (§15.6.12) |
+| 1–4 | Motor HR, captura, HojaRutaOtDialog, PDF | ✅ **~100%** operativo (pulidos menores Digital/Guillotina/PDF) |
+| 5 | Etiquetas digital (Hugo) + puente Rita→Hugo | ✅ **Módulo más maduro** (meses en uso). ⏳ Solo falta lanzar OTs despachadas digital → hoja Hugo (o seguir entrada manual) |
+| 6 | Producidas / cierre OT | ✅ MVP + promedios + oficiales + clone. ⏳ Cierre **contenedor** (= 8.4 + snapshot barco); UX Pipeline «Listo para cerrar» |
+| 7 | Expedición / Albarán | ⏸ **Aparcado** hasta decisión Odoo |
+| 8 | Contenedor / formas / hijas | 🔄 FORMATO–8.1 ✅ · **8.2 wizard MVP ✅** · 8.3 parcial · **8.4 cierre barco ⏳** · 8.5/8.6 futuro (engomado/semáforo por componente) |
+| 9 | Material, cartelas, stock, calendario prod. | ✅ 9.0–9.6d + 9.4. ⏳ Derivar OT→imp. externa (§15.6.12); plan engomado desde troquel; sobrantes al cierre; OCR 9.7 baja |
+| 10 | Presupuestos | ⏸ Futuro (más miga; tras Minerva estable) |
+| 11 | Calendario = master planificar / lanzar | 🔄 **Éxito de uso** (Carlos/Jordi). Ampliar con cuidado: planificar sí; lanzar suave (pool/mesa) + conflictos de máquina |
+| 12 | Roles, permisos, landing por perfil | 📋 **Documentado** — operario→ejecución; gestor→home rico. Aparcado de implementación inmediata; crítico antes usuarios masivos |
+
+Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 
 ---
 
 ## 🔜 Tareas pendientes inmediatas
 
-### Retomar aquí (27 jul 2026 — post engomado prep/tiraje)
-- [x] **Bloque 6.x — Engomado prep/tiraje** en ejecución + despacho + histórico (27 jul, `2f6b696`)
-- [x] **Bloque 6.x — Promedios maestro Paso A**: columnas `*_promedio` / `*_oficial` / `*_muestra_n` (28 jul)
-- [x] **Bloque 6.x — Promedios maestro Paso B**: motor mediana/moda/millar (`maestro-promedios-calc.ts`, tests)
-- [x] **Bloque 6.x — Promedios maestro Paso C**: botón «Actualizar promedios» en Maestro (§7.1.9 paso 4)
-- [x] **Bloque 6.x — Promedios maestro Paso D**: prefill despacho oficial ?? promedio + panel promedios en Maestro
-- [x] **Promedios UI ampliada (30 jul)**: panel completo por proceso (+ guillotina/desbroce absolutas); recálculo todas / filtrados / seleccionados / este artículo
-- [x] **Promedios validados (30 jul)**: M-00003 con OTs 98003/98004/35265; PDF ficha A4; prefill «Usar maestro» en **98014** (Q=8000) escala tiraje OK — `PLAN_PRUEBA_PROMEDIOS_MAESTRO.md`
-- [x] **Ejecución / despacho (30 jul)**: aliases troquel/engomado; desbroce editable; resumen despacho con prep/tiraje impresión+troquel
-- [x] **UX inputs numéricos**: aceptar `.` y `,` en horas (cierre proceso / datos proceso / despacho) — `DecimalInput` + `parseDecimalLoose` (5 ago)
-- [x] **Despacho clone/prefill**: «Usar último» / clonar OT **sobrescribe** técnicos (material, horas, caja, **CTP checks**) + itinerario; «Usar maestro» sigue solo vacíos (5 ago)
-- [x] **Resumen despacho**: 3 últimas OTs de la referencia como `OT XXXXX — mes / año` (buscar muestras en disco) (5 ago)
-- [x] **Oficiales editables en Maestro** (5 ago): prep/millar impresión·troquel·engomado + guillotina/desbroce abs.; «Actualizar promedios» no las toca
-- [ ] **Bloque 11 (idea)**: Calendario como master de lanzamiento — `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md`
-- [ ] **Bloque 6.x** (opcional resto): comparar versiones OT; UX Pipeline «Listo para cerrar»
-- [ ] **Fase 8.4**: cierre OT contenedor/hijas (depende B6 + Bloque 8)
-- [x] **Bloque 6 MVP**: cierre/reabrir + Producidas + Pipeline pendientes + club usuarios (23 jul) — handoff §0 en `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md`
+### Retomar aquí (11 ago 2026 — camino a paralelo septiembre)
+- [ ] **Pipeline**: rendimiento + **modo compacto por defecto** (hoy `compactMode=false`; `?compact=1` existe)
+- [ ] **Pipeline UX**: «Listo para cerrar» en pendientes de revisión (paso actual "—" confunde)
+- [ ] **Fase 8.4**: cierre OT contenedor cuando **todas las hijas** terminan → `pendiente_revision` / producida + snapshot barco (regla MVP acordada Manel 11 ago)
+- [ ] **Bloque 9 §15.6.12**: derivar OT a impresión externa post-despacho
+- [ ] **Bloque 6.x** (opcional rápido): avisos calidad al cierre; comparar versiones OT
+- [ ] **Bloque 11** (con cuidado): planificar/mover desde calendario; lanzar ≠ pisar plan de otra máquina — `MINERVA_BLOQUE11_…`
+- [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor — `MINERVA_BLOQUE12_…` (no abrir ya)
+- [ ] **Bloque 5 puente**: Rita lanza OTs a Hugo (no bloquea paralelo si Hugo sigue a mano)
 
-### Histórico (junio — Bloque 8 / CTP)
-- [x] **Fase FORMATO**: encadenado formato de hoja — commit `aadad81`, probado OT 98009
-- [x] **Fase 8.0**: migración `ot_tipo` / `ot_padre_numero` + campos hija (`aedb353`)
-- [x] **Fase 8.1**: agrupación UI Pool/Pipeline (contenedor + hijas expandibles, filtro tipo OT)
-- [x] **Fase 8.1.1**: pool mesa lateral, material barco, merma impresión, prefill troquel, % pasos — rama `feature/bloque8.1-pool-mesa-ejecucion-fixes`
-- [x] **OT prueba 98010**: 01 avanzada; 02 CTP confirmada; 03 pendiente pool — script `setup-contenedor-test-98010.mjs`
-- [x] **Usuarios CTP**: `ctp@minervaglobal.es` (Gemma), `ctp2@minervaglobal.es` (Marc) — rol `ctp`
-- [x] **Usuarios gerencia/OT (23 jul)**: `albert@`, `gemma@` (gerencia), `zaida@` (oficina_tecnica) + flags club cierre
-- [x] **Campos CTP**: cerrados de momento (checkboxes actuales suficientes)
-- [ ] **Demo planta** (Albert/Jordi): guía en `GUIA_MAÑANA.md`
-- [ ] **Fase 8.2**: wizard despacho contenedor + hijas (responder §12 planta antes)
-- [ ] Preguntas a planta — ver §12 de `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`
-- [x] **`bultos_por_palet_default`** de Gabri en `prod_cajas_embalaje` (cargado en prod 9 jun; seed en repo `20260618143200`)
-- [x] **Plantillas de ruta**: Desbroce entre Troquelado y Engomado en 5 plantillas offset (`20260618143000`)
-- [x] Probar flujo contenedor parcial: 98010-01 CTP → Impresión → Troquel → Desbroce disponible
+### Hecho reciente (jul–ago)
+- [x] Bloque 6 MVP + engomado prep/tiraje + promedios A–D + oficiales + decimales `.`/, + clone overwrite (horas/caja/CTP) + 3 OTs en resumen
+- [x] PDF OK etiquetas digital (Hugo)
+- [x] Bloque 8.2 wizard contenedor MVP; 8.1 agrupación Pool/Pipeline; FORMATO encadenado
+- [x] Bloque 9 cartelas/stock/calendario producción
+- [x] Usuarios CTP / gerencia / OT (jun–jul)
 
-### Prioridad media (desarrollo)
-- [ ] Pulir Digital (Bloque 3.1 pendiente)
-- [ ] Pulir Guillotina (compactar, salida real)
-- [ ] Añadir CTP y Desbroce a plantillas de ruta en Settings
-- [ ] Afinar diseño del PDF acompañante tras feedback real de planta/dirección
+### Prioridad media
+- [ ] Pulir Digital / Guillotina; PDF acompañante con feedback planta
+- [ ] 8.5 / 8.6 solo si barcos multi-ref diarios
+- [ ] 9.7 OCR albarán (baja); sobrantes al cierre (B6+B9)
+- [ ] Preguntas §12 planta (CTP hija) si hace falta antes de 8.4 fino
 
-### Siguiente bloque grande
-- **Bloque 6.x**: promedios ✅ validados 30 jul; UX `.`/, + clone horas/embalaje + oficiales Maestro ✅ (5 ago)
-- **Bloque 11 (idea)**: calendario = master planificar + lanzar — `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md`
-- **Bloque 8.2+ / 8.4**: wizard contenedor + cierre hijas
-- **Bloque 7**: expedición / albarán (depende Odoo)
+### Siguiente foco (orden sugerido 11 ago)
+1. **Pipeline** (rápido + compacto)
+2. **8.4** cierre contenedor
+3. **9** derivar a externa
+4. Afinados B6 / B11 suave
+5. **Bloque 12** al acercarse usuarios nuevos
+6. **B5** puente Rita→Hugo si sobra
+7. **B7 / B10** aparcados
 
 ---
 
@@ -333,17 +315,19 @@ src/components/produccion/planificacion/
 
 14. **Bloque 8.1.1 — contenedor en campo (18 jun 2026)**: compra conjunta en padre; hijas heredan material en pool. Progreso barco = **pasos finalizados / pasos totales** (todas las hijas). Pool lateral mesa filtra por `planificacionTipoPaso` del itinerario (sin OTs con paso distinto ni `null`). Merma impresión: `brutas − merma = netas`. Troquel: prefill desde salida impresión. OT demo: **98010** (3 hijas). Rama: `feature/bloque8.1-pool-mesa-ejecucion-fixes`.
 
-15. **Roles, permisos y navegación (23 jun 2026, diseño)**: capa transversal, **bloque futuro propio** (no urgente, no bloquea Bloque 9). Sistema actual híbrido (matriz estática `permissions.ts` + `role_permissions` dinámica con prioridad). Límites: 1 usuario = 1 rol, granularidad solo a módulo, sin permiso por recurso (caso Abraham/CD 102). Plan 3 ejes: multi-rol/capacidades → función fina → recurso. Objetivo navegación: "la Minerva de cada uno" (ve solo lo suyo; admin/gerencia todo). Briefing: `MINERVA_ROLES_Y_NAVEGACION.md`.
+15. **Roles, permisos y navegación → Bloque 12 (23 jun diseño · 11 ago formalizado)**: capa transversal. Sistema actual híbrido (`permissions.ts` + `role_permissions`). MVP sept: landing operario→ejecución / gestor→home / Hugo→etiquetas; menú que oculta. Multi-rol y permiso por máquina = después. **Implementación aparcada** hasta afinar Pipeline/producción; crítica antes de usuarios masivos. Brief: `MINERVA_BLOQUE12_…` · diseño: `MINERVA_ROLES_Y_NAVEGACION.md`.
 
 16. **Bloque 8.1.2 — agrupación maestro y despachadas (23 jun 2026)**: misma UX barco que Pool/Pipeline en **Maestro OTs** y **OTs despachadas** (`ots-contenedor-display.ts`, expandir hijas lazy). Filtro vista: agrupado | solo simples | solo contenedores | todas planas. Maestro paginado excluye hijas en servidor cuando no es vista plana.
 
-17. **Bloque 10 — Presupuestos (23 jun 2026, diseño)**: **después** de cartelas (9) y antes de ventas/comercial (11+). Hoy las hijas se parten en **despacho** (8.2 puente); futuro: formas en presupuesto + **versión real** al copiar (estructura como se ejecutó, no solo teoría Optimus). Briefing: `MINERVA_BLOQUE10_PRESUPUESTOS.md`. Reunión planta jueves: `MINERVA_REUNION_HOJA_RUTA_JUEVES.md`.
+17. **Bloque 10 — Presupuestos (23 jun 2026, diseño)**: **después** de cartelas (9) y Minerva estable. Hoy las hijas se parten en **despacho** (8.2); futuro: formas en presupuesto + **versión real** al copiar. Briefing: `MINERVA_BLOQUE10_PRESUPUESTOS.md`.
 
-18. **Calendario Producción (17–18 jul + multi-ámbito 24 jul + marca hecho 30 jul)**: planificador manual OTs. **Ámbitos** Impresión/Digital/Troquelado/Engomado. Semáforo pastilla = estado HR del ámbito. **Marca manual «hecho»** (`marcado_hecho`, check en pastilla) independiente del itinerario + filtro «Solo pendientes». PDF grid encaja todas las OTs (reduce tipografía; sin «…»). Tabla `prod_calendario_produccion_ot`. Detalle §15.11–15.13 Bloque 9.
+18. **Calendario Producción (17–18 jul + multi-ámbito 24 jul + marca hecho 30 jul)**: planificador manual OTs. **Ámbitos** Impresión/Digital/Troquelado/Engomado. Semáforo pastilla = estado HR del ámbito. **Marca manual «hecho»** (`marcado_hecho`). Tabla `prod_calendario_produccion_ot`. Detalle §15.11–15.13 Bloque 9. **Éxito de adopción** (Carlos/Jordi, ago 2026).
 
 19. **Cartelas impresión (18 jul 2026)**: **1 copia** por palet (antes 2). Confirmado Emma/Ramón.
 
-20. **Bloque 11 — Calendario como master de lanzamiento (28 jul 2026, idea)**: Albert/Carlos quieren planificar **y lanzar** desde el calendario (no solo colocar pastillas). Flujo deseado: colocar OT en día/ámbito → pasar a mesa / lanzar → aparece en tareas maquinista → al cerrar, color “hecho” → siguiente ámbito (T/E…) listo en su calendario. Replanificar si el día no se ejecutó. **No implementar aún.** Brief: `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md`.
+20. **Bloque 11 — Calendario como master (28 jul idea · 11 ago matiz)**: quieren planificar **y** desplazar desde calendario; visión Albert de home ≠ Pipeline sino calendario. **Lanzar con cuidado:** preferible a pool/mesa sin pisar slots ajenos; o provisional + confirmar plan. **Conflictos de máquina/día** (Carlos día 9 vs Antonio ya tiene día 8) → bloquear o avisar fuerte. Brief: `MINERVA_BLOQUE11_…`.
+
+21. **Paralelo septiembre (11 ago 2026)**: no smoke fijo 10–20; por tanda de despacho elegir **~3 OTs** y seguir E2E en Minerva. Cierre contenedor MVP: **barco listo cuando todas las hijas terminan** (8.4).
 
 ## 📁 Estructura de carpetas relevante
 

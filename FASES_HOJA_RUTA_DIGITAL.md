@@ -570,11 +570,16 @@ PDF compacto para acompañar la OT entre departamentos (sustituto papel de la ho
 ✅ **Bloque 3.8 IMPLEMENTADO** (11 jun 2026, rama `feature/fase0.6-hoja-ruta-virtual`): pruebas de campo del flujo nuevo → CTP fuera del cómputo productivo (0.25h plan), material de soporte en Impresión (flag `soporte_impresion` + heurística + combo), info de Externos (acabado + ojo + datos de retorno por muelle), fix encadenado por paso (1099 vs 900) y máquina Desbroce MNRV. Ver detalle abajo.
 ✅ **Bloque 4 BETA IMPLEMENTADA** (11 jun 2026): PDF acompañante desde `HojaRutaOtDialog` (A4 vertical) con cabecera, itinerario, tarjetas por proceso, detalle de pausas, gráfico previsto/real por proceso, botones Recargar/PDF y placeholders Recalcular presupuesto/Ficha técnica.
 ✅ **Maestro troqueles etiquetas simplificado** (13 jun 2026): `prod_etiquetas_troqueles` — eliminadas columnas `cliente`/`trabajo` (migración `20260613142500_drop_etiquetas_troqueles_cliente_trabajo.sql` + UI/tipos/import-export/script). Dimensiones solo `dimensiones_texto` en el modal (sin ancho/alto/diámetro). `necesita_revision` conservado como checkbox. Fix UI: select "Estado" pisaba el campo de fecha (añadido `min-w-0`).
-⏳ **Bloque 5 PENDIENTE**: Integración Etiquetas ↔ Hoja de Ruta (flujo Hugo)
-✅ **Bloque 6 MVP** (23 jul) + engomado prep/tiraje (27 jul): `prod_ot_producidas`, cierre/reabrir, Producidas, Pipeline pendientes. ⏭️ Promedios maestro.
-⏳ **Bloque 7 PENDIENTE**: Expedición/Albarán (depende de Bloque 6 + decisión Odoo)
-🔄 **Bloque 8 EN CURSO** (17–18 jun 2026): **Fase FORMATO ✅** + **8.0 ✅** + **8.1 ✅** + **8.1.1 ✅**. Pendiente 8.2–8.4. Fuente de verdad: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
-📋 **Bloque 9 EN CURSO** (9 jul 2026): **9.0–9.6d operativo ✅** + semáforo pool ATP (9.4) + 9.3 ajuste/split + sync Optimus diff + pool «Ver cartelas» + muelle multi-línea + **9.9 IA Stock NL→SQL**. Pendiente: cierre OT sobrantes (Bloque 6), sync marcar agotados, 9.7 OCR. `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §15.9.
+✅ **Bloque 5 — Etiquetas Hugo MADURO** (uso meses): módulo operativo + PDF OK. ⏳ Solo puente Rita→Hugo (lanzar OTs digital → filas etiquetas). Ver maestro 11 ago.
+✅ **Bloque 6 MVP** (23 jul) + engomado/promedios/oficiales/clone (jul–ago). ⏳ Cierre contenedor (= 8.4); UX Pipeline «Listo para cerrar».
+⏸ **Bloque 7 APARCADO**: Expedición/Albarán (hasta decisión Odoo).
+🔄 **Bloque 8**: FORMATO–8.1 ✅ · **8.2 wizard MVP ✅** · 8.3 parcial · **8.4 cierre barco ⏳** · 8.5/8.6 futuro. Fuente: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
+✅ **Bloque 9**: 9.0–9.6d + calendario prod. ⏳ Derivar→imp. externa (§15.6.12); OCR/sobrantes baja. `MINERVA_BLOQUE9_…`.
+📋 **Bloque 11**: calendario en uso (Carlos/Jordi); lanzar con cuidado — `MINERVA_BLOQUE11_…`.
+📋 **Bloque 12**: roles/landing por perfil documentado (11 ago), implementación aparcada — `MINERVA_BLOQUE12_…` + `MINERVA_ROLES_Y_NAVEGACION.md`.
+
+> Mapa vivo y prioridades paralelo septiembre: **`MINERVA_HUB_CONTEXTO_MAESTRO.md`** (actualizado 11 ago 2026).
+
 
 ---
 

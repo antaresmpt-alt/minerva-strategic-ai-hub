@@ -1,17 +1,18 @@
 # MINERVA — Bloque 11: Calendario OT como maestro de planificación y lanzamiento
 
-> Documento de brainstorming / diseño (no implementar aún).
-> Origen: feedback Albert + sesión Manel (28 jul 2026). El calendario de previsión OT les gusta; la idea es que **mande** sobre cuándo y desde dónde se lanza un paso a máquina.
+> Documento de brainstorming / diseño.
+> Origen: feedback Albert + sesión Manel (28 jul 2026). Actualizado **11 ago 2026** tras uso real (Carlos/Jordi) y matiz de lanzamiento prudente.
 >
-> Complementa: Calendario Producción actual (`MINERVA_BLOQUE9` §15.11–15.13), Mesa / Pool / Ejecución (Hoja de Ruta Digital).
-> Estado: **idea capturada** — retomar con tiempo.
+> Complementa: Calendario Producción actual (`MINERVA_BLOQUE9` §15.11–15.13), Mesa / Pool / Ejecución, **Bloque 12** (gestores aterrizan aquí).
+> Estado: **en uso como planificador**; visión “master + lanzar” aún por diseñar con cuidado (no a saco).
 
 ---
 
 ## 0. En una frase
 
 Hoy: Pool → Mesa → planificar → lanzar → ejecutar → cerrar.  
-Mañana (visión Albert/Carlos): **el calendario es el sitio donde se planifica y se lanza**; la mesa/tareas del maquinista reciben el trabajo ya “enviado” desde ahí.
+Mañana (visión Albert/Carlos): **el calendario es el sitio donde se planifica y se lanza**; la mesa/tareas del maquinista reciben el trabajo ya “enviado” desde ahí.  
+**Matiz Manel (11 ago):** planificar/mover fechas = sí; lanzar = suave (a mesa/pool) **sin pisar** el plan de otra máquina/día.
 
 ---
 
@@ -84,13 +85,20 @@ Orden sugerido, barato → rico:
 
 ## 6. Riesgos
 
-| Riesgo | Nota |
-|--------|------|
-| Dos “verdades” (calendario vs mesa) | Definir master explícito; el otro es vista o legacy |
-| Lanzar sin máquina concreta | ¿Asignación automática, última máquina, o obligar a elegir? |
-| Contenedor / hijas | Calendario hoy piensa OT; Bloque 8 complica |
-| Sobrecarga UI del calendario | Ya es denso; acciones deben ser 1–2 clics, no otro wizard enorme |
-| Permisos | Hoy escritura por ámbito/rol; lanzar es más sensible |
+- Duplicar estado (calendario vs mesa vs pasos) si no hay una sola fuente de verdad al lanzar.
+- Operarios confundidos si ven calendario y mesa a la vez (mitigar con **Bloque 12**: ellos solo ejecución).
+- **Conflicto de capacidad:** Carlos lanza/coloca para el día 9 en troquel y Antonio ya tenía carga el día 8 en esa máquina → el sistema **no debería dejarlo pasar en silencio** (bloquear o aviso fuerte + confirmación).
+- Lanzar directo a slot de mesa sin “confirmar plan” puede romper la carga real de planta.
+
+### 6.1 Política de lanzamiento recomendada (11 ago)
+
+| Acción | ¿OK? | Nota |
+|--------|------|------|
+| Mover pastilla / cambiar día | Sí | Core del éxito actual |
+| Marcar hecho / ver colores HR | Sí | Ya existe |
+| Lanzar → pool / “listo en mesa” **sin** slot | Preferible MVP | Menos daño |
+| Lanzar → mesa con máquina/día/turno | Solo con reglas | Evitar pisar planes ajenos |
+| Confirmar plan (batch) | Deseable | Antes de “oficializar” carga |
 
 ---
 
@@ -100,6 +108,14 @@ Orden sugerido, barato → rico:
 
 No tiraría la Mesa de golpe: el calendario es excelente para **fecha + ámbito + estado**; la Mesa sigue útil para **máquina/turno/carga**. El puente natural es: *colocar en calendario* ⇒ *lanzar paso* ⇒ *aparece en tareas* ⇒ *al cerrar, pastilla navy*.
 
+| Riesgo | Nota |
+|--------|------|
+| Dos “verdades” (calendario vs mesa) | Definir master explícito; el otro es vista o legacy |
+| Lanzar sin máquina concreta | ¿Asignación automática, última máquina, o obligar a elegir? |
+| Contenedor / hijas | Calendario hoy piensa OT; Bloque 8 complica |
+| Sobrecarga UI del calendario | Ya es denso; acciones deben ser 1–2 clics, no otro wizard enorme |
+| Permisos | Hoy escritura por ámbito/rol; lanzar es más sensible — ver Bloque 12 |
+
 Retomar con Albert/Carlos: validar si “lanzar” implica elegir máquina o solo “liberar a planta”.
 
 ---
@@ -107,9 +123,11 @@ Retomar con Albert/Carlos: validar si “lanzar” implica elegir máquina o sol
 ## 8. Retomar aquí
 
 - [ ] Revisar este brief con Albert / Carlos (5–10 min)
-- [ ] Elegir modelo A/B/C (§4.1)
+- [ ] Elegir modelo A/B/C (§4.1) + política §6.1
 - [ ] Boceto UX pastilla (estados + 1 botón)
 - [ ] Spike técnico: reutilizar APIs de “enviar a mesa” / iniciar paso desde UI calendario
 - [ ] Encajar con Bloque 6 cierre y promedios (sin mezcla)
+- [ ] Reglas de conflicto máquina/día antes de lanzar a slot
 
-**No empezar código** hasta cerrar §4.1 y el MVP §5.
+**No empezar código de lanzamiento agresivo** hasta cerrar §4.1, §5 y §6.1.
+

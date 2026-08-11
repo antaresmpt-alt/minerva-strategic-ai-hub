@@ -3,11 +3,11 @@
 > Documento de diseño y toma de decisiones (**fuente de verdad** de identidad, permisos y arquitectura de información).
 > Complementa `MINERVA_HUB_CONTEXTO_MAESTRO.md`. No describe un bloque funcional concreto, sino una **capa transversal** que afecta a toda la app.
 >
-> **Estado:** 📋 Diseño / análisis — **sin implementación** (el sistema actual sigue vigente).
-> **Creado:** 23 jun 2026.
+> **Estado:** 📋 Diseño / análisis — implementación = **Bloque 12** (`MINERVA_BLOQUE12_ROLES_PERMISOS_NAVEGACION.md`). El sistema actual de permisos sigue vigente hasta entonces.
+> **Creado:** 23 jun 2026. **Actualizado:** 11 ago 2026 (promovido a Bloque 12; MVP sept = landing + menú por perfil).
 > **Idea central:** cada usuario debe entrar en **"su Minerva"** — ver solo lo que le toca, hacer solo lo que le toca. Admin/Gerencia ven todo.
 
-**Relacionado:** permisos de almacén → `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` · roles de planta (CTP, etc.) → `MINERVA_HUB_CONTEXTO_MAESTRO.md`.
+**Relacionado:** brief implementación → `MINERVA_BLOQUE12_ROLES_PERMISOS_NAVEGACION.md` · permisos de almacén → `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` · roles de planta → `MINERVA_HUB_CONTEXTO_MAESTRO.md`.
 
 ---
 
@@ -18,7 +18,9 @@ El sistema de roles/accesos se diseñó al principio para una app más pequeña.
 1. **Permisos más finos** — quién puede qué, hasta nivel de función y de recurso (ej. un maquinista que solo ve *su* máquina).
 2. **Navegación reorganizada** — cómo se presenta lo que cada usuario puede ver, para que su Minerva sea limpia y sin ruido.
 
-Son **dos caras de lo mismo** (qué puedes ↔ qué ves), por eso van juntas aquí. El rediseño es **un bloque propio futuro**, no urgente, y **no bloquea** Bloque 9 ni el trabajo actual.
+Son **dos caras de lo mismo** (qué puedes ↔ qué ves), por eso van juntas aquí.
+
+**11 ago 2026:** deja de ser solo “capa futura sin número”. Es el **Bloque 12**. Prioridad alta para el paralelo de septiembre (usuarios nuevos), pero **no se abre ya** — primero Pipeline, cierre contenedor (8.4), afinados de producción. Este archivo sigue siendo la **fuente de verdad de diseño**; el brief de implementación y MVP está en `MINERVA_BLOQUE12_ROLES_PERMISOS_NAVEGACION.md`.
 
 ---
 
@@ -125,12 +127,13 @@ Van acopladas: el rediseño de permisos (Ejes 1–3) **habilita** una navegació
 
 ---
 
-## C. Decisiones registradas (23 jun 2026)
+## C. Decisiones registradas
 
-- El rediseño de roles/permisos/navegación es **un bloque propio futuro**, planificado, no metido con calzador. No es urgente y **no bloquea** Bloque 9.
+- **23 jun 2026:** El rediseño de roles/permisos/navegación es **un bloque propio**, planificado, no metido con calzador. No bloquea Bloque 9.
 - **`administracion` no es `almacen`**: son roles distintos; almacén (Juan) no lleva permisos administrativos.
 - Usuarios reales futuros sustituirán a los provisionales por departamento (`logistica@`, `almacen@`, `digital@`…): Rita→digital, Marc→ctp, Abraham→impresión (idealmente solo CD 102), etc.
-- Cada **nuevo módulo** que se cree (incluido Bloque 9) se diseña ya pensando en **función fina** (ej. separar `cartelas` de `stock`) para facilitar la migración a los Ejes 1–3.
+- Cada **nuevo módulo** que se cree se diseña pensando en **función fina** (ej. separar `cartelas` de `stock`) para facilitar la migración a los Ejes 1–3.
+- **11 ago 2026:** Formalizado como **Bloque 12**. MVP = landing por perfil (operario → ejecución; gestor → home rico; Hugo → etiquetas) + menú que oculta. Multi-rol / recurso = después. Implementación **aparcada** hasta afinar Pipeline/producción; imprescindible antes de usuarios masivos en paralelo.
 
 ---
 
@@ -139,3 +142,4 @@ Van acopladas: el rediseño de permisos (Ejes 1–3) **habilita** una navegació
 | Fecha | Cambio |
 |-------|--------|
 | 23 jun 2026 | Creación. Parte A (permisos: estado real, límites, plan 3 ejes, permisos Bloque 9). Parte B (navegación: objetivo "Minerva de cada uno", relación permiso↔pantalla, pendientes). Decisiones registradas. |
+| 11 ago 2026 | Enlace a Bloque 12; prioridad sept; MVP landing; decisión de no abrir implementación aún. |
