@@ -111,6 +111,10 @@ export type HojaRutaDespacho = {
   troquel: string | null;
   poses: number | null;
   acabadoPral: string | null;
+  /** Código Minerva (`prod_referencias.codigo`) vía `referencia_id` del despacho. */
+  referenciaMinerva: string | null;
+  /** Código cliente de la misma referencia. */
+  referenciaCliente: string | null;
 };
 
 export type HojaRutaData = {
@@ -300,12 +304,30 @@ export async function fetchHojaRutaOt(
 
   const { data: despData, error: despErr } = await supabase
     .from(TABLE_DESPACHADAS)
-    .select("ot_numero, material, gramaje, tamano_hoja, num_hojas_brutas, tintas, troquel, poses, acabado_pral")
+    .select(
+      "ot_numero, material, gramaje, tamano_hoja, num_hojas_brutas, tintas, troquel, poses, acabado_pral, referencia_id",
+    )
     .eq("ot_numero", ot)
     .order("despachado_at", { ascending: false })
     .limit(1);
   if (despErr) throw despErr;
   const despRow = ((despData ?? [])[0] ?? null) as Record<string, unknown> | null;
+
+  let referenciaMinerva: string | null = null;
+  let referenciaCliente: string | null = null;
+  const referenciaId = str(despRow?.referencia_id);
+  if (referenciaId) {
+    const { data: refRow, error: refErr } = await supabase
+      .from("prod_referencias")
+      .select("codigo, referencia_cliente")
+      .eq("id", referenciaId)
+      .maybeSingle();
+    if (refErr) throw refErr;
+    referenciaMinerva = str((refRow as { codigo?: string | null } | null)?.codigo);
+    referenciaCliente = str(
+      (refRow as { referencia_cliente?: string | null } | null)?.referencia_cliente,
+    );
+  }
 
   const despacho: HojaRutaDespacho | null = despRow
     ? {
@@ -317,6 +339,8 @@ export async function fetchHojaRutaOt(
         troquel: str(despRow.troquel),
         poses: num(despRow.poses),
         acabadoPral: str(despRow.acabado_pral),
+        referenciaMinerva,
+        referenciaCliente,
       }
     : null;
 

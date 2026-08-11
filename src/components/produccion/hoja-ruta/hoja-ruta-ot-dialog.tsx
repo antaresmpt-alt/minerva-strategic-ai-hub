@@ -137,6 +137,15 @@ function HojaRutaHeader({ data }: { data: HojaRutaData }) {
               <span className="font-medium">Acabado:</span> {data.despacho.acabadoPral}
             </span>
           ) : null}
+          {data.despacho.referenciaMinerva || data.despacho.referenciaCliente ? (
+            <span>
+              <span className="font-medium">Ref:</span>{" "}
+              {data.despacho.referenciaMinerva ?? "—"}
+              {data.despacho.referenciaCliente
+                ? ` / ${data.despacho.referenciaCliente}`
+                : ""}
+            </span>
+          ) : null}
         </div>
       ) : null}
     </div>

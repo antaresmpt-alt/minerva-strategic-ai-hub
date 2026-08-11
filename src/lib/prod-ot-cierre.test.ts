@@ -60,6 +60,8 @@ function snapshot(pasos: HojaRutaPaso[]): HojaRutaData {
       troquel: "TAM1",
       poses: 8,
       acabadoPral: null,
+      referenciaMinerva: null,
+      referenciaCliente: null,
     },
     pasos,
   };

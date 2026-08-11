@@ -122,6 +122,11 @@ function drawHeaderDataBox(doc: jsPDF, data: HojaRutaData, startY: number): numb
     if (d.tintas) items.push(`Tintas: ${d.tintas}`);
     if (d.troquel) items.push(`Troquel: ${d.troquel}${d.poses ? ` (${d.poses})` : ""}`);
     if (d.acabadoPral) items.push(`Acabado: ${d.acabadoPral}`);
+    if (d.referenciaMinerva || d.referenciaCliente) {
+      items.push(
+        `Ref: ${d.referenciaMinerva ?? "—"}${d.referenciaCliente ? ` / ${d.referenciaCliente}` : ""}`,
+      );
+    }
     doc.text(items.join("  |  "), MARGIN.left + 3, infoY);
   }
 
