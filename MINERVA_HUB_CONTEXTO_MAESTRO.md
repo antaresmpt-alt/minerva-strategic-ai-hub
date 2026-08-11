@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 11 ago 2026 (mapa bloques 1–12; paralelo septiembre; Bloque 12 roles; Pipeline/8.4 prioridades)
+> Última actualización: 11 ago 2026 (Pipeline perf: chunks paralelos + filtros cliente + índices)
 
 ---
 
@@ -254,6 +254,7 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 ### Retomar aquí (11 ago 2026 — camino a paralelo septiembre)
 - [x] **Pipeline**: modo **compacto por defecto** (+ preferencia localStorage; `?compact=0` = extendida) (11 ago)
 - [x] **Pipeline UX**: «Listo para cerrar» en pendientes de revisión (paso actual + badge) (11 ago)
+- [x] **Pipeline perf**: `fetchAllInChunks` concurrencia 5; olas desp→(arch∥ot∥pool∥hijas)→pasos→(ejec∥ext); filtros search/incidencias/externo/estado en cliente; índice `despachado_at` (11 ago)
 - [ ] **Fase 8.4**: cierre OT contenedor cuando **todas las hijas** terminan → `pendiente_revision` / producida + snapshot barco (regla MVP acordada Manel 11 ago)
 - [ ] **Bloque 9 §15.6.12**: derivar OT a impresión externa post-despacho
 - [ ] **Bloque 6.x** (opcional rápido): avisos calidad al cierre; comparar versiones OT
@@ -275,10 +276,10 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [ ] Preguntas §12 planta (CTP hija) si hace falta antes de 8.4 fino
 
 ### Siguiente foco (orden sugerido 11 ago)
-1. ~~**Pipeline** (rápido + compacto)~~ ✅ compacto default + Listo para cerrar
+1. ~~**Pipeline** (rápido + compacto + carga)~~ ✅ compacto + Listo para cerrar + perf fetch (11 ago)
 2. **8.4** cierre contenedor
 3. **9** derivar a externa
-4. Afinados B6 / B11 suave (+ perfilar carga Pipeline si sigue lento)
+4. Afinados B6 / B11 suave (virtualizar tabla Pipeline solo si sigue lento)
 5. **Bloque 12** al acercarse usuarios nuevos
 6. **B5** puente Rita→Hugo si sobra
 7. **B7 / B10** aparcados
@@ -341,7 +342,7 @@ src/
   lib/
     hoja-ruta-campos-config.ts
     hoja-ruta-formato-encadenado.ts   ← encadenado formato pliego (Bloque 8 Fase FORMATO)
-    supabase-query-chunks.ts          ← consultas .in() troceadas (Pool/Pipeline)
+    supabase-query-chunks.ts          ← .in() troceados + concurrencia 5 (Pool/Pipeline)
     planificacion-analytics-query.ts
     sys-parametros-sobreproduccion.ts
   types/

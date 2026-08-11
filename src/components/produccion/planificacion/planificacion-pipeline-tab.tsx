@@ -29,13 +29,11 @@ import {
   formatHijaDisplayLabel,
   type PlanificacionOtTipoFiltroUi,
 } from "@/lib/planificacion-contenedor-query";
-import {
-  fetchPipelineRows,
-  type FetchPipelineFilters,
-} from "@/lib/pipeline/pipeline-query";
+import { fetchPipelineRows } from "@/lib/pipeline/pipeline-query";
 import {
   formatPipelineBadgeLabel,
   formatPipelinePasoActualLabel,
+  type PipelinePasoEstado,
 } from "@/lib/pipeline/pipeline-data";
 import { getSupabaseErrorMessage } from "@/lib/supabase-error-message";
 import {
@@ -129,8 +127,9 @@ export function PlanificacionPipelineTab() {
   const [search, setSearch] = useState("");
   const [onlyIncidencias, setOnlyIncidencias] = useState(false);
   const [externoFilter, setExternoFilter] = useState<"all" | "yes" | "no">("all");
-  const [estadoPasoActual, setEstadoPasoActual] =
-    useState<FetchPipelineFilters["estadoPasoActual"]>("all");
+  const [estadoPasoActual, setEstadoPasoActual] = useState<
+    PipelinePasoEstado | "all"
+  >("all");
   const [quickRiesgo, setQuickRiesgo] = useState(false);
   const [quickBloqueado, setQuickBloqueado] = useState(false);
   const [quickExternoActivo, setQuickExternoActivo] = useState(false);
@@ -258,11 +257,6 @@ export function PlanificacionPipelineTab() {
     setLoading(true);
     try {
       const data = await fetchPipelineRows(supabase, {
-        search,
-        onlyIncidencias,
-        externo:
-          externoFilter === "all" ? undefined : externoFilter === "yes",
-        estadoPasoActual,
         otTipoFiltro: otTipoFilter,
         limit: 700,
       });
@@ -277,14 +271,36 @@ export function PlanificacionPipelineTab() {
     } finally {
       setLoading(false);
     }
-  }, [estadoPasoActual, externoFilter, onlyIncidencias, otTipoFilter, search, supabase]);
+  }, [otTipoFilter, supabase]);
 
   useEffect(() => {
     void loadData();
   }, [loadData]);
 
   const visibleRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
     return rows.filter((row) => {
+      if (q) {
+        const hayMatch = [row.otNumero, row.cliente, row.trabajo]
+          .map((v) => String(v ?? "").toLowerCase())
+          .some((v) => v.includes(q));
+        if (!hayMatch) return false;
+      }
+      if (onlyIncidencias) {
+        const hasIssue =
+          row.badges.includes("bloqueado") ||
+          row.badges.includes("en_riesgo") ||
+          row.badges.includes("sin_itinerario");
+        if (!hasIssue) return false;
+      }
+      if (externoFilter !== "all") {
+        const hasExterno = row.pasos.some((p) => p.esExterno);
+        if (externoFilter === "yes" && !hasExterno) return false;
+        if (externoFilter === "no" && hasExterno) return false;
+      }
+      if (estadoPasoActual !== "all") {
+        if (row.pasoActual?.estadoPaso !== estadoPasoActual) return false;
+      }
       if (quickRiesgo && row.riesgo === "ok") return false;
       if (quickBloqueado && !row.badges.includes("bloqueado")) return false;
       if (quickExternoActivo && !row.badges.includes("externo_activo")) return false;
@@ -293,12 +309,16 @@ export function PlanificacionPipelineTab() {
       return true;
     });
   }, [
+    estadoPasoActual,
+    externoFilter,
+    onlyIncidencias,
     quickBloqueado,
     quickExternoActivo,
     quickPendienteRevision,
     quickRiesgo,
     quickSinItinerario,
     rows,
+    search,
   ]);
 
   const loadHijasForContenedor = useCallback(
@@ -494,7 +514,7 @@ export function PlanificacionPipelineTab() {
                 setEstadoPasoActual(
                   e.target.value === "all"
                     ? "all"
-                    : (e.target.value as FetchPipelineFilters["estadoPasoActual"]),
+                    : (e.target.value as PipelinePasoEstado),
                 )
               }
             >

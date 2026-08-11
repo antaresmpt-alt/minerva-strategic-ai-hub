@@ -3,7 +3,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   inferPlanificacionTipoFromProceso,
   parsePlanificacionTipoMaquina,
-  type PlanificacionTipoMaquina,
 } from "@/lib/planificacion-ambito";
 import {
   computePipelineBadges,
@@ -12,7 +11,6 @@ import {
   getSiguientePaso,
   normalizeDateIso,
   normalizePasoEstado,
-  type PipelinePasoEstado,
   type PipelineRowView,
   type PipelineStepView,
 } from "@/lib/pipeline/pipeline-data";
@@ -47,14 +45,10 @@ const ACTIVE_EJECUCION_ORDER = new Map<string, number>([
 ]);
 
 type FetchPipelineFilters = {
-  search?: string;
-  onlyIncidencias?: boolean;
-  externo?: boolean;
-  estadoPasoActual?: PipelinePasoEstado | "all";
   limit?: number;
   /** Si se indica, construye filas solo para estas OTs (p. ej. hijas expandidas). */
   otNumeros?: string[];
-  /** Filtro Bloque 8.1 — default agrupado (sin hijas sueltas). */
+  /** Filtro Bloque 8.1 — default agrupado (sin hijas sueltas). Filtros UI (search, etc.) van en cliente. */
   otTipoFiltro?: PlanificacionOtTipoFiltroUi;
 };
 
@@ -236,38 +230,36 @@ function mapSlaStatus(riesgo: PipelineRowView["riesgo"]): PipelineRowView["analy
   return "on_track";
 }
 
+const DESP_SELECT =
+  "ot_numero, despachado_at, material, gramaje, tamano_hoja, num_hojas_brutas, horas_entrada, horas_tiraje, tintas, troquel, poses, acabado_pral, horas_estimadas_troquelado, horas_estimadas_engomado";
+
 export async function fetchPipelineRows(
   supabase: SupabaseClient,
   filters: FetchPipelineFilters = {},
 ): Promise<PipelineRowView[]> {
   const limit = Math.max(1, Math.min(2000, Math.trunc(filters.limit ?? 500)));
-  const search = String(filters.search ?? "").trim().toLowerCase();
   const explicitOtNumeros = (filters.otNumeros ?? [])
     .map((n) => str(n))
     .filter(Boolean) as string[];
 
+  // Ola 1: despachadas (fuente de OTs visibles)
   let otNumeros: string[];
   let despRows: DespRow[];
 
   if (explicitOtNumeros.length > 0) {
     otNumeros = [...new Set(explicitOtNumeros)];
-    const despData = await fetchAllInChunks(otNumeros, 100, async (chunk) => {
+    despRows = await fetchAllInChunks(otNumeros, 100, async (chunk) => {
       const { data, error } = await supabase
         .from(TABLE_DESPACHADAS)
-        .select(
-          "ot_numero, despachado_at, material, gramaje, tamano_hoja, num_hojas_brutas, horas_entrada, horas_tiraje, tintas, troquel, poses, acabado_pral, horas_estimadas_troquelado, horas_estimadas_engomado",
-        )
+        .select(DESP_SELECT)
         .in("ot_numero", chunk);
       if (error) throw error;
       return (data ?? []) as DespRow[];
     });
-    despRows = despData;
   } else {
     const { data: despData, error: despErr } = await supabase
       .from(TABLE_DESPACHADAS)
-      .select(
-        "ot_numero, despachado_at, material, gramaje, tamano_hoja, num_hojas_brutas, horas_entrada, horas_tiraje, tintas, troquel, poses, acabado_pral, horas_estimadas_troquelado, horas_estimadas_engomado",
-      )
+      .select(DESP_SELECT)
       .order("despachado_at", { ascending: false })
       .limit(limit);
     if (despErr) throw despErr;
@@ -290,26 +282,45 @@ export async function fetchPipelineRows(
 
   if (visibleOtNumeros.length === 0) return [];
 
-  const archivadasRows = await fetchAllInChunks(visibleOtNumeros, 100, async (chunk) => {
-    const { data, error } = await supabase
-      .from(TABLE_PRODUCIDAS)
-      .select("ot_numero")
-      .in("ot_numero", chunk)
-      .is("reabierta_at", null);
-    if (error) throw error;
-    return (data ?? []) as { ot_numero: string }[];
-  });
-  const archivadas = new Set(
-    archivadasRows.map((r) => str(r.ot_numero)).filter(Boolean) as string[],
-  );
-
   const contenedorNumeros = visibleOtNumeros.filter(
     (ot) => otMetaByNum.get(ot)?.otTipo === "contenedor",
   );
-  const hijasByPadre =
+
+  // Ola 2: archivadas ∥ otRows ∥ pool ∥ hijas (independientes entre sí)
+  const [archivadasRows, otRows, poolRows, hijasByPadre] = await Promise.all([
+    fetchAllInChunks(visibleOtNumeros, 100, async (chunk) => {
+      const { data, error } = await supabase
+        .from(TABLE_PRODUCIDAS)
+        .select("ot_numero")
+        .in("ot_numero", chunk)
+        .is("reabierta_at", null);
+      if (error) throw error;
+      return (data ?? []) as { ot_numero: string }[];
+    }),
+    fetchAllInChunks(visibleOtNumeros, 100, async (chunk) => {
+      const { data, error } = await supabase
+        .from(TABLE_OTS)
+        .select("id, num_pedido, cliente, titulo, cantidad, prioridad, fecha_entrega, estado_desc")
+        .in("num_pedido", chunk);
+      if (error) throw error;
+      return (data ?? []) as OtRow[];
+    }),
+    fetchAllInChunks(visibleOtNumeros, 100, async (chunk) => {
+      const { data, error } = await supabase
+        .from(TABLE_POOL)
+        .select("ot_numero, estado_pool")
+        .in("ot_numero", chunk);
+      if (error) throw error;
+      return (data ?? []) as PoolRow[];
+    }),
     contenedorNumeros.length > 0 && !includeHijas
-      ? await fetchHijasByPadreNumeros(supabase, contenedorNumeros)
-      : new Map<string, OtContenedorMeta[]>();
+      ? fetchHijasByPadreNumeros(supabase, contenedorNumeros)
+      : Promise.resolve(new Map<string, OtContenedorMeta[]>()),
+  ]);
+
+  const archivadas = new Set(
+    archivadasRows.map((r) => str(r.ot_numero)).filter(Boolean) as string[],
+  );
 
   const hijaNumerosForProgress = [...hijasByPadre.values()].flatMap((list) =>
     list.map((h) => h.numPedido),
@@ -319,19 +330,9 @@ export async function fetchPipelineRows(
       ? await fetchContenedorProgressByPadre(supabase, hijasByPadre)
       : new Map();
 
-  const otRows = await fetchAllInChunks(visibleOtNumeros, 100, async (chunk) => {
-    const { data, error } = await supabase
-      .from(TABLE_OTS)
-      .select("id, num_pedido, cliente, titulo, cantidad, prioridad, fecha_entrega, estado_desc")
-      .in("num_pedido", chunk);
-    if (error) throw error;
-    return (data ?? []) as OtRow[];
-  });
-  const ots = otRows;
-
   const otByNum = new Map<string, OtRow>();
   const otIds: string[] = [];
-  for (const ot of ots) {
+  for (const ot of otRows) {
     const num = str(ot.num_pedido);
     const id = str(ot.id);
     if (!num || !id) continue;
@@ -346,6 +347,13 @@ export async function fetchPipelineRows(
     despByOt.set(ot, row);
   }
 
+  const poolByOt = new Map<string, PoolRow>();
+  for (const row of poolRows) {
+    const ot = str(row.ot_numero);
+    if (ot && !poolByOt.has(ot)) poolByOt.set(ot, row);
+  }
+
+  // Ola 3: pasos (necesita ot ids)
   const uniqueOtIds = [...new Set(otIds)];
   const pasosByOtId = new Map<string, PasoRow[]>();
   const allPasoIds: string[] = [];
@@ -372,20 +380,35 @@ export async function fetchPipelineRows(
     }
   }
 
+  // Ola 4: ejecuciones ∥ externos (necesitan paso ids)
   const uniquePasoIds = [...new Set(allPasoIds)];
   const ejecByPaso = new Map<string, EjecRow>();
+  const extByPaso = new Map<string, ExtRow>();
   if (uniquePasoIds.length > 0) {
-    const ejecData = await fetchAllInChunks(uniquePasoIds, 80, async (chunk) => {
-      const { data, error } = await supabase
-        .from(TABLE_EJECUCIONES)
-        .select(
-          "id, ot_paso_id, estado_ejecucion, inicio_real_at, fin_real_at, horas_reales, num_hojas_producidas, cantidad_unidades, horas_reales_troquelado, horas_reales_engomado, maquinista, incidencia, accion_correctiva, observaciones, updated_at",
-        )
-        .in("ot_paso_id", chunk)
-        .order("updated_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as EjecRow[];
-    });
+    const [ejecData, extData] = await Promise.all([
+      fetchAllInChunks(uniquePasoIds, 80, async (chunk) => {
+        const { data, error } = await supabase
+          .from(TABLE_EJECUCIONES)
+          .select(
+            "id, ot_paso_id, estado_ejecucion, inicio_real_at, fin_real_at, horas_reales, num_hojas_producidas, cantidad_unidades, horas_reales_troquelado, horas_reales_engomado, maquinista, incidencia, accion_correctiva, observaciones, updated_at",
+          )
+          .in("ot_paso_id", chunk)
+          .order("updated_at", { ascending: false });
+        if (error) throw error;
+        return (data ?? []) as EjecRow[];
+      }),
+      fetchAllInChunks(uniquePasoIds, 80, async (chunk) => {
+        const { data, error } = await supabase
+          .from(TABLE_EXTERNOS)
+          .select(
+            "id, ot_paso_id, estado, proveedor_id, fecha_envio, fecha_prevista, observaciones, updated_at, prod_proveedores(nombre)",
+          )
+          .in("ot_paso_id", chunk)
+          .order("updated_at", { ascending: false });
+        if (error) throw error;
+        return (data ?? []) as ExtRow[];
+      }),
+    ]);
 
     for (const row of ejecData) {
       const pasoId = str(row.ot_paso_id);
@@ -399,21 +422,7 @@ export async function fetchPipelineRows(
       const nextRank = ACTIVE_EJECUCION_ORDER.get(row.estado_ejecucion) ?? 99;
       if (nextRank < prevRank) ejecByPaso.set(pasoId, row);
     }
-  }
 
-  const extByPaso = new Map<string, ExtRow>();
-  if (uniquePasoIds.length > 0) {
-    const extData = await fetchAllInChunks(uniquePasoIds, 80, async (chunk) => {
-      const { data, error } = await supabase
-        .from(TABLE_EXTERNOS)
-        .select(
-          "id, ot_paso_id, estado, proveedor_id, fecha_envio, fecha_prevista, observaciones, updated_at, prod_proveedores(nombre)",
-        )
-        .in("ot_paso_id", chunk)
-        .order("updated_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as ExtRow[];
-    });
     for (const row of extData) {
       const pasoId = str(row.ot_paso_id);
       if (!pasoId) continue;
@@ -428,20 +437,6 @@ export async function fetchPipelineRows(
         extByPaso.set(pasoId, row);
       }
     }
-  }
-
-  const poolByOt = new Map<string, PoolRow>();
-  const poolRows = await fetchAllInChunks(visibleOtNumeros, 100, async (chunk) => {
-    const { data, error } = await supabase
-      .from(TABLE_POOL)
-      .select("ot_numero, estado_pool")
-      .in("ot_numero", chunk);
-    if (error) throw error;
-    return (data ?? []) as PoolRow[];
-  });
-  for (const row of poolRows) {
-    const ot = str(row.ot_numero);
-    if (ot && !poolByOt.has(ot)) poolByOt.set(ot, row);
   }
 
   const out: PipelineRowView[] = [];
@@ -639,30 +634,6 @@ export async function fetchPipelineRows(
       (p) => (p.ejecucion?.observaciones ?? "").trim().length > 0,
     );
     if (hasOperarioNotes) row.badges.push("con_notas");
-
-    if (search) {
-      const hayMatch = [row.otNumero, row.cliente, row.trabajo]
-        .map((v) => String(v ?? "").toLowerCase())
-        .some((v) => v.includes(search));
-      if (!hayMatch) continue;
-    }
-
-    if (filters.onlyIncidencias) {
-      const hasIssue =
-        row.badges.includes("bloqueado") ||
-        row.badges.includes("en_riesgo") ||
-        row.badges.includes("sin_itinerario");
-      if (!hasIssue) continue;
-    }
-
-    if (typeof filters.externo === "boolean") {
-      const hasExterno = row.pasos.some((p) => p.esExterno);
-      if (hasExterno !== filters.externo) continue;
-    }
-
-    if (filters.estadoPasoActual && filters.estadoPasoActual !== "all") {
-      if (row.pasoActual?.estadoPaso !== filters.estadoPasoActual) continue;
-    }
 
     out.push(row);
   }
