@@ -773,6 +773,8 @@ export function PlanificacionOtsEjecucionTab({
   const [maquinas, setMaquinas] = useState<Array<{ id: string; nombre: string }>>([]);
   const [selectedMaquina, setSelectedMaquina] = useState<string>("all");
   const [estado, setEstado] = useState<"activas" | EstadoEjecucionMesa | "all">("activas");
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [planificacionRole, setPlanificacionRole] = useState<string | null>(null);
@@ -1435,20 +1437,50 @@ export function PlanificacionOtsEjecucionTab({
     void loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    const t = window.setTimeout(() => setSearch(searchInput.trim()), 250);
+    return () => window.clearTimeout(t);
+  }, [searchInput]);
+
   const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
     return rows.filter((r) => {
       if (selectedMaquina !== "all" && r.maquinaId !== selectedMaquina) return false;
       if (estado === "activas") {
-        return (
-          r.estadoEjecucion === "pendiente_inicio" ||
-          r.estadoEjecucion === "en_curso" ||
-          r.estadoEjecucion === "pausada"
-        );
+        if (
+          r.estadoEjecucion !== "pendiente_inicio" &&
+          r.estadoEjecucion !== "en_curso" &&
+          r.estadoEjecucion !== "pausada"
+        ) {
+          return false;
+        }
+      } else if (estado !== "all" && r.estadoEjecucion !== estado) {
+        return false;
       }
-      if (estado === "all") return true;
-      return r.estadoEjecucion === estado;
+      if (!q) return true;
+      const desp = despachoByOt[r.ot];
+      const meta = otMetaByOt[r.ot];
+      const procesoNombre =
+        r.procesoId != null
+          ? (getCamposConfigByProcesoId(r.procesoId)?.procesoNombre ?? "")
+          : "";
+      const haystack = [
+        r.ot,
+        r.maquinaNombre,
+        procesoNombre,
+        desp?.cliente,
+        desp?.titulo,
+        desp?.material,
+        desp?.troquel,
+        meta?.formaDescripcion,
+        meta?.otPadreNumero,
+        meta?.tipoHija,
+      ]
+        .map((v) => String(v ?? "").toLowerCase())
+        .join(" ");
+      return haystack.includes(q);
     });
-  }, [rows, selectedMaquina, estado]);
+  }, [rows, selectedMaquina, estado, search, despachoByOt, otMetaByOt]);
 
   const filteredSections = useMemo(() => {
     const pending = filtered.filter((r) => r.estadoEjecucion === "pendiente_inicio");
@@ -1739,23 +1771,27 @@ export function PlanificacionOtsEjecucionTab({
     try {
       exportEjecucionesExcel(filtered, {
         maquina: selectedMaquinaLabel,
-        estado: estadoLabelFiltro,
+        estado: search
+          ? `${estadoLabelFiltro} · buscar="${search}"`
+          : estadoLabelFiltro,
       }, pausesByExecutionId);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo exportar Excel.");
     }
-  }, [filtered, selectedMaquinaLabel, estadoLabelFiltro, pausesByExecutionId]);
+  }, [filtered, selectedMaquinaLabel, estadoLabelFiltro, pausesByExecutionId, search]);
 
   const handleExportPdf = useCallback(() => {
     try {
       exportEjecucionesPdf(filtered, {
         maquina: selectedMaquinaLabel,
-        estado: estadoLabelFiltro,
+        estado: search
+          ? `${estadoLabelFiltro} · buscar="${search}"`
+          : estadoLabelFiltro,
       }, pausesByExecutionId);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo exportar PDF.");
     }
-  }, [filtered, selectedMaquinaLabel, estadoLabelFiltro, pausesByExecutionId]);
+  }, [filtered, selectedMaquinaLabel, estadoLabelFiltro, pausesByExecutionId, search]);
 
   return (
     <>
@@ -1798,6 +1834,13 @@ export function PlanificacionOtsEjecucionTab({
           <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700">
             Ámbito: {etiquetaAmbitoEjecucion}
           </span>
+          <Input
+            className="h-8 w-full min-w-[10rem] max-w-xs text-xs sm:w-56"
+            placeholder="Buscar OT, cliente, trabajo…"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            aria-label="Buscar OTs en ejecución"
+          />
           <select
             className="h-8 rounded-md border border-slate-300 bg-white px-2"
             value={selectedMaquina}
