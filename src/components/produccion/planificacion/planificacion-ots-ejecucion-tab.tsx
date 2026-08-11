@@ -246,6 +246,69 @@ function isDatoProcesoEmpty(value: unknown): boolean {
 }
 
 /**
+ * Desbroce: hojas de entrada = salida real del troquel cuando existe.
+ * Las netas de componentes/wizard son solo fallback de plan (p. ej. 600);
+ * si troquel dejó 575, el formulario debe arrancar en 575 y recalcular estuches.
+ */
+function enrichDesbroceDatosProceso(
+  datos: DatosProcesoGenerico,
+  opts: {
+    salidaProcesoAnterior: number | null | undefined;
+    hijaComponentes: HijaComponenteRow[];
+    despachoPoses: number | null | undefined;
+  },
+): DatosProcesoGenerico {
+  const next: DatosProcesoGenerico = { ...datos };
+  const comps = opts.hijaComponentes;
+  const salida =
+    opts.salidaProcesoAnterior != null &&
+    Number.isFinite(opts.salidaProcesoAnterior) &&
+    opts.salidaProcesoAnterior > 0
+      ? Math.max(0, Math.trunc(opts.salidaProcesoAnterior))
+      : null;
+
+  if (salida != null) {
+    next.hojas_entrada = salida;
+  } else if (isDatoProcesoEmpty(next.hojas_entrada)) {
+    const hojasNetas = hojasNetasFormaFromComponentes(comps);
+    if (hojasNetas != null && hojasNetas > 0) {
+      next.hojas_entrada = hojasNetas;
+    }
+  }
+
+  if (isDatoProcesoEmpty(next.poses)) {
+    const posesComp = comps[0]?.poses_en_forma;
+    if (posesComp != null && posesComp > 0) {
+      next.poses = posesComp;
+    } else if (opts.despachoPoses != null && opts.despachoPoses > 0) {
+      next.poses = opts.despachoPoses;
+    }
+  }
+
+  const hojas = toFiniteNum(next.hojas_entrada);
+  const poses = toFiniteNum(next.poses);
+  if (hojas != null && poses != null && poses > 0) {
+    // Con salida real del anterior, siempre alinear estuches a hojas×poses
+    // (evita dejar el pedido teórico 2400 con 575 hojas).
+    if (salida != null || isDatoProcesoEmpty(next.estuches_desbrozados)) {
+      next.estuches_desbrozados = Math.max(0, Math.floor(hojas * poses));
+    }
+  } else if (isDatoProcesoEmpty(next.estuches_desbrozados) && comps.length > 0) {
+    const total = totalEstuchesFormaComponentes(comps);
+    if (total > 0) next.estuches_desbrozados = total;
+  }
+
+  if (
+    comps.length > 0 &&
+    (isDatoProcesoEmpty(next.componentes_forma) || !Array.isArray(next.componentes_forma))
+  ) {
+    next.componentes_forma = buildComponentesDesbroceSeed(comps);
+  }
+
+  return next;
+}
+
+/**
  * Troquel ejecución form expects poses / hojas_troquelar / pinza / etc.
  * Despacho seed historically wrote num_figuras / hojas_a_troquelar only,
  * and skipped catalog fill when datos_proceso was already non-empty.
@@ -2021,6 +2084,13 @@ function ExecutionCard({
           row.salidaProcesoAnterior,
         );
       }
+      if (pid === PROCESO_DESBROCE_ID) {
+        seeded = enrichDesbroceDatosProceso(seeded, {
+          salidaProcesoAnterior: row.salidaProcesoAnterior,
+          hijaComponentes,
+          despachoPoses: despacho?.poses ?? null,
+        });
+      }
       if (pid === PROCESO_ENGOMADO) {
         seeded = enrichEngomadoDatosProceso(seeded, cajasDefaultByCodigo);
       }
@@ -2143,31 +2213,14 @@ function ExecutionCard({
       Object.assign(base, enrichEngomadoDatosProceso(base, cajasDefaultByCodigo));
     }
     if (pid === PROCESO_DESBROCE_ID) {
-      if (hijaComponentes.length > 0) {
-        const hojasNetas = hojasNetasFormaFromComponentes(hijaComponentes);
-        if (hojasNetas != null) {
-          base.hojas_entrada = hojasNetas;
-        } else if (row.salidaProcesoAnterior != null) {
-          base.hojas_entrada = row.salidaProcesoAnterior;
-        }
-        const primeraRef = hijaComponentes[0];
-        if (primeraRef && primeraRef.poses_en_forma > 0) {
-          base.poses = primeraRef.poses_en_forma;
-        }
-        const totalEstuches = totalEstuchesFormaComponentes(hijaComponentes);
-        if (totalEstuches > 0) {
-          base.estuches_desbrozados = totalEstuches;
-        }
-        base.componentes_forma = buildComponentesDesbroceSeed(hijaComponentes);
-      } else {
-        if (row.salidaProcesoAnterior != null) base.hojas_entrada = row.salidaProcesoAnterior;
-        if (despacho.poses != null) base.poses = despacho.poses;
-        const hojas = toFiniteNum(base.hojas_entrada);
-        const poses = toFiniteNum(base.poses);
-        if (hojas != null && poses != null && poses > 0) {
-          base.estuches_desbrozados = Math.max(0, Math.floor(hojas * poses));
-        }
-      }
+      Object.assign(
+        base,
+        enrichDesbroceDatosProceso(base, {
+          salidaProcesoAnterior: row.salidaProcesoAnterior,
+          hijaComponentes,
+          despachoPoses: despacho.poses ?? null,
+        }),
+      );
     }
     if (pid === 15) {
       if (row.salidaProcesoAnterior != null) {
