@@ -297,6 +297,128 @@ function dp(paso: HojaRutaPaso | undefined): Record<string, unknown> | null {
   return paso.datosProceso as Record<string, unknown>;
 }
 
+function consensusStringOrNull(vals: (string | null | undefined)[]): string | null {
+  const unique = new Set<string>();
+  for (const v of vals) {
+    const s = String(v ?? "").trim();
+    if (s) unique.add(s);
+  }
+  if (unique.size === 0) return null;
+  if (unique.size === 1) return [...unique][0] ?? null;
+  return null; // distintas → null (honesto; UI puede mostrar «Varias»)
+}
+
+function consensusNumberOrNull(vals: (number | null | undefined)[]): number | null {
+  const unique = new Set<number>();
+  for (const v of vals) {
+    if (v == null || !Number.isFinite(v)) continue;
+    unique.add(v);
+  }
+  if (unique.size === 0) return null;
+  if (unique.size === 1) return [...unique][0] ?? null;
+  return null;
+}
+
+/** Embalaje indexado desde paso Engomado (OT simple o una hija). */
+export function extractEmbalajeFromPasos(pasos: HojaRutaPaso[]): {
+  codigo_caja_embalaje: string | null;
+  estuches_por_bulto: number | null;
+} {
+  const engDp = dp(pasoByProceso(pasos, PROCESO_ENGOMADO_ID));
+  return {
+    codigo_caja_embalaje: asStr(engDp?.codigo_caja_embalaje),
+    estuches_por_bulto: asNum(engDp?.estuches_por_bulto),
+  };
+}
+
+/**
+ * Rollup de embalaje para el índice plano del barco.
+ * - Todas las hijas que informaron la misma caja/uds → ese valor.
+ * - Valores distintos → null (no moda: `prod_ot_producidas` no debe mentir).
+ * - Ninguna informó → null.
+ */
+export function aggregateEmbalajeFromHijaFlats(
+  hijaFlats: Array<{
+    codigo_caja_embalaje: string | null;
+    estuches_por_bulto: number | null;
+  }>,
+): {
+  codigo_caja_embalaje: string | null;
+  estuches_por_bulto: number | null;
+} {
+  return {
+    codigo_caja_embalaje: consensusStringOrNull(hijaFlats.map((f) => f.codigo_caja_embalaje)),
+    estuches_por_bulto: consensusNumberOrNull(hijaFlats.map((f) => f.estuches_por_bulto)),
+  };
+}
+
+/** Misma agregación desde snapshots completos de hija (p. ej. fallback UI). */
+export function aggregateEmbalajeFromHijasSnapshots(hijas: HojaRutaData[]): {
+  codigo_caja_embalaje: string | null;
+  estuches_por_bulto: number | null;
+} {
+  return aggregateEmbalajeFromHijaFlats(hijas.map((h) => extractEmbalajeFromPasos(h.pasos)));
+}
+
+/**
+ * Etiqueta de embalaje para UI de producidas.
+ * Flat gana si tiene valor; si flat es null y las hijas discrepan → «Varias»
+ * (nunca se persiste el literal «Varias» en columnas planas).
+ */
+export function resolveEmbalajeDisplayFromProducida(args: {
+  codigoCajaEmbalaje: string | null;
+  estuchesPorBulto: number | null;
+  hijasSnapshots?: HojaRutaData[] | null;
+}): { codigoLabel: string; estuchesPorBulto: number | null } {
+  if (args.codigoCajaEmbalaje) {
+    return {
+      codigoLabel: args.codigoCajaEmbalaje,
+      estuchesPorBulto: args.estuchesPorBulto,
+    };
+  }
+  const hijas = args.hijasSnapshots ?? [];
+  if (hijas.length === 0) {
+    return {
+      codigoLabel: args.estuchesPorBulto != null ? "—" : "—",
+      estuchesPorBulto: args.estuchesPorBulto,
+    };
+  }
+  const parts = hijas.map((h) => extractEmbalajeFromPasos(h.pasos));
+  const codes = new Set(
+    parts.map((p) => String(p.codigo_caja_embalaje ?? "").trim()).filter(Boolean),
+  );
+  if (codes.size === 1) {
+    const only = [...codes][0] ?? null;
+    return {
+      codigoLabel: only ?? "—",
+      estuchesPorBulto:
+        args.estuchesPorBulto ?? consensusNumberOrNull(parts.map((p) => p.estuches_por_bulto)),
+    };
+  }
+  if (codes.size > 1) {
+    return { codigoLabel: "Varias", estuchesPorBulto: null };
+  }
+  return {
+    codigoLabel: "—",
+    estuchesPorBulto: args.estuchesPorBulto,
+  };
+}
+
+/**
+ * Checklist barco: si alguna hija tiene engomado, todas esas deben tener caja.
+ * Sin engomado en ninguna → N/A (informado = true).
+ */
+export function embalajeInformadoEnContenedor(
+  hijas: Array<{
+    tienePasoEngomado?: boolean;
+    codigoCajaEmbalaje?: string | null;
+  }>,
+): boolean {
+  const conEng = hijas.filter((h) => h.tienePasoEngomado);
+  if (conEng.length === 0) return true;
+  return conEng.every((h) => !!String(h.codigoCajaEmbalaje ?? "").trim());
+}
+
 /**
  * Cantidad producida final: preferir engomado (estuches/cantidad),
  * luego el último paso con señal positiva (ejecución o datos_proceso).
@@ -431,8 +553,7 @@ export function buildProdOtProducidaInsert(args: {
 
   const tipoEngomado =
     asStr(despachoExtras?.tipo_engomado) ?? asStr(engDp?.tipo_engomado);
-  const codigoCaja = asStr(engDp?.codigo_caja_embalaje);
-  const estuchesPorBulto = asNum(engDp?.estuches_por_bulto);
+  const embalaje = extractEmbalajeFromPasos(pasos);
 
   return {
     ot_numero: otNumero,
@@ -452,8 +573,8 @@ export function buildProdOtProducidaInsert(args: {
     poses: desp?.poses ?? null,
     acabado_pral: desp?.acabadoPral ?? null,
     tipo_engomado: tipoEngomado,
-    codigo_caja_embalaje: codigoCaja,
-    estuches_por_bulto: estuchesPorBulto,
+    codigo_caja_embalaje: embalaje.codigo_caja_embalaje,
+    estuches_por_bulto: embalaje.estuches_por_bulto,
     fsc: null,
     fecha_inicio_real: fechaInicio,
     fecha_fin_real: fechaFin,
@@ -546,6 +667,7 @@ export function buildProdOtProducidaContenedorInsert(args: {
 
   const cantidadPedidaPadre = padre.cantidad;
   const cantidadProducidaHijas = sumNullable(hijaFlats.map((f) => f.cantidad_producida));
+  const embalajeAgregado = aggregateEmbalajeFromHijaFlats(hijaFlats);
 
   const snapshot: ContenedorCierreSnapshot = {
     kind: "contenedor",
@@ -574,8 +696,8 @@ export function buildProdOtProducidaContenedorInsert(args: {
     poses: desp?.poses ?? null,
     acabado_pral: desp?.acabadoPral ?? null,
     tipo_engomado: asStr(despachoExtras?.tipo_engomado),
-    codigo_caja_embalaje: null,
-    estuches_por_bulto: null,
+    codigo_caja_embalaje: embalajeAgregado.codigo_caja_embalaje,
+    estuches_por_bulto: embalajeAgregado.estuches_por_bulto,
     fsc: null,
     fecha_inicio_real: fechaInicio,
     fecha_fin_real: fechaFin,

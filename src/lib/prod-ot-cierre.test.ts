@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  aggregateEmbalajeFromHijaFlats,
   buildProdOtProducidaContenedorInsert,
   buildProdOtProducidaInsert,
   contenedorHijasItinerarioCompleto,
+  embalajeInformadoEnContenedor,
   extractCantidadProducida,
+  extractEmbalajeFromPasos,
   isContenedorCierreSnapshot,
+  resolveEmbalajeDisplayFromProducida,
 } from "@/lib/prod-ot-cierre";
 import type { HojaRutaData, HojaRutaPaso } from "@/lib/hoja-ruta/hoja-ruta-query";
 import {
@@ -231,6 +235,9 @@ describe("buildProdOtProducidaContenedorInsert", () => {
             pasos: [],
             pasosCompletados: 1,
             pasosTotal: 1,
+            tienePasoEngomado: false,
+            codigoCajaEmbalaje: null,
+            estuchesPorBulto: null,
           },
           {
             otNumero: "98010-02",
@@ -241,6 +248,9 @@ describe("buildProdOtProducidaContenedorInsert", () => {
             pasos: [],
             pasosCompletados: 1,
             pasosTotal: 1,
+            tienePasoEngomado: false,
+            codigoCajaEmbalaje: null,
+            estuchesPorBulto: null,
           },
         ],
       },
@@ -256,5 +266,148 @@ describe("buildProdOtProducidaContenedorInsert", () => {
     if (isContenedorCierreSnapshot(row.snapshot)) {
       expect(row.snapshot.hijas).toHaveLength(2);
     }
+  });
+
+  it("agrega codigo_caja_embalaje y estuches_por_bulto desde engomado de hijas", () => {
+    const hijaA = snapshot([
+      paso(PROCESO_ENGOMADO_ID, {
+        datosProceso: {
+          estuches_engomados: 4400,
+          codigo_caja_embalaje: "MN2L",
+          estuches_por_bulto: 500,
+        },
+      }),
+    ]);
+    hijaA.otNumero = "98011-01";
+    const hijaB = snapshot([
+      paso(PROCESO_ENGOMADO_ID, {
+        datosProceso: {
+          estuches_engomados: 2300,
+          codigo_caja_embalaje: "MN2L",
+          estuches_por_bulto: 500,
+        },
+      }),
+    ]);
+    hijaB.otNumero = "98011-02";
+
+    const padre = snapshot([]);
+    padre.otNumero = "98011";
+    padre.cantidad = 6000;
+
+    const row = buildProdOtProducidaContenedorInsert({
+      padreOtNumero: "98011",
+      contenedor: {
+        padre,
+        progress: {
+          total: 2,
+          completadas: 2,
+          pct: 100,
+          pasosCompletados: 14,
+          pasosTotal: 14,
+          hijasCerradasPct: 100,
+          hijasItinerarioCompleto: true,
+        },
+        progressLabel: "2 hijas · 100%",
+        hijasResumen: [
+          {
+            otNumero: "98011-01",
+            formaDescripcion: "Forma 1",
+            trabajo: null,
+            cantidad: 4400,
+            pasoActual: null,
+            pasos: [],
+            pasosCompletados: 7,
+            pasosTotal: 7,
+            tienePasoEngomado: true,
+            codigoCajaEmbalaje: "MN2L",
+            estuchesPorBulto: 500,
+          },
+          {
+            otNumero: "98011-02",
+            formaDescripcion: "Forma 2",
+            trabajo: null,
+            cantidad: 2400,
+            pasoActual: null,
+            pasos: [],
+            pasosCompletados: 7,
+            pasosTotal: 7,
+            tienePasoEngomado: true,
+            codigoCajaEmbalaje: "MN2L",
+            estuchesPorBulto: 500,
+          },
+        ],
+      },
+      hijasSnapshots: [hijaA, hijaB],
+      userId: "user-1",
+      nowIso: "2026-08-11T20:56:00.000Z",
+    });
+
+    expect(row.codigo_caja_embalaje).toBe("MN2L");
+    expect(row.estuches_por_bulto).toBe(500);
+    expect(row.cantidad_producida).toBe(6700);
+  });
+});
+
+describe("aggregateEmbalajeFromHijaFlats / embalajeInformadoEnContenedor", () => {
+  it("si todas iguales, conserva caja; si mixtas, null (no moda)", () => {
+    expect(
+      aggregateEmbalajeFromHijaFlats([
+        { codigo_caja_embalaje: "MN2L", estuches_por_bulto: 500 },
+        { codigo_caja_embalaje: "MN2L", estuches_por_bulto: 500 },
+      ]),
+    ).toEqual({ codigo_caja_embalaje: "MN2L", estuches_por_bulto: 500 });
+    expect(
+      aggregateEmbalajeFromHijaFlats([
+        { codigo_caja_embalaje: "MN2L", estuches_por_bulto: 500 },
+        { codigo_caja_embalaje: "MN2L", estuches_por_bulto: 500 },
+        { codigo_caja_embalaje: "MN3S", estuches_por_bulto: 400 },
+      ]),
+    ).toEqual({ codigo_caja_embalaje: null, estuches_por_bulto: null });
+  });
+
+  it("extractEmbalajeFromPasos lee engomado", () => {
+    expect(
+      extractEmbalajeFromPasos([
+        paso(PROCESO_ENGOMADO_ID, {
+          datosProceso: { codigo_caja_embalaje: "MN2L", estuches_por_bulto: 500 },
+        }),
+      ]),
+    ).toEqual({ codigo_caja_embalaje: "MN2L", estuches_por_bulto: 500 });
+  });
+
+  it("checklist barco exige caja si hay engomado", () => {
+    expect(
+      embalajeInformadoEnContenedor([
+        { tienePasoEngomado: true, codigoCajaEmbalaje: "MN2L" },
+        { tienePasoEngomado: true, codigoCajaEmbalaje: "MN2L" },
+      ]),
+    ).toBe(true);
+    expect(
+      embalajeInformadoEnContenedor([
+        { tienePasoEngomado: true, codigoCajaEmbalaje: "MN2L" },
+        { tienePasoEngomado: true, codigoCajaEmbalaje: null },
+      ]),
+    ).toBe(false);
+    expect(embalajeInformadoEnContenedor([{ tienePasoEngomado: false }])).toBe(true);
+  });
+
+  it("UI muestra Varias si hijas discrepan y flat es null", () => {
+    const hijaA = snapshot([
+      paso(PROCESO_ENGOMADO_ID, {
+        datosProceso: { codigo_caja_embalaje: "MN2L", estuches_por_bulto: 500 },
+      }),
+    ]);
+    const hijaB = snapshot([
+      paso(PROCESO_ENGOMADO_ID, {
+        datosProceso: { codigo_caja_embalaje: "MN3S", estuches_por_bulto: 400 },
+      }),
+    ]);
+    expect(
+      resolveEmbalajeDisplayFromProducida({
+        codigoCajaEmbalaje: null,
+        estuchesPorBulto: null,
+        hijasSnapshots: [hijaA, hijaB],
+      }),
+    ).toEqual({ codigoLabel: "Varias", estuchesPorBulto: null });
   });
 });

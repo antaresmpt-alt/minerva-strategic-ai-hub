@@ -575,6 +575,23 @@ Rama: `feature/bloque8.1-pool-mesa-ejecucion-fixes` (commit `2d9d3ab`).
 
 **Fuera de MVP 8.4:** auto-cierre, archive por hija, reglas configurables más allá de “todas las hijas”.
 
+**Embalaje en índice plano (11 ago 2026 noche):** el cierre de barco ya **no** deja `codigo_caja_embalaje` / `estuches_por_bulto` a `null` cuando las hijas coinciden. Agrega desde Engomado de cada hija (`aggregateEmbalajeFromHijaFlats`: **consenso** — mismas → valor; distintas → `null` honesto, nunca moda). OT simple sin cambio de criterio (`extractEmbalajeFromPasos`). Vista barco lee caja en resumen de hijas (`datos_proceso` engomado) para el checklist. UI Producidas: si flat vacío/mixto, `resolveEmbalajeDisplayFromProducida` muestra código consenso o **«Varias»** (solo etiqueta; no se persiste).
+
+### Cola Ramón / captura envío-recepción externos 📋 **retomar mañana (12 ago 2026)**
+
+**Problema:** en externos (plastificado, stamping, etc.) Ramón marca estado enviado/recibido pero **a menudo no anota hojas/palets enviados ni recibidos**. El muelle sí puede poner hojas al recibir. Esos datos quedan huérfanos y el paso siguiente (p. ej. troquel) no puede prefillarse con lo que realmente volvió del proveedor.
+
+**Dirección acordada (no implementar aún):**
+
+1. **Al enviar** (pantalla Gestión externos / Ramón): modal con hojas (y palets si aplica) enviados — prefill desde netas de impresión / plan.
+2. **Al recibir** (Ramón **y/o** muelle): mismo contrato de campos — recibidas + obs/merma.
+3. **Encadenado al siguiente paso:** primero **blando** (prefill editable de hojas a troquelar / entrada). No hard-gate hasta validar en planta.
+4. PDF hoja de ruta: hoy el bloque Externo solo pinta estado/proveedor/fechas — conviene mostrar también hojas env/rec cuando existan.
+
+**Qué no mezclar:** no es 8.5 convergencia; es captura logística del paso externo dentro de cada hija (o OT simple).
+
+**Archivos de partida:** `gestion-externos-page.tsx`, `prod_seguimiento_externos`, UI hoja ruta externo (`hoja-ruta-ot-dialog` / `hoja-ruta-pdf.ts`), prefill troquel vía `inputFromProcessIds`.
+
 ### Fase 8.5 — Convergencia entre hijas 📋 **diseño 11 ago 2026 (sin implementar)**
 
 Separar tres patrones (no un solo “CONVERGER”):

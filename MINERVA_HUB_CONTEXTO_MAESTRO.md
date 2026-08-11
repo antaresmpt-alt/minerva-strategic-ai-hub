@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 11 ago 2026 (8.4 cierre contenedor MVP; 8.5 convergencia documentada)
+> Última actualización: 11 ago 2026 (8.4 cierre contenedor + rollup embalaje; cola Ramón externos 📋 mañana)
 
 ---
 
@@ -108,6 +108,7 @@ Software a medida para la planta de producción gráfica/impresión de la empres
 
 ### ✅ Gestión de Externos (Ramón)
 - Módulo para gestionar proveedores externos
+- **Retomar 12 ago:** modal enviar/recibir con hojas (y palets) + prefill blando al siguiente paso — detalle en `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` § «Cola Ramón / captura envío-recepción externos»
 - Integrado con el módulo de Hoja de Ruta (proceso "Externo" usa este módulo)
 
 ### ✅ Etiquetas (Hugo) — módulo más maduro

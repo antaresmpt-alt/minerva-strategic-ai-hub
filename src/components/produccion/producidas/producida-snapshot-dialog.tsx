@@ -24,6 +24,7 @@ import {
 import { fmtCantidad, fmtDate } from "@/lib/hoja-ruta/hoja-ruta-formatters";
 import type { HojaRutaData } from "@/lib/hoja-ruta/hoja-ruta-query";
 import {
+  resolveEmbalajeDisplayFromProducida,
   isContenedorCierreSnapshot,
   reabrirOtProducida,
   updateProducidaRevisionMeta,
@@ -68,6 +69,14 @@ export function ProducidaSnapshotDialog({
   const parsed = row ? parseSnapshot(row.snapshot) : null;
   const snapshot = parsed?.kind === "ot" ? parsed.data : null;
   const contenedorSnap = parsed?.kind === "contenedor" ? parsed.data : null;
+  const embalajeIndex =
+    row == null
+      ? { codigoLabel: "—", estuchesPorBulto: null as number | null }
+      : resolveEmbalajeDisplayFromProducida({
+          codigoCajaEmbalaje: row.codigo_caja_embalaje,
+          estuchesPorBulto: row.estuches_por_bulto,
+          hijasSnapshots: contenedorSnap?.hijas ?? null,
+        });
   const [profile, setProfile] = useState<ProfileConPermisos | null>(null);
   const [excluido, setExcluido] = useState(false);
   const [motivo, setMotivo] = useState("");
@@ -249,9 +258,9 @@ export function ProducidaSnapshotDialog({
                   <div>
                     <span className="text-slate-500">Embalaje:</span>{" "}
                     <span className="font-medium">
-                      {row.codigo_caja_embalaje ?? "—"}
-                      {row.estuches_por_bulto != null
-                        ? ` · ${row.estuches_por_bulto} un/bulto`
+                      {embalajeIndex.codigoLabel}
+                      {embalajeIndex.estuchesPorBulto != null
+                        ? ` · ${embalajeIndex.estuchesPorBulto} un/bulto`
                         : ""}
                     </span>
                   </div>

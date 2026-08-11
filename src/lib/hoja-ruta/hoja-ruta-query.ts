@@ -15,6 +15,7 @@ import {
 } from "@/lib/planificacion-contenedor-query";
 import { fetchAllInChunks } from "@/lib/supabase-query-chunks";
 import { getPasoActual, normalizePasoEstado, type PipelineStepView } from "@/lib/pipeline/pipeline-data";
+import { PROCESO_ENGOMADO_ID } from "@/lib/despacho-wizard-shared";
 
 /**
  * Loader de la **Hoja de Ruta Virtual** de una OT.
@@ -142,6 +143,11 @@ export type HojaRutaHijaResumen = {
   pasos: HojaRutaPasoResumen[];
   pasosCompletados: number;
   pasosTotal: number;
+  /** True si el itinerario de la hija incluye Engomado. */
+  tienePasoEngomado: boolean;
+  /** Caja informada en datos_proceso del Engomado (si hay). */
+  codigoCajaEmbalaje: string | null;
+  estuchesPorBulto: number | null;
 };
 
 export type HojaRutaContenedorData = {
@@ -487,6 +493,8 @@ type HijaPasoRow = {
   ot_id: string | null;
   orden: number | null;
   estado: string | null;
+  proceso_id: number | null;
+  datos_proceso: Record<string, unknown> | null;
   prod_procesos_cat: { nombre: string | null } | { nombre: string | null }[] | null;
 };
 
@@ -497,6 +505,26 @@ function toPasoResumen(row: HijaPasoRow): HojaRutaPasoResumen {
     orden: Math.max(0, Math.trunc(num(row.orden) ?? 0)),
     estado: str(row.estado) ?? "pendiente",
     procesoNombre: str(cat?.nombre),
+  };
+}
+
+function embalajeFromHijaPasoRows(rows: HijaPasoRow[]): {
+  tienePasoEngomado: boolean;
+  codigoCajaEmbalaje: string | null;
+  estuchesPorBulto: number | null;
+} {
+  const eng = rows.find((r) => Number(r.proceso_id) === PROCESO_ENGOMADO_ID);
+  if (!eng) {
+    return { tienePasoEngomado: false, codigoCajaEmbalaje: null, estuchesPorBulto: null };
+  }
+  const dp =
+    eng.datos_proceso && typeof eng.datos_proceso === "object" ? eng.datos_proceso : null;
+  const caja = str(dp?.codigo_caja_embalaje);
+  const estuches = num(dp?.estuches_por_bulto);
+  return {
+    tienePasoEngomado: true,
+    codigoCajaEmbalaje: caja,
+    estuchesPorBulto: estuches,
   };
 }
 
@@ -593,11 +621,12 @@ export async function fetchHojaRutaContenedor(
 
   const otIds = [...otIdByNum.values()];
   const pasosByOtId = new Map<string, HojaRutaPasoResumen[]>();
+  const pasoRowsByOtId = new Map<string, HijaPasoRow[]>();
   if (otIds.length > 0) {
     const pasoRows = await fetchAllInChunks(otIds, 80, async (chunk) => {
       const { data, error } = await supabase
         .from(TABLE_PASOS)
-        .select("id, ot_id, orden, estado, prod_procesos_cat(nombre)")
+        .select("id, ot_id, orden, estado, proceso_id, datos_proceso, prod_procesos_cat(nombre)")
         .in("ot_id", chunk)
         .order("orden", { ascending: true });
       if (error) throw error;
@@ -606,6 +635,9 @@ export async function fetchHojaRutaContenedor(
     for (const row of pasoRows) {
       const otId = str(row.ot_id);
       if (!otId) continue;
+      const rawList = pasoRowsByOtId.get(otId) ?? [];
+      rawList.push(row);
+      pasoRowsByOtId.set(otId, rawList);
       const list = pasosByOtId.get(otId) ?? [];
       list.push(toPasoResumen(row));
       pasosByOtId.set(otId, list);
@@ -615,9 +647,11 @@ export async function fetchHojaRutaContenedor(
   const hijas: HojaRutaHijaResumen[] = hijasMeta.map((meta) => {
     const otId = otIdByNum.get(meta.numPedido);
     const pasos = otId ? (pasosByOtId.get(otId) ?? []) : [];
+    const rawPasos = otId ? (pasoRowsByOtId.get(otId) ?? []) : [];
     const pasosCompletados = pasos.filter(
       (p) => String(p.estado).trim().toLowerCase() === "finalizado",
     ).length;
+    const embalaje = embalajeFromHijaPasoRows(rawPasos);
     return {
       otNumero: meta.numPedido,
       formaDescripcion: meta.formaDescripcion,
@@ -627,6 +661,9 @@ export async function fetchHojaRutaContenedor(
       pasos,
       pasosCompletados,
       pasosTotal: pasos.length,
+      tienePasoEngomado: embalaje.tienePasoEngomado,
+      codigoCajaEmbalaje: embalaje.codigoCajaEmbalaje,
+      estuchesPorBulto: embalaje.estuchesPorBulto,
     };
   });
 

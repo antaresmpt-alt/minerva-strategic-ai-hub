@@ -57,6 +57,7 @@ import { errorMessageFromUnknown } from "@/lib/error-message";
 import {
   buildProdOtProducidaContenedorInsert,
   buildProdOtProducidaInsert,
+  embalajeInformadoEnContenedor,
   extractCantidadProducida,
   isContenedorListoParaCerrar,
   isContenedorPendienteRevision,
@@ -618,7 +619,7 @@ export function HojaRutaOtDialog({
         cantidadProducida: algunaCantidad,
         horasCoherentes: true,
         incidenciasRevisadas: true,
-        embalajeInformado: true,
+        embalajeInformado: embalajeInformadoEnContenedor(loadResult.hijas),
         modoContenedor: true,
         hijasTotal: loadResult.hijas.length,
         hijasCompletas: loadResult.hijas.filter(

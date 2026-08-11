@@ -1712,7 +1712,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 ### Bloque 6 — Cierre OT / Producidas (23 jul 2026 MVP ✅)
 | Archivo | Responsabilidad |
 |---------|-----------------|
-| `src/lib/prod-ot-cierre.ts` | Estado derivado pendiente revisión, mapper planas, cantidad (engomado / sin engomado), reabrir, meta revisión. |
+| `src/lib/prod-ot-cierre.ts` | Estado derivado pendiente revisión, mapper planas, cantidad (engomado / sin engomado), reabrir, meta revisión. Cierre barco: rollup embalaje desde hijas (`aggregateEmbalajeFromHijaFlats`). |
 | `src/lib/prod-ot-cierre-permisos.ts` | `puedeCerrarOt` / `puedeReabrirOt` (admin/gerencia o flags). |
 | `src/lib/prod-ot-producidas-export.ts` | Export Excel del histórico. |
 | `src/types/prod-ot-producidas.ts` | Tipos fila histórico. |
