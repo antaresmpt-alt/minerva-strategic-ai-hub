@@ -154,6 +154,29 @@ export function getSiguientePaso(
   );
 }
 
+/** Texto de “Paso actual” en Pipeline (incl. pendientes de revisión). */
+export function formatPipelinePasoActualLabel(
+  row: Pick<PipelineRowView, "pasoActual" | "pasos" | "badges">,
+): string {
+  if (row.pasoActual) {
+    const nombre = row.pasoActual.procesoNombre?.trim() || "—";
+    return `${nombre} (${row.pasoActual.estadoPaso})`;
+  }
+  if (row.badges.includes("pendiente_revision")) {
+    const ordered = [...row.pasos].sort((a, b) => a.orden - b.orden);
+    const last = ordered[ordered.length - 1];
+    const lastName = last?.procesoNombre?.trim();
+    return lastName ? `Listo para cerrar · ${lastName}` : "Listo para cerrar";
+  }
+  return "—";
+}
+
+/** Etiqueta legible de badge Pipeline. */
+export function formatPipelineBadgeLabel(badge: PipelineBadge | string): string {
+  if (badge === "pendiente_revision") return "Listo para cerrar";
+  return String(badge).replace(/_/g, " ");
+}
+
 type BadgeInput = {
   pasos: PipelineStepView[];
   fechaCompromiso: string | null;

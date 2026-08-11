@@ -33,6 +33,10 @@ import {
   fetchPipelineRows,
   type FetchPipelineFilters,
 } from "@/lib/pipeline/pipeline-query";
+import {
+  formatPipelineBadgeLabel,
+  formatPipelinePasoActualLabel,
+} from "@/lib/pipeline/pipeline-data";
 import { getSupabaseErrorMessage } from "@/lib/supabase-error-message";
 import {
   exportPipelinePdf,
@@ -41,6 +45,8 @@ import {
 import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
+const PIPELINE_COMPACT_STORAGE_KEY = "minerva.pipeline.compact";
+
 const STEP_BADGE_STYLES: Record<string, string> = {
   pendiente: "bg-slate-100 text-slate-700",
   disponible: "bg-blue-100 text-blue-800",
@@ -48,6 +54,29 @@ const STEP_BADGE_STYLES: Record<string, string> = {
   pausado: "bg-orange-100 text-orange-800",
   finalizado: "bg-emerald-100 text-emerald-800",
 };
+
+function readCompactPreference(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const v = window.localStorage.getItem(PIPELINE_COMPACT_STORAGE_KEY);
+    if (v === "0") return false;
+    if (v === "1") return true;
+  } catch {
+    /* ignore */
+  }
+  return true;
+}
+
+function writeCompactPreference(compact: boolean) {
+  try {
+    window.localStorage.setItem(
+      PIPELINE_COMPACT_STORAGE_KEY,
+      compact ? "1" : "0",
+    );
+  } catch {
+    /* ignore */
+  }
+}
 
 function fmtHours(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return "—";
@@ -107,7 +136,8 @@ export function PlanificacionPipelineTab() {
   const [quickExternoActivo, setQuickExternoActivo] = useState(false);
   const [quickSinItinerario, setQuickSinItinerario] = useState(false);
   const [quickPendienteRevision, setQuickPendienteRevision] = useState(false);
-  const [compactMode, setCompactMode] = useState(false);
+  /** Por defecto compacto (rendimiento/UX sept). `?compact=0` = vista extendida. */
+  const [compactMode, setCompactMode] = useState(true);
   const [showAnalyticsColumns, setShowAnalyticsColumns] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportMode, setExportMode] = useState<PipelinePdfMode>("listado");
@@ -149,7 +179,10 @@ export function PlanificacionPipelineTab() {
     if (searchParams.get("quickExternoActivo") === "1") setQuickExternoActivo(true);
     if (searchParams.get("quickSinItinerario") === "1") setQuickSinItinerario(true);
     if (searchParams.get("quickPendienteRevision") === "1") setQuickPendienteRevision(true);
-    if (searchParams.get("compact") === "1") setCompactMode(true);
+    const compactQ = searchParams.get("compact");
+    if (compactQ === "0") setCompactMode(false);
+    else if (compactQ === "1") setCompactMode(true);
+    else setCompactMode(readCompactPreference());
     if (searchParams.get("analyticsCols") === "1") setShowAnalyticsColumns(true);
     const otQ = searchParams.get("ot");
     if (otQ) setSelectedOtNumero(otQ);
@@ -193,7 +226,8 @@ export function PlanificacionPipelineTab() {
     setOrDelete("quickExternoActivo", quickExternoActivo ? "1" : null);
     setOrDelete("quickSinItinerario", quickSinItinerario ? "1" : null);
     setOrDelete("quickPendienteRevision", quickPendienteRevision ? "1" : null);
-    setOrDelete("compact", compactMode ? "1" : null);
+    // compact=0 = extendida; omitir param si compacto (default)
+    setOrDelete("compact", compactMode ? null : "0");
     setOrDelete("analyticsCols", showAnalyticsColumns ? "1" : null);
     setOrDelete("ot", detailOpen ? selectedOtNumero : null);
 
@@ -505,7 +539,11 @@ export function PlanificacionPipelineTab() {
               <input
                 type="checkbox"
                 checked={compactMode}
-                onChange={(e) => setCompactMode(e.target.checked)}
+                onChange={(e) => {
+                  const next = e.target.checked;
+                  setCompactMode(next);
+                  writeCompactPreference(next);
+                }}
               />
               Modo compacto
             </label>
@@ -582,7 +620,7 @@ export function PlanificacionPipelineTab() {
                   <p className="text-sm font-semibold text-amber-900">{kpis.bloqueadas}</p>
                 </div>
                 <div className="rounded-md border border-slate-200 bg-teal-50 px-3 py-2">
-                  <p className="text-[11px] text-teal-700">Pend. revisión</p>
+                  <p className="text-[11px] text-teal-700">Listo cerrar</p>
                   <p className="text-sm font-semibold text-teal-900">
                     {kpis.pendientesRevision}
                   </p>
@@ -793,6 +831,17 @@ export function PlanificacionPipelineTab() {
                             {row.pasoActual.procesoNombre ?? "—"}{" "}
                             <span className="text-slate-500">({row.pasoActual.estadoPaso})</span>
                           </span>
+                        ) : row.badges.includes("pendiente_revision") ? (
+                          <span
+                            className={
+                              compactMode
+                                ? "text-[11px] font-medium text-teal-800"
+                                : "text-xs font-medium text-teal-800"
+                            }
+                            title={formatPipelinePasoActualLabel(row)}
+                          >
+                            {formatPipelinePasoActualLabel(row)}
+                          </span>
                         ) : (
                           <span className={compactMode ? "text-[11px] text-slate-500" : "text-xs text-slate-500"}>—</span>
                         )}
@@ -899,7 +948,7 @@ export function PlanificacionPipelineTab() {
                                   } ${compactMode ? "px-1 py-0 text-[9px]" : "px-1.5 py-0.5 text-[10px]"}`}
                                 >
                                   <AlertTriangle className="size-3" />
-                                  {b}
+                                  {formatPipelineBadgeLabel(b)}
                                 </span>
                               ))}
                             </div>

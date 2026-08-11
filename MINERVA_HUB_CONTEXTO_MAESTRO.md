@@ -252,8 +252,8 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 ## 🔜 Tareas pendientes inmediatas
 
 ### Retomar aquí (11 ago 2026 — camino a paralelo septiembre)
-- [ ] **Pipeline**: rendimiento + **modo compacto por defecto** (hoy `compactMode=false`; `?compact=1` existe)
-- [ ] **Pipeline UX**: «Listo para cerrar» en pendientes de revisión (paso actual "—" confunde)
+- [x] **Pipeline**: modo **compacto por defecto** (+ preferencia localStorage; `?compact=0` = extendida) (11 ago)
+- [x] **Pipeline UX**: «Listo para cerrar» en pendientes de revisión (paso actual + badge) (11 ago)
 - [ ] **Fase 8.4**: cierre OT contenedor cuando **todas las hijas** terminan → `pendiente_revision` / producida + snapshot barco (regla MVP acordada Manel 11 ago)
 - [ ] **Bloque 9 §15.6.12**: derivar OT a impresión externa post-despacho
 - [ ] **Bloque 6.x** (opcional rápido): avisos calidad al cierre; comparar versiones OT
@@ -275,10 +275,10 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [ ] Preguntas §12 planta (CTP hija) si hace falta antes de 8.4 fino
 
 ### Siguiente foco (orden sugerido 11 ago)
-1. **Pipeline** (rápido + compacto)
+1. ~~**Pipeline** (rápido + compacto)~~ ✅ compacto default + Listo para cerrar
 2. **8.4** cierre contenedor
 3. **9** derivar a externa
-4. Afinados B6 / B11 suave
+4. Afinados B6 / B11 suave (+ perfilar carga Pipeline si sigue lento)
 5. **Bloque 12** al acercarse usuarios nuevos
 6. **B5** puente Rita→Hugo si sobra
 7. **B7 / B10** aparcados

@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   computePipelineBadges,
   computePipelineRisk,
+  formatPipelineBadgeLabel,
+  formatPipelinePasoActualLabel,
   getPasoActual,
   getSiguientePaso,
   type PipelineRowView,
@@ -87,6 +89,30 @@ test("computePipelineBadges detecta externo activo", () => {
     riesgo: "ok",
   });
   assert.ok(badges.includes("externo_activo"));
+});
+
+test("formatPipelinePasoActualLabel muestra Listo para cerrar", () => {
+  const pasos = [
+    mkStep({
+      pasoId: "a",
+      orden: 1,
+      estadoPaso: "finalizado",
+      procesoNombre: "Impresión Offset",
+    }),
+    mkStep({
+      pasoId: "b",
+      orden: 2,
+      estadoPaso: "finalizado",
+      procesoNombre: "Engomado",
+    }),
+  ];
+  const label = formatPipelinePasoActualLabel({
+    pasoActual: null,
+    pasos,
+    badges: ["pendiente_revision"],
+  });
+  assert.equal(label, "Listo para cerrar · Engomado");
+  assert.equal(formatPipelineBadgeLabel("pendiente_revision"), "Listo para cerrar");
 });
 
 test("computePipelineBadges marca cerrada cuando todos finalizados", () => {

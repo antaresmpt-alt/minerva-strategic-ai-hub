@@ -1,7 +1,11 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
-import type { PipelineRowView } from "@/lib/pipeline/pipeline-data";
+import {
+  formatPipelineBadgeLabel,
+  formatPipelinePasoActualLabel,
+  type PipelineRowView,
+} from "@/lib/pipeline/pipeline-data";
 
 type PipelinePdfMode = "listado" | "analitica" | "ambas";
 
@@ -48,7 +52,7 @@ function listRows(rows: PipelineRowView): string[] {
     rows.otNumero,
     rows.cliente ?? "—",
     rows.trabajo ?? "—",
-    rows.pasoActual?.procesoNombre ?? "—",
+    formatPipelinePasoActualLabel(rows),
     rows.siguientePaso?.procesoNombre ?? "—",
     rows.pasos.length > 0
       ? rows.pasos
@@ -57,7 +61,7 @@ function listRows(rows: PipelineRowView): string[] {
           .join(" · ")
       : "—",
     rows.riesgo,
-    rows.badges.join(", ") || "—",
+    rows.badges.map(formatPipelineBadgeLabel).join(", ") || "—",
   ];
 }
 
