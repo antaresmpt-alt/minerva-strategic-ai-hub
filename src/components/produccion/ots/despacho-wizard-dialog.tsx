@@ -150,6 +150,13 @@ export type DespachoWizardDialogProps = {
   /** Racha Tiburón: mantener modal tras guardar. Default on sin initialOt. */
   batchModeDefault?: boolean;
   onDespachado?: (info: { ot: string; rowId: string }) => void;
+  /**
+   * Modo forzado: admin/oficina_tecnica/gerencia pueden guardar aunque haya
+   * compra generada. El sistema avisa pero no bloquea.
+   */
+  forceMode?: boolean;
+  /** Rol del usuario activo; necesario para validar acceso forzado. */
+  userRole?: string | null;
 };
 
 function makeTabHelpers(tabs: { id: DespachoWizardTab; label: string }[]) {
@@ -286,12 +293,16 @@ function buildCartelitaPackFromWizard(
   return { portada, hijas };
 }
 
+const ROLES_FORZADO = new Set(["admin", "oficina_tecnica", "gerencia"]);
+
 export function DespachoWizardDialog({
   open,
   onOpenChange,
   initialOt,
   batchModeDefault = false,
   onDespachado,
+  forceMode = false,
+  userRole,
 }: DespachoWizardDialogProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const otInputRef = useRef<HTMLInputElement | null>(null);
@@ -1584,13 +1595,25 @@ export function DespachoWizardDialog({
     return true;
   }, [formasValidation, seleccion, wizardTab]);
 
+  const canForceSave = useMemo(
+    () => forceMode && userRole != null && ROLES_FORZADO.has(userRole),
+    [forceMode, userRole],
+  );
+
   const submitDespacho = useCallback(async () => {
     if (!seleccion) return;
     if (despachoStatus === "despachada_con_compra") {
-      toast.error(
-        "OT despachada con compra generada. Modifica desde Compras."
+      const canForce =
+        forceMode && userRole != null && ROLES_FORZADO.has(userRole);
+      if (!canForce) {
+        toast.error(
+          "OT despachada con compra generada. Modifica desde Compras.",
+        );
+        return;
+      }
+      toast.warning(
+        "OT con compra generada — guardando igualmente. A tu cuenta y riesgo.",
       );
-      return;
     }
     setSaving(true);
     const selectedRowId = seleccion.id;
@@ -2797,8 +2820,16 @@ export function DespachoWizardDialog({
                     </p>
                   ) : null}
                   {despachoStatus === "despachada_con_compra" ? (
-                    <p className="w-full rounded border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-800">
-                      OT con compra generada: despacho bloqueado.
+                    <p
+                      className={
+                        canForceSave
+                          ? "w-full rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-900"
+                          : "w-full rounded border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-800"
+                      }
+                    >
+                      {canForceSave
+                        ? "OT con compra generada — guardado forzado habilitado. A tu cuenta y riesgo."
+                        : "OT con compra generada: despacho bloqueado."}
                     </p>
                   ) : null}
                 </div>
@@ -4173,7 +4204,7 @@ export function DespachoWizardDialog({
                 disabled={
                   saving ||
                   !seleccion ||
-                  despachoStatus === "despachada_con_compra"
+                  (despachoStatus === "despachada_con_compra" && !canForceSave)
                 }
                 className="gap-2 bg-emerald-700 text-white hover:bg-emerald-800"
                 onClick={() => void submitDespacho()}

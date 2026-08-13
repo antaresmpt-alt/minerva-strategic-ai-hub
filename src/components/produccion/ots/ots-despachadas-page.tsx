@@ -65,6 +65,7 @@ import {
 } from "@/components/produccion/ots/detalles-compra-dialog";
 import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
 import { DespachoWizardDialog } from "@/components/produccion/ots/despacho-wizard-dialog";
+import { AjustarItinerarioDialog } from "@/components/produccion/ots/ajustar-itinerario-dialog";
 import {
   horasEngomadoFromDespachoForm,
   type DespachoFormState,
@@ -518,6 +519,10 @@ export function OtsDespachadasPage({
   const [editItinerarioLoading, setEditItinerarioLoading] = useState(false);
   const editItinerarioInitialRef = useRef<string>("");
 
+  const [ajustarItinerarioOpen, setAjustarItinerarioOpen] = useState(false);
+  const [ajustarItinerarioOt, setAjustarItinerarioOt] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+
   const [compraLoteConfirmOpen, setCompraLoteConfirmOpen] = useState(false);
   const [compraLoteSinItinerario, setCompraLoteSinItinerario] = useState<
     string[]
@@ -532,6 +537,40 @@ export function OtsDespachadasPage({
     setEditItinerarioLoading(false);
     editItinerarioInitialRef.current = "";
   }, []);
+
+  // Load user role once on mount for forceMode in wizard and ajustar itinerario
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const {
+          data: { user: authUser },
+        } = await supabase.auth.getUser();
+        const uid =
+          typeof authUser?.id === "string" && authUser.id.trim().length > 0
+            ? authUser.id.trim()
+            : null;
+        if (!uid || cancelled) return;
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", uid)
+          .maybeSingle();
+        if (!cancelled) {
+          setUserRole(
+            prof && typeof (prof as { role?: unknown }).role === "string"
+              ? String((prof as { role: string }).role).trim() || null
+              : null,
+          );
+        }
+      } catch {
+        // non-critical — role stays null
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase]);
 
   const handleVerCompra = useCallback((row: OtsDespachadasTableRow) => {
     const ot = String(row.ot_numero ?? "").trim();
@@ -551,6 +590,16 @@ export function OtsDespachadasPage({
   const handleVerHojaRuta = useCallback((row: OtsDespachadasTableRow) => {
     setHojaRutaOt(String(row.ot_numero ?? "").trim() || null);
   }, []);
+
+  const handleAjustarItinerario = useCallback(
+    (row: OtsDespachadasTableRow) => {
+      const ot = String(row.ot_numero ?? "").trim();
+      if (!ot) return;
+      setAjustarItinerarioOt(ot);
+      setAjustarItinerarioOpen(true);
+    },
+    [],
+  );
 
   const isSeleccionCompraDeshabilitada = useCallback(
     (row: OtsDespachadasTableRow) =>
@@ -1048,7 +1097,7 @@ export function OtsDespachadasPage({
   const columnCtx = useMemo<OtsDespachadasColumnsContext>(
     () => ({
       onVerCompra: handleVerCompra,
-      onItinerario: handleEditarDespacho,
+      onItinerario: handleAjustarItinerario,
       onEditarDespacho: handleEditarDespacho,
       onVerHojaRuta: handleVerHojaRuta,
       troquelExcelByCodigo,
@@ -1061,6 +1110,7 @@ export function OtsDespachadasPage({
     }),
     [
       handleVerCompra,
+      handleAjustarItinerario,
       handleEditarDespacho,
       handleVerHojaRuta,
       troquelExcelByCodigo,
@@ -1458,9 +1508,22 @@ export function OtsDespachadasPage({
         }}
         initialOt={despachoWizardInitialOt}
         batchModeDefault={false}
+        forceMode
+        userRole={userRole}
         onDespachado={() => {
           void loadRows();
         }}
+      />
+
+      <AjustarItinerarioDialog
+        open={ajustarItinerarioOpen}
+        onOpenChange={(o) => {
+          setAjustarItinerarioOpen(o);
+          if (!o) setAjustarItinerarioOt(null);
+        }}
+        otNumero={ajustarItinerarioOt}
+        supabase={supabase}
+        onGuardado={() => void loadRows()}
       />
 
       <DetallesCompraDialog

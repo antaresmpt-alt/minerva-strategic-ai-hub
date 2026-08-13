@@ -162,6 +162,72 @@ export async function replaceProdOtItinerarioSlots(
 }
 
 /**
+ * Sustituye únicamente los pasos PENDIENTES/DISPONIBLES de una OT activa.
+ * Los pasos ya iniciados (en_marcha, pausado) o finalizados se dejan intactos.
+ * newSlots define la nueva cola que irá después de los pasos bloqueados.
+ */
+export async function insertarPasosEnColaViva(
+  supabase: SupabaseClient,
+  otId: string,
+  pasosActuales: ProdOtPasoVista[],
+  newSlots: DespachoItinerarioSlot[],
+): Promise<void> {
+  const locked = pasosActuales.filter(
+    (p) => !ESTADOS_EDITABLES.has(String(p.estado ?? "").trim().toLowerCase()),
+  );
+  const editableIds = pasosActuales
+    .filter((p) =>
+      ESTADOS_EDITABLES.has(String(p.estado ?? "").trim().toLowerCase()),
+    )
+    .map((p) => p.id);
+
+  if (editableIds.length > 0) {
+    const { error: errDel } = await supabase
+      .from(TABLE_PROD_OT_PASOS)
+      .delete()
+      .in("id", editableIds);
+    if (errDel) throw errDel;
+  }
+
+  if (newSlots.length === 0) return;
+
+  const nextOrden =
+    locked.length > 0 ? Math.max(...locked.map((p) => p.orden)) + 1 : 1;
+
+  // If a step is currently en_marcha, new first slot stays pendiente (not disponible)
+  const hasEnMarcha = locked.some(
+    (p) => String(p.estado ?? "").trim().toLowerCase() === "en_marcha",
+  );
+
+  let desbroceMaquinaId: string | null = null;
+  if (newSlots.some((s) => s.procesoId === PROCESO_DESBROCE_ID)) {
+    const { data: maqData, error: maqErr } = await supabase
+      .from("prod_maquinas")
+      .select("id")
+      .eq("codigo", "ENG-DESBROZ")
+      .maybeSingle();
+    if (maqErr) throw maqErr;
+    desbroceMaquinaId =
+      typeof (maqData as { id?: unknown } | null)?.id === "string"
+        ? String((maqData as { id: string }).id).trim() || null
+        : null;
+  }
+
+  const pasoRows = newSlots.map((s, i) => ({
+    ot_id: otId,
+    orden: nextOrden + i,
+    proceso_id: s.procesoId,
+    maquina_id: s.procesoId === PROCESO_DESBROCE_ID ? desbroceMaquinaId : null,
+    estado: i === 0 && !hasEnMarcha ? "disponible" : "pendiente",
+  }));
+
+  const { error: errIns } = await supabase
+    .from(TABLE_PROD_OT_PASOS)
+    .insert(pasoRows);
+  if (errIns) throw errIns;
+}
+
+/**
  * Números de OT sin ningún paso en `prod_ot_pasos` (sin fila maestro → también se listan).
  */
 export async function listOtNumerosSinItinerario(

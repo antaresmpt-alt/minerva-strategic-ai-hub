@@ -195,8 +195,9 @@ function OtsDespachadasSortHeader({
 
 export type OtsDespachadasColumnsContext = {
   onVerCompra: (row: OtsDespachadasTableRow) => void;
-  /** Abre el mismo modal de edición (despacho + itinerario). */
+  /** Abre el diálogo de ajuste de itinerario en vivo (cola pendiente). */
   onItinerario: (row: OtsDespachadasTableRow) => void;
+  /** Abre el wizard de edición de despacho (modo forzado si hay compra). */
   onEditarDespacho: (row: OtsDespachadasTableRow) => void;
   /** Abre la Hoja de Ruta Virtual (lectura) de la OT. */
   onVerHojaRuta: (row: OtsDespachadasTableRow) => void;
@@ -533,10 +534,10 @@ export function createOtsDespachadasColumns(
               variant="ghost"
               size="icon"
               className={itinerarioIconClass(row.original.has_itinerario)}
-              aria-label={`Itinerario y despacho OT ${row.original.ot_numero}`}
+              aria-label={`Ajustar itinerario OT ${row.original.ot_numero}`}
               title={
                 row.original.has_itinerario
-                  ? "Editar despacho (wizard)"
+                  ? "Ajustar itinerario (cola pendiente)"
                   : "Despachar / asignar itinerario"
               }
               onClick={() => ctx.onItinerario(row.original)}
@@ -587,7 +588,7 @@ export function createOtsDespachadasColumns(
             size="icon"
             className="h-7 w-7 shrink-0 text-slate-600 hover:text-[#002147]"
             aria-label={`Editar despacho OT ${row.original.ot_numero}`}
-            title="Editar despacho (wizard)"
+            title="Reeditar despacho (wizard, forzado)"
             onClick={() => ctx.onEditarDespacho(row.original)}
           >
             <Pencil className="h-4 w-4" aria-hidden />
