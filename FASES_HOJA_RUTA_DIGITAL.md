@@ -574,16 +574,16 @@ PDF compacto para acompañar la OT entre departamentos (sustituto papel de la ho
 ✅ **Bloque 6 MVP** (23 jul) + engomado/promedios/oficiales/clone (jul–ago). ✅ Cierre contenedor 8.4 (11 ago).
 ⏸ **Bloque 7 APARCADO**: Expedición/Albarán (hasta decisión Odoo).
 🔄 **Bloque 8**: FORMATO–8.1 ✅ · **8.2 wizard MVP ✅** · 8.3 parcial · **8.4 cierre barco ✅** · **8.5 convergencia 📋** · 8.6 futuro. Fuente: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
-✅ **Bloque 9**: 9.0–9.6d + calendario prod. ⏳ Derivar→imp. externa (§15.6.12); OCR/sobrantes baja. `MINERVA_BLOQUE9_…`.
+✅ **Bloque 9**: 9.0–9.6d + calendario prod. ✅ Derivar→imp. externa §15.6.12 (13 ago). ⏳ OCR/sobrantes baja. `MINERVA_BLOQUE9_…` · `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`.
 📋 **Bloque 11**: calendario en uso (Carlos/Jordi); lanzar con cuidado — `MINERVA_BLOQUE11_…`.
 📋 **Bloque 12**: roles/landing por perfil documentado (11 ago), implementación aparcada — `MINERVA_BLOQUE12_…` + `MINERVA_ROLES_Y_NAVEGACION.md`.
 
-> Mapa vivo y prioridades paralelo septiembre: **`MINERVA_HUB_CONTEXTO_MAESTRO.md`** (actualizado 11 ago 2026).
+> Mapa vivo y prioridades paralelo septiembre: **`MINERVA_HUB_CONTEXTO_MAESTRO.md`** (actualizado 13 ago 2026).
 
 
 ---
 
-**Última actualización**: 5 de julio de 2026 — Bloque 9: reimpresión cartela remanente libre; valoración remanente Stock; prueba planta OT 99905 (#99002, consumo 1800 h).
+**Última actualización**: 13 de agosto de 2026 — §15.6.12 Imprimir fuera + anular mesa→Pool + ajustar itinerario vivo (`SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`).
 
 ---
 
@@ -1088,3 +1088,29 @@ Pendiente: H1/H2 recuento global; lista OTs piloto con Emma/Ramón.
 | Ejecución | `planificacion-ots-ejecucion-tab.tsx` |
 | RPC | `supabase/migrations/20260705150000_bloque9_4_stock_consumo_rpc.sql` |
 | IA Stock | `stock-ai-dialog.tsx`, `/api/gemini/stock-analyze` |
+
+---
+
+## Bloque 9 §15.6.12 + itinerario vivo ✅ **13 ago 2026**
+
+> Fuente: `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md` · `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §15.6.12 / §15.14.
+
+### Hecho
+
+- **Imprimir fuera:** sustituye Offset/Digital `disponible` por proceso **21**. Mesa no iniciada se **borra**; pool `en_transito`. Acciones en Pool, mesa (Acción) y tarjeta de ejecución (Pendiente inicio).
+- **Anular mesa:** cancela ejecución y borra hueco → Pool. Ya no deja la OT Terminada (`estado_mesa = finalizada`).
+- **Ajustar itinerario (Ruta):** pasos hechos con candado; cola pendiente editable (`insertarPasosEnColaViva`). Compra no bloquea.
+- **Reeditar despacho (Lápiz):** `forceMode` para `admin` / `oficina_tecnica` / `gerencia` aunque haya compra (aviso, no muro).
+
+### Archivos
+
+| Pieza | Ruta |
+|-------|------|
+| Derivar / anular | `src/lib/derivar-impresion-externa.ts` |
+| Cola viva | `src/lib/prod-ot-itinerario-client.ts` (`insertarPasosEnColaViva`) |
+| Diálogo Ruta | `src/components/produccion/ots/ajustar-itinerario-dialog.tsx` |
+| Wizard forzado | `despacho-wizard-dialog.tsx` (`forceMode`, `userRole`) |
+
+### Smoke
+
+- OT **98015**: Imprimir fuera → Externos 1600/1400 → insertar Desbroce en cola viva.

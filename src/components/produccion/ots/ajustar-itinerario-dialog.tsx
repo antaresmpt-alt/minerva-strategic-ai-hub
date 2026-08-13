@@ -149,7 +149,8 @@ export function AjustarItinerarioDialog({
           </DialogTitle>
           <DialogDescription className="text-xs">
             Los pasos ya iniciados o finalizados son de solo lectura. Puedes
-            reordenar, quitar o añadir procesos en la cola pendiente.
+            reordenar, quitar o añadir procesos en la cola pendiente (los nuevos
+            se insertan al inicio de esa cola — justo después de lo hecho).
           </DialogDescription>
         </DialogHeader>
 
@@ -203,6 +204,7 @@ export function AjustarItinerarioDialog({
                     disabled={saving}
                     slots={editableSlots}
                     onSlotsChange={setEditableSlots}
+                    addPosition="prepend"
                     embedded
                   />
                 ) : (

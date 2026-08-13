@@ -2,7 +2,7 @@
 
 > Documento de contexto técnico generado automáticamente.
 > Proyecto: **minerva-strategic-ai-hub** · Next.js 16 + React 19 + Supabase.
-> Fecha de generación: 13 de junio de 2026 · **Última actualización: 23 julio 2026** (Bloque 6 MVP + handoff §0).
+> Fecha de generación: 13 de junio de 2026 · **Última actualización: 13 agosto 2026** (imprimir fuera + itinerario vivo; ver `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`).
 
 ---
 
@@ -1789,6 +1789,19 @@ Handoff y backlog: `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` **§0**.
 
 > Además: `supabase/seeds/etiquetas_material_catalogo.json` (seed), `supabase/seed_troqueles_test.sql`
 > (seed de prueba) y `supabase/migrations/.pending/` (migraciones aún no aplicadas).
+
+---
+
+## 9. Novedades 13 ago 2026 (itinerario / mesa)
+
+> Detalle: `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`.
+
+| Módulo | Función |
+|--------|---------|
+| `src/lib/derivar-impresion-externa.ts` | `derivarOtAImpresionExterna` (1/2 → 21), `devolverHuecoMesaAlPool`, `puedeMostrarImprimirFueraMesa` |
+| `src/lib/prod-ot-itinerario-client.ts` | `insertarPasosEnColaViva` (no borra pasos en marcha/finalizados) |
+| `src/components/produccion/ots/ajustar-itinerario-dialog.tsx` | UI botón Ruta en OTs Despachadas |
+| `DespachoWizardDialog` | Props `forceMode` + `userRole` — guardar con compra si admin/oficina_tecnica/gerencia |
 
 ---
 

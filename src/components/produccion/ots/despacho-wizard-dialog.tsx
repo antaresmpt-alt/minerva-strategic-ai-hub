@@ -133,6 +133,11 @@ import {
 } from "@/lib/despacho-wizard-shared";
 import { CTP_REQUISITO_DEFS, buildCtpRequisitosSeedFromWizard, formatCtpRequisitosResumen, mergeDatosProcesoSeed } from "@/lib/ctp-despacho";
 import {
+  fetchProdOtPasosVista,
+  insertarPasosEnColaViva,
+  itinerarioPasosPermitenReemplazo,
+} from "@/lib/prod-ot-itinerario-client";
+import {
   exportHojaRutaCartelitaPdf,
   printHojaRutaCartelitaPdf,
   type HojaRutaCartelitaInput,
@@ -326,6 +331,9 @@ export function DespachoWizardDialog({
   const [itinerarioSlots, setItinerarioSlots] = useState<DespachoItinerarioSlot[]>(
     []
   );
+  /** true si hay pasos en_marcha/finalizado: el wizard no puede reemplazar el itinerario entero. */
+  const [itinerarioBloqueadoPorProduccion, setItinerarioBloqueadoPorProduccion] =
+    useState(false);
   const [procesoDatos, setProcesoDatos] = useState<DespachoWizardProcesoDatos>(
     () => emptyDespachoWizardProcesoDatos()
   );
@@ -387,6 +395,7 @@ export function DespachoWizardDialog({
     impresionFormatoAutoRef.current = true;
     setForm(emptyDespachoForm());
     setItinerarioSlots([]);
+    setItinerarioBloqueadoPorProduccion(false);
     setProcesoDatos(emptyDespachoWizardProcesoDatos());
     setReferenciaHistorial([]);
     setPostDespachoCartelita(null);
@@ -418,6 +427,7 @@ export function DespachoWizardDialog({
           setCompraGenerada(false);
           setMeta(emptyDespachoMeta());
           setItinerarioSlots([]);
+          setItinerarioBloqueadoPorProduccion(false);
           setForm(emptyDespachoForm());
           setProcesoDatos(emptyDespachoWizardProcesoDatos());
           return;
@@ -463,7 +473,7 @@ export function DespachoWizardDialog({
             .maybeSingle(),
           supabase
             .from(TABLE_OT_PASOS)
-            .select("proceso_id, orden, datos_proceso")
+            .select("proceso_id, orden, estado, datos_proceso")
             .eq("ot_id", sel.id)
             .order("orden", { ascending: true }),
           supabase.from("prod_procesos_cat").select("id, nombre"),
@@ -605,7 +615,11 @@ export function DespachoWizardDialog({
           nombreById.set(c.id, String(c.nombre ?? `Proceso #${c.id}`));
         }
         const nextSlots: DespachoItinerarioSlot[] = (
-          (pasosRows ?? []) as Array<{ proceso_id: number; orden: number }>
+          (pasosRows ?? []) as Array<{
+            proceso_id: number;
+            orden: number;
+            estado?: string | null;
+          }>
         )
           .sort((a, b) => a.orden - b.orden)
           .map((p) => ({
@@ -614,6 +628,13 @@ export function DespachoWizardDialog({
             nombre: nombreById.get(p.proceso_id) ?? `Proceso #${p.proceso_id}`,
           }));
         setItinerarioSlots(nextSlots);
+        setItinerarioBloqueadoPorProduccion(
+          !itinerarioPasosPermitenReemplazo(
+            ((pasosRows ?? []) as Array<{ estado?: string | null }>).map((p) => ({
+              estado: p.estado,
+            })),
+          ),
+        );
 
         const parsedProceso = yaDesp
           ? parseProcesoDatosFromPasos(pasosList)
@@ -1758,72 +1779,147 @@ export function DespachoWizardDialog({
           if (errDespHija) throw errDespHija;
         }
       } else if (itinerarioSlots.length > 0) {
-        // OT simple: escribir pasos en la OT normal
-        const { data: existingPasos, error: errLoadPasos } = await supabase
-          .from(TABLE_OT_PASOS)
-          .select("id, orden, proceso_id, datos_proceso")
-          .eq("ot_id", selectedRowId)
-          .order("orden", { ascending: true });
-        if (errLoadPasos) throw errLoadPasos;
+        // OT simple: nunca borrar pasos ya iniciados/finalizados.
+        const pasosVista = await fetchProdOtPasosVista(supabase, selectedRowId);
+        const permiteReplace = itinerarioPasosPermitenReemplazo(pasosVista);
 
-        const sameItinerario =
-          (existingPasos?.length ?? 0) === itinerarioSlots.length &&
-          itinerarioSlots.every(
-            (s, i) => existingPasos?.[i]?.proceso_id === s.procesoId,
-          );
-
-        if (sameItinerario && existingPasos && existingPasos.length > 0) {
-          for (let i = 0; i < itinerarioSlots.length; i++) {
-            const slot = itinerarioSlots[i]!;
-            const paso = existingPasos[i]!;
-            const seed = buildDatosProcesoSeed(
-              slot.procesoId,
-              form,
-              procesoDatos,
-              procesoIdsInRoute,
+        if (!permiteReplace) {
+          const locked = pasosVista.filter((p) => {
+            const e = String(p.estado ?? "").trim().toLowerCase();
+            return e !== "pendiente" && e !== "disponible";
+          });
+          const prefixOk =
+            itinerarioSlots.length >= locked.length &&
+            locked.every(
+              (p, i) => itinerarioSlots[i]?.procesoId === p.procesoId,
             );
-            const merged = mergeDatosProcesoSeed(
-              paso.datos_proceso as Record<string, unknown> | null,
-              seed ??
-                (slot.procesoId === PROCESO_CTP_ID
-                  ? buildCtpRequisitosSeedFromWizard(procesoDatos.ctp)
-                  : null),
-              slot.procesoId,
+          if (!prefixOk) {
+            toast.warning(
+              "Cabecera/material guardados. Itinerario con pasos hechos no se tocó — usa «Ajustar itinerario» (Ruta) para la cola pendiente.",
             );
-            const { error: errUpd } = await supabase
-              .from(TABLE_OT_PASOS)
-              .update({
-                orden: i + 1,
-                ...(merged ? { datos_proceso: merged } : { datos_proceso: null }),
-              })
-              .eq("id", paso.id);
-            if (errUpd) throw errUpd;
+          } else {
+            // Solo la cola pendiente puede cambiar; merge seed en pasos hechos sin tocar estado.
+            for (const p of locked) {
+              const slot = itinerarioSlots.find((s) => s.procesoId === p.procesoId);
+              if (!slot) continue;
+              const seed = buildDatosProcesoSeed(
+                slot.procesoId,
+                form,
+                procesoDatos,
+                procesoIdsInRoute,
+              );
+              const { data: pasoRow } = await supabase
+                .from(TABLE_OT_PASOS)
+                .select("datos_proceso")
+                .eq("id", p.id)
+                .maybeSingle();
+              const merged = mergeDatosProcesoSeed(
+                (pasoRow?.datos_proceso as Record<string, unknown> | null) ?? null,
+                seed ??
+                  (slot.procesoId === PROCESO_CTP_ID
+                    ? buildCtpRequisitosSeedFromWizard(procesoDatos.ctp)
+                    : null),
+                slot.procesoId,
+              );
+              if (merged) {
+                const { error: errUpd } = await supabase
+                  .from(TABLE_OT_PASOS)
+                  .update({ datos_proceso: merged })
+                  .eq("id", p.id);
+                if (errUpd) throw errUpd;
+              }
+            }
+            const pendingSlots = itinerarioSlots.slice(locked.length);
+            const currentPending = pasosVista.filter((p) => {
+              const e = String(p.estado ?? "").trim().toLowerCase();
+              return e === "pendiente" || e === "disponible";
+            });
+            const samePending =
+              currentPending.length === pendingSlots.length &&
+              currentPending.every(
+                (p, i) => p.procesoId === pendingSlots[i]?.procesoId,
+              );
+            if (!samePending) {
+              await insertarPasosEnColaViva(
+                supabase,
+                selectedRowId,
+                pasosVista,
+                pendingSlots,
+              );
+              toast.info(
+                "Itinerario: pasos hechos intactos; cola pendiente actualizada.",
+              );
+            }
           }
         } else {
-          const { error: errDelPasos } = await supabase
+          const { data: existingPasos, error: errLoadPasos } = await supabase
             .from(TABLE_OT_PASOS)
-            .delete()
-            .eq("ot_id", selectedRowId);
-          if (errDelPasos) throw errDelPasos;
-          const pasoRows = itinerarioSlots.map((s, i) => {
-            const datos = buildDatosProcesoSeed(
-              s.procesoId,
-              form,
-              procesoDatos,
-              procesoIdsInRoute,
+            .select("id, orden, proceso_id, datos_proceso")
+            .eq("ot_id", selectedRowId)
+            .order("orden", { ascending: true });
+          if (errLoadPasos) throw errLoadPasos;
+
+          const sameItinerario =
+            (existingPasos?.length ?? 0) === itinerarioSlots.length &&
+            itinerarioSlots.every(
+              (s, i) => existingPasos?.[i]?.proceso_id === s.procesoId,
             );
-            return {
-              ot_id: selectedRowId,
-              orden: i + 1,
-              proceso_id: s.procesoId,
-              estado: i === 0 ? "disponible" : "pendiente",
-              ...(datos ? { datos_proceso: datos } : {}),
-            };
-          });
-          const { error: errInsPasos } = await supabase
-            .from(TABLE_OT_PASOS)
-            .insert(pasoRows);
-          if (errInsPasos) throw errInsPasos;
+
+          if (sameItinerario && existingPasos && existingPasos.length > 0) {
+            for (let i = 0; i < itinerarioSlots.length; i++) {
+              const slot = itinerarioSlots[i]!;
+              const paso = existingPasos[i]!;
+              const seed = buildDatosProcesoSeed(
+                slot.procesoId,
+                form,
+                procesoDatos,
+                procesoIdsInRoute,
+              );
+              const merged = mergeDatosProcesoSeed(
+                paso.datos_proceso as Record<string, unknown> | null,
+                seed ??
+                  (slot.procesoId === PROCESO_CTP_ID
+                    ? buildCtpRequisitosSeedFromWizard(procesoDatos.ctp)
+                    : null),
+                slot.procesoId,
+              );
+              const { error: errUpd } = await supabase
+                .from(TABLE_OT_PASOS)
+                .update({
+                  orden: i + 1,
+                  ...(merged
+                    ? { datos_proceso: merged }
+                    : { datos_proceso: null }),
+                })
+                .eq("id", paso.id);
+              if (errUpd) throw errUpd;
+            }
+          } else {
+            const { error: errDelPasos } = await supabase
+              .from(TABLE_OT_PASOS)
+              .delete()
+              .eq("ot_id", selectedRowId);
+            if (errDelPasos) throw errDelPasos;
+            const pasoRows = itinerarioSlots.map((s, i) => {
+              const datos = buildDatosProcesoSeed(
+                s.procesoId,
+                form,
+                procesoDatos,
+                procesoIdsInRoute,
+              );
+              return {
+                ot_id: selectedRowId,
+                orden: i + 1,
+                proceso_id: s.procesoId,
+                estado: i === 0 ? "disponible" : "pendiente",
+                ...(datos ? { datos_proceso: datos } : {}),
+              };
+            });
+            const { error: errInsPasos } = await supabase
+              .from(TABLE_OT_PASOS)
+              .insert(pasoRows);
+            if (errInsPasos) throw errInsPasos;
+          }
         }
       }
 
@@ -1931,6 +2027,7 @@ export function DespachoWizardDialog({
     setMeta(emptyDespachoMeta());
     setOtInput("");
     setItinerarioSlots([]);
+    setItinerarioBloqueadoPorProduccion(false);
     setProcesoDatos(emptyDespachoWizardProcesoDatos());
     setOtTipo("simple");
     setModoContenedor(false);
@@ -3725,10 +3822,19 @@ export function DespachoWizardDialog({
                       Define la ruta de procesos. Las pestañas siguientes se adaptan
                       a los pasos que incluyas.
                     </p>
+                    {itinerarioBloqueadoPorProduccion ? (
+                      <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                        Hay pasos ya iniciados o finalizados. Este wizard{" "}
+                        <strong>no reemplaza</strong> el itinerario (cabecera y
+                        material sí se guardan). Para añadir o reordenar la cola
+                        pendiente usa <strong>Ajustar itinerario (Ruta)</strong> en
+                        OTs Despachadas.
+                      </p>
+                    ) : null}
                     <DespachoItinerarioPicker
                       open={open && wizardTab === "itinerario"}
                       supabase={supabase}
-                      disabled={saving}
+                      disabled={saving || itinerarioBloqueadoPorProduccion}
                       slots={itinerarioSlots}
                       onSlotsChange={setItinerarioSlots}
                       layout="wide"

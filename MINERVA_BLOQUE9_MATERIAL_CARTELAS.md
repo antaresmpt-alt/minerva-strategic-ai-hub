@@ -4,7 +4,7 @@
 > Tema: recepción de material, cartelas de palet, stock libre y trazabilidad.
 > Complementa `MINERVA_HUB_CONTEXTO_MAESTRO.md`, `FASES_HOJA_RUTA_DIGITAL.md` y briefings Bloques 6 y 7.
 >
-> **Estado:** ✅ **9.0–9.6d + 9.4 A/B/C** + **Calendario Producción** (18 jul 2026) — cartelas (impresión **1 copia**), Stock ATP, consumo guillotina/impresión/troquel/imp. externa, planificador OTs Jordi (pastillas, PDF grid+listado). **Validado E2E:** OT **98013**. **Pendiente:** derivar OT a imp. externa post-despacho (§15.6.12), plan engomado desde troquel, 9.7 OCR, cierre OT sobrantes (Bloque 6).
+> **Estado:** ✅ **9.0–9.6d + 9.4 A/B/C** + **Calendario Producción** (18 jul 2026) — cartelas (impresión **1 copia**), Stock ATP, consumo guillotina/impresión/troquel/imp. externa, planificador OTs Jordi. **Validado E2E:** OT **98013**. ✅ **§15.6.12 derivar a externa (13 ago)** — OT **98015**. ⏳ Plan engomado desde troquel, 9.7 OCR, cierre OT sobrantes (Bloque 6).
 > **Origen:** Optimus + cartelas CARPAPSA (15 jun 2026).
 > **Actualizado:** 18 jul 2026 — §15.12: UX calendario (pastillas, modal, PDF grid/listado), cartela 1 copia, fix crash menú PDF.
 > **PENDIENTE:** H1/H2 recuento global. Ubicación por filas de material (catálogo UI sin definir en planta). Ajuste impresión A6 física vs A4 PDF.
@@ -1280,70 +1280,55 @@ Mesa ejecución → Cerrar proceso (OT en impresión offset o digital)
 | UI | `gestion-externos-page.tsx` — al pasar a **Enviado** (lista o edición); diálogo `cartela-externo-enviado-dialog.tsx` si falta ID Stock |
 | Hojas | `hojas_enviadas` del seguimiento o `numero_hojas` en `datos_proceso`; persiste cartela en `prod_ot_pasos` |
 
-#### 15.6.12 Pendiente — Derivar OT a impresión externa (post-despacho)
+#### 15.6.12 ✅ Derivar OT a impresión externa (post-despacho) — 13 ago 2026
 
-> **Contexto planta (jul 2026):** Muchas OTs se despachan para **producción en casa** (CTP → guillotina → offset/digital…). Con carga alta, Ramón puede decidir **a mitad de ruta** enviar la OT a **imprimir fuera**. Hoy eso **no** está soportado: hay que replantear itinerario a mano o crear OT de prueba con **21** desde el despacho. **9.4 C** (consumo al **Enviado**) solo aplica a proceso **21** y solo si es el **primer consumidor** de material (17→1/2→10→21).
+> **Contexto planta (jul 2026):** Muchas OTs se despachan para **producción en casa** (CTP → guillotina → offset/digital…). Con carga alta, Ramón decide **a mitad de ruta** enviar la OT a **imprimir fuera**.  
+> **Implementado 13 ago 2026 (opción A):** acción única que sustituye el paso Offset/Digital **disponible** por Impresión EXTERNA (**21**), libera mesa si no se ha iniciado y deja la OT en Pool para la cola de Externos.  
+> **Sesión completa:** `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`. Commits: `1addf8d`, `622fc7b`. Prueba planta: OT **98015**.
 
-**Estado actual (referencia):**
+**Qué hace ahora:**
 
-| Capacidad | Dónde | Límite |
-|-----------|--------|--------|
-| Editar itinerario completo | OTs Despachadas → editar | Solo si **todos** los pasos están `pendiente` o `disponible` (`itinerarioPasosPermitenReemplazo`) |
-| Cola externo desde itinerario | Externos → OTs con paso externo | El **siguiente paso disponible** debe ser `es_externo` en catálogo (p. ej. Plastificado **3**, Impresión EXTERNA **21**) |
-| Consumo cartela externo | Gestión Externos → **Enviado** | Solo **21**; no plastificado ni otros externos |
+| Sitio | Acción | Cuándo |
+|-------|--------|--------|
+| **Pool OTs** | Derivar / Imprimir fuera | Próximo paso = **1** o **2**, abierto |
+| **Mesa diaria / secuenciación** | **Acción → Imprimir fuera** | Máquina impresión/digital + `confirmado` o `pendiente_inicio` |
+| **Ejecución (tarjeta)** | **Imprimir fuera** | Offset/Digital + Pendiente inicio |
 
-**Problema:** Si la OT ya pasó CTP/guillotina o está en pool/mesa de **impresión interna (1/2)**, no hay acción única «mandar a imprimir fuera» que sustituya 1/2 por 21 y abra seguimiento externo.
+Oculto si la ejecución está `en_curso` o `pausada`. No deriva el **contenedor** padre (las hijas sí). No duplica si ya hay un 21 abierto.
 
-**Opciones de diseño (evaluar en reunión):**
+**Al derivar:** paso 1/2 → proceso **21**; ejecuciones `pendiente_inicio` → `cancelada`; filas de mesa **borradas** (no `finalizada`); pool → `en_transito`.
 
-| Opción | Idea | Pros | Contras / reglas |
-|--------|------|------|------------------|
-| **A — Acción Pool/Mesa** | Botón «Derivar a impresión externa» en Pool OTs (y/o mesa) cuando el **próximo paso** es 1 o 2 | UX clara; operación habitual | Sustituir paso 1/2 por 21; cancelar/liberar slot mesa si planificado; crear fila Externos con `ot_paso_id`; aviso si material ya consumido en 17 |
-| **B — Editar itinerario acotado** | Permitir cambio de itinerario **solo** si no hay paso `en_marcha`/`finalizado` **posterior** al punto de corte, y el cambio afecta solo tramo **antes de impresión** (sustituir 1/2 → 21) | Reutiliza editor despachadas | Más difícil de explicar; validar troquel/plastificado downstream |
-| **C — Insertar 21 sin borrar 1/2** | Marcar 1/2 como `saltado` / `cancelado` y activar 21 como siguiente | Trazabilidad histórica | Riesgo doble planificación; hay que definir estados nuevos |
-| **D — Solo pre-despacho** | Documentar que impresión externa debe ir en wizard inicial | Cero dev | No resuelve el caso real de carga |
+**Anular mesa (misma sesión):** «Anular y devolver al Pool» borra el hueco y deja `en_transito`. Antes dejaba `estado_mesa = finalizada` y la OT salía Terminada.
 
-**Reglas cartela acordadas (cuando se implemente A/B):**
+**Itinerario vivo (misma sesión, no solo 21):** OTs Despachadas → botón **Ruta** abre `AjustarItinerarioDialog`. Pasos `en_marcha`/`finalizado` = candado; cola `pendiente`/`disponible` = editable (añadir Desbroce, etc.). Compra **no** bloquea. Lápiz = wizard cabecera/material; roles `admin` / `oficina_tecnica` / `gerencia` pueden guardar **con compra** (aviso, no muro).
 
-- Si **no** hubo consumo en 17/1/2/10 → consumo en **21** al **Enviado** (como 9.4 C).
-- Si **ya** consumió en guillotina (17) → **21** no repite cartela; plastificado/otros externos tampoco.
-- Prefill hojas en Enviado: `hojas_enviadas` del seguimiento o salida del último paso interno completado (guillotina → `hojas_finales` o `hojas_iniciales` según acuerdo — ver fix prefill guillotina).
+**Cartela (sin cambio de regla 9.4 C):**
 
-**Prueba cartela 9.4 C (jul 2026):** OT **98013** (maestro clon **35842**) — despachar con itinerario **Impresión EXTERNA (21)** desde el inicio; compra → muelle → cartela → Externos → Enviado.
+- Si **no** hubo consumo en 17/1/2/10 → consumo en **21** al **Enviado**.
+- Si **ya** consumió en guillotina (17) → **21** no repite cartela.
+- Prefill hojas en Enviado: `hojas_enviadas` o salida del último paso interno.
 
-**Bug corregido (14 jul 2026):** proceso **21** tenía `es_externo = false` en `prod_procesos_cat` → no entraba en cola Externos y sí en mesa offset (`tipo_planificacion = impresion`). Migración `20260714210000_proceso_21_impresion_externa_es_externo.sql` + `planificacion-ambito.ts` (pasos `es_externo` → `planificacionTipoPaso = null`).
+**Prueba cartela 9.4 C (jul 2026):** OT **98013** — 21 desde el despacho inicial.  
+**Prueba derivar (13 ago 2026):** OT **98015** — Imprimir fuera desde Pool → Externos → 1600 brutas / 1400 netas recibidas. Muelle muestra brutas (aceptado; futuro: netas).
 
-**Pendiente wizard Impresión EXTERNA (despacho paso 4) — hecho 14 jul 2026:**
+**Diseño descartado (histórico jul):** B = editor acotado; C = insertar 21 y marcar 1/2 `saltado`; D = solo pre-despacho. Se eligió **A**.
 
-| Tema | Detalle |
-|------|---------|
-| Hojas brutas / netas | Campos en wizard paso Producción (21): **brutas a enviar** + **netas a recibir** → `datos_proceso` (`hojas_brutas`, `hojas_netas`, `numero_hojas`) y `produccion_ot_despachadas.num_hojas_netas` |
-| Acabados | Combo unifica catálogo `acabado_pral` (barniz…) + `prod_cat_acabados`; cara incluye **IMPRESIÓN** |
-| Estuches resumen | `hojasNetasParaEstuchesDespacho` usa netas del paso 21 |
+**Lógica:** `src/lib/derivar-impresion-externa.ts` (`derivarOtAImpresionExterna`, `devolverHuecoMesaAlPool`, `puedeMostrarImprimirFueraMesa`). Tests: `derivar-impresion-externa.test.ts`. Itinerario cola: `insertarPasosEnColaViva` en `prod-ot-itinerario-client.ts`.
 
-**Bug corregido cartelas (14 jul 2026):** bandeja pendientes duplicaba palets/hojas al agrupar por albarán (1 palet → mostraba 2; 550 h → 1100). Fix en `cartelas-page.tsx`.
+**Bug corregido (14 jul 2026):** proceso **21** tenía `es_externo = false` → no entraba en cola Externos. Migración `20260714210000_proceso_21_impresion_externa_es_externo.sql`.
 
-**Dónde colocarlo en UI (recomendación tras prueba 98013 — jul 2026):**
-
-| Ubicación | Acción | Cuándo mostrar | Notas |
-|-----------|--------|----------------|-------|
-| **Pool OTs** (`planificacion-pool-ots-tab-v2.tsx`) | Botón / menú **«Derivar a impresión externa»** | Próximo paso = **1** o **2**; paso aún `pendiente`/`disponible` | Caso habitual de Ramón con carga alta; no sustituye wizard pre-despacho |
-| **Mesa ejecución** (opcional fase 2) | Misma acción en fila OT si ya está en mesa impresión | Slot planificado pero no iniciado | Liberar slot + sustituir paso |
-| **OTs Despachadas** | Mantener editor itinerario completo | Solo pasos no iniciados (regla actual) | Reserva para replanificación total |
-| **Externos → Seguimiento** | **No** añadir botón «Cartelar» aparte | Consumo cartela = modal al pasar **Pendiente → Enviado** | «Preparar envío → Gmail» no cartela; hay que **Crear en seguimiento** desde cola itinerario |
+**Wizard Impresión EXTERNA (despacho paso 4) — 14 jul 2026:** brutas a enviar + netas a recibir; acabados unificados; `hojasNetasParaEstuchesDespacho` usa netas del 21.
 
 **Flujo Externos impresión (21) — recordatorio operativo:**
 
 ```text
-Despacho con paso 21 en itinerario
+Paso 21 en itinerario (wizard inicial O Imprimir fuera)
   → Compra → Muelle (Juan) → Cartelas (#ID Stock)
   → Externos: cola «OTs con paso externo» → Crear en seguimiento
   → Seguimiento: Pendiente → [modal cartela] → Enviado (descuenta stock)
   → Recepción externo (hojas netas recibidas)
   → Troquelado / siguiente paso (encadenado desde recepción)
 ```
-
-**Piezas probables:** `despacho-wizard-dialog.tsx`, `despacho-wizard-shared.ts`, `planificacion-pool-ots-tab-v2.tsx`, `prod-ot-itinerario-client.ts`, `externos-itinerario-queue.ts`, migración estados paso opcional, § doc Bloque 8/Externos.
 
 #### 15.6.5 Lote de tintas en cierre impresión
 
@@ -1658,7 +1643,7 @@ Archivos: `src/lib/hoja-ruta/hoja-ruta-pdf.ts`, `hoja-ruta-formatters.ts`.
 
 | Ítem | Prioridad | Dónde / notas |
 |------|-----------|---------------|
-| **Derivar OT → imp. externa post-despacho** | **Alta** | §15.6.12 — botón Pool OTs (recomendado); sustituir 1/2 por 21 |
+| **Derivar OT → imp. externa post-despacho** | **Alta** | §15.6.12 — ✅ **13 ago** (Pool/mesa/ejecución; OT 98015) |
 | **Plan engomado desde salida troquel** | Media | `planificacion-ots-ejecucion-tab.tsx` — `estuches_realizar` siembra 550×8=4400; badge ya muestra 260×8=2080 |
 | **Prefill guillotina** | Media | Usar `hojas_iniciales` además de `hojas_finales` al encadenar |
 | **Recepción externo: cantidad esperada** | Baja | Mostrar netas del despacho/paso 21 (ahora «sin dato») |
@@ -1706,7 +1691,7 @@ Archivos: `src/lib/hoja-ruta/hoja-ruta-pdf.ts`, `hoja-ruta-formatters.ts`.
 
 | Ítem | Prioridad | Notas |
 |------|-----------|-------|
-| Derivar OT → imp. externa post-despacho | Alta | §15.6.12 (sigue pendiente) |
+| Derivar OT → imp. externa post-despacho | Alta | §15.6.12 — ✅ **13 ago** |
 | Feedback Jordi calendario | Media | Ajustes tras uso real planificador verano |
 | PDF semana | ✅ | Hecho 18 jul (§15.12) |
 | Marca hecho manual + PDF grid sin «…» | ✅ **30 jul** | `marcado_hecho` + filtro Solo pendientes; PDF reduce tipografía |
@@ -1782,7 +1767,7 @@ Emma (jueves) + Ramón (viernes): **ya no se imprimen 2 copias** por palet, solo
 
 | Ítem | Prioridad | Notas |
 |------|-----------|-------|
-| Derivar OT → imp. externa post-despacho | Alta | §15.6.12 |
+| Derivar OT → imp. externa post-despacho | Alta | §15.6.12 — ✅ **13 ago** |
 | Plan engomado desde salida troquel | Media | Badge 2080 vs plan 4400 |
 
 #### 15.13 Sesión 24 jul 2026 — Calendario multi-ámbito (Fase 1 + 1.1 + 2)
@@ -1808,3 +1793,18 @@ Mapa mental por sección (Carlos Impresión, Rita Digital, Antonio Troquel, Gabr
 
 **Presentar a planta:** «Tablón por sección (I/D/T/E). Los checks eligen qué mapas miras (Antonio I+T, Gabri T+E…). Verde = puedes tirar; navy = ese paso ya está cerrado en Minerva; ámbar = aún no te toca.»
 | Feedback colores | ✅ | Badge I sky-600; hecho→navy vs listo→verde (24 jul) |
+
+#### 15.14 Sesión 13 ago 2026 — Imprimir fuera, Anular al Pool, itinerario vivo
+
+> Detalle operativo: `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`. §15.6.12 cerrado.
+
+| Pieza | Detalle | Commits |
+|-------|---------|---------|
+| Imprimir fuera | 1/2 disponible → proceso **21**; mesa se borra si no iniciada; pool `en_transito` | `1addf8d` |
+| Anular mesa | Borra hueco; no `finalizada`; OT vuelve al Pool | `1addf8d` |
+| Ajustar itinerario | Botón Ruta: hechos candado, cola editable (`insertarPasosEnColaViva`) | `622fc7b` |
+| Reeditar despacho | Lápiz + `forceMode` para admin/oficina_tecnica/gerencia aunque haya compra | `622fc7b` |
+
+**OT de prueba:** **98015** — derivar, envío 1600, recepción 1400, luego insertar Desbroce en cola viva.
+
+**Pendiente post-sesión:** muelle netas vs brutas; plan engomado desde troquel; OCR 9.7.

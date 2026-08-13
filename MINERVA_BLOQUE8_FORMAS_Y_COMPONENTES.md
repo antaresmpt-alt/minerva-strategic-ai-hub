@@ -400,7 +400,7 @@ Responde pregunta §12.7: Caso A = **varias referencias** por forma; a veces mis
 ### Opción A — OTs hijas + contenedor (ELEGIDA)
 
 - `prod_ots_general`: `ot_tipo` (`simple` | `contenedor` | `hija`), `ot_padre_numero`, `tipo_hija`, `forma_descripcion`.
-- Hijas = OTs normales (despacho, `prod_ot_pasos`, ejecución, hoja de ruta).
+- Hijas = OTs normales (despacho, `prod_ot_pasos`, ejecución, hoja de ruta). **13 ago:** mismas acciones que una OT simple — Imprimir fuera, Anular→Pool, Ajustar itinerario (Ruta). El contenedor padre no se deriva a externa.
 - **Pros:** máxima compatibilidad con lo construido; material e itinerario distintos por hija; Abraham registra horas como hoy.
 - **Contras:** muchas filas en BD → mitigado con **agrupación UI obligatoria** (Fase 8.1).
 - Creación asistida en despacho del contenedor (no manual para 12 hijas).

@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 11 ago 2026 (8.4 cierre contenedor + rollup embalaje; cola Ramón externos 📋 mañana)
+> Última actualización: 13 ago 2026 (imprimir fuera + anular→Pool + ajustar itinerario vivo; sesión `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`)
 
 ---
 
@@ -18,7 +18,8 @@
    - `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` (calendario = master planificar/lanzar)
    - `MINERVA_BLOQUE12_ROLES_PERMISOS_NAVEGACION.md` (landing por perfil — sept)
 3. Añadir `MINERVA_CONTEXTO_TECNICO.md` solo si la IA necesita detalles técnicos del repo.
-4. Al cerrar una fase, actualizar este maestro + `FASES_HOJA_RUTA_DIGITAL.md`.
+4. Si el tema es mesa / externos / itinerario post-despacho: `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`.
+5. Al cerrar una fase, actualizar este maestro + `FASES_HOJA_RUTA_DIGITAL.md`.
 
 **Jerarquía documental:**
 | Documento | Rol |
@@ -32,6 +33,7 @@
 | `MINERVA_BLOQUE10_PRESUPUESTOS.md` | Bloque futuro: presupuestos, formas, versión real al copiar. |
 | `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` | Calendario OT como master de planificar + lanzar (con cuidado). |
 | `MINERVA_REUNION_HOJA_RUTA_JUEVES.md` | Guía reunión demo 98010 + preguntas §12. |
+| `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md` | Sesión 13 ago: imprimir fuera, anular al Pool, ajustar itinerario / reeditar despacho. |
 | `MINERVA_BRIEFING.md` | Onboarding narrativo largo; útil, pero secundario frente a este maestro. |
 
 ---
@@ -108,7 +110,8 @@ Software a medida para la planta de producción gráfica/impresión de la empres
 
 ### ✅ Gestión de Externos (Ramón)
 - Módulo para gestionar proveedores externos
-- **Retomar 13 ago:** modal Enviado/Recibido con hojas (y palets) + brief formato/papel/tintas. Prefill blando al troquel. Derivar a impresión externa (§15.6.12) pendiente.
+- **13 ago:** «Imprimir fuera» (1/2 → 21) desde Pool/mesa/ejecución. OT **98015** validada. Detalle: `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`.
+- ⏳ Muelle: mostrar netas pedidas (hoy salen brutas enviadas). Prefill blando al troquel.
 - Integrado con el módulo de Hoja de Ruta (proceso "Externo" usa este módulo)
 
 ### ✅ Etiquetas (Hugo) — módulo más maduro
@@ -241,7 +244,7 @@ src/components/produccion/planificacion/
 | 6 | Producidas / cierre OT | ✅ MVP + promedios + oficiales + clone. ✅ Cierre **contenedor** 8.4 (snapshot barco) |
 | 7 | Expedición / Albarán | ⏸ **Aparcado** hasta decisión Odoo |
 | 8 | Contenedor / formas / hijas | 🔄 FORMATO–8.1 ✅ · **8.2 wizard MVP ✅** · 8.3 parcial · **8.4 cierre barco ✅** · **8.5 convergencia 📋 diseño** · 8.6 futuro |
-| 9 | Material, cartelas, stock, calendario prod. | ✅ 9.0–9.6d + 9.4. ⏳ Derivar OT→imp. externa (§15.6.12); plan engomado desde troquel; sobrantes al cierre; OCR 9.7 baja |
+| 9 | Material, cartelas, stock, calendario prod. | ✅ 9.0–9.6d + 9.4 + **§15.6.12 derivar a externa (13 ago)**. ⏳ Plan engomado desde troquel; sobrantes al cierre; OCR 9.7 baja |
 | 10 | Presupuestos | ⏸ Futuro (más miga; tras Minerva estable) |
 | 11 | Calendario = master planificar / lanzar | 🔄 **Éxito de uso** (Carlos/Jordi). Ampliar con cuidado: planificar sí; lanzar suave (pool/mesa) + conflictos de máquina |
 | 12 | Roles, permisos, landing por perfil | 📋 **Documentado** — operario→ejecución; gestor→home rico. Aparcado de implementación inmediata; crítico antes usuarios masivos |
@@ -258,13 +261,16 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [x] **Pipeline perf**: `fetchAllInChunks` concurrencia 5; olas desp→(arch∥ot∥pool∥hijas)→pasos→(ejec∥ext); filtros search/incidencias/externo/estado en cliente; índice `despachado_at` (11 ago)
 - [x] **Fase 8.4**: cierre OT contenedor cuando **todas las hijas** terminan → `pendiente_revision` / producida + snapshot barco (11 ago)
 - [x] **Fase 8.5 (docs)**: convergencia A/B/C + `modo_sync`/`proceso_join` + override solo Planning — sin implementar (11 ago)
-- [ ] **Bloque 9 §15.6.12**: derivar OT a impresión externa post-despacho
+- [x] **Bloque 9 §15.6.12**: derivar OT a impresión externa post-despacho (13 ago — Pool/mesa/ejecución; OT 98015)
+- [x] **Anular mesa → Pool** (13 ago): borra hueco; no deja la OT Terminada
+- [x] **Ajustar itinerario vivo + reeditar despacho forzado** (13 ago): Ruta = cola pendiente; lápiz = cabecera a cuenta y riesgo (admin/oficina/gerencia)
 - [ ] **Bloque 6.x** (opcional rápido): avisos calidad al cierre; comparar versiones OT
 - [ ] **Bloque 11** (con cuidado): planificar/mover desde calendario; lanzar ≠ pisar plan de otra máquina — `MINERVA_BLOQUE11_…`
 - [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor — `MINERVA_BLOQUE12_…` (no abrir ya)
 - [ ] **Bloque 5 puente**: Rita lanza OTs a Hugo (no bloquea paralelo si Hugo sigue a mano)
 
 ### Hecho reciente (jul–ago)
+- [x] **13 ago:** imprimir fuera (1/2→21), anular mesa→Pool, ajustar itinerario vivo, wizard despacho forzado — `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`
 - [x] Bloque 6 MVP + engomado prep/tiraje + promedios A–D + oficiales + decimales `.`/, + clone overwrite (horas/caja/CTP) + 3 OTs en resumen
 - [x] PDF OK etiquetas digital (Hugo)
 - [x] Bloque 8.2 wizard contenedor MVP; 8.1 agrupación Pool/Pipeline; FORMATO encadenado
@@ -278,14 +284,15 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [ ] 9.7 OCR albarán (baja); sobrantes al cierre (B6+B9)
 - [ ] Preguntas §12 planta (CTP hija) si hace falta antes de 8.4 fino
 
-### Siguiente foco (orden sugerido 11 ago)
+### Siguiente foco (orden sugerido 13 ago)
 1. ~~**Pipeline** (rápido + compacto + carga)~~ ✅ compacto + Listo para cerrar + perf fetch (11 ago)
 2. ~~**8.4** cierre contenedor~~ ✅ MVP (11 ago)
-3. **9** derivar a externa
+3. ~~**9** derivar a externa~~ ✅ 13 ago (Pool/mesa/ejecución + OT 98015)
 4. Afinados B6 / B11 suave (virtualizar Pipeline solo si sigue lento)
-5. **Bloque 12** al acercarse usuarios nuevos
-6. **B5** puente Rita→Hugo si sobra
-7. **8.5** convergencia (solo si un barco real lo exige) · **B7 / B10** aparcados
+5. Muelle: netas pedidas vs brutas enviadas (impresión externa) — consciente, no urgente
+6. **Bloque 12** al acercarse usuarios nuevos
+7. **B5** puente Rita→Hugo si sobra
+8. **8.5** convergencia (solo si un barco real lo exige) · **B7 / B10** aparcados
 
 ---
 
@@ -313,7 +320,7 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 
 11. **Encadenado formato de pliego (17 jun 2026, Fase FORMATO ✅)**: por **orden de itinerario** (`prod_ot_pasos.orden`), no por tipo de proceso global. `tamano_hoja` en despacho = **Formato compra** (solo referencia de compra). Guillotina: `tamano_inicial` ← anterior, `tamano_final` → siguiente. Impresión/externos hojas: `formato_hojas`. Troquelado: `tamano_corte` es el troquel (independiente); banner muestra pliego de entrada. Módulo: `hoja-ruta-formato-encadenado.ts`. Probado OT 98009 (commit `aadad81`).
 
-12. **Bloque 9 — Cartelas y stock (18 jul 2026)**: **9.0–9.6d + 9.4 A/B/C** en `main`. Consumo cartela guillotina/impresión/troquel/imp. externa. **Sesión 18 jul:** Calendario Producción UX (pastillas, progreso HR, mini-modal, PDF grid + listado papel), impresión cartela **1 copia**, fix crash menú PDF. Briefing §15.10–15.12: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`. **Pendiente:** «Derivar a impresión externa» Pool (§15.6.12).
+12. **Bloque 9 — Cartelas y stock (18 jul 2026)**: **9.0–9.6d + 9.4 A/B/C** en `main`. Consumo cartela guillotina/impresión/troquel/imp. externa. **Sesión 18 jul:** Calendario Producción UX (pastillas, progreso HR, mini-modal, PDF grid + listado papel), impresión cartela **1 copia**, fix crash menú PDF. Briefing §15.10–15.12: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`. **§15.6.12 ✅ 13 ago:** «Imprimir fuera» Pool/mesa/ejecución (1/2 → 21). Detalle: `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`.
 
 13. **Higiene operativa (18 jun 2026)**: `bultos_por_palet_default` de Gabri versionado en migración seed (`20260618143200`). Plantillas offset: **Desbroce** insertado entre Troquelado y Engomado en 5 rutas (`20260618143000`). Rol usuario CTP = **`ctp`** (no `preimpresion`); permisos `produccion` + `produccion_ejecucion` en BD y `permissions.ts`. Marc/Gemma: usuarios aún no creados en Supabase.
 
@@ -333,6 +340,8 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 
 21. **Paralelo septiembre (11 ago 2026)**: no smoke fijo 10–20; por tanda de despacho elegir **~3 OTs** y seguir E2E en Minerva. Cierre contenedor MVP: **barco listo cuando todas las hijas terminan** (8.4) ✅. Convergencia física = 8.5 documentada, sin código aún.
 
+22. **Itinerario y mesa flexibles (13 ago 2026)**: (a) **Imprimir fuera** sustituye Offset/Digital disponible por proceso 21; no inserta un 21 extra. (b) **Anular mesa borra el hueco** y devuelve al Pool (`en_transito`); no deja `estado_mesa = finalizada`. (c) **Ruta** en OTs Despachadas ajusta solo la cola `pendiente`/`disponible`; pasos en marcha/finalizados van con candado. (d) **Lápiz** puede forzar cabecera/material aunque haya compra: roles `admin` / `oficina_tecnica` / `gerencia`, con aviso. Compra **no** es el candado del itinerario.
+
 ## 📁 Estructura de carpetas relevante
 
 ```
@@ -345,6 +354,8 @@ src/
   lib/
     hoja-ruta-campos-config.ts
     hoja-ruta-formato-encadenado.ts   ← encadenado formato pliego (Bloque 8 Fase FORMATO)
+    derivar-impresion-externa.ts      ← imprimir fuera + anular mesa→Pool (13 ago)
+    prod-ot-itinerario-client.ts      ← replace total + insertarPasosEnColaViva
     supabase-query-chunks.ts          ← .in() troceados + concurrencia 5 (Pool/Pipeline)
     planificacion-analytics-query.ts
     sys-parametros-sobreproduccion.ts

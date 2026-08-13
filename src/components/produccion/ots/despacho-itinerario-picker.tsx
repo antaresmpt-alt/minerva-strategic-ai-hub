@@ -16,7 +16,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { GripVertical, Loader2, X } from "lucide-react";
+import { GripVertical, Loader2, ChevronDown, ChevronUp, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -40,10 +40,18 @@ function newSlot(p: ProdProcesoCatRow): DespachoItinerarioSlot {
 function SortablePasoRow({
   slot,
   disabled,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
   onRemove,
 }: {
   slot: DespachoItinerarioSlot;
   disabled?: boolean;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
   onRemove: () => void;
 }) {
   const {
@@ -91,14 +99,34 @@ function SortablePasoRow({
         {slot.nombre}
       </span>
       {!disabled ? (
-        <button
-          type="button"
-          className="rounded p-0.5 text-slate-500 hover:bg-red-50 hover:text-red-700"
-          aria-label="Quitar"
-          onClick={onRemove}
-        >
-          <X className="size-3.5" />
-        </button>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            className="rounded p-0.5 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+            aria-label="Subir"
+            disabled={!canMoveUp}
+            onClick={onMoveUp}
+          >
+            <ChevronUp className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            className="rounded p-0.5 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+            aria-label="Bajar"
+            disabled={!canMoveDown}
+            onClick={onMoveDown}
+          >
+            <ChevronDown className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            className="rounded p-0.5 text-slate-500 hover:bg-red-50 hover:text-red-700"
+            aria-label="Quitar"
+            onClick={onRemove}
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
       ) : null}
     </div>
   );
@@ -114,6 +142,12 @@ type Props = {
   layout?: "default" | "wide";
   /** Sin borde superior cuando va incrustado en otra sección. */
   embedded?: boolean;
+  /**
+   * Dónde insertar al pulsar un proceso del catálogo.
+   * `prepend` = al inicio (útil en «Ajustar itinerario» para meter un paso
+   * justo después de los hechos / antes del siguiente pendiente).
+   */
+  addPosition?: "append" | "prepend";
 };
 
 export function DespachoItinerarioPicker({
@@ -124,6 +158,7 @@ export function DespachoItinerarioPicker({
   onSlotsChange,
   layout = "default",
   embedded = false,
+  addPosition = "append",
 }: Props) {
   const [procesos, setProcesos] = useState<ProdProcesoCatRow[]>([]);
   const [plantillas, setPlantillas] = useState<ProdRutaPlantillaRow[]>([]);
@@ -228,7 +263,19 @@ export function DespachoItinerarioPicker({
 
   const appendProceso = useCallback(
     (p: ProdProcesoCatRow) => {
-      onSlotsChange([...slots, newSlot(p)]);
+      const slot = newSlot(p);
+      onSlotsChange(
+        addPosition === "prepend" ? [slot, ...slots] : [...slots, slot],
+      );
+    },
+    [addPosition, onSlotsChange, slots],
+  );
+
+  const moveSlot = useCallback(
+    (index: number, delta: number) => {
+      const target = index + delta;
+      if (target < 0 || target >= slots.length) return;
+      onSlotsChange(arrayMove(slots, index, target));
     },
     [onSlotsChange, slots],
   );
@@ -264,7 +311,9 @@ export function DespachoItinerarioPicker({
       <p className="text-[11px] text-muted-foreground">
         {readOnly
           ? "Refleja el orden actual guardado en base de datos. No se puede modificar porque ya hay pasos iniciados o finalizados."
-          : "Define el orden de procesos para esta OT. Si lo dejas vacío, solo se registra el despacho técnico."}
+          : addPosition === "prepend"
+            ? "Los procesos nuevos se insertan al inicio de esta cola (justo después de los hechos). Arrastra o usa ↑↓ para reordenar."
+            : "Define el orden de procesos para esta OT. Arrastra o usa ↑↓. Si lo dejas vacío, solo se registra el despacho técnico."}
       </p>
       {loadErr ? (
         <p className="text-[11px] text-destructive" role="alert">
@@ -399,6 +448,10 @@ export function DespachoItinerarioPicker({
                           nombre: `${idx + 1}. ${slot.nombre}`,
                         }}
                         disabled={false}
+                        canMoveUp={idx > 0}
+                        canMoveDown={idx < slots.length - 1}
+                        onMoveUp={() => moveSlot(idx, -1)}
+                        onMoveDown={() => moveSlot(idx, 1)}
                         onRemove={() =>
                           onSlotsChange(slots.filter((s) => s.key !== slot.key))
                         }
