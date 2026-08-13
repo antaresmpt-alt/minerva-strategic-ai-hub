@@ -107,10 +107,10 @@ export function suggestHojasConsumoCartela(
   if (procesoId == null) return null;
 
   if (procesoId === PROCESO_GUILLOTINA_ID) {
-    const finales = toFiniteNum(datos.hojas_finales);
-    if (finales != null && finales > 0) return Math.round(finales);
     const iniciales = toFiniteNum(datos.hojas_iniciales);
     if (iniciales != null && iniciales > 0) return Math.round(iniciales);
+    const finales = toFiniteNum(datos.hojas_finales);
+    if (finales != null && finales > 0) return Math.round(finales);
     return null;
   }
 

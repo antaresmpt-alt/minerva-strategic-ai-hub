@@ -581,12 +581,16 @@ Rama: `feature/bloque8.1-pool-mesa-ejecucion-fixes` (commit `2d9d3ab`).
 
 **Problema:** en externos (plastificado, stamping, etc.) Ramón marca estado enviado/recibido pero **a menudo no anota hojas/palets enviados ni recibidos**. El muelle sí puede poner hojas al recibir. Esos datos quedan huérfanos y el paso siguiente (p. ej. troquel) no puede prefillarse con lo que realmente volvió del proveedor.
 
-**Dirección acordada (no implementar aún):**
+**Dirección acordada (MVP 13 ago 2026):**
 
-1. **Al enviar** (pantalla Gestión externos / Ramón): modal con hojas (y palets si aplica) enviados — prefill desde netas de impresión / plan.
-2. **Al recibir** (Ramón **y/o** muelle): mismo contrato de campos — recibidas + obs/merma.
-3. **Encadenado al siguiente paso:** primero **blando** (prefill editable de hojas a troquelar / entrada). No hard-gate hasta validar en planta.
-4. PDF hoja de ruta: hoy el bloque Externo solo pinta estado/proveedor/fechas — conviene mostrar también hojas env/rec cuando existan.
+1. **Al enviar** (Gestión externos): modal obligatorio con hojas enviadas (+ palets/obs). Prefill desde impresión/guillotina/despacho. Muestra formato, papel y tintas en lectura.
+2. **Al recibir**: modal con hojas recibidas (prefill = enviadas o muelle).
+3. **PDF hoja de ruta**: bloque Externo muestra enviadas/recibidas si hay dato.
+4. **Prefill blando** al troquel: `inputFromProcessIds` incluye procesos externos; `outputField` = `hojas_recibidas_muelle` (editable en mesa).
+
+**OT prueba:** **99905** (acabado sobre ya impreso). **98015** (clone 35177, solo maestro) para más adelante derivar impresión fuera.
+
+**Qué no mezclar:** no es 8.5 convergencia; es captura logística. Derivar 1/2 → 21 sigue en Bloque 9 §15.6.12.
 
 **Qué no mezclar:** no es 8.5 convergencia; es captura logística del paso externo dentro de cada hija (o OT simple).
 

@@ -978,6 +978,13 @@ const CTP_PREIMPRESION_CAMPOS: CampoDefinicion[] = [
     width: 'third',
   },
   {
+    id: 'aaffs_enviados_externo',
+    label: 'AAFFs enviados a proveedor externo',
+    tipo: 'boolean',
+    width: 'third',
+    hint: 'Sin planchas: se envían archivos al impresor externo.',
+  },
+  {
     id: 'num_planchas',
     label: 'Nº de planchas',
     tipo: 'number',
@@ -1082,7 +1089,7 @@ export const PROCESO_CAMPOS_CONFIG: Record<number, ProcesoConfigCampos> = {
     campos: TROQUELADO_CAMPOS,
     outputField: 'hojas_troqueladas',
     outputUnit: 'hojas',
-    inputFromProcessIds: [1, 2],
+    inputFromProcessIds: [3, 4, 5, 6, 9, 21, 1, 2],
   },
   12: {
     procesoNombre: 'Engomado',
@@ -1123,17 +1130,17 @@ export const PROCESO_CAMPOS_CONFIG: Record<number, ProcesoConfigCampos> = {
 export const PROCESOS_ETIQUETA_DIGITAL_IDS = new Set([18, 19, 20]);
 
 export const PROCESO_EXTERNO_CAMPOS_CONFIG: Record<number, ProcesoConfigCampos> = {
-  3: { procesoNombre: 'Plastificado (Ext)', campos: EXTERNO_HOJAS_CAMPOS, formatOutputField: 'formato_hojas' },
-  4: { procesoNombre: 'Stamping (Ext)', campos: EXTERNO_HOJAS_CAMPOS, formatOutputField: 'formato_hojas' },
-  5: { procesoNombre: 'UVI Serigrafía (Ext)', campos: EXTERNO_HOJAS_CAMPOS, formatOutputField: 'formato_hojas' },
-  6: { procesoNombre: 'Serigrafía Digital (MGI/Scodix)', campos: EXTERNO_HOJAS_CAMPOS, formatOutputField: 'formato_hojas' },
+  3: { procesoNombre: 'Plastificado (Ext)', campos: EXTERNO_HOJAS_CAMPOS, formatOutputField: 'formato_hojas', outputField: 'hojas_recibidas_muelle', outputUnit: 'hojas' },
+  4: { procesoNombre: 'Stamping (Ext)', campos: EXTERNO_HOJAS_CAMPOS, formatOutputField: 'formato_hojas', outputField: 'hojas_recibidas_muelle', outputUnit: 'hojas' },
+  5: { procesoNombre: 'UVI Serigrafía (Ext)', campos: EXTERNO_HOJAS_CAMPOS, formatOutputField: 'formato_hojas', outputField: 'hojas_recibidas_muelle', outputUnit: 'hojas' },
+  6: { procesoNombre: 'Serigrafía Digital (MGI/Scodix)', campos: EXTERNO_HOJAS_CAMPOS, formatOutputField: 'formato_hojas', outputField: 'hojas_recibidas_muelle', outputUnit: 'hojas' },
   7: { procesoNombre: 'Contracolado Microcanal (Ext)', campos: EXTERNO_CONTRACOLADO_CAMPOS },
   8: { procesoNombre: 'Relieve (Interno)', campos: EXTERNO_HOJAS_CAMPOS, formatOutputField: 'formato_hojas' },
-  9: { procesoNombre: 'Relieve (Ext)', campos: EXTERNO_HOJAS_CAMPOS, formatOutputField: 'formato_hojas' },
+  9: { procesoNombre: 'Relieve (Ext)', campos: EXTERNO_HOJAS_CAMPOS, formatOutputField: 'formato_hojas', outputField: 'hojas_recibidas_muelle', outputUnit: 'hojas' },
   11: { procesoNombre: 'Poner Ventana PVC (Ext)', campos: EXTERNO_VENTANA_CAMPOS },
   13: { procesoNombre: 'Forrado de Cajas (Ext)', campos: EXTERNO_FORRADO_CAMPOS },
   14: { procesoNombre: 'Encuadernación/Plegado (Ext)', campos: EXTERNO_GENERICO_CAMPOS },
-  21: { procesoNombre: 'Impresión EXTERNA', campos: EXTERNO_GENERICO_CAMPOS },
+  21: { procesoNombre: 'Impresión EXTERNA', campos: EXTERNO_GENERICO_CAMPOS, outputField: 'hojas_recibidas_muelle', outputUnit: 'hojas' },
 };
 
 /**
@@ -1254,6 +1261,9 @@ export type DatosProcesoCTP = {
   operador_ctp?: string;
   horas_proceso?: number;
   planchas_nuevas?: boolean;
+  planchas_hechas?: boolean;
+  aaffs_enviados_externo?: boolean;
+  num_planchas?: number;
   verificacion_troquel?: boolean;
   prueba_color?: boolean;
   notas?: string;

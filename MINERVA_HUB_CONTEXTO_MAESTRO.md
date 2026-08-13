@@ -108,7 +108,7 @@ Software a medida para la planta de producción gráfica/impresión de la empres
 
 ### ✅ Gestión de Externos (Ramón)
 - Módulo para gestionar proveedores externos
-- **Retomar 12 ago:** modal enviar/recibir con hojas (y palets) + prefill blando al siguiente paso — detalle en `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md` § «Cola Ramón / captura envío-recepción externos»
+- **Retomar 13 ago:** modal Enviado/Recibido con hojas (y palets) + brief formato/papel/tintas. Prefill blando al troquel. Derivar a impresión externa (§15.6.12) pendiente.
 - Integrado con el módulo de Hoja de Ruta (proceso "Externo" usa este módulo)
 
 ### ✅ Etiquetas (Hugo) — módulo más maduro

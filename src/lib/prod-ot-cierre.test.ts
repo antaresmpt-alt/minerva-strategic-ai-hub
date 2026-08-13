@@ -10,6 +10,7 @@ import {
   extractEmbalajeFromPasos,
   isContenedorCierreSnapshot,
   resolveEmbalajeDisplayFromProducida,
+  sumMermaHojasExternos,
 } from "@/lib/prod-ot-cierre";
 import type { HojaRutaData, HojaRutaPaso } from "@/lib/hoja-ruta/hoja-ruta-query";
 import {
@@ -170,6 +171,123 @@ describe("buildProdOtProducidaInsert + referencia_id", () => {
     expect(row.horas_prep_engomado_reales).toBe(0.4);
     expect(row.horas_tiraje_engomado_reales).toBe(1.6);
     expect(row.horas_total_reales).toBe(2);
+  });
+
+  it("suma merma de impresión + troquel + externos (caso 99905)", () => {
+    const row = buildProdOtProducidaInsert({
+      otNumero: "99905",
+      snapshot: snapshot([
+        paso(PROCESO_OFFSET_ID, {
+          datosProceso: { hojas_impresas: 1650, hojas_merma: 150 },
+        }),
+        paso(3, {
+          esExterno: true,
+          procesoNombre: "Plastificado",
+          datosProceso: { hojas_enviadas: 1650, hojas_recibidas_muelle: 1550 },
+          externo: {
+            estado: "recibido",
+            proveedorNombre: "Llobregat",
+            acabadoNombre: null,
+            fechaEnvio: null,
+            fechaPrevista: null,
+            fechaRecepcionMuelle: null,
+            hojasEnviadas: 1650,
+            hojasRecibidasMuelle: 1550,
+            unidades: null,
+            unidadesRecibidasMuelle: null,
+            palets: null,
+            paletsRecibidosMuelle: null,
+            observaciones: null,
+          },
+        }),
+        paso(5, {
+          esExterno: true,
+          procesoNombre: "UVI",
+          datosProceso: { hojas_enviadas: 1550, hojas_recibidas_muelle: 1500 },
+          externo: {
+            estado: "recibido",
+            proveedorNombre: "Esparbé",
+            acabadoNombre: null,
+            fechaEnvio: null,
+            fechaPrevista: null,
+            fechaRecepcionMuelle: null,
+            hojasEnviadas: 1550,
+            hojasRecibidasMuelle: 1500,
+            unidades: null,
+            unidadesRecibidasMuelle: null,
+            palets: null,
+            paletsRecibidosMuelle: null,
+            observaciones: null,
+          },
+        }),
+        paso(PROCESO_TROQUEL_ID, {
+          datosProceso: { hojas_troqueladas: 1450, hojas_merma: 50, poses: 4 },
+        }),
+        paso(PROCESO_ENGOMADO_ID, {
+          datosProceso: { estuches_engomados: 5800 },
+        }),
+      ]),
+      userId: "user-1",
+      nowIso: "2026-08-13T12:00:00.000Z",
+    });
+    expect(row.merma_total).toBe(350);
+    expect(row.cantidad_producida).toBe(5800);
+  });
+
+  it("OT simple sin externos sigue siendo solo impresión + troquel", () => {
+    const row = buildProdOtProducidaInsert({
+      otNumero: "36070",
+      snapshot: snapshot([
+        paso(PROCESO_OFFSET_ID, {
+          datosProceso: { hojas_impresas: 1000, hojas_merma: 40 },
+        }),
+        paso(PROCESO_TROQUEL_ID, {
+          datosProceso: { hojas_troqueladas: 960, hojas_merma: 10 },
+        }),
+      ]),
+      userId: "user-1",
+      nowIso: "2026-08-13T12:00:00.000Z",
+    });
+    expect(row.merma_total).toBe(50);
+  });
+
+  it("sin señal de merma deja merma_total null", () => {
+    const row = buildProdOtProducidaInsert({
+      otNumero: "36070",
+      snapshot: snapshot([
+        paso(PROCESO_ENGOMADO_ID, {
+          datosProceso: { estuches_engomados: 1000 },
+        }),
+      ]),
+      userId: "user-1",
+      nowIso: "2026-08-13T12:00:00.000Z",
+    });
+    expect(row.merma_total).toBeNull();
+  });
+});
+
+describe("sumMermaHojasExternos", () => {
+  it("suma enviadas − recibidas y clampa negativos", () => {
+    expect(
+      sumMermaHojasExternos([
+        paso(3, {
+          esExterno: true,
+          datosProceso: { hojas_enviadas: 100, hojas_recibidas_muelle: 80 },
+        }),
+        paso(5, {
+          esExterno: true,
+          datosProceso: { hojas_enviadas: 80, hojas_recibidas_muelle: 90 },
+        }),
+      ]),
+    ).toBe(20);
+  });
+
+  it("sin par envío/recepción no aporta", () => {
+    expect(
+      sumMermaHojasExternos([
+        paso(PROCESO_OFFSET_ID, { datosProceso: { hojas_merma: 10 } }),
+      ]),
+    ).toBeNull();
   });
 });
 

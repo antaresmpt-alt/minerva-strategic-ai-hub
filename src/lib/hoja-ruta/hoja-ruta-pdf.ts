@@ -19,6 +19,7 @@ import {
   formatHorasResumenLine,
 } from "@/lib/hoja-ruta/hoja-ruta-horas";
 import { formatHijaDisplayLabel } from "@/lib/planificacion-contenedor-query";
+import { buildPrevistoRealPdfRows } from "@/lib/hoja-ruta/hoja-ruta-pdf-previsto-real";
 
 const NAVY: [number, number, number] = [0, 33, 71];
 const SLATE: [number, number, number] = [71, 85, 105];
@@ -353,6 +354,14 @@ function drawProcesoCard(
       `Estado: ${ext.estado ?? "—"}${ext.proveedorNombre ? ` · Proveedor: ${ext.proveedorNombre}` : ""}`,
     );
     execText(`Envío: ${fmtDate(ext.fechaEnvio)} · Previsto: ${fmtDate(ext.fechaPrevista)}`);
+    if (ext.hojasEnviadas != null || ext.hojasRecibidasMuelle != null) {
+      const parts: string[] = [];
+      if (ext.hojasEnviadas != null) parts.push(`Enviadas: ${fmtCantidad(ext.hojasEnviadas)}`);
+      if (ext.hojasRecibidasMuelle != null) {
+        parts.push(`Recibidas: ${fmtCantidad(ext.hojasRecibidasMuelle)}`);
+      }
+      execText(parts.join(" · "));
+    }
     if (ext.observaciones) {
       execText(`Obs: ${ext.observaciones}`);
     }
@@ -466,44 +475,7 @@ function drawPvistoRealChart(
 ): number {
   let y = startY;
   const usable = pageW(doc) - MARGIN.left - MARGIN.right;
-  const n = (value: unknown): number => {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-  };
-
-  const rows: {
-    label: string;
-    previsto: number;
-    real: number;
-    merma: number;
-  }[] = [];
-
-  for (let i = 0; i < pasos.length; i++) {
-    const paso = pasos[i];
-    const dp = paso.datosProceso;
-    if (!dp) continue;
-    const hojasBrutas = n(dp.hojas_brutas);
-    const hojasNetas = n(dp.hojas_netas);
-    const hojasTroquelar = n(dp.hojas_troquelar);
-    const hojasImpresas = n(dp.hojas_impresas);
-    const hojasTroqueladas = n(dp.hojas_troqueladas);
-    const hojasMerma = n(dp.hojas_merma);
-
-    let previsto = hojasTroquelar || hojasNetas || hojasBrutas;
-    if (previsto === 0 && paso.procesoId === 10 && i > 0) {
-      const prevDp = pasos[i - 1]?.datosProceso;
-      previsto = n(prevDp?.hojas_impresas) || n(prevDp?.hojas_finales);
-    }
-    const real = hojasTroqueladas || hojasImpresas;
-    if (previsto > 0 || real > 0) {
-      rows.push({
-        label: `${paso.orden} · ${paso.procesoNombre ?? "Proceso"}`,
-        previsto,
-        real,
-        merma: hojasMerma,
-      });
-    }
-  }
+  const rows = buildPrevistoRealPdfRows(pasos);
 
   const requiredH = 18 + Math.max(1, rows.length) * 12 + 12;
   if (y + requiredH > maxY) {

@@ -34,6 +34,7 @@ import {
   slotKey,
 } from "@/lib/planificacion-mesa";
 import type { PlanificacionTipoMaquina } from "@/lib/planificacion-ambito";
+import { puedeMostrarImprimirFueraMesa } from "@/lib/derivar-impresion-externa";
 import { cn } from "@/lib/utils";
 import type {
   DayKey,
@@ -48,6 +49,15 @@ export const itemIdForMesa = (id: string) => `mesa::${id}`;
 export const itemIdForPool = (ot: string) => `pool::${ot}`;
 export const POOL_CONTAINER_ID = "pool::sidebar";
 
+export type MesaOperacionAccion =
+  | "lanzar"
+  | "iniciar"
+  | "pausar"
+  | "reanudar"
+  | "cancelar"
+  | "finalizar"
+  | "imprimir_fuera";
+
 interface TurnoColumnProps {
   day: DayKey;
   turno: TurnoKey;
@@ -57,13 +67,7 @@ interface TurnoColumnProps {
   maquinaTipo: PlanificacionTipoMaquina | null;
   onAction: (
     trabajo: MesaTrabajo,
-    action:
-      | "lanzar"
-      | "iniciar"
-      | "pausar"
-      | "reanudar"
-      | "cancelar"
-      | "finalizar",
+    action: MesaOperacionAccion,
     payload?: {
       horasEntrada: number | null;
       horasTiraje: number | null;
@@ -115,9 +119,7 @@ function fmtHoras(v: number | null | undefined): string {
 }
 
 /** Texto del botón (evita «Cancelar» ambiguo con cerrar el diálogo). */
-function mesaActionButtonLabel(
-  action: "lanzar" | "iniciar" | "pausar" | "reanudar" | "finalizar" | "cancelar",
-): string {
+function mesaActionButtonLabel(action: MesaOperacionAccion): string {
   switch (action) {
     case "lanzar":
       return "Lanzar";
@@ -129,8 +131,10 @@ function mesaActionButtonLabel(
       return "Reanudar";
     case "finalizar":
       return "Finalizar";
+    case "imprimir_fuera":
+      return "Imprimir fuera";
     case "cancelar":
-      return "Anular ejecución…";
+      return "Anular y devolver al Pool…";
     default:
       return action;
   }
@@ -190,6 +194,7 @@ function SortableMesaCard({
   const [actionOpen, setActionOpen] = useState(false);
   const [showFinalizeForm, setShowFinalizeForm] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [showDerivarConfirm, setShowDerivarConfirm] = useState(false);
   const [horasEntrada, setHorasEntrada] = useState("");
   const [horasTiraje, setHorasTiraje] = useState("");
   const [horasTroquelado, setHorasTroquelado] = useState("");
@@ -203,15 +208,29 @@ function SortableMesaCard({
     return Number.isFinite(n) ? n : null;
   };
 
-  const availableActions = useMemo(() => {
+  const showImprimirFuera = puedeMostrarImprimirFueraMesa({
+    maquinaTipo,
+    estadoMesa: trabajo.estadoMesa,
+    estadoEjecucion: trabajo.estadoEjecucionActual,
+  });
+
+  const availableActions = useMemo((): MesaOperacionAccion[] => {
+    const extraFuera: MesaOperacionAccion[] = showImprimirFuera ? ["imprimir_fuera"] : [];
     if (trabajo.estadoMesa === "confirmado" && !trabajo.estadoEjecucionActual) {
-      return ["lanzar", "iniciar"] as const;
+      return ["lanzar", "iniciar", ...extraFuera, "cancelar"];
     }
-    if (isPendingStart) return ["iniciar", "cancelar"] as const;
-    if (isInCourse) return ["pausar", "finalizar", "cancelar"] as const;
-    if (isPaused) return ["reanudar", "finalizar", "cancelar"] as const;
-    return [] as const;
-  }, [isInCourse, isPaused, isPendingStart, trabajo.estadoEjecucionActual, trabajo.estadoMesa]);
+    if (isPendingStart) return ["iniciar", ...extraFuera, "cancelar"];
+    if (isInCourse) return ["pausar", "finalizar", "cancelar"];
+    if (isPaused) return ["reanudar", "finalizar", "cancelar"];
+    return [];
+  }, [
+    isInCourse,
+    isPaused,
+    isPendingStart,
+    showImprimirFuera,
+    trabajo.estadoEjecucionActual,
+    trabajo.estadoMesa,
+  ]);
 
   const isPreLaunchChoice =
     trabajo.estadoMesa === "confirmado" && !trabajo.estadoEjecucionActual;
@@ -340,6 +359,7 @@ function SortableMesaCard({
           if (!open) {
             setShowFinalizeForm(false);
             setShowCancelConfirm(false);
+            setShowDerivarConfirm(false);
           }
         }}
       >
@@ -353,32 +373,44 @@ function SortableMesaCard({
                   <>
                     <span className="font-medium text-slate-800">Lanzar</span> deja la OT liberada en
                     espera de inicio. <span className="font-medium text-slate-800">Iniciar</span>{" "}
-                    libera y arranca el cronómetro al momento. El botón inferior permite{" "}
-                    <span className="font-medium text-slate-800">cerrar sin cambios</span>.
+                    libera y arranca el cronómetro al momento.{" "}
+                    <span className="font-medium text-red-800">Anular</span> la saca de mesa y la
+                    devuelve al Pool, sin dejarla terminada.
                   </>
                 ) : (
                   <>
                     <span className="font-medium text-slate-800">Cerrar sin cambios</span> solo
                     cierra este cuadro.{" "}
-                    <span className="font-medium text-red-800">Anular ejecución</span> modifica
-                    datos: cancela la ejecución y deja la OT como terminada en el tablero.
+                    <span className="font-medium text-red-800">Anular</span> cancela la liberación
+                    y devuelve la OT al Pool (como antes de enviarla a mesa), no como terminada.
                   </>
                 )}
               </span>
             </DialogDescription>
           </DialogHeader>
-          {!showFinalizeForm && !showCancelConfirm ? (
+          {!showFinalizeForm && !showCancelConfirm && !showDerivarConfirm ? (
             <div className="grid grid-cols-2 gap-2 px-6 pb-2">
               {availableActions.map((action) => (
                 <Button
                   key={action}
                   type="button"
-                  variant={action === "finalizar" || action === "cancelar" ? "outline" : "default"}
+                  variant={
+                    action === "finalizar" ||
+                    action === "cancelar" ||
+                    action === "imprimir_fuera"
+                      ? "outline"
+                      : "default"
+                  }
                   className={cn(
                     "justify-center",
                     action === "cancelar" && "col-span-2 border-red-200 text-red-700 hover:bg-red-50",
+                    action === "imprimir_fuera" &&
+                      "col-span-2 border-amber-300 text-amber-950 hover:bg-amber-50",
                     action === "finalizar" && "border-[#002147]/30 text-[#002147]",
-                    action !== "cancelar" && action !== "finalizar" && "bg-[#002147] text-white hover:bg-[#001735]",
+                    action !== "cancelar" &&
+                      action !== "finalizar" &&
+                      action !== "imprimir_fuera" &&
+                      "bg-[#002147] text-white hover:bg-[#001735]",
                   )}
                   disabled={isSavingThis}
                   onClick={() => {
@@ -388,6 +420,10 @@ function SortableMesaCard({
                     }
                     if (action === "cancelar") {
                       setShowCancelConfirm(true);
+                      return;
+                    }
+                    if (action === "imprimir_fuera") {
+                      setShowDerivarConfirm(true);
                       return;
                     }
                     onAction(trabajo, action);
@@ -401,18 +437,27 @@ function SortableMesaCard({
           ) : showCancelConfirm ? (
             <div className="space-y-3 px-6 pb-2">
               <div className="rounded-md border border-red-200 bg-red-50/80 p-3 text-xs leading-relaxed text-red-950">
-                <p className="font-semibold">Confirmar anulación en máquina</p>
+                <p className="font-semibold">Confirmar anulación</p>
                 <p className="mt-1.5">
-                  Se marcará la <strong>ejecución como cancelada</strong> y la posición en mesa
-                  como <strong>finalizada</strong> (verás la OT como terminada). No equivale a
-                  cerrar el menú sin hacer nada.
+                  Se cancela la liberación (si existe) y <strong>se quita el hueco de mesa</strong>.
+                  La OT vuelve al Pool como antes de enviarla a mesa: no queda terminada.
                 </p>
                 {isPendingStart ? (
                   <p className="mt-1.5 text-red-900/90">
-                    La OT está liberada pero aún sin tiempo de inicio: al anular se cierra esa
-                    liberación en esta máquina.
+                    Está liberada pero aún sin inicio: al anular desaparece de esta máquina y
+                    reaparece en el Pool.
                   </p>
                 ) : null}
+              </div>
+            </div>
+          ) : showDerivarConfirm ? (
+            <div className="space-y-3 px-6 pb-2">
+              <div className="rounded-md border border-amber-200 bg-amber-50/80 p-3 text-xs leading-relaxed text-amber-950">
+                <p className="font-semibold">Mandar a impresión externa</p>
+                <p className="mt-1.5">
+                  Se sustituye Offset/Digital por <strong>Impresión EXTERNA</strong>, se saca de
+                  esta máquina y queda en cola de Externos para Ramón. No queda como terminada.
+                </p>
               </div>
             </div>
           ) : (
@@ -510,7 +555,30 @@ function SortableMesaCard({
                     setShowCancelConfirm(false);
                   }}
                 >
-                  Sí, anular ejecución
+                  Sí, devolver al Pool
+                </Button>
+              </>
+            ) : showDerivarConfirm ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isSavingThis}
+                  onClick={() => setShowDerivarConfirm(false)}
+                >
+                  Volver
+                </Button>
+                <Button
+                  type="button"
+                  className="bg-amber-700 text-white hover:bg-amber-800"
+                  disabled={isSavingThis}
+                  onClick={() => {
+                    onAction(trabajo, "imprimir_fuera");
+                    setActionOpen(false);
+                    setShowDerivarConfirm(false);
+                  }}
+                >
+                  Sí, imprimir fuera
                 </Button>
               </>
             ) : (

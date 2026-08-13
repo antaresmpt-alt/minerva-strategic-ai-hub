@@ -170,6 +170,7 @@ export type ProximoPasoInfo = {
   seccionSlug: string | null;
   tipoPlanificacionDb: string | null;
   tipoMaquina: PlanificacionTipoMaquina | null;
+  procesoId: number | null;
 };
 
 /**
@@ -211,7 +212,7 @@ export async function fetchProximoPasoDisponiblePorOt(
     const { data, error } = await supabase
       .from("prod_ot_pasos")
       .select(
-        "ot_id, orden, estado, prod_procesos_cat(nombre, seccion_slug, tipo_planificacion, es_externo)",
+        "ot_id, orden, estado, proceso_id, prod_procesos_cat(nombre, seccion_slug, tipo_planificacion, es_externo)",
       )
       .in("ot_id", chunk)
       .eq("estado", "disponible")
@@ -222,6 +223,7 @@ export async function fetchProximoPasoDisponiblePorOt(
 
   type PasoRow = {
     ot_id?: string;
+    proceso_id?: number | null;
     prod_procesos_cat?: {
       nombre?: string | null;
       seccion_slug?: string | null;
@@ -259,11 +261,15 @@ export async function fetchProximoPasoDisponiblePorOt(
       ? null
       : parsePlanificacionTipoMaquina(tipoFromDb) ??
         inferPlanificacionTipoFromProceso(slug, nombre);
+    const pidRaw = raw.proceso_id;
+    const procesoId =
+      typeof pidRaw === "number" && Number.isFinite(pidRaw) ? Math.trunc(pidRaw) : null;
     out.set(num, {
       nombre,
       seccionSlug: slug,
       tipoPlanificacionDb: tipoFromDb,
       tipoMaquina,
+      procesoId,
     });
   }
 

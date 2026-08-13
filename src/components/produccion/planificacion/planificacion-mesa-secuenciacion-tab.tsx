@@ -66,6 +66,7 @@ import {
 import {
   POOL_CONTAINER_ID,
   TurnoColumn,
+  type MesaOperacionAccion,
 } from "@/components/produccion/planificacion/mesa/turno-column";
 import { Button } from "@/components/ui/button";
 import {
@@ -109,6 +110,10 @@ import {
 } from "@/lib/planificacion-ia-validate";
 import { useHubStore } from "@/lib/store";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import {
+  derivarOtAImpresionExterna,
+  devolverHuecoMesaAlPool,
+} from "@/lib/derivar-impresion-externa";
 import { fetchAllInChunks } from "@/lib/supabase-query-chunks";
 import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
 import { cn } from "@/lib/utils";
@@ -1862,7 +1867,7 @@ export function PlanificacionMesaSecuenciacionTab() {
   const runMesaAction = useCallback(
     async (
       trabajo: MesaTrabajo,
-      action: "lanzar" | "iniciar" | "pausar" | "reanudar" | "cancelar" | "finalizar",
+      action: MesaOperacionAccion,
       payload?: {
         horasEntrada: number | null;
         horasTiraje: number | null;
@@ -1879,6 +1884,38 @@ export function PlanificacionMesaSecuenciacionTab() {
       }
       if (action === "iniciar" && !trabajo.ejecucionIdActual?.trim()) {
         await launchExecution(trabajo, { startImmediately: true });
+        return;
+      }
+      if (action === "imprimir_fuera") {
+        setActionLoadingId(trabajo.id);
+        try {
+          await derivarOtAImpresionExterna(supabase, trabajo.ot);
+          toast.success(`${trabajo.ot} lista para Ramón (cola Externos).`);
+          await reload();
+        } catch (e) {
+          toast.error(getErrorMessage(e, "No se pudo derivar a impresión externa."));
+          await reload();
+        } finally {
+          setActionLoadingId(null);
+        }
+        return;
+      }
+      if (action === "cancelar") {
+        setActionLoadingId(trabajo.id);
+        try {
+          await devolverHuecoMesaAlPool(supabase, {
+            otNumero: trabajo.ot,
+            mesaTrabajoId: trabajo.id,
+            ejecucionId: trabajo.ejecucionIdActual,
+          });
+          toast.success(`OT ${trabajo.ot} devuelta al Pool.`);
+          await reload();
+        } catch (e) {
+          toast.error(getErrorMessage(e, "No se pudo devolver la OT al Pool."));
+          await reload();
+        } finally {
+          setActionLoadingId(null);
+        }
         return;
       }
       const ejecucionId = trabajo.ejecucionIdActual?.trim() || null;
@@ -1908,17 +1945,6 @@ export function PlanificacionMesaSecuenciacionTab() {
             .update({ estado_ejecucion: "en_curso", updated_at: nowIso })
             .eq("id", ejecucionId);
           if (error) throw error;
-        } else if (action === "cancelar") {
-          const { error: execErr } = await supabase
-            .from(TABLE_EJECUCIONES)
-            .update({ estado_ejecucion: "cancelada", fin_real_at: nowIso, updated_at: nowIso })
-            .eq("id", ejecucionId);
-          if (execErr) throw execErr;
-          const { error: mesaErr } = await supabase
-            .from(TABLE_MESA)
-            .update({ estado_mesa: "finalizada" })
-            .eq("id", trabajo.id);
-          if (mesaErr) throw mesaErr;
         } else if (action === "finalizar") {
           const horasEntrada = payload?.horasEntrada ?? null;
           const horasTiraje = payload?.horasTiraje ?? null;
@@ -3361,13 +3387,7 @@ function DayCard({
   maquinaTipo: PlanificacionTipoMaquina | null;
   onAction: (
     trabajo: MesaTrabajo,
-    action:
-      | "lanzar"
-      | "iniciar"
-      | "pausar"
-      | "reanudar"
-      | "cancelar"
-      | "finalizar",
+    action: MesaOperacionAccion,
     payload?: {
       horasEntrada: number | null;
       horasTiraje: number | null;

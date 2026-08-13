@@ -73,6 +73,7 @@ export function emptyDespachoWizardCtpDatos(): DespachoWizardCtpDatos {
 
 export const CTP_EJECUCION_ONLY_FIELD_IDS = [
   "planchas_hechas",
+  "aaffs_enviados_externo",
   "num_planchas",
   "horas_proceso",
 ] as const;

@@ -14,6 +14,7 @@ import {
   Printer,
   Search,
   Send,
+  Truck,
 } from "lucide-react";
 import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -93,6 +94,10 @@ import { fetchAllInChunks } from "@/lib/supabase-query-chunks";
 import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
 import { PoolOtCartelasDialog } from "@/components/produccion/planificacion/pool-ot-cartelas-dialog";
 import { compareOtNumerosEs } from "@/lib/ots-contenedor-display";
+import {
+  derivarOtAImpresionExterna,
+  puedeDerivarImpresionExterna,
+} from "@/lib/derivar-impresion-externa";
 import type { ProdOtTipo, ProdOtTipoHija } from "@/types/prod-ots";
 
 const TABLE_DESPACHADAS = "produccion_ot_despachadas";
@@ -199,6 +204,7 @@ type PoolRow = {
   horasTotal: number;
   proximoPasoNombre: string | null;
   proximoPasoSlug: string | null;
+  proximoPasoProcesoId: number | null;
   planificacionTipoPaso: PlanificacionTipoMaquina | null;
   /** `estado_pool === enviada_mesa`: en cola para la mesa, aún sin huecos obligatorios. */
   enColaMesa: boolean;
@@ -680,6 +686,7 @@ export function PlanificacionPoolOtsTab() {
             horasTotal: horas,
             proximoPasoNombre: null,
             proximoPasoSlug: null,
+            proximoPasoProcesoId: null,
             planificacionTipoPaso: null,
             enColaMesa: false,
             planificadaEnMesa: false,
@@ -1065,6 +1072,7 @@ export function PlanificacionPoolOtsTab() {
           ...r,
           proximoPasoNombre: info.nombre,
           proximoPasoSlug: info.seccionSlug,
+          proximoPasoProcesoId: info.procesoId,
           planificacionTipoPaso: info.tipoMaquina,
         };
       });
@@ -1331,6 +1339,7 @@ export function PlanificacionPoolOtsTab() {
                 ? "Itinerario completo"
                 : (paso?.nombre ?? null),
               proximoPasoSlug: poolCerrada ? null : (paso?.seccionSlug ?? null),
+              proximoPasoProcesoId: poolCerrada ? null : (paso?.procesoId ?? null),
               planificacionTipoPaso: poolCerrada ? null : (paso?.tipoMaquina ?? null),
               enColaMesa: false,
               planificadaEnMesa: false,
@@ -1864,6 +1873,47 @@ export function PlanificacionPoolOtsTab() {
     }
   }, [loadRows, selectedRows, supabase]);
 
+  const imprimirFuera = useCallback(async () => {
+    if (selectedRows.length === 0) {
+      toast.error("Selecciona al menos una OT para imprimir fuera.");
+      return;
+    }
+    const noDerivable = selectedRows.filter((r) => !puedeDerivarImpresionExterna(r));
+    if (noDerivable.length > 0) {
+      toast.error(
+        `Solo cuando el próximo paso es Offset o Digital: ${noDerivable.map((r) => r.ot).join(", ")}.`,
+      );
+      return;
+    }
+    const ok = window.confirm(
+      selectedRows.length === 1
+        ? `¿Mandar ${selectedRows[0]!.ot} a impresión externa?\n\nOffset/Digital pasa a Impresión EXTERNA. Si estaba en mesa (planificada o lanzada sin iniciar), se saca del hueco. Ramón la verá en Externos.`
+        : `¿Mandar ${selectedRows.length} OTs a impresión externa?\n\nSe sustituye Offset/Digital por Impresión EXTERNA y se quitan de mesa si no habían iniciado.`,
+    );
+    if (!ok) return;
+
+    setSaving(true);
+    try {
+      const done: string[] = [];
+      for (const row of selectedRows) {
+        await derivarOtAImpresionExterna(supabase, row.ot);
+        done.push(row.ot);
+      }
+      toast.success(
+        done.length === 1
+          ? `${done[0]} lista para Ramón (cola Externos).`
+          : `${done.length} OTs listas para Ramón (cola Externos).`,
+      );
+      setSelected({});
+      await loadRows();
+    } catch (e) {
+      console.error(e);
+      toast.error(getErrorMessage(e, "No se pudo derivar a impresión externa."));
+    } finally {
+      setSaving(false);
+    }
+  }, [loadRows, selectedRows, supabase]);
+
   return (
     <Card className="border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
       <CardHeader>
@@ -1961,6 +2011,22 @@ export function PlanificacionPoolOtsTab() {
               <Send className="mr-1.5 size-4" aria-hidden />
             )}
             Pasar a Mesa de Secuenciación
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="border-[#002147]/30 text-[#002147] hover:bg-[#002147]/5"
+            disabled={saving || selectedRows.length === 0}
+            onClick={() => void imprimirFuera()}
+            title="Sustituye Offset/Digital por Impresión EXTERNA. Si está en mesa y no ha iniciado, se saca del hueco."
+          >
+            {saving ? (
+              <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden />
+            ) : (
+              <Truck className="mr-1.5 size-4" aria-hidden />
+            )}
+            Imprimir fuera
           </Button>
           <span className="text-xs text-slate-600">
             Seleccionadas:{" "}

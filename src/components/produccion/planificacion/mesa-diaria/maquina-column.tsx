@@ -5,6 +5,7 @@ import { useMemo } from "react";
 
 import {
   TurnoColumn,
+  type MesaOperacionAccion,
 } from "@/components/produccion/planificacion/mesa/turno-column";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,13 +50,7 @@ interface MaquinaColumnProps {
   ) => void;
   onAction: (
     trabajo: MesaTrabajo,
-    action:
-      | "lanzar"
-      | "iniciar"
-      | "pausar"
-      | "reanudar"
-      | "cancelar"
-      | "finalizar",
+    action: MesaOperacionAccion,
     payload?: {
       horasEntrada: number | null;
       horasTiraje: number | null;

@@ -461,6 +461,37 @@ export function extractCantidadProducida(pasos: HojaRutaPaso[]): number | null {
 }
 
 /**
+ * Merma de hojas en un paso externo: enviadas − recibidas.
+ * Prefiere `prod_seguimiento_externos`; si falta, `datos_proceso` (modal Ramón).
+ * Si falta enviadas o recibidas, no aporta. Recibidas > enviadas se cuenta como 0.
+ */
+export function mermaHojasDePasoExterno(paso: HojaRutaPaso): number | null {
+  const d = dp(paso);
+  const enviadas =
+    asNum(paso.externo?.hojasEnviadas) ?? asNum(d?.hojas_enviadas);
+  const recibidas =
+    asNum(paso.externo?.hojasRecibidasMuelle) ?? asNum(d?.hojas_recibidas_muelle);
+  if (enviadas == null || recibidas == null) return null;
+  return Math.max(0, enviadas - recibidas);
+}
+
+/**
+ * Suma merma de hojas de todos los pasos con par envío/recepción.
+ * `null` si ningún paso tiene el par (OT simple sin externos).
+ */
+export function sumMermaHojasExternos(pasos: HojaRutaPaso[]): number | null {
+  let sum = 0;
+  let any = false;
+  for (const paso of pasos) {
+    const merma = mermaHojasDePasoExterno(paso);
+    if (merma == null) continue;
+    any = true;
+    sum += merma;
+  }
+  return any ? sum : null;
+}
+
+/**
  * Construye el payload de INSERT de prod_ot_producidas desde el snapshot
  * de hoja de ruta (+ extras de despacho/referencia).
  */
@@ -535,11 +566,12 @@ export function buildProdOtProducidaInsert(args: {
   ].filter((n): n is number => n != null);
   const horasTotal = partesHoras.length > 0 ? partesHoras.reduce((a, b) => a + b, 0) : null;
 
-  const mermaImp = asNum(impDp?.hojas_merma) ?? 0;
-  const mermaTroq = asNum(troqDp?.hojas_merma) ?? 0;
+  const mermaImp = asNum(impDp?.hojas_merma);
+  const mermaTroq = asNum(troqDp?.hojas_merma);
+  const mermaExt = sumMermaHojasExternos(pasos);
   const mermaTotal =
-    mermaImp > 0 || mermaTroq > 0 || impDp?.hojas_merma != null || troqDp?.hojas_merma != null
-      ? mermaImp + mermaTroq
+    mermaImp != null || mermaTroq != null || mermaExt != null
+      ? (mermaImp ?? 0) + (mermaTroq ?? 0) + (mermaExt ?? 0)
       : null;
 
   let fechaInicio: string | null = null;

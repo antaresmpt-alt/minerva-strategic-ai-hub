@@ -57,6 +57,7 @@ import {
 } from "@/components/produccion/externos/externos-weekly-board";
 import { ImportacionOptimusTab } from "@/components/produccion/externos/importacion-optimus-tab";
 import { CartelaExternoEnviadoDialog } from "@/components/produccion/externos/cartela-externo-enviado-dialog";
+import { ExternoCantidadDialog } from "@/components/produccion/externos/externo-cantidad-dialog";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -136,6 +137,14 @@ import {
   type ConsumoExternoEnviadoContext,
 } from "@/lib/cartela-consumo-externos";
 import type { DatosProcesoGenerico } from "@/lib/hoja-ruta-campos-config";
+import {
+  fetchExternoEnvioBrief,
+  mergeDatosProcesoExternoPaso,
+  parseHojasPositive,
+  resolveExternoRecibidoHojasSugeridas,
+  type ExternoCantidadModo,
+  type ExternoEnvioBrief,
+} from "@/lib/externos-envio-brief";
 import { useHubStore } from "@/lib/store";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
@@ -979,6 +988,14 @@ export function GestionExternosPage() {
     otNumero: string;
     afterConsumo: () => Promise<void>;
   } | null>(null);
+  const [cantidadOpen, setCantidadOpen] = useState(false);
+  const [cantidadModo, setCantidadModo] = useState<ExternoCantidadModo>("enviado");
+  const [cantidadRow, setCantidadRow] = useState<SeguimientoRow | null>(null);
+  const [cantidadBrief, setCantidadBrief] = useState<ExternoEnvioBrief | null>(null);
+  const [cantidadBriefLoading, setCantidadBriefLoading] = useState(false);
+  const [cantidadHojas, setCantidadHojas] = useState("");
+  const [cantidadPalets, setCantidadPalets] = useState("");
+  const [cantidadObs, setCantidadObs] = useState("");
 
   const [analistaOpen, setAnalistaOpen] = useState(false);
   const [analistaLoading, setAnalistaLoading] = useState(false);
@@ -2384,14 +2401,96 @@ export function GestionExternosPage() {
   }
 
   async function updateEstado(row: SeguimientoRow, nuevo: string) {
+    if (nuevo === row.estado) return;
+    if (
+      (nuevo === "Enviado" && row.estado !== "Enviado") ||
+      (nuevo === "Recibido" && row.estado !== "Recibido")
+    ) {
+      void openCantidadDialog(row, nuevo === "Recibido" ? "recibido" : "enviado");
+      return;
+    }
+    await applyEstadoPatch(row, { estado: nuevo });
+  }
+
+  async function openCantidadDialog(row: SeguimientoRow, modo: ExternoCantidadModo) {
+    setCantidadRow(row);
+    setCantidadModo(modo);
+    setCantidadOpen(true);
+    setCantidadObs(row.observaciones ?? "");
+    setCantidadPalets(
+      modo === "enviado"
+        ? row.palets != null
+          ? String(row.palets)
+          : ""
+        : row.palets_recibidos_muelle != null
+          ? String(row.palets_recibidos_muelle)
+          : "",
+    );
+    setCantidadBrief(null);
+    setCantidadBriefLoading(true);
+    try {
+      const brief = await fetchExternoEnvioBrief(supabase, {
+        otNumero: getOtDisplay(row),
+        otPasoId: row.ot_paso_id,
+        hojasYaEnSeguimiento: row.hojas_enviadas,
+      });
+      if (modo === "recibido") {
+        const rec = resolveExternoRecibidoHojasSugeridas({
+          hojasEnviadas: row.hojas_enviadas,
+          hojasRecibidasMuelle: row.hojas_recibidas_muelle,
+        });
+        setCantidadBrief({
+          ...brief,
+          hojasSugeridas: rec.hojasSugeridas,
+          hojasSugeridasOrigen: rec.hojasSugeridasOrigen,
+        });
+        setCantidadHojas(rec.hojasSugeridas != null ? String(rec.hojasSugeridas) : "");
+      } else {
+        setCantidadBrief(brief);
+        setCantidadHojas(brief.hojasSugeridas != null ? String(brief.hojasSugeridas) : "");
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "No se pudieron cargar los datos de la OT.";
+      toast.error(msg);
+      setCantidadBrief(null);
+      setCantidadHojas(
+        modo === "recibido"
+          ? row.hojas_recibidas_muelle != null
+            ? String(row.hojas_recibidas_muelle)
+            : row.hojas_enviadas != null
+              ? String(row.hojas_enviadas)
+              : ""
+          : row.hojas_enviadas != null
+            ? String(row.hojas_enviadas)
+            : "",
+      );
+    } finally {
+      setCantidadBriefLoading(false);
+    }
+  }
+
+  async function applyEstadoPatch(
+    row: SeguimientoRow,
+    extra: Record<string, string | number | null>,
+  ) {
     const now = new Date().toISOString();
-    const patch: Record<string, string> = {
+    const nuevo = String(extra.estado ?? row.estado);
+    const patch: Record<string, string | number | null> = {
       estado: nuevo,
       updated_at: now,
+      ...extra,
     };
-    if (nuevo === "Enviado" && row.estado !== "Enviado") {
+    if (nuevo === "Enviado" && row.estado !== "Enviado" && !patch.fecha_envio) {
       patch.fecha_envio = now;
-      const consumo = await runConsumoCartelaAlMarcarEnviado(row, row.hojas_enviadas);
+    }
+    if (nuevo === "Recibido" && row.estado !== "Recibido" && !patch.fecha_recepcion_muelle) {
+      patch.fecha_recepcion_muelle = now;
+    }
+
+    if (nuevo === "Enviado" && row.estado !== "Enviado") {
+      const hojasEnviadas =
+        typeof patch.hojas_enviadas === "number" ? patch.hojas_enviadas : row.hojas_enviadas;
+      const consumo = await runConsumoCartelaAlMarcarEnviado(row, hojasEnviadas ?? null);
       if (!consumo.ok) {
         if (consumo.needsDialog) {
           setCartelaEnviadoPending({
@@ -2399,14 +2498,18 @@ export function GestionExternosPage() {
             otNumero: getOtDisplay(row),
             afterConsumo: async () => {
               setSaving(true);
-              const { error } = await supabase
-                .from("prod_seguimiento_externos")
-                .update(patch)
-                .eq("id", row.id);
-              setSaving(false);
-              if (error) throw new Error(error.message);
-              toast.success("Estado actualizado.");
-              void loadCore();
+              try {
+                const { error } = await supabase
+                  .from("prod_seguimiento_externos")
+                  .update(patch)
+                  .eq("id", row.id);
+                if (error) throw new Error(error.message);
+                await persistPasoDatosFromPatch(row, patch);
+                toast.success("Estado actualizado.");
+                void loadCore();
+              } finally {
+                setSaving(false);
+              }
             },
           });
           setCartelaEnviadoDatos(consumo.datosDraft);
@@ -2415,6 +2518,7 @@ export function GestionExternosPage() {
         return;
       }
     }
+
     setSaving(true);
     const { error } = await supabase
       .from("prod_seguimiento_externos")
@@ -2425,8 +2529,56 @@ export function GestionExternosPage() {
       toast.error(error.message);
       return;
     }
+    try {
+      await persistPasoDatosFromPatch(row, patch);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo guardar en el paso de itinerario.");
+    }
     toast.success("Estado actualizado.");
     void loadCore();
+  }
+
+  async function persistPasoDatosFromPatch(
+    row: SeguimientoRow,
+    patch: Record<string, string | number | null>,
+  ) {
+    const dp: Record<string, unknown> = {};
+    if (typeof patch.hojas_enviadas === "number") dp.hojas_enviadas = patch.hojas_enviadas;
+    if (typeof patch.hojas_recibidas_muelle === "number") {
+      dp.hojas_recibidas_muelle = patch.hojas_recibidas_muelle;
+      dp.numero_hojas = patch.hojas_recibidas_muelle;
+    }
+    if (cantidadBrief?.formato) dp.formato_hojas = cantidadBrief.formato;
+    if (Object.keys(dp).length === 0) return;
+    await mergeDatosProcesoExternoPaso(supabase, row.ot_paso_id, dp);
+  }
+
+  async function confirmCantidadDialog() {
+    if (!cantidadRow) return;
+    const hojas = parseHojasPositive(cantidadHojas);
+    if (hojas == null) {
+      toast.error("Indica un número de hojas mayor que 0.");
+      return;
+    }
+    const palets = parseHojasPositive(cantidadPalets);
+    const obs = cantidadObs.trim();
+    const extra: Record<string, string | number | null> =
+      cantidadModo === "enviado"
+        ? {
+            estado: "Enviado",
+            hojas_enviadas: hojas,
+            palets: palets,
+            observaciones: obs || cantidadRow.observaciones || null,
+          }
+        : {
+            estado: "Recibido",
+            hojas_recibidas_muelle: hojas,
+            palets_recibidos_muelle: palets,
+            observaciones: obs || cantidadRow.observaciones || null,
+          };
+    setCantidadOpen(false);
+    await applyEstadoPatch(cantidadRow, extra);
+    setCantidadRow(null);
   }
 
   async function handleDuplicateSeguimiento(row: SeguimientoRow) {
@@ -3464,6 +3616,7 @@ export function GestionExternosPage() {
                             </td>
                             <td className="w-24 max-w-24 py-0.5 align-middle">
                               <NativeSelect
+                                key={`${row.id}-${row.estado}`}
                                 label=""
                                 options={estadoRapidoOptions}
                                 value={row.estado}
@@ -3691,6 +3844,7 @@ export function GestionExternosPage() {
                               Estado
                             </Label>
                             <NativeSelect
+                              key={`${row.id}-${row.estado}`}
                               label=""
                               options={estadoRapidoOptions}
                               value={row.estado}
@@ -5967,6 +6121,36 @@ export function GestionExternosPage() {
           </Card>
         </div>
       ) : null}
+      <ExternoCantidadDialog
+        open={cantidadOpen}
+        onOpenChange={(open) => {
+          setCantidadOpen(open);
+          if (!open) setCantidadRow(null);
+        }}
+        modo={cantidadModo}
+        otNumero={cantidadRow ? getOtDisplay(cantidadRow) : ""}
+        procesoNombre={null}
+        proveedorNombre={
+          cantidadRow
+            ? (proveedorNombreById.get(cantidadRow.proveedor_id) ?? null)
+            : null
+        }
+        acabadoNombre={
+          cantidadRow
+            ? (acabadoNombreById.get(cantidadRow.acabado_id) ?? null)
+            : null
+        }
+        brief={cantidadBrief}
+        briefLoading={cantidadBriefLoading}
+        hojas={cantidadHojas}
+        palets={cantidadPalets}
+        observaciones={cantidadObs}
+        onHojasChange={setCantidadHojas}
+        onPaletsChange={setCantidadPalets}
+        onObservacionesChange={setCantidadObs}
+        onConfirm={() => void confirmCantidadDialog()}
+        saving={saving}
+      />
       <CartelaExternoEnviadoDialog
         open={cartelaEnviadoOpen}
         onOpenChange={(open) => {

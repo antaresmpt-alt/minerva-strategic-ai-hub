@@ -12,6 +12,8 @@ import {
   Pause,
   Play,
   RefreshCcw,
+  Truck,
+  Undo2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -28,6 +30,11 @@ import { CerrarProcesoDialog } from "@/components/produccion/planificacion/cerra
 import { CtpEjecucionRequisitosBlock } from "@/components/produccion/planificacion/ctp-ejecucion-requisitos-block";
 import { aplicarConsumoCartelaSiCorresponde, validarCartelaConsumoAntesCerrar } from "@/lib/cartela-stock-consumo";
 import { procesoUsaCartela, type PasoItinerarioConsumo } from "@/lib/cartela-ejecucion";
+import {
+  derivarOtAImpresionExterna,
+  devolverHuecoMesaAlPool,
+} from "@/lib/derivar-impresion-externa";
+import { PROCESO_DIGITAL_ID, PROCESO_OFFSET_ID } from "@/lib/despacho-wizard-shared";
 import { errorMessageFromUnknown } from "@/lib/error-message";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -78,6 +85,7 @@ import {
   buildFormatoAnteriorByOtPasoId,
   type PasoItinerarioFormato,
 } from "@/lib/hoja-ruta-formato-encadenado";
+import { resolveSalidaAnteriorPorItinerario } from "@/lib/hoja-ruta-salida-encadenado";
 import { DatosProcesoForm } from "@/components/produccion/hoja-ruta/datos-proceso-form";
 import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
 import type {
@@ -1479,8 +1487,9 @@ export function PlanificacionOtsEjecucionTab({
           });
         }
 
-        // Para cada ejecución activa, buscamos el último paso completado de la misma OT
-        // cuyo proceso_id sea compatible como entrada (inputFromProcessIds del proceso actual)
+        // Para cada ejecución activa, el paso de entrada es el finalizado
+        // inmediatamente anterior en el itinerario (mayor orden < actual)
+        // entre los procesos compatibles (inputFromProcessIds).
         const pasosPorOtId = new Map<string, Array<{ proceso_id: number | null; datos_proceso: Record<string, unknown> | null; orden: number | null }>>();
         for (const p of pasosData as Array<{ ot_id: string; proceso_id: number | null; estado: string; datos_proceso: Record<string, unknown> | null; orden: number | null }>) {
           const otId = String(p.ot_id ?? "").trim();
@@ -1497,27 +1506,18 @@ export function PlanificacionOtsEjecucionTab({
           if (!pid) continue;
           const key = salidaAnteriorKey(otId, pid);
           if (!key) continue;
-          const procesoConfig = PROCESO_CAMPOS_CONFIG[pid];
+          const procesoConfig = getCamposConfigByProcesoId(pid);
           const inputIds = procesoConfig?.inputFromProcessIds;
           if (!inputIds || inputIds.length === 0) continue;
 
           const pasosOt = pasosPorOtId.get(otId) ?? [];
-          // Busca el paso finalizado más reciente cuyo proceso sea compatible
-          for (const candidatePid of inputIds) {
-            const paso = pasosOt.find((p) => p.proceso_id === candidatePid);
-            if (!paso?.datos_proceso) continue;
-            const candidateConfig = PROCESO_CAMPOS_CONFIG[candidatePid];
-            if (!candidateConfig?.outputField) continue;
-            const rawVal = paso.datos_proceso[candidateConfig.outputField];
-            const val = typeof rawVal === "number" ? rawVal : (typeof rawVal === "string" ? Number(rawVal) : null);
-            if (val == null || !Number.isFinite(val)) continue;
-            salidaAnteriorByPasoKey.set(key, {
-              procesoAnteriorId: candidatePid,
-              salida: val,
-              nombre: candidateConfig.procesoNombre,
-            });
-            break;
-          }
+          const currentOrden = execRow.prod_ot_pasos?.orden ?? null;
+          const resolved = resolveSalidaAnteriorPorItinerario(
+            pasosOt,
+            inputIds,
+            currentOrden,
+          );
+          if (resolved) salidaAnteriorByPasoKey.set(key, resolved);
         }
       }
 
@@ -1749,6 +1749,55 @@ export function PlanificacionOtsEjecucionTab({
       } catch (e) {
         const msg = e instanceof Error ? e.message : "No se pudo iniciar la OT.";
         toast.error(msg);
+      } finally {
+        setSavingId(null);
+      }
+    },
+    [loadData, supabase],
+  );
+
+  const devolverEjecucionAlPool = useCallback(
+    async (row: MesaEjecucion) => {
+      const mesaId = String(row.mesaTrabajoId ?? "").trim();
+      if (!mesaId) {
+        toast.error("Esta ejecución no tiene hueco de mesa asociado.");
+        return;
+      }
+      const ok = window.confirm(
+        `¿Devolver ${row.ot} al Pool?\n\nSe anula la liberación y desaparece de esta máquina. No queda como terminada.`,
+      );
+      if (!ok) return;
+      setSavingId(row.id);
+      try {
+        await devolverHuecoMesaAlPool(supabase, {
+          otNumero: row.ot,
+          mesaTrabajoId: mesaId,
+          ejecucionId: row.id,
+        });
+        toast.success(`OT ${row.ot} devuelta al Pool.`);
+        await loadData();
+      } catch (e) {
+        toast.error(errorMessageFromUnknown(e, "No se pudo devolver la OT al Pool."));
+      } finally {
+        setSavingId(null);
+      }
+    },
+    [loadData, supabase],
+  );
+
+  const imprimirFueraDesdeEjecucion = useCallback(
+    async (row: MesaEjecucion) => {
+      const ok = window.confirm(
+        `¿Mandar ${row.ot} a impresión externa?\n\nSe sustituye Offset/Digital por Impresión EXTERNA y se saca de mesa. Queda en cola de Externos para Ramón.`,
+      );
+      if (!ok) return;
+      setSavingId(row.id);
+      try {
+        await derivarOtAImpresionExterna(supabase, row.ot);
+        toast.success(`${row.ot} lista para Ramón (cola Externos).`);
+        await loadData();
+      } catch (e) {
+        toast.error(errorMessageFromUnknown(e, "No se pudo derivar a impresión externa."));
       } finally {
         setSavingId(null);
       }
@@ -2027,6 +2076,8 @@ export function PlanificacionOtsEjecucionTab({
                       }
                       onPatch={(patch, dp) => void patchExecution(row, patch, dp)}
                       onBegin={(patch, dp) => void beginExecution(row, patch, dp)}
+                      onDevolverAlPool={() => void devolverEjecucionAlPool(row)}
+                      onImprimirFuera={() => void imprimirFueraDesdeEjecucion(row)}
                       onPause={(motivo, patch, dp) => void pauseExecution(row, motivo, patch, dp)}
                       onResume={(pauses, patch, dp) => void resumeExecution(row, pauses, patch, dp)}
                       onOpenHojaRuta={() => setHojaRutaOt(row.ot)}
@@ -2058,6 +2109,8 @@ function ExecutionCard({
   pasosItinerario,
   onPatch,
   onBegin,
+  onDevolverAlPool,
+  onImprimirFuera,
   onPause,
   onResume,
   onOpenHojaRuta,
@@ -2076,6 +2129,8 @@ function ExecutionCard({
   pasosItinerario: PasoItinerarioConsumo[];
   onPatch: (patch: Record<string, unknown>, datosProcesoUpdate?: DatosProcesoGenerico | null) => void;
   onBegin: (patch: Record<string, unknown>, datosProcesoUpdate?: DatosProcesoGenerico | null) => void;
+  onDevolverAlPool: () => void;
+  onImprimirFuera: () => void;
   onPause: (
     motivo: MotivoPausa | null,
     patch?: Record<string, unknown>,
@@ -2915,6 +2970,31 @@ function ExecutionCard({
               onClick={() => onBegin(buildCommonFieldsPatch(), datosProcesoPatch)}
             >
               <Play className="mr-1 size-4" /> Iniciar
+            </Button>
+          ) : null}
+          {isPendingStart &&
+          (row.procesoId === PROCESO_OFFSET_ID || row.procesoId === PROCESO_DIGITAL_ID) ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="border-amber-300 text-amber-950 hover:bg-amber-50"
+              disabled={saving}
+              onClick={onImprimirFuera}
+            >
+              <Truck className="mr-1 size-4" /> Imprimir fuera
+            </Button>
+          ) : null}
+          {isPendingStart ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="border-red-200 text-red-700 hover:bg-red-50"
+              disabled={saving}
+              onClick={onDevolverAlPool}
+            >
+              <Undo2 className="mr-1 size-4" /> Devolver al Pool
             </Button>
           ) : null}
           {row.estadoEjecucion === "pausada" ? (
