@@ -107,6 +107,20 @@ const TABLE_DESPACHO_MATERIALES_LINEAS = "prod_despacho_materiales_lineas";
 const TABLE_OTS_GENERAL = "prod_ots_general";
 const TABLE_TROQUELES = "prod_troqueles";
 
+const EJECUCION_COLUMNS =
+  "id, mesa_trabajo_id, ot_paso_id, ot_numero, maquina_id, fecha_planificada, turno, slot_orden, liberada_at, inicio_real_at, fin_real_at, estado_ejecucion, ha_estado_pausada, num_pausas, minutos_pausada_acum, horas_planificadas_snapshot, horas_reales, horas_reales_entrada, horas_reales_tiraje, horas_reales_troquelado, horas_reales_engomado, num_hojas_producidas, cantidad_unidades, incidencia, accion_correctiva, maquinista, densidades_json, observaciones, created_at, updated_at, prod_maquinas(nombre,tipo_maquina), prod_ot_pasos(ot_id,orden,proceso_id,datos_proceso)";
+
+const ESTADOS_ACTIVAS: EstadoEjecucionMesa[] = [
+  "pendiente_inicio",
+  "en_curso",
+  "pausada",
+];
+const HISTORICO_EJECUCION_LIMIT = 200;
+
+function startOfLocalDayIso(now = new Date()): string {
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+}
+
 type OtMetaInfo = {
   otTipo: string | null;
   otPadreNumero: string | null;
@@ -488,6 +502,13 @@ type CajaEmbalajeOption = {
   codigo: string;
   descripcion: string | null;
   bultos_por_palet_default: number | null;
+};
+
+type CatalogosEjecucion = {
+  motivos: MotivoPausa[];
+  cajas: CajaEmbalajeOption[];
+  tiposEngomado: string[];
+  maqRows: Array<{ id: string; nombre: string; tipo_maquina: string | null }>;
 };
 
 /**
@@ -990,6 +1011,9 @@ export function PlanificacionOtsEjecucionTab({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const hasAutoExpandedRef = useRef(false);
+  const catalogosRef = useRef<CatalogosEjecucion | null>(null);
+  const roleRef = useRef<string | null>(null);
+  const roleLoadedRef = useRef(false);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [planificacionRole, setPlanificacionRole] = useState<string | null>(null);
@@ -1007,86 +1031,142 @@ export function PlanificacionOtsEjecucionTab({
     setLoading(true);
     try {
       let roleRead: string | null = null;
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser();
-      const uid =
-        typeof authUser?.id === "string" && authUser.id.trim().length > 0
-          ? authUser.id.trim()
-          : null;
-      if (uid) {
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", uid)
-          .maybeSingle();
-        roleRead =
-          prof && typeof (prof as { role?: unknown }).role === "string"
-            ? String((prof as { role: string }).role).trim() || null
+      if (!roleLoadedRef.current) {
+        const {
+          data: { user: authUser },
+        } = await supabase.auth.getUser();
+        const uid =
+          typeof authUser?.id === "string" && authUser.id.trim().length > 0
+            ? authUser.id.trim()
             : null;
+        if (uid) {
+          const { data: prof } = await supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", uid)
+            .maybeSingle();
+          roleRead =
+            prof && typeof (prof as { role?: unknown }).role === "string"
+              ? String((prof as { role: string }).role).trim() || null
+              : null;
+        }
+        roleRef.current = roleRead;
+        roleLoadedRef.current = true;
+        setPlanificacionRole(roleRead);
+      } else {
+        roleRead = roleRef.current;
       }
-      setPlanificacionRole(roleRead);
       const tipoFiltro = getPlanificacionTipoMaquinaFilter(roleRead);
 
-      let maqQuery = supabase
-        .from(TABLE_MAQUINAS)
-        .select("id, nombre, tipo_maquina, activa")
-        .eq("activa", true)
-        .order("nombre");
-      if (tipoFiltro) {
-        maqQuery = maqQuery.eq("tipo_maquina", tipoFiltro);
-      } else {
-        maqQuery = maqQuery.in("tipo_maquina", PLANIFICACION_TIPOS_MAQUINA);
+      let catalogos = catalogosRef.current;
+      if (!catalogos) {
+        let maqQuery = supabase
+          .from(TABLE_MAQUINAS)
+          .select("id, nombre, tipo_maquina, activa")
+          .eq("activa", true)
+          .order("nombre");
+        if (tipoFiltro) {
+          maqQuery = maqQuery.eq("tipo_maquina", tipoFiltro);
+        } else {
+          maqQuery = maqQuery.in("tipo_maquina", PLANIFICACION_TIPOS_MAQUINA);
+        }
+
+        const [maqRes, motivosRes, cajasRes, engomadoRes] = await Promise.all([
+          maqQuery,
+          supabase
+            .from(TABLE_MOTIVOS_PAUSA)
+            .select("id, slug, label, categoria, color_hex, activo, orden, tipos_maquina")
+            .eq("activo", true)
+            .order("categoria", { ascending: true })
+            .order("orden", { ascending: true }),
+          supabase
+            .from("prod_cajas_embalaje")
+            .select("codigo, descripcion, bultos_por_palet_default")
+            .eq("activo", true)
+            .order("orden", { ascending: true })
+            .order("codigo", { ascending: true }),
+          supabase
+            .from("prod_despacho_catalogo")
+            .select("label")
+            .eq("tipo", "tipo_engomado")
+            .eq("activo", true)
+            .order("orden", { ascending: true })
+            .order("label", { ascending: true }),
+        ]);
+        if (maqRes.error) throw maqRes.error;
+        if (motivosRes.error) throw motivosRes.error;
+        const tiposPlan = new Set<string>(PLANIFICACION_TIPOS_MAQUINA);
+        const maqRowsRaw = (maqRes.data ?? []) as Array<{
+          id: string;
+          nombre: string;
+          tipo_maquina: string | null;
+        }>;
+        catalogos = {
+          motivos: ((motivosRes.data ?? []) as MotivoPausaRow[]).map(mapMotivoRow),
+          cajas: (cajasRes.error ? [] : (cajasRes.data ?? [])) as CajaEmbalajeOption[],
+          tiposEngomado: (engomadoRes.error ? [] : (engomadoRes.data ?? []))
+            .map((r) => String((r as { label?: string | null }).label ?? "").trim())
+            .filter(Boolean),
+          maqRows: maqRowsRaw.filter((m) =>
+            tiposPlan.has(String(m.tipo_maquina ?? "").trim()),
+          ),
+        };
+        catalogosRef.current = catalogos;
+        setMotivosPausa(catalogos.motivos);
+        setCajasEmbalaje(catalogos.cajas);
+        setTipoEngomadoOptions(catalogos.tiposEngomado);
+        setMaquinas(catalogos.maqRows.map((m) => ({ id: m.id, nombre: m.nombre })));
       }
 
-      const [execRes, maqRes, motivosRes, cajasRes, engomadoRes] = await Promise.all([
-        supabase
-          .from(TABLE_EJECUCIONES)
-          .select("*, prod_maquinas(nombre,tipo_maquina), prod_ot_pasos(ot_id,orden,proceso_id,datos_proceso)")
-          .order("updated_at", { ascending: false }),
-        maqQuery,
-        supabase
-          .from(TABLE_MOTIVOS_PAUSA)
-          .select("id, slug, label, categoria, color_hex, activo, orden, tipos_maquina")
-          .eq("activo", true)
-          .order("categoria", { ascending: true })
-          .order("orden", { ascending: true }),
-        supabase
-          .from("prod_cajas_embalaje")
-          .select("codigo, descripcion, bultos_por_palet_default")
-          .eq("activo", true)
-          .order("orden", { ascending: true })
-          .order("codigo", { ascending: true }),
-        supabase
-          .from("prod_despacho_catalogo")
-          .select("label")
-          .eq("tipo", "tipo_engomado")
-          .eq("activo", true)
-          .order("orden", { ascending: true })
-          .order("label", { ascending: true }),
-      ]);
-      if (execRes.error) throw execRes.error;
-      if (maqRes.error) throw maqRes.error;
-      if (motivosRes.error) throw motivosRes.error;
-      const motivos = ((motivosRes.data ?? []) as MotivoPausaRow[]).map(mapMotivoRow);
-      const cajas = (cajasRes.error ? [] : (cajasRes.data ?? [])) as CajaEmbalajeOption[];
-      const tiposEngomado = (
-        engomadoRes.error ? [] : (engomadoRes.data ?? [])
-      ).map((r) => String((r as { label?: string | null }).label ?? "").trim())
-        .filter(Boolean);
-      const maqRowsRaw = (maqRes.data ?? []) as Array<{
-        id: string;
-        nombre: string;
-        tipo_maquina: string | null;
-      }>;
-      const tiposPlan = new Set<string>(PLANIFICACION_TIPOS_MAQUINA);
-      const maqRows = maqRowsRaw.filter((m) =>
-        tiposPlan.has(String(m.tipo_maquina ?? "").trim()),
-      );
-      const allowedMaquinaIds = new Set(maqRows.map((m) => m.id));
-      const execRows = ((execRes.data ?? []) as unknown as EjecucionRow[]).filter(
-        (r) => allowedMaquinaIds.has(String(r.maquina_id ?? "").trim()),
-      );
+      const motivos = catalogos.motivos;
+      const allowedMaquinaIds = new Set(catalogos.maqRows.map((m) => m.id));
+
+      const fetchEjecuciones = async (): Promise<EjecucionRow[]> => {
+        const asRows = (data: unknown): EjecucionRow[] =>
+          ((data ?? []) as unknown as EjecucionRow[]).filter((r) =>
+            allowedMaquinaIds.has(String(r.maquina_id ?? "").trim()),
+          );
+        if (estado === "all") {
+          const [activasRes, histRes] = await Promise.all([
+            supabase
+              .from(TABLE_EJECUCIONES)
+              .select(EJECUCION_COLUMNS)
+              .in("estado_ejecucion", ESTADOS_ACTIVAS)
+              .order("updated_at", { ascending: false }),
+            supabase
+              .from(TABLE_EJECUCIONES)
+              .select(EJECUCION_COLUMNS)
+              .in("estado_ejecucion", ["finalizada", "cancelada"])
+              .order("updated_at", { ascending: false })
+              .limit(HISTORICO_EJECUCION_LIMIT),
+          ]);
+          if (activasRes.error) throw activasRes.error;
+          if (histRes.error) throw histRes.error;
+          const byId = new Map<string, EjecucionRow>();
+          for (const row of [...asRows(activasRes.data), ...asRows(histRes.data)]) {
+            byId.set(row.id, row);
+          }
+          return [...byId.values()];
+        }
+
+        let query = supabase.from(TABLE_EJECUCIONES).select(EJECUCION_COLUMNS);
+        if (estado === "activas") {
+          query = query.in("estado_ejecucion", ESTADOS_ACTIVAS);
+        } else if (estado === "terminadas_hoy") {
+          query = query
+            .eq("estado_ejecucion", "finalizada")
+            .gte("fin_real_at", startOfLocalDayIso());
+        } else if (estado === "finalizada" || estado === "cancelada") {
+          query = query.eq("estado_ejecucion", estado).limit(HISTORICO_EJECUCION_LIMIT);
+        } else {
+          query = query.eq("estado_ejecucion", estado);
+        }
+        const execRes = await query.order("updated_at", { ascending: false });
+        if (execRes.error) throw execRes.error;
+        return asRows(execRes.data);
+      };
+
+      const execRows = await fetchEjecuciones();
       const executionIds = execRows.map((r) => r.id);
       const pauseMap = new Map<string, MesaEjecucionPausa[]>();
       if (executionIds.length > 0) {
@@ -1562,29 +1642,25 @@ export function PlanificacionOtsEjecucionTab({
         ),
       ];
       if (otIds.length > 0) {
-        const [pasosItinerarioData, pasosData] = await Promise.all([
-          fetchAllInChunks(otIds, 80, async (chunk) => {
-            const { data, error } = await supabase
-              .from(TABLE_OT_PASOS)
-              .select("id, ot_id, proceso_id, estado, datos_proceso, orden")
-              .in("ot_id", chunk)
-              .order("ot_id")
-              .order("orden", { ascending: true });
-            if (error) throw error;
-            return data ?? [];
-          }),
-          fetchAllInChunks(otIds, 80, async (chunk) => {
-            const { data, error } = await supabase
-              .from(TABLE_OT_PASOS)
-              .select("ot_id, proceso_id, estado, datos_proceso, orden")
-              .in("ot_id", chunk)
-              .eq("estado", "finalizado")
-              .order("ot_id")
-              .order("orden", { ascending: false });
-            if (error) throw error;
-            return data ?? [];
-          }),
-        ]);
+        const pasosItinerarioData = await fetchAllInChunks(otIds, 80, async (chunk) => {
+          const { data, error } = await supabase
+            .from(TABLE_OT_PASOS)
+            .select("id, ot_id, proceso_id, estado, datos_proceso, orden")
+            .in("ot_id", chunk)
+            .order("ot_id")
+            .order("orden", { ascending: true });
+          if (error) throw error;
+          return data ?? [];
+        });
+        const pasosData = (
+          pasosItinerarioData as Array<{
+            ot_id: string;
+            proceso_id: number | null;
+            estado: string;
+            datos_proceso: Record<string, unknown> | null;
+            orden: number | null;
+          }>
+        ).filter((p) => p.estado === "finalizado");
 
         for (const p of pasosItinerarioData as Array<{
           id: string;
@@ -1672,22 +1748,13 @@ export function PlanificacionOtsEjecucionTab({
       setHijaComponentesByOt(hijaComponentesMap);
       setPasosItinerarioPorOtId(pasosItinerarioPorOtId);
       setRows(execRows.map((r) => mapRow(r, pauseMap, salidaAnteriorByPasoKey, formatoAnteriorByOtPasoId)));
-      setMotivosPausa(motivos);
-      setCajasEmbalaje(cajas);
-      setTipoEngomadoOptions(tiposEngomado);
-      setMaquinas(
-        maqRows.map((m) => ({
-          id: m.id,
-          nombre: m.nombre,
-        })),
-      );
     } catch (e) {
       const msg = e instanceof Error ? e.message : "No se pudieron cargar las OTs en ejecución.";
       toast.error(msg);
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, [supabase, estado]);
 
   useEffect(() => {
     void loadData();
@@ -2213,20 +2280,20 @@ export function PlanificacionOtsEjecucionTab({
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        {loading ? (
+        {loading && colaRows.length === 0 ? (
           <div className="flex items-center gap-2 text-sm text-slate-500">
             <Loader2 className="size-4 animate-spin" />
             Cargando ejecuciones...
           </div>
         ) : null}
 
-        {!loading && filtered.length === 0 ? (
+        {!loading && colaRows.length === 0 ? (
           <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-600">
             No hay OTs en ejecución para los filtros actuales.
           </p>
         ) : null}
 
-        {!loading && colaRows.length > 0 ? (
+        {colaRows.length > 0 ? (
           <ul className="space-y-2">
             {colaRows.map((row) => {
               const expanded = expandedId === row.id;

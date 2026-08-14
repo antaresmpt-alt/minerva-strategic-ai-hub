@@ -1,21 +1,58 @@
 "use client";
 
 import { CalendarClock, GitBranch, PlayCircle, Rows3, Table2 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 
-import { PlanificacionMesaDiariaTab } from "@/components/produccion/planificacion/planificacion-mesa-diaria-tab";
-import { PlanificacionMesaSecuenciacionTab } from "@/components/produccion/planificacion/planificacion-mesa-secuenciacion-tab";
-import { PlanificacionOtsEjecucionTab } from "@/components/produccion/planificacion/planificacion-ots-ejecucion-tab";
-import { PlanificacionPipelineTab } from "@/components/produccion/planificacion/planificacion-pipeline-tab";
-import { PlanificacionPoolOtsTab } from "@/components/produccion/planificacion/planificacion-pool-ots-tab-v2";
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { TabRouteLoading } from "@/components/ui/tab-route-loading";
 import { getPlanificacionLastTabStorageKey } from "@/lib/planificacion-mesa-diaria";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+
+const PlanificacionMesaDiariaTab = dynamic(
+  () =>
+    import("@/components/produccion/planificacion/planificacion-mesa-diaria-tab").then(
+      (m) => ({ default: m.PlanificacionMesaDiariaTab }),
+    ),
+  { loading: () => <TabRouteLoading label="Cargando mesa diaria…" /> },
+);
+
+const PlanificacionMesaSecuenciacionTab = dynamic(
+  () =>
+    import("@/components/produccion/planificacion/planificacion-mesa-secuenciacion-tab").then(
+      (m) => ({ default: m.PlanificacionMesaSecuenciacionTab }),
+    ),
+  { loading: () => <TabRouteLoading label="Cargando mesa semanal…" /> },
+);
+
+const PlanificacionOtsEjecucionTab = dynamic(
+  () =>
+    import("@/components/produccion/planificacion/planificacion-ots-ejecucion-tab").then(
+      (m) => ({ default: m.PlanificacionOtsEjecucionTab }),
+    ),
+  { loading: () => <TabRouteLoading label="Cargando ejecución…" /> },
+);
+
+const PlanificacionPipelineTab = dynamic(
+  () =>
+    import("@/components/produccion/planificacion/planificacion-pipeline-tab").then(
+      (m) => ({ default: m.PlanificacionPipelineTab }),
+    ),
+  { loading: () => <TabRouteLoading label="Cargando pipeline…" /> },
+);
+
+const PlanificacionPoolOtsTab = dynamic(
+  () =>
+    import("@/components/produccion/planificacion/planificacion-pool-ots-tab-v2").then(
+      (m) => ({ default: m.PlanificacionPoolOtsTab }),
+    ),
+  { loading: () => <TabRouteLoading label="Cargando pool…" /> },
+);
 
 const SUBTAB_TRIGGER_CLASS =
   "flex h-full min-h-8 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs data-active:bg-[#C69C2B]/20 data-active:font-semibold data-active:text-[#002147] data-active:shadow-sm data-active:ring-2 data-active:ring-[#C69C2B]/45 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm";
@@ -147,23 +184,23 @@ export function PlanificacionOtsPage() {
         </TabsList>
 
         <TabsContent value="pool" className="mt-0 space-y-3 outline-none">
-          <PlanificacionPoolOtsTab />
+          {subtab === "pool" ? <PlanificacionPoolOtsTab /> : null}
         </TabsContent>
 
         <TabsContent value="diaria" className="mt-0 space-y-3 outline-none">
-          <PlanificacionMesaDiariaTab />
+          {subtab === "diaria" ? <PlanificacionMesaDiariaTab /> : null}
         </TabsContent>
 
         <TabsContent value="mesa" className="mt-0 space-y-3 outline-none">
-          <PlanificacionMesaSecuenciacionTab />
+          {subtab === "mesa" ? <PlanificacionMesaSecuenciacionTab /> : null}
         </TabsContent>
 
         <TabsContent value="ejecucion" className="mt-0 space-y-3 outline-none">
-          <PlanificacionOtsEjecucionTab />
+          {subtab === "ejecucion" ? <PlanificacionOtsEjecucionTab /> : null}
         </TabsContent>
 
         <TabsContent value="pipeline" className="mt-0 space-y-3 outline-none">
-          <PlanificacionPipelineTab />
+          {subtab === "pipeline" ? <PlanificacionPipelineTab /> : null}
         </TabsContent>
       </Tabs>
     </section>
