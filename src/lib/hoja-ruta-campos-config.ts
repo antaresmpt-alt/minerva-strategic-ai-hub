@@ -901,12 +901,91 @@ const MANIPULADOS_INTERNOS_CAMPOS: CampoDefinicion[] = [
     conditionalValue: true,
     hint: 'Calculado: unidades ÷ uds. por paquete.',
   },
+  // — Encajar (mismos campos de embalaje que Engomado; no reutiliza uds. por paquete de retractilar) —
+  {
+    id: 'encajar',
+    label: 'Encajar',
+    tipo: 'boolean',
+    width: 'half',
+    hint: 'Activa caja, estuches/bulto, bultos y palets.',
+  },
+  {
+    id: 'codigo_caja_embalaje',
+    label: 'Caja de embalaje',
+    tipo: 'select',
+    width: 'half',
+    options: [], // Se rellena dinámicamente desde prod_cajas_embalaje.
+    conditionalOn: 'encajar',
+    conditionalValue: true,
+    hint: 'Al elegirla se propone bultos/palet del catálogo.',
+  },
+  {
+    id: 'estuches_por_bulto',
+    label: 'Estuches por bulto',
+    tipo: 'number',
+    min: 1,
+    width: 'third',
+    conditionalOn: 'encajar',
+    conditionalValue: true,
+    hint: 'Uds. por caja. Tras retractilar: p. ej. 100 paquetes × 25 = 2500.',
+  },
+  {
+    id: 'bultos_por_palet',
+    label: 'Bultos por palet',
+    tipo: 'number',
+    min: 1,
+    width: 'third',
+    conditionalOn: 'encajar',
+    conditionalValue: true,
+    hint: 'Por defecto el de la caja; ajústalo si el cliente admite otra altura.',
+  },
+  {
+    id: 'bultos_completos',
+    label: 'Bultos completos',
+    tipo: 'number',
+    min: 0,
+    width: 'third',
+    conditionalOn: 'encajar',
+    conditionalValue: true,
+    hint: 'Calculado: unidades ÷ estuches por bulto (entero).',
+  },
+  {
+    id: 'pico',
+    label: 'Pico (bulto incompleto)',
+    tipo: 'number',
+    min: 0,
+    width: 'third',
+    conditionalOn: 'encajar',
+    conditionalValue: true,
+    hint: 'Estuches sueltos del último bulto parcial.',
+  },
+  {
+    id: 'bultos_totales',
+    label: 'Bultos totales',
+    tipo: 'number',
+    min: 0,
+    width: 'third',
+    emphasis: 'real',
+    conditionalOn: 'encajar',
+    conditionalValue: true,
+    hint: 'Bultos completos + 1 si hay pico.',
+  },
+  {
+    id: 'palets',
+    label: 'Palets',
+    tipo: 'number',
+    min: 0,
+    width: 'third',
+    conditionalOn: 'encajar',
+    conditionalValue: true,
+    hint: 'Calculado con tolerancia: no abre palet por un pico suelto.',
+  },
   {
     id: 'notas',
     label: 'Notas',
     tipo: 'textarea',
     width: 'full',
-    placeholder: 'Observaciones del manipulado o retractilado...',
+    placeholder: 'Observaciones del manipulado, retractilado o encajado...',
   },
 ];
 
@@ -1254,6 +1333,14 @@ export type DatosProcesoManipuladosInternos = {
   etiquetar?: boolean;
   unidades_por_paquete_etiqueta?: number;
   num_paquetes_etiqueta?: number;
+  encajar?: boolean;
+  codigo_caja_embalaje?: string;
+  estuches_por_bulto?: number;
+  bultos_por_palet?: number;
+  bultos_completos?: number;
+  pico?: number;
+  bultos_totales?: number;
+  palets?: number;
   notas?: string;
 };
 

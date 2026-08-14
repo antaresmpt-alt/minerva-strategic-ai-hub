@@ -71,6 +71,7 @@ import {
   applyClonePrefill,
   buildDatosProcesoSeed,
   buildDatosProcesoSeedForForma,
+  buildManipuladosDescripcionWizard,
   buildHijaNumPedido,
   calcCantidadObjetivoComponente,
   calcHojasBrutasForma,
@@ -2786,18 +2787,147 @@ export function DespachoWizardDialog({
       );
     }
     if (pid === PROCESO_MANIPULADOS_ID) {
+      const m = procesoDatos.manipulados;
+      const patchManip = (patch: Partial<typeof m>) =>
+        setProcesoDatos((prev) => ({
+          ...prev,
+          manipulados: { ...prev.manipulados, ...patch },
+        }));
       return (
         <section
           key={slot.key}
-          className="rounded-lg border border-slate-200 bg-slate-50/50 p-4"
+          className="rounded-lg border border-slate-200 bg-white p-4"
         >
           <h4 className="mb-2 text-sm font-semibold text-[#002147]">
             {slot.nombre}
           </h4>
-          <p className="text-xs text-slate-600">
-            Etiquetado, retractilado y paquetes se capturan en mesa de
-            ejecución.
+          <p className="mb-3 text-xs text-slate-600">
+            Marca lo que hay que hacer. Bultos, pico y palets se calculan en
+            mesa.
           </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label
+              htmlFor="wiz-manip-retractilar"
+              className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs"
+            >
+              <Checkbox
+                id="wiz-manip-retractilar"
+                checked={m.retractilar}
+                onCheckedChange={(v) =>
+                  patchManip({ retractilar: v === true })
+                }
+              />
+              <span className="font-medium text-slate-800">Retractilar</span>
+            </label>
+            {m.retractilar ? (
+              <div className="grid gap-1">
+                <Label htmlFor="wiz-manip-uds-retractilar" className="text-xs">
+                  Uds. por paquete
+                </Label>
+                <Input
+                  id="wiz-manip-uds-retractilar"
+                  className="h-8 text-xs"
+                  type="number"
+                  min={1}
+                  placeholder="ej: 25"
+                  value={m.unidades_por_paquete}
+                  onChange={(e) =>
+                    patchManip({ unidades_por_paquete: e.target.value })
+                  }
+                />
+              </div>
+            ) : (
+              <div className="hidden sm:block" />
+            )}
+            <label
+              htmlFor="wiz-manip-etiquetar"
+              className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs"
+            >
+              <Checkbox
+                id="wiz-manip-etiquetar"
+                checked={m.etiquetar}
+                onCheckedChange={(v) => patchManip({ etiquetar: v === true })}
+              />
+              <span className="font-medium text-slate-800">Etiquetar</span>
+            </label>
+            {m.etiquetar ? (
+              <div className="grid gap-1">
+                <Label htmlFor="wiz-manip-uds-etiqueta" className="text-xs">
+                  Uds. por paquete
+                </Label>
+                <Input
+                  id="wiz-manip-uds-etiqueta"
+                  className="h-8 text-xs"
+                  type="number"
+                  min={1}
+                  placeholder="ej: 6"
+                  value={m.unidades_por_paquete_etiqueta}
+                  onChange={(e) =>
+                    patchManip({
+                      unidades_por_paquete_etiqueta: e.target.value,
+                    })
+                  }
+                />
+              </div>
+            ) : (
+              <div className="hidden sm:block" />
+            )}
+            <label
+              htmlFor="wiz-manip-encajar"
+              className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs sm:col-span-2"
+            >
+              <Checkbox
+                id="wiz-manip-encajar"
+                checked={m.encajar}
+                onCheckedChange={(v) => patchManip({ encajar: v === true })}
+              />
+              <span className="font-medium text-slate-800">Encajar</span>
+            </label>
+            {m.encajar ? (
+              <>
+                <div className="grid gap-1">
+                  <Label htmlFor="wiz-caja-embalaje-manip" className="text-xs">
+                    Caja embalaje
+                  </Label>
+                  <Input
+                    id="wiz-caja-embalaje-manip"
+                    className="h-8 text-xs"
+                    list="wiz-cajas-embalaje-manip"
+                    placeholder="ej: MN1L"
+                    value={m.codigo_caja_embalaje}
+                    onChange={(e) =>
+                      patchManip({ codigo_caja_embalaje: e.target.value })
+                    }
+                  />
+                  <datalist id="wiz-cajas-embalaje-manip">
+                    {cajasEmbalaje.map((c) => (
+                      <option
+                        key={c.codigo}
+                        value={c.codigo}
+                        label={c.descripcion ?? undefined}
+                      />
+                    ))}
+                  </datalist>
+                </div>
+                <div className="grid gap-1">
+                  <Label htmlFor="wiz-uds-embalaje-manip" className="text-xs">
+                    Estuches por bulto
+                  </Label>
+                  <Input
+                    id="wiz-uds-embalaje-manip"
+                    className="h-8 text-xs"
+                    type="number"
+                    min={0}
+                    placeholder="ej: 2500"
+                    value={m.estuches_por_bulto}
+                    onChange={(e) =>
+                      patchManip({ estuches_por_bulto: e.target.value })
+                    }
+                  />
+                </div>
+              </>
+            ) : null}
+          </div>
         </section>
       );
     }
@@ -4044,6 +4174,16 @@ export function DespachoWizardDialog({
                         {form.unidades_por_embalaje
                           ? ` · ${form.unidades_por_embalaje} uds/caja`
                           : ""}
+                      </p>
+                    ) : null}
+                    {buildManipuladosDescripcionWizard(
+                      procesoDatos.manipulados,
+                    ) ? (
+                      <p className="sm:col-span-2">
+                        <span className="text-slate-500">Manipulados:</span>{" "}
+                        {buildManipuladosDescripcionWizard(
+                          procesoDatos.manipulados,
+                        )}
                       </p>
                     ) : null}
                     {itinerarioSlots

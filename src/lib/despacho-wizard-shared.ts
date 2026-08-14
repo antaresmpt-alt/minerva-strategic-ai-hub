@@ -628,10 +628,22 @@ export type DespachoWizardExternoDatos = {
   hojas_netas: string;
 };
 
+/** Flags de Manipulados internos (15) que siembran datos_proceso en mesa. */
+export type DespachoWizardManipuladoDatos = {
+  retractilar: boolean;
+  unidades_por_paquete: string;
+  etiquetar: boolean;
+  unidades_por_paquete_etiqueta: string;
+  encajar: boolean;
+  codigo_caja_embalaje: string;
+  estuches_por_bulto: string;
+};
+
 export type DespachoWizardProcesoDatos = {
   guillotina: DespachoWizardGuillotinaDatos;
   impresion: DespachoWizardImpresionDatos;
   ctp: DespachoWizardCtpDatos;
+  manipulados: DespachoWizardManipuladoDatos;
   /** Clave = proceso_id como string. */
   externos: Record<string, DespachoWizardExternoDatos>;
 };
@@ -655,6 +667,18 @@ export function getExternoDatosWizard(
   );
 }
 
+export function emptyDespachoWizardManipuladoDatos(): DespachoWizardManipuladoDatos {
+  return {
+    retractilar: false,
+    unidades_por_paquete: "",
+    etiquetar: false,
+    unidades_por_paquete_etiqueta: "",
+    encajar: false,
+    codigo_caja_embalaje: "",
+    estuches_por_bulto: "",
+  };
+}
+
 export function emptyDespachoWizardProcesoDatos(): DespachoWizardProcesoDatos {
   return {
     guillotina: {
@@ -669,8 +693,34 @@ export function emptyDespachoWizardProcesoDatos(): DespachoWizardProcesoDatos {
       formato_hojas: "",
     },
     ctp: emptyDespachoWizardCtpDatos(),
+    manipulados: emptyDespachoWizardManipuladoDatos(),
     externos: {},
   };
+}
+
+/** Texto de plan para Manipulados (p. ej. “Retractilar de 25. Encajar en MN1L (2500 uds/caja).”). */
+export function buildManipuladosDescripcionWizard(
+  m: DespachoWizardManipuladoDatos,
+): string {
+  const parts: string[] = [];
+  if (m.retractilar) {
+    const uds = m.unidades_por_paquete.trim();
+    parts.push(uds ? `Retractilar de ${uds}` : "Retractilar");
+  }
+  if (m.etiquetar) {
+    const uds = m.unidades_por_paquete_etiqueta.trim();
+    parts.push(uds ? `Etiquetar de ${uds}` : "Etiquetar");
+  }
+  if (m.encajar) {
+    const caja = m.codigo_caja_embalaje.trim();
+    const uds = m.estuches_por_bulto.trim();
+    if (caja && uds) parts.push(`Encajar en ${caja} (${uds} uds/caja)`);
+    else if (caja) parts.push(`Encajar en ${caja}`);
+    else if (uds) parts.push(`Encajar (${uds} uds/caja)`);
+    else parts.push("Encajar");
+  }
+  if (parts.length === 0) return "";
+  return `${parts.join(". ")}.`;
 }
 
 /** Hojas brutas del pliego compra (entrada típica a guillotina). */
@@ -796,6 +846,10 @@ function numOrNull(s: string): number | null {
   return n > 0 ? n : null;
 }
 
+function flagFromDatosProceso(v: unknown): boolean {
+  return v === true || v === "true" || v === 1 || v === "1";
+}
+
 /** Construye datos_proceso JSON al guardar despacho. */
 export function buildDatosProcesoSeed(
   procesoId: number,
@@ -887,6 +941,32 @@ export function buildDatosProcesoSeed(
       // Canonical engomado form field (+ legacy alias used in older seeds).
       payload.estuches_por_bulto = udsEmb;
       payload.unidades_por_paquete = udsEmb;
+    }
+    return Object.keys(payload).length > 0 ? payload : null;
+  }
+  if (procesoId === PROCESO_MANIPULADOS_ID) {
+    const m = procesoDatos.manipulados;
+    const payload: Record<string, unknown> = {};
+    const est = estuchesEstimadosDespacho(form, procesoDatos, procesoIdsInRoute);
+    if (est != null && est.estuches > 0) payload.unidades = est.estuches;
+    const desc = buildManipuladosDescripcionWizard(m);
+    if (desc) payload.descripcion = desc;
+    if (m.retractilar) {
+      payload.retractilar = true;
+      const uds = integerOrZeroForDespacho(m.unidades_por_paquete);
+      if (uds > 0) payload.unidades_por_paquete = uds;
+    }
+    if (m.etiquetar) {
+      payload.etiquetar = true;
+      const uds = integerOrZeroForDespacho(m.unidades_por_paquete_etiqueta);
+      if (uds > 0) payload.unidades_por_paquete_etiqueta = uds;
+    }
+    if (m.encajar) {
+      payload.encajar = true;
+      const caja = m.codigo_caja_embalaje.trim();
+      if (caja) payload.codigo_caja_embalaje = caja;
+      const porBulto = integerOrZeroForDespacho(m.estuches_por_bulto);
+      if (porBulto > 0) payload.estuches_por_bulto = porBulto;
     }
     return Object.keys(payload).length > 0 ? payload : null;
   }
@@ -987,6 +1067,12 @@ export function buildDatosProcesoSeedForForma(
     return Object.keys(merged).length > 0 ? merged : null;
   }
 
+  if (procesoId === PROCESO_MANIPULADOS_ID) {
+    const merged = { ...base };
+    if (estuchesForma > 0) merged.unidades = estuchesForma;
+    return Object.keys(merged).length > 0 ? merged : null;
+  }
+
   return Object.keys(base).length > 0 ? base : null;
 }
 
@@ -1037,6 +1123,23 @@ export function parseProcesoDatosFromPasos(
               ? ""
               : String(d.numero_hojas)
             : String(d.hojas_netas),
+      };
+    }
+    if (p.proceso_id === PROCESO_MANIPULADOS_ID) {
+      const caja = String(d.codigo_caja_embalaje ?? "").trim();
+      next.manipulados = {
+        retractilar: flagFromDatosProceso(d.retractilar),
+        unidades_por_paquete:
+          d.unidades_por_paquete == null ? "" : String(d.unidades_por_paquete),
+        etiquetar: flagFromDatosProceso(d.etiquetar),
+        unidades_por_paquete_etiqueta:
+          d.unidades_por_paquete_etiqueta == null
+            ? ""
+            : String(d.unidades_por_paquete_etiqueta),
+        encajar: flagFromDatosProceso(d.encajar) || caja.length > 0,
+        codigo_caja_embalaje: caja,
+        estuches_por_bulto:
+          d.estuches_por_bulto == null ? "" : String(d.estuches_por_bulto),
       };
     }
   }

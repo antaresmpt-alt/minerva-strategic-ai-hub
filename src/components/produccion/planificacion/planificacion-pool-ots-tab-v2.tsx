@@ -7,7 +7,6 @@ import {
   ChevronRight,
   Circle,
   Droplet,
-  Edit3,
   Eye,
   Loader2,
   Map as MapIcon,
@@ -23,7 +22,6 @@ import {
   DespachoItinerarioPicker,
   type DespachoItinerarioSlot,
 } from "@/components/produccion/ots/despacho-itinerario-picker";
-import { DespachoWizardDialog } from "@/components/produccion/ots/despacho-wizard-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -416,10 +414,6 @@ export function PlanificacionPoolOtsTab() {
   const [hojaRutaOt, setHojaRutaOt] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftRow | null>(null);
   const [poolEditDialogOpen, setPoolEditDialogOpen] = useState(false);
-  const [despachoWizardOpen, setDespachoWizardOpen] = useState(false);
-  const [despachoWizardInitialOt, setDespachoWizardInitialOt] = useState<
-    string | null
-  >(null);
   const [poolEditOtGeneralId, setPoolEditOtGeneralId] = useState<string | null>(
     null
   );
@@ -1436,11 +1430,6 @@ export function PlanificacionPoolOtsTab() {
     poolItinerarioInitialRef.current = "";
   }, []);
 
-  const startEdit = useCallback((r: PoolRow) => {
-    setDespachoWizardInitialOt(r.ot);
-    setDespachoWizardOpen(true);
-  }, []);
-
   const cancelEdit = useCallback(() => {
     setEditingOt(null);
     setDraft(null);
@@ -2455,18 +2444,6 @@ export function PlanificacionPoolOtsTab() {
                         >
                           <MapIcon className="size-4" />
                         </Button>
-                        {!r.isHijaRow ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="size-8 text-slate-600 hover:text-[#002147]"
-                            onClick={() => startEdit(r)}
-                            title="Editar despacho (wizard)"
-                          >
-                            <Edit3 className="size-4" />
-                          </Button>
-                        ) : null}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -2481,18 +2458,6 @@ export function PlanificacionPoolOtsTab() {
         open={hojaRutaOt != null}
         onOpenChange={(o) => {
           if (!o) setHojaRutaOt(null);
-        }}
-      />
-      <DespachoWizardDialog
-        open={despachoWizardOpen}
-        onOpenChange={(o) => {
-          setDespachoWizardOpen(o);
-          if (!o) setDespachoWizardInitialOt(null);
-        }}
-        initialOt={despachoWizardInitialOt}
-        batchModeDefault={false}
-        onDespachado={() => {
-          void loadRows();
         }}
       />
       <Dialog

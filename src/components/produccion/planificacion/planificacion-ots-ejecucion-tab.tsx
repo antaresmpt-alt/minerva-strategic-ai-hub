@@ -410,6 +410,53 @@ function enrichEngomadoDatosProceso(
   return next;
 }
 
+function isTruthyDatoProceso(value: unknown): boolean {
+  return value === true || value === "true" || value === 1 || value === "1";
+}
+
+/**
+ * Manipulados: paquetes retractilar/etiquetar +, si Encajar, mismo reparto que Engomado.
+ * No alias `unidades_por_paquete` → `estuches_por_bulto` (ese id es retractilar).
+ */
+function enrichManipuladoDatosProceso(
+  datos: DatosProcesoGenerico,
+  cajasDefaultByCodigo: Map<string, number>,
+): DatosProcesoGenerico {
+  const next: DatosProcesoGenerico = { ...datos };
+  const unidades = toFiniteNum(next.unidades);
+  const udsRetractilar = toFiniteNum(next.unidades_por_paquete);
+  const udsEtiqueta = toFiniteNum(next.unidades_por_paquete_etiqueta);
+
+  if (unidades != null && udsRetractilar != null && udsRetractilar > 0) {
+    next.num_paquetes = Math.ceil(unidades / udsRetractilar);
+  }
+  if (unidades != null && udsEtiqueta != null && udsEtiqueta > 0) {
+    next.num_paquetes_etiqueta = Math.ceil(unidades / udsEtiqueta);
+  }
+
+  const encajar =
+    isTruthyDatoProceso(next.encajar) ||
+    String(next.codigo_caja_embalaje ?? "").trim() !== "" ||
+    toFiniteNum(next.estuches_por_bulto) != null;
+  if (!encajar) return next;
+
+  const caja = String(next.codigo_caja_embalaje ?? "").trim();
+  if (caja && isDatoProcesoEmpty(next.bultos_por_palet)) {
+    const def = cajasDefaultByCodigo.get(caja);
+    if (def != null) next.bultos_por_palet = def;
+  }
+
+  const porBulto = toFiniteNum(next.estuches_por_bulto);
+  const bultosPorPalet = toFiniteNum(next.bultos_por_palet);
+  const reparto = computeEngomadoReparto(unidades, porBulto, bultosPorPalet);
+  if (reparto.bultos_completos != null) next.bultos_completos = reparto.bultos_completos;
+  if (reparto.pico != null) next.pico = reparto.pico;
+  if (reparto.bultos_totales != null) next.bultos_totales = reparto.bultos_totales;
+  if (reparto.palets != null) next.palets = reparto.palets;
+
+  return next;
+}
+
 function seedRealValuesFromPrevistos(
   procesoId: number | null | undefined,
   datos: DatosProcesoGenerico,
@@ -435,6 +482,7 @@ function seedRealValuesFromPrevistos(
 
 const PROCESOS_IMPRESION = new Set([1, 2]);
 const PROCESO_ENGOMADO = 12;
+const PROCESO_MANIPULADOS = 15;
 
 type CajaEmbalajeOption = {
   codigo: string;
@@ -679,7 +727,7 @@ function computeDerivedDatosProceso(
     }
   }
 
-  if (procesoId === 15) {
+  if (procesoId === PROCESO_MANIPULADOS) {
     const next: DatosProcesoGenerico = { ...datos };
     const unidades = toFiniteNum(next.unidades);
     const udsRetractilar = toFiniteNum(next.unidades_por_paquete);
@@ -690,6 +738,20 @@ function computeDerivedDatosProceso(
     }
     if (unidades != null && udsEtiqueta != null && udsEtiqueta > 0) {
       next.num_paquetes_etiqueta = Math.ceil(unidades / udsEtiqueta);
+    }
+
+    const encajar =
+      isTruthyDatoProceso(next.encajar) ||
+      String(next.codigo_caja_embalaje ?? "").trim() !== "" ||
+      toFiniteNum(next.estuches_por_bulto) != null;
+    if (encajar) {
+      const porBulto = toFiniteNum(next.estuches_por_bulto);
+      const bultosPorPalet = toFiniteNum(next.bultos_por_palet);
+      const reparto = computeEngomadoReparto(unidades, porBulto, bultosPorPalet);
+      if (reparto.bultos_completos != null) next.bultos_completos = reparto.bultos_completos;
+      if (reparto.pico != null) next.pico = reparto.pico;
+      if (reparto.bultos_totales != null) next.bultos_totales = reparto.bultos_totales;
+      if (reparto.palets != null) next.palets = reparto.palets;
     }
     return next;
   }
@@ -2217,6 +2279,9 @@ function ExecutionCard({
           }
         }
       }
+      if (pid === PROCESO_MANIPULADOS) {
+        seeded = enrichManipuladoDatosProceso(seeded, cajasDefaultByCodigo);
+      }
       return pid != null
         ? aplicarPrefillFormatoEncadenado(pid, seeded, row.formatoAnterior)
         : seeded;
@@ -2327,12 +2392,13 @@ function ExecutionCard({
         }),
       );
     }
-    if (pid === 15) {
+    if (pid === PROCESO_MANIPULADOS) {
       if (row.salidaProcesoAnterior != null) {
         base.unidades = Math.max(0, Math.trunc(row.salidaProcesoAnterior));
       } else if (despacho.cantidad != null) {
         base.unidades = despacho.cantidad;
       }
+      Object.assign(base, enrichManipuladoDatosProceso(base, cajasDefaultByCodigo));
     }
     return seedRealValuesFromPrevistos(
       pid,
@@ -2342,17 +2408,27 @@ function ExecutionCard({
 
   // Si el catálogo de cajas llega después del primer paint, completar bultos/palet y alias uds.
   useEffect(() => {
-    if (row.procesoId !== PROCESO_ENGOMADO) return;
+    if (
+      row.procesoId !== PROCESO_ENGOMADO &&
+      row.procesoId !== PROCESO_MANIPULADOS
+    ) {
+      return;
+    }
     if (cajasDefaultByCodigo.size === 0) return;
     setDatosProcesoLocal((prev) => {
-      const next = enrichEngomadoDatosProceso(prev, cajasDefaultByCodigo);
+      const next =
+        row.procesoId === PROCESO_MANIPULADOS
+          ? enrichManipuladoDatosProceso(prev, cajasDefaultByCodigo)
+          : enrichEngomadoDatosProceso(prev, cajasDefaultByCodigo);
       if (
         next.estuches_por_bulto === prev.estuches_por_bulto &&
         next.bultos_por_palet === prev.bultos_por_palet &&
         next.bultos_completos === prev.bultos_completos &&
         next.pico === prev.pico &&
         next.bultos_totales === prev.bultos_totales &&
-        next.palets === prev.palets
+        next.palets === prev.palets &&
+        next.num_paquetes === prev.num_paquetes &&
+        next.num_paquetes_etiqueta === prev.num_paquetes_etiqueta
       ) {
         return prev;
       }
@@ -2688,7 +2764,7 @@ function ExecutionCard({
               proyeccionLabel = `${salidaRaw.toLocaleString("es-ES")} hojas × ${poses} poses = ${est.toLocaleString("es-ES")} estuches est.`;
             }
           }
-        } else if (procesoId === 15) {
+        } else if (procesoId === PROCESO_MANIPULADOS) {
           semaforoTitulo = `Entrada desde proceso anterior · ${row.salidaProcesoAnteriorNombre}`;
           const anteriorOutputUnit =
             PROCESO_CAMPOS_CONFIG[row.procesoAnteriorId ?? 0]?.outputUnit ?? "uds";
@@ -2782,7 +2858,8 @@ function ExecutionCard({
                   // Al elegir caja, proponemos su bultos/palet por defecto.
                   if (
                     changedFieldId === "codigo_caja_embalaje" &&
-                    row.procesoId === PROCESO_ENGOMADO
+                    (row.procesoId === PROCESO_ENGOMADO ||
+                      row.procesoId === PROCESO_MANIPULADOS)
                   ) {
                     const def = cajasDefaultByCodigo.get(
                       String(datos.codigo_caja_embalaje ?? ""),
