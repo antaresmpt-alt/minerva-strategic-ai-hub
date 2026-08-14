@@ -15,7 +15,7 @@ import {
   Truck,
   Undo2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -880,12 +880,90 @@ function mapRow(
   };
 }
 
+type FiltroEstadoEjecucion = "activas" | "terminadas_hoy" | EstadoEjecucionMesa | "all";
+
 function estadoLabel(e: EstadoEjecucionMesa): string {
-  if (e === "pendiente_inicio") return "Pendiente inicio";
+  if (e === "pendiente_inicio") return "Por hacer";
   if (e === "en_curso") return "En curso";
   if (e === "pausada") return "Pausada";
   if (e === "finalizada") return "Finalizada";
   return "Cancelada";
+}
+
+function estadoColaClass(e: EstadoEjecucionMesa): string {
+  if (e === "pendiente_inicio") return "bg-sky-100 text-sky-800";
+  if (e === "en_curso") return "bg-emerald-100 text-emerald-800";
+  if (e === "pausada") return "bg-amber-100 text-amber-800";
+  if (e === "finalizada") return "bg-slate-100 text-slate-700";
+  return "bg-slate-100 text-slate-500";
+}
+
+function estadoColaRowClass(e: EstadoEjecucionMesa): string {
+  if (e === "pendiente_inicio") return "border-l-sky-400 bg-sky-50/70";
+  if (e === "en_curso") return "border-l-emerald-500 bg-emerald-50/80";
+  if (e === "pausada") return "border-l-amber-400 bg-amber-50/80";
+  if (e === "finalizada") return "border-l-slate-300 bg-slate-50";
+  return "border-l-slate-300 bg-white";
+}
+
+function colaRank(e: EstadoEjecucionMesa): number {
+  if (e === "en_curso") return 0;
+  if (e === "pausada") return 1;
+  if (e === "pendiente_inicio") return 2;
+  if (e === "finalizada") return 3;
+  return 4;
+}
+
+function isSameLocalDay(iso: string | null, now = new Date()): boolean {
+  if (!iso) return false;
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return false;
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  );
+}
+
+function isTerminadaHoy(row: MesaEjecucion, now = new Date()): boolean {
+  if (row.estadoEjecucion !== "finalizada") return false;
+  return isSameLocalDay(row.finRealAt, now) || (!row.finRealAt && isSameLocalDay(row.updatedAt, now));
+}
+
+function formatDuracionHoras(h: number | null): string {
+  if (h == null || !Number.isFinite(h) || h < 0) return "—";
+  const totalMin = Math.max(0, Math.round(h * 60));
+  const hh = Math.floor(totalMin / 60);
+  const mm = totalMin % 60;
+  if (hh <= 0) return `${mm} min`;
+  return `${hh} h ${String(mm).padStart(2, "0")} min`;
+}
+
+function tiempoColaLabel(
+  row: MesaEjecucion,
+  pauses: MesaEjecucionPausa[],
+  now: Date,
+): string {
+  if (row.estadoEjecucion === "pendiente_inicio") return "—";
+  const horas =
+    row.estadoEjecucion === "finalizada" && row.horasReales != null
+      ? row.horasReales
+      : computeHorasMesaNetas({
+          inicioRealAt: row.inicioRealAt,
+          finRealAt: row.estadoEjecucion === "finalizada" ? row.finRealAt : null,
+          minutosPausadaAcum: row.minutosPausadaAcum,
+          pauses: pauses.map((p) => ({
+            pausedAt: p.pausedAt,
+            resumedAt: p.resumedAt,
+            minutosPausa: p.minutosPausa,
+          })),
+          now,
+        });
+  const base = formatDuracionHoras(horas);
+  if (row.estadoEjecucion === "pausada") {
+    return base === "—" ? "Pausa" : `${base} · pausa`;
+  }
+  return base;
 }
 
 export function PlanificacionOtsEjecucionTab({
@@ -906,9 +984,12 @@ export function PlanificacionOtsEjecucionTab({
   const [tipoEngomadoOptions, setTipoEngomadoOptions] = useState<string[]>([]);
   const [maquinas, setMaquinas] = useState<Array<{ id: string; nombre: string }>>([]);
   const [selectedMaquina, setSelectedMaquina] = useState<string>("all");
-  const [estado, setEstado] = useState<"activas" | EstadoEjecucionMesa | "all">("activas");
+  const [estado, setEstado] = useState<FiltroEstadoEjecucion>("activas");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const hasAutoExpandedRef = useRef(false);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [planificacionRole, setPlanificacionRole] = useState<string | null>(null);
@@ -1619,6 +1700,7 @@ export function PlanificacionOtsEjecucionTab({
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const now = new Date();
     return rows.filter((r) => {
       if (selectedMaquina !== "all" && r.maquinaId !== selectedMaquina) return false;
       if (estado === "activas") {
@@ -1629,6 +1711,8 @@ export function PlanificacionOtsEjecucionTab({
         ) {
           return false;
         }
+      } else if (estado === "terminadas_hoy") {
+        if (!isTerminadaHoy(r, now)) return false;
       } else if (estado !== "all" && r.estadoEjecucion !== estado) {
         return false;
       }
@@ -1657,18 +1741,46 @@ export function PlanificacionOtsEjecucionTab({
     });
   }, [rows, selectedMaquina, estado, search, despachoByOt, otMetaByOt]);
 
-  const filteredSections = useMemo(() => {
-    const pending = filtered.filter((r) => r.estadoEjecucion === "pendiente_inicio");
-    const active = filtered.filter((r) => r.estadoEjecucion === "en_curso" || r.estadoEjecucion === "pausada");
-    const finished = filtered.filter((r) => r.estadoEjecucion === "finalizada" || r.estadoEjecucion === "cancelada");
-    const sections = [
-      { key: "pending", title: "Pendientes de iniciar", rows: pending },
-      { key: "active", title: "En curso / pausadas", rows: active },
-      { key: "finished", title: "Finalizadas / canceladas", rows: finished },
-    ];
-    if (estado === "activas") return sections.filter((s) => s.key !== "finished" && s.rows.length > 0);
-    return sections.filter((s) => s.rows.length > 0);
-  }, [estado, filtered]);
+  const colaRows = useMemo(() => {
+    const next = [...filtered];
+    next.sort((a, b) => {
+      const dr = colaRank(a.estadoEjecucion) - colaRank(b.estadoEjecucion);
+      if (dr !== 0) return dr;
+      if (a.estadoEjecucion === "finalizada") {
+        const ta = new Date(a.finRealAt ?? a.updatedAt).getTime();
+        const tb = new Date(b.finRealAt ?? b.updatedAt).getTime();
+        const dt = (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0);
+        if (dt !== 0) return dt;
+      }
+      const maq = (a.maquinaNombre ?? "").localeCompare(b.maquinaNombre ?? "", "es");
+      if (maq !== 0) return maq;
+      return a.ot.localeCompare(b.ot, "es", { numeric: true });
+    });
+    return next;
+  }, [filtered]);
+
+  useEffect(() => {
+    const hasLive = rows.some(
+      (r) => r.estadoEjecucion === "en_curso" || r.estadoEjecucion === "pausada",
+    );
+    if (!hasLive) return;
+    const t = window.setInterval(() => setNowTick(Date.now()), 30_000);
+    return () => window.clearInterval(t);
+  }, [rows]);
+
+  useEffect(() => {
+    if (loading) return;
+    if (expandedId != null && colaRows.some((r) => r.id === expandedId)) return;
+    const firstEnCurso = colaRows.find((r) => r.estadoEjecucion === "en_curso");
+    if (expandedId != null) {
+      setExpandedId(firstEnCurso?.id ?? null);
+      return;
+    }
+    if (!hasAutoExpandedRef.current && colaRows.length > 0) {
+      hasAutoExpandedRef.current = true;
+      setExpandedId(firstEnCurso?.id ?? null);
+    }
+  }, [loading, colaRows, expandedId]);
 
   const patchExecution = useCallback(
     async (row: MesaEjecucion, patch: Record<string, unknown>, datosProcesoUpdate?: DatosProcesoGenerico | null) => {
@@ -1988,6 +2100,7 @@ export function PlanificacionOtsEjecucionTab({
   const estadoLabelFiltro = useMemo(() => {
     if (estado === "all") return "Todas";
     if (estado === "activas") return "Activas";
+    if (estado === "terminadas_hoy") return "Terminadas de hoy";
     return estadoLabel(estado);
   }, [estado]);
 
@@ -2032,7 +2145,7 @@ export function PlanificacionOtsEjecucionTab({
           <div>
             <CardTitle className="text-lg text-[#002147]">OTs en ejecución</CardTitle>
             <CardDescription>
-              Cola de trabajos liberados a máquina y seguimiento del inicio real, pausas y cierre.
+              Toca una OT para abrir el parte. En curso queda abierta al entrar. Terminadas, ocultas salvo filtro.
             </CardDescription>
           </div>
           <div className="flex gap-1.5">
@@ -2059,14 +2172,20 @@ export function PlanificacionOtsEjecucionTab({
             Ámbito: {etiquetaAmbitoEjecucion}
           </span>
           <Input
-            className="h-8 w-full min-w-[10rem] max-w-xs text-xs sm:w-56"
+            className={cn(
+              "w-full min-w-[10rem] max-w-xs sm:w-56",
+              tabletMode ? "h-11 text-sm" : "h-8 text-xs",
+            )}
             placeholder="Buscar OT, cliente, trabajo…"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             aria-label="Buscar OTs en ejecución"
           />
           <select
-            className="h-8 rounded-md border border-slate-300 bg-white px-2"
+            className={cn(
+              "rounded-md border border-slate-300 bg-white px-2",
+              tabletMode ? "h-11 text-sm" : "h-8",
+            )}
             value={selectedMaquina}
             onChange={(e) => setSelectedMaquina(e.target.value)}
           >
@@ -2076,14 +2195,18 @@ export function PlanificacionOtsEjecucionTab({
             ))}
           </select>
           <select
-            className="h-8 rounded-md border border-slate-300 bg-white px-2"
+            className={cn(
+              "rounded-md border border-slate-300 bg-white px-2",
+              tabletMode ? "h-11 text-sm" : "h-8",
+            )}
             value={estado}
-            onChange={(e) => setEstado(e.target.value as typeof estado)}
+            onChange={(e) => setEstado(e.target.value as FiltroEstadoEjecucion)}
           >
             <option value="activas">Activas</option>
-            <option value="pendiente_inicio">Pendientes de iniciar</option>
             <option value="en_curso">En curso</option>
             <option value="pausada">Pausadas</option>
+            <option value="pendiente_inicio">Por hacer</option>
+            <option value="terminadas_hoy">Terminadas de hoy</option>
             <option value="finalizada">Finalizadas</option>
             <option value="all">Todas</option>
           </select>
@@ -2103,53 +2226,104 @@ export function PlanificacionOtsEjecucionTab({
           </p>
         ) : null}
 
-        <div className="space-y-4">
-          {filteredSections.map((section) => (
-            <section key={section.key} className="space-y-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                {section.title} · {section.rows.length}
-              </h3>
-              <div className="grid gap-3 lg:grid-cols-2">
-                {section.rows.map((row) => {
-                  const desviacion =
-                    row.procesoId !== PROCESO_CTP_ID &&
-                    row.horasReales != null &&
-                    row.horasPlanificadasSnapshot != null
-                      ? row.horasReales - row.horasPlanificadasSnapshot
-                      : null;
-                  return (
-                    <ExecutionCard
-                      key={`${row.id}-${row.updatedAt}`}
-                      row={row}
-                      despacho={despachoByOt[row.ot] ?? null}
-                      otMeta={otMetaByOt[row.ot] ?? null}
-                      hijaComponentes={hijaComponentesByOt[row.ot] ?? []}
-                      pauses={pausesByExecutionId[row.id] ?? []}
-                      motivosPausa={motivosPausa}
-                      cajasEmbalaje={cajasEmbalaje}
-                      tipoEngomadoOptions={tipoEngomadoOptions}
-                      margenesSobreproduccion={margenesSobreproduccion}
-                      desviacion={desviacion}
-                      saving={savingId === row.id}
-                      pasosItinerario={
-                        row.otId
-                          ? pasosItinerarioParaConsumo(pasosItinerarioPorOtId.get(row.otId) ?? [])
-                          : []
-                      }
-                      onPatch={(patch, dp) => void patchExecution(row, patch, dp)}
-                      onBegin={(patch, dp) => void beginExecution(row, patch, dp)}
-                      onDevolverAlPool={() => void devolverEjecucionAlPool(row)}
-                      onImprimirFuera={() => void imprimirFueraDesdeEjecucion(row)}
-                      onPause={(motivo, patch, dp) => void pauseExecution(row, motivo, patch, dp)}
-                      onResume={(pauses, patch, dp) => void resumeExecution(row, pauses, patch, dp)}
-                      onOpenHojaRuta={() => setHojaRutaOt(row.ot)}
+        {!loading && colaRows.length > 0 ? (
+          <ul className="space-y-2">
+            {colaRows.map((row) => {
+              const expanded = expandedId === row.id;
+              const pauses = pausesByExecutionId[row.id] ?? [];
+              const despacho = despachoByOt[row.ot] ?? null;
+              const procesoNombre =
+                row.procesoId != null
+                  ? (getCamposConfigByProcesoId(row.procesoId)?.procesoNombre ?? null)
+                  : null;
+              const tiempo = tiempoColaLabel(row, pauses, new Date(nowTick));
+              const desviacion =
+                row.procesoId !== PROCESO_CTP_ID &&
+                row.horasReales != null &&
+                row.horasPlanificadasSnapshot != null
+                  ? row.horasReales - row.horasPlanificadasSnapshot
+                  : null;
+              return (
+                <li key={row.id} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xs">
+                  <button
+                    type="button"
+                    aria-expanded={expanded}
+                    onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+                    className={cn(
+                      "flex w-full min-h-16 items-center gap-3 border-l-4 px-3 py-2.5 text-left",
+                      estadoColaRowClass(row.estadoEjecucion),
+                      expanded && "ring-1 ring-inset ring-[#002147]/20",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                        estadoColaClass(row.estadoEjecucion),
+                      )}
+                    >
+                      {estadoLabel(row.estadoEjecucion)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-mono text-base font-bold tabular-nums text-[#002147]">
+                        OT {row.ot}
+                        {otMetaByOt[row.ot]?.formaDescripcion ? (
+                          <span className="ml-1.5 font-sans text-xs font-normal text-slate-600">
+                            · {otMetaByOt[row.ot]?.formaDescripcion}
+                          </span>
+                        ) : null}
+                      </p>
+                      <p className="truncate text-sm text-slate-700">
+                        {[despacho?.cliente, despacho?.titulo].filter(Boolean).join(" · ") || "Sin cliente / trabajo"}
+                      </p>
+                      <p className="truncate text-xs text-slate-500">
+                        {[procesoNombre, row.maquinaNombre].filter(Boolean).join(" · ")}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-right text-xs font-semibold tabular-nums text-slate-700">
+                      {tiempo}
+                    </span>
+                    <ChevronDown
+                      className={cn(
+                        "size-5 shrink-0 text-slate-400 transition-transform",
+                        expanded && "rotate-180",
+                      )}
                     />
-                  );
-                })}
-              </div>
-            </section>
-          ))}
-        </div>
+                  </button>
+                  {expanded ? (
+                    <div className="border-t border-slate-200 p-2">
+                      <ExecutionCard
+                        key={`${row.id}-${row.updatedAt}`}
+                        row={row}
+                        despacho={despacho}
+                        otMeta={otMetaByOt[row.ot] ?? null}
+                        hijaComponentes={hijaComponentesByOt[row.ot] ?? []}
+                        pauses={pauses}
+                        motivosPausa={motivosPausa}
+                        cajasEmbalaje={cajasEmbalaje}
+                        tipoEngomadoOptions={tipoEngomadoOptions}
+                        margenesSobreproduccion={margenesSobreproduccion}
+                        desviacion={desviacion}
+                        saving={savingId === row.id}
+                        pasosItinerario={
+                          row.otId
+                            ? pasosItinerarioParaConsumo(pasosItinerarioPorOtId.get(row.otId) ?? [])
+                            : []
+                        }
+                        onPatch={(patch, dp) => void patchExecution(row, patch, dp)}
+                        onBegin={(patch, dp) => void beginExecution(row, patch, dp)}
+                        onDevolverAlPool={() => void devolverEjecucionAlPool(row)}
+                        onImprimirFuera={() => void imprimirFueraDesdeEjecucion(row)}
+                        onPause={(motivo, patch, dp) => void pauseExecution(row, motivo, patch, dp)}
+                        onResume={(pausesNext, patch, dp) => void resumeExecution(row, pausesNext, patch, dp)}
+                        onOpenHojaRuta={() => setHojaRutaOt(row.ot)}
+                      />
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
       </CardContent>
     </Card>
     </>
@@ -2574,16 +2748,19 @@ function ExecutionCard({
           <span
             className={cn(
               "rounded-full px-2 py-1 text-[11px] font-semibold",
-              row.estadoEjecucion === "pendiente_inicio" && "bg-sky-100 text-sky-800",
-              row.estadoEjecucion === "en_curso" && "bg-emerald-100 text-emerald-800",
-              row.estadoEjecucion === "pausada" && "bg-amber-100 text-amber-800",
-              row.estadoEjecucion === "finalizada" && "bg-slate-100 text-slate-700",
+              estadoColaClass(row.estadoEjecucion),
             )}
           >
             {estadoLabel(row.estadoEjecucion)}
           </span>
         </div>
       </div>
+
+      {!canEdit ? (
+        <p className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] text-slate-600">
+          Proceso cerrado · solo consulta. No se puede reabrir ni cambiar cantidades.
+        </p>
+      ) : null}
 
       {despacho ? (
         <div className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 rounded border border-slate-200 bg-slate-50/70 px-2 py-1.5 text-[10px] text-slate-600">
