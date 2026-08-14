@@ -65,6 +65,8 @@ Orden práctico (no reescribir permisos de cero):
    - Gestor → calendario o home acordado.  
    - Hugo → etiquetas digital.
 
+   **Interino 14 ago (no es B12):** `/produccion` redirige al maestro de OTs para todo el mundo con módulo producción. Sustituir esta redirección cuando se abra el landing por rol.
+
 2. **Menú que oculta** lo no permitido (no solo “bloqueado al entrar”).
 
 3. **Usuarios reales** (sustituir `impresion@`, `digital@`… por personas).

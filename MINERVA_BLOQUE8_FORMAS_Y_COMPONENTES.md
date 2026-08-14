@@ -577,24 +577,24 @@ Rama: `feature/bloque8.1-pool-mesa-ejecucion-fixes` (commit `2d9d3ab`).
 
 **Embalaje en índice plano (11 ago 2026 noche):** el cierre de barco ya **no** deja `codigo_caja_embalaje` / `estuches_por_bulto` a `null` cuando las hijas coinciden. Agrega desde Engomado de cada hija (`aggregateEmbalajeFromHijaFlats`: **consenso** — mismas → valor; distintas → `null` honesto, nunca moda). OT simple sin cambio de criterio (`extractEmbalajeFromPasos`). Vista barco lee caja en resumen de hijas (`datos_proceso` engomado) para el checklist. UI Producidas: si flat vacío/mixto, `resolveEmbalajeDisplayFromProducida` muestra código consenso o **«Varias»** (solo etiqueta; no se persiste).
 
-### Cola Ramón / captura envío-recepción externos 📋 **retomar mañana (12 ago 2026)**
+### Cola Ramón / captura envío-recepción externos ✅ **hecho (probado 13 ago OT 98015)**
 
-**Problema:** en externos (plastificado, stamping, etc.) Ramón marca estado enviado/recibido pero **a menudo no anota hojas/palets enviados ni recibidos**. El muelle sí puede poner hojas al recibir. Esos datos quedan huérfanos y el paso siguiente (p. ej. troquel) no puede prefillarse con lo que realmente volvió del proveedor.
+**Problema (histórico):** en externos Ramón marcaba enviado/recibido pero a menudo no anotaba hojas/palets. El muelle sí puede poner hojas al recibir. Sin esos datos el paso siguiente (p. ej. troquel) no prefillaba lo que volvió del proveedor.
 
-**Dirección acordada (MVP 13 ago 2026):**
+**Implementado:**
 
-1. **Al enviar** (Gestión externos): modal obligatorio con hojas enviadas (+ palets/obs). Prefill desde impresión/guillotina/despacho. Muestra formato, papel y tintas en lectura.
-2. **Al recibir**: modal con hojas recibidas (prefill = enviadas o muelle).
-3. **PDF hoja de ruta**: bloque Externo muestra enviadas/recibidas si hay dato.
-4. **Prefill blando** al troquel: `inputFromProcessIds` incluye procesos externos; `outputField` = `hojas_recibidas_muelle` (editable en mesa).
+1. **Al enviar** (Gestión externos): `ExternoCantidadDialog` obligatorio — hojas enviadas (+ palets/obs). Prefill `fetchExternoEnvioBrief` desde impresión/guillotina/despacho. Formato, papel y tintas en lectura.
+2. **Al recibir**: mismo modal; prefill = enviadas o muelle (`resolveExternoRecibidoHojasSugeridas`).
+3. **PDF / hoja de ruta**: previsto/real de externos usa `hojas_enviadas` / `hojas_recibidas_muelle`.
+4. **Prefill troquel:** `inputFromProcessIds` incluye 3, 4, 5, 6, 9, **21**; `outputField` = `hojas_recibidas_muelle`.
 
-**OT prueba:** **99905** (acabado sobre ya impreso). **98015** (clone 35177, solo maestro) para más adelante derivar impresión fuera.
+**OT prueba:** **98015** — envío 1600 brutas / recepción 1400 netas (junto a Imprimir fuera). **99905** (acabado sobre ya impreso) sigue válido como caso plastificado.
 
-**Qué no mezclar:** no es 8.5 convergencia; es captura logística. Derivar 1/2 → 21 sigue en Bloque 9 §15.6.12.
+**Qué no mezclar:** no es 8.5 convergencia. Derivar 1/2 → 21 está en Bloque 9 §15.6.12 (`SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`).
 
-**Qué no mezclar:** no es 8.5 convergencia; es captura logística del paso externo dentro de cada hija (o OT simple).
+**Pendiente menor:** muelle muestra brutas enviadas, no netas pedidas (consciente).
 
-**Archivos de partida:** `gestion-externos-page.tsx`, `prod_seguimiento_externos`, UI hoja ruta externo (`hoja-ruta-ot-dialog` / `hoja-ruta-pdf.ts`), prefill troquel vía `inputFromProcessIds`.
+**Archivos:** `externo-cantidad-dialog.tsx`, `externos-envio-brief.ts`, `gestion-externos-page.tsx`, `hoja-ruta-campos-config.ts` (externos + troquel).
 
 ### Fase 8.5 — Convergencia entre hijas 📋 **diseño 11 ago 2026 (sin implementar)**
 
@@ -781,7 +781,7 @@ Responder con Jordi / Zaida / Abraham / Carlos:
 - **HR horas totales:** `hoja-ruta-horas.ts` en modal y PDF.
 - **Pool:** filtro Guillotina/Desbroce; hijas cerradas visibles al expandir barco.
 - **Impresión:** encadenado desde Guillotina en badge y datos proceso.
-- **Manipulados:** etiquetar + paquetes. Externos: revisión pendiente.
+- **Manipulados:** etiquetar + paquetes. **14 ago:** Encajar + flags wizard (`SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`). Externos: captura envío/recepción ✅.
 
 ### 2 jul 2026 — Caso referencia OT 36204 (ampollas) para wizard 8.2
 

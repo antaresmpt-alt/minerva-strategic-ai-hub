@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 13 ago 2026 (imprimir fuera + anular→Pool + ajustar itinerario vivo; sesión `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`)
+> Última actualización: 14 ago 2026 (Encajar Manipulados + flags wizard + portada → OTs; sesión `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`. Día anterior: imprimir fuera / itinerario vivo.)
 
 ---
 
@@ -19,7 +19,8 @@
    - `MINERVA_BLOQUE12_ROLES_PERMISOS_NAVEGACION.md` (landing por perfil — sept)
 3. Añadir `MINERVA_CONTEXTO_TECNICO.md` solo si la IA necesita detalles técnicos del repo.
 4. Si el tema es mesa / externos / itinerario post-despacho: `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`.
-5. Al cerrar una fase, actualizar este maestro + `FASES_HOJA_RUTA_DIGITAL.md`.
+5. Si el tema es Manipulados / Encajar / entrada a Producción: `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`.
+6. Al cerrar una fase, actualizar este maestro + `FASES_HOJA_RUTA_DIGITAL.md`.
 
 **Jerarquía documental:**
 | Documento | Rol |
@@ -34,6 +35,7 @@
 | `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` | Calendario OT como master de planificar + lanzar (con cuidado). |
 | `MINERVA_REUNION_HOJA_RUTA_JUEVES.md` | Guía reunión demo 98010 + preguntas §12. |
 | `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md` | Sesión 13 ago: imprimir fuera, anular al Pool, ajustar itinerario / reeditar despacho. |
+| `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md` | Sesión 14 ago: Encajar en Manipulados, flags wizard, Pool sin lápiz, `/produccion` → OTs. |
 | `MINERVA_BRIEFING.md` | Onboarding narrativo largo; útil, pero secundario frente a este maestro. |
 
 ---
@@ -111,7 +113,8 @@ Software a medida para la planta de producción gráfica/impresión de la empres
 ### ✅ Gestión de Externos (Ramón)
 - Módulo para gestionar proveedores externos
 - **13 ago:** «Imprimir fuera» (1/2 → 21) desde Pool/mesa/ejecución. OT **98015** validada. Detalle: `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`.
-- ⏳ Muelle: mostrar netas pedidas (hoy salen brutas enviadas). Prefill blando al troquel.
+- **Captura envío/recepción:** al marcar Enviado o Recibido, modal obligatorio de hojas/palets (`ExternoCantidadDialog`). Prefill desde impresión/guillotina/despacho. Troquel encadena `hojas_recibidas_muelle`.
+- ⏳ Muelle: mostrar netas pedidas (hoy salen brutas enviadas).
 - Integrado con el módulo de Hoja de Ruta (proceso "Externo" usa este módulo)
 
 ### ✅ Etiquetas (Hugo) — módulo más maduro
@@ -239,11 +242,11 @@ src/components/produccion/planificacion/
 
 | Bloque | Descripción | Estado |
 |--------|-------------|--------|
-| 1–4 | Motor HR, captura, HojaRutaOtDialog, PDF | ✅ **~100%** operativo (pulidos menores Digital/Guillotina/PDF) |
+| 1–4 | Motor HR, captura, HojaRutaOtDialog, PDF | ✅ **~100%** operativo (pulidos menores Digital/Guillotina/PDF). **14 ago:** Encajar en Manipulados + flags wizard |
 | 5 | Etiquetas digital (Hugo) + puente Rita→Hugo | ✅ **Módulo más maduro** (meses en uso). ⏳ Solo falta lanzar OTs despachadas digital → hoja Hugo (o seguir entrada manual) |
 | 6 | Producidas / cierre OT | ✅ MVP + promedios + oficiales + clone. ✅ Cierre **contenedor** 8.4 (snapshot barco) |
 | 7 | Expedición / Albarán | ⏸ **Aparcado** hasta decisión Odoo |
-| 8 | Contenedor / formas / hijas | 🔄 FORMATO–8.1 ✅ · **8.2 wizard MVP ✅** · 8.3 parcial · **8.4 cierre barco ✅** · **8.5 convergencia 📋 diseño** · 8.6 futuro |
+| 8 | Contenedor / formas / hijas | 🔄 FORMATO–8.1 ✅ · **8.2 wizard MVP ✅** · 8.3 parcial · **8.4 cierre barco ✅** · **8.5 convergencia 📋 diseño** · 8.6 futuro · **captura envío externos ✅** |
 | 9 | Material, cartelas, stock, calendario prod. | ✅ 9.0–9.6d + 9.4 + **§15.6.12 derivar a externa (13 ago)**. ⏳ Plan engomado desde troquel; sobrantes al cierre; OCR 9.7 baja |
 | 10 | Presupuestos | ⏸ Futuro (más miga; tras Minerva estable) |
 | 11 | Calendario = master planificar / lanzar | 🔄 **Éxito de uso** (Carlos/Jordi). Ampliar con cuidado: planificar sí; lanzar suave (pool/mesa) + conflictos de máquina |
@@ -255,7 +258,7 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 
 ## 🔜 Tareas pendientes inmediatas
 
-### Retomar aquí (11 ago 2026 — camino a paralelo septiembre)
+### Retomar aquí (14 ago 2026 — camino a TEST septiembre)
 - [x] **Pipeline**: modo **compacto por defecto** (+ preferencia localStorage; `?compact=0` = extendida) (11 ago)
 - [x] **Pipeline UX**: «Listo para cerrar» en pendientes de revisión (paso actual + badge) (11 ago)
 - [x] **Pipeline perf**: `fetchAllInChunks` concurrencia 5; olas desp→(arch∥ot∥pool∥hijas)→pasos→(ejec∥ext); filtros search/incidencias/externo/estado en cliente; índice `despachado_at` (11 ago)
@@ -263,14 +266,19 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [x] **Fase 8.5 (docs)**: convergencia A/B/C + `modo_sync`/`proceso_join` + override solo Planning — sin implementar (11 ago)
 - [x] **Bloque 9 §15.6.12**: derivar OT a impresión externa post-despacho (13 ago — Pool/mesa/ejecución; OT 98015)
 - [x] **Anular mesa → Pool** (13 ago): borra hueco; no deja la OT Terminada
-- [x] **Ajustar itinerario vivo + reeditar despacho forzado** (13 ago): Ruta = cola pendiente; lápiz = cabecera a cuenta y riesgo (admin/oficina/gerencia)
+- [x] **Ajustar itinerario vivo + reeditar despacho forzado** (13 ago): Ruta = cola pendiente; lápiz = cabecera a cuenta y riesgo (admin/oficina/gerencia). Noche: no wipe + prepend (`325429d`). Campo 14 ago: OT **36286**
+- [x] **Captura envío/recepción externos** (modal al Enviado/Recibido; 98015 1600/1400)
+- [x] **Manipulados Encajar + flags wizard** (14 ago — OT 36286)
+- [x] **Entrada Producción** (14 ago): `/produccion` → `/produccion/ots`; lápiz fuera del Pool
+- [ ] **Prefill horas** al añadir proceso en Ruta
 - [ ] **Bloque 6.x** (opcional rápido): avisos calidad al cierre; comparar versiones OT
 - [ ] **Bloque 11** (con cuidado): planificar/mover desde calendario; lanzar ≠ pisar plan de otra máquina — `MINERVA_BLOQUE11_…`
-- [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor — `MINERVA_BLOQUE12_…` (no abrir ya)
+- [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor — `MINERVA_BLOQUE12_…` (no abrir ya; default gestor = maestro OTs)
 - [ ] **Bloque 5 puente**: Rita lanza OTs a Hugo (no bloquea paralelo si Hugo sigue a mano)
 
 ### Hecho reciente (jul–ago)
-- [x] **13 ago:** imprimir fuera (1/2→21), anular mesa→Pool, ajustar itinerario vivo, wizard despacho forzado — `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`
+- [x] **14 ago:** Encajar en Manipulados, flags Retractilar/Etiquetar/Encajar en wizard, Pool sin lápiz, portada → OTs — `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`
+- [x] **13 ago:** imprimir fuera (1/2→21), anular mesa→Pool, ajustar itinerario vivo, wizard despacho forzado (sin wipe) — `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`
 - [x] Bloque 6 MVP + engomado prep/tiraje + promedios A–D + oficiales + decimales `.`/, + clone overwrite (horas/caja/CTP) + 3 OTs en resumen
 - [x] PDF OK etiquetas digital (Hugo)
 - [x] Bloque 8.2 wizard contenedor MVP; 8.1 agrupación Pool/Pipeline; FORMATO encadenado
@@ -284,15 +292,17 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [ ] 9.7 OCR albarán (baja); sobrantes al cierre (B6+B9)
 - [ ] Preguntas §12 planta (CTP hija) si hace falta antes de 8.4 fino
 
-### Siguiente foco (orden sugerido 13 ago)
+### Siguiente foco (orden sugerido 14 ago)
 1. ~~**Pipeline** (rápido + compacto + carga)~~ ✅ compacto + Listo para cerrar + perf fetch (11 ago)
 2. ~~**8.4** cierre contenedor~~ ✅ MVP (11 ago)
 3. ~~**9** derivar a externa~~ ✅ 13 ago (Pool/mesa/ejecución + OT 98015)
-4. Afinados B6 / B11 suave (virtualizar Pipeline solo si sigue lento)
-5. Muelle: netas pedidas vs brutas enviadas (impresión externa) — consciente, no urgente
-6. **Bloque 12** al acercarse usuarios nuevos
-7. **B5** puente Rita→Hugo si sobra
-8. **8.5** convergencia (solo si un barco real lo exige) · **B7 / B10** aparcados
+4. ~~**Manipulados Encajar + entrada OTs**~~ ✅ 14 ago (OT 36286)
+5. Pulir fricción de planta (horas al añadir en Ruta; Digital/Guillotina/PDF)
+6. Muelle: netas pedidas vs brutas enviadas (impresión externa) — consciente, no urgente
+7. Afinados B6 / B11 suave (virtualizar Pipeline solo si sigue lento)
+8. **Bloque 12** al acercarse usuarios nuevos
+9. **B5** puente Rita→Hugo si sobra
+10. **8.5** convergencia (solo si un barco real lo exige) · **B7 / B10** aparcados
 
 ---
 
@@ -340,7 +350,9 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 
 21. **Paralelo septiembre (11 ago 2026)**: no smoke fijo 10–20; por tanda de despacho elegir **~3 OTs** y seguir E2E en Minerva. Cierre contenedor MVP: **barco listo cuando todas las hijas terminan** (8.4) ✅. Convergencia física = 8.5 documentada, sin código aún.
 
-22. **Itinerario y mesa flexibles (13 ago 2026)**: (a) **Imprimir fuera** sustituye Offset/Digital disponible por proceso 21; no inserta un 21 extra. (b) **Anular mesa borra el hueco** y devuelve al Pool (`en_transito`); no deja `estado_mesa = finalizada`. (c) **Ruta** en OTs Despachadas ajusta solo la cola `pendiente`/`disponible`; pasos en marcha/finalizados van con candado. (d) **Lápiz** puede forzar cabecera/material aunque haya compra: roles `admin` / `oficina_tecnica` / `gerencia`, con aviso. Compra **no** es el candado del itinerario.
+22. **Itinerario y mesa flexibles (13 ago 2026)**: (a) **Imprimir fuera** sustituye Offset/Digital disponible por proceso 21; no inserta un 21 extra. (b) **Anular mesa borra el hueco** y devuelve al Pool (`en_transito`); no deja `estado_mesa = finalizada`. (c) **Ruta** en OTs Despachadas ajusta solo la cola `pendiente`/`disponible`; pasos en marcha/finalizados van con candado. (d) **Lápiz** puede forzar cabecera/material aunque haya compra: roles `admin` / `oficina_tecnica` / `gerencia`, con aviso. Compra **no** es el candado del itinerario. Wizard con pasos bloqueados **no** hace delete+insert del itinerario.
+
+23. **Manipulados y entrada (14 ago 2026)**: Encajar vive en proceso 15 (no en Engomado) con `estuches_por_bulto` distinto de retractilar. Redespacho solo en OTs Despachadas (Pool sin lápiz). `/produccion` redirige al maestro de OTs hasta Bloque 12.
 
 ## 📁 Estructura de carpetas relevante
 
@@ -356,6 +368,7 @@ src/
     hoja-ruta-formato-encadenado.ts   ← encadenado formato pliego (Bloque 8 Fase FORMATO)
     derivar-impresion-externa.ts      ← imprimir fuera + anular mesa→Pool (13 ago)
     prod-ot-itinerario-client.ts      ← replace total + insertarPasosEnColaViva
+    despacho-wizard-shared.ts         ← seed flags Manipulados (14 ago)
     supabase-query-chunks.ts          ← .in() troceados + concurrencia 5 (Pool/Pipeline)
     planificacion-analytics-query.ts
     sys-parametros-sobreproduccion.ts

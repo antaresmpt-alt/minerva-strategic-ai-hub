@@ -6,7 +6,7 @@
 >
 > **Estado:** ✅ **9.0–9.6d + 9.4 A/B/C** + **Calendario Producción** (18 jul 2026) — cartelas (impresión **1 copia**), Stock ATP, consumo guillotina/impresión/troquel/imp. externa, planificador OTs Jordi. **Validado E2E:** OT **98013**. ✅ **§15.6.12 derivar a externa (13 ago)** — OT **98015**. ⏳ Plan engomado desde troquel, 9.7 OCR, cierre OT sobrantes (Bloque 6).
 > **Origen:** Optimus + cartelas CARPAPSA (15 jun 2026).
-> **Actualizado:** 18 jul 2026 — §15.12: UX calendario (pastillas, modal, PDF grid/listado), cartela 1 copia, fix crash menú PDF.
+> **Actualizado:** 14 ago 2026 — sesiones 13–14 ago (itinerario vivo + Encajar); §15.14 / `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`.
 > **PENDIENTE:** H1/H2 recuento global. Ubicación por filas de material (catálogo UI sin definir en planta). Ajuste impresión A6 física vs A4 PDF.
 
 **Relacionado:** sobrantes → Bloque 6 · expedición → Bloque 7 · material contenedor/hijas → Bloque 8 · FSC → maestro artículos.
@@ -1804,7 +1804,21 @@ Mapa mental por sección (Carlos Impresión, Rita Digital, Antonio Troquel, Gabr
 | Anular mesa | Borra hueco; no `finalizada`; OT vuelve al Pool | `1addf8d` |
 | Ajustar itinerario | Botón Ruta: hechos candado, cola editable (`insertarPasosEnColaViva`) | `622fc7b` |
 | Reeditar despacho | Lápiz + `forceMode` para admin/oficina_tecnica/gerencia aunque haya compra | `622fc7b` |
+| No wipe / prepend | Wizard no borra pasos hechos; Ruta inserta al inicio + flechas | `325429d` |
 
-**OT de prueba:** **98015** — derivar, envío 1600, recepción 1400, luego insertar Desbroce en cola viva.
+**OT de prueba:** **98015** — derivar, envío 1600, recepción 1400 (modal cantidad), luego insertar Desbroce en cola viva.
 
-**Pendiente post-sesión:** muelle netas vs brutas; plan engomado desde troquel; OCR 9.7.
+**Captura envío/recepción:** ya existía (`ExternoCantidadDialog`); no es pendiente de §15.6.12.
+
+**Pendiente post-sesión:** muelle netas vs brutas; plan engomado desde troquel; OCR 9.7; prefill horas al añadir en Ruta.
+
+#### 15.15 Sesión 14 ago 2026 — Encajar Manipulados / portada
+
+> Detalle: `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`. No cambia reglas de cartela 9.4.
+
+| Pieza | Detalle | Commits |
+|-------|---------|---------|
+| Encajar (proc. 15) | Caja + estuches/bulto + pico/palets; seed wizard Retractilar/Etiquetar/Encajar | `b1c4104` |
+| Pool / entrada | Sin lápiz en Pool; `/produccion` → `/produccion/ots` | `b1c4104`, `1305dcc` |
+
+**OT de prueba:** **36286** — 25 / MN1L 2500 / 28.800 uds.

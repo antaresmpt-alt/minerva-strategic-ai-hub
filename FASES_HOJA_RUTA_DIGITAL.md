@@ -566,7 +566,7 @@ PDF compacto para acompañar la OT entre departamentos (sustituto papel de la ho
 ✅ **Bloque 3.3 IMPLEMENTADO** (9 jun 2026): Maestro de Artículos — campos `fsc` (Sí/No) y `fsc_fecha_validacion` (BD + formulario).
 ✅ **Bloque 3.5 IMPLEMENTADO** (9 jun 2026): Tipo de engomado parametrizado + Homogeneidad pantalla "Despachadas".
 ✅ **Bloque 3.6 IMPLEMENTADO** (9 jun 2026): Semáforo sobreproducción (🟠) configurable por proceso en Settings + proyección en Impresión.
-✅ **Bloque 3.7 IMPLEMENTADO** (9 jun 2026): CTP/Preimpresión + Desbroce + Manipulados con Retractilado + 5ª área de planificación "preimpresion". Ver detalle abajo.
+✅ **Bloque 3.7 IMPLEMENTADO** (9 jun 2026): CTP/Preimpresión + Desbroce + Manipulados con Retractilado + 5ª área de planificación "preimpresion". **14 ago:** Encajar + etiquetar/retractilar en wizard. Ver detalle abajo.
 ✅ **Bloque 3.8 IMPLEMENTADO** (11 jun 2026, rama `feature/fase0.6-hoja-ruta-virtual`): pruebas de campo del flujo nuevo → CTP fuera del cómputo productivo (0.25h plan), material de soporte en Impresión (flag `soporte_impresion` + heurística + combo), info de Externos (acabado + ojo + datos de retorno por muelle), fix encadenado por paso (1099 vs 900) y máquina Desbroce MNRV. Ver detalle abajo.
 ✅ **Bloque 4 BETA IMPLEMENTADA** (11 jun 2026): PDF acompañante desde `HojaRutaOtDialog` (A4 vertical) con cabecera, itinerario, tarjetas por proceso, detalle de pausas, gráfico previsto/real por proceso, botones Recargar/PDF y placeholders Recalcular presupuesto/Ficha técnica.
 ✅ **Maestro troqueles etiquetas simplificado** (13 jun 2026): `prod_etiquetas_troqueles` — eliminadas columnas `cliente`/`trabajo` (migración `20260613142500_drop_etiquetas_troqueles_cliente_trabajo.sql` + UI/tipos/import-export/script). Dimensiones solo `dimensiones_texto` en el modal (sin ancho/alto/diámetro). `necesita_revision` conservado como checkbox. Fix UI: select "Estado" pisaba el campo de fecha (añadido `min-w-0`).
@@ -576,14 +576,14 @@ PDF compacto para acompañar la OT entre departamentos (sustituto papel de la ho
 🔄 **Bloque 8**: FORMATO–8.1 ✅ · **8.2 wizard MVP ✅** · 8.3 parcial · **8.4 cierre barco ✅** · **8.5 convergencia 📋** · 8.6 futuro. Fuente: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
 ✅ **Bloque 9**: 9.0–9.6d + calendario prod. ✅ Derivar→imp. externa §15.6.12 (13 ago). ⏳ OCR/sobrantes baja. `MINERVA_BLOQUE9_…` · `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`.
 📋 **Bloque 11**: calendario en uso (Carlos/Jordi); lanzar con cuidado — `MINERVA_BLOQUE11_…`.
-📋 **Bloque 12**: roles/landing por perfil documentado (11 ago), implementación aparcada — `MINERVA_BLOQUE12_…` + `MINERVA_ROLES_Y_NAVEGACION.md`.
+📋 **Bloque 12**: roles/landing por perfil documentado (11 ago), implementación aparcada — `MINERVA_BLOQUE12_…` + `MINERVA_ROLES_Y_NAVEGACION.md`. Hasta entonces `/produccion` → maestro OTs (14 ago).
 
-> Mapa vivo y prioridades paralelo septiembre: **`MINERVA_HUB_CONTEXTO_MAESTRO.md`** (actualizado 13 ago 2026).
+> Mapa vivo y prioridades paralelo septiembre: **`MINERVA_HUB_CONTEXTO_MAESTRO.md`** (actualizado 14 ago 2026).
 
 
 ---
 
-**Última actualización**: 13 de agosto de 2026 — §15.6.12 Imprimir fuera + anular mesa→Pool + ajustar itinerario vivo (`SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`).
+**Última actualización**: 14 de agosto de 2026 — Encajar en Manipulados + flags wizard + portada → OTs (`SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`). 13 ago: §15.6.12 + itinerario vivo.
 
 ---
 
@@ -655,7 +655,7 @@ El usuario necesitaba tres nuevos procesos en la Hoja de Ruta Digital:
   - Constantes `PROCESO_CTP_ID = 16`, `PROCESO_DESBROCE_ID = 22`.
   - **`CTP_PREIMPRESION_CAMPOS`**: operador CTP, horas proceso (real), planchas nuevas (bool), verificación troquel (bool), prueba de color (bool), notas. *(Pendiente ampliar tras reunión con Gemma.)*
   - **`DESBROCE_CAMPOS`**: hojas entrada, poses, estuches desbrozados (real), horas proceso, notas/incidencias.
-  - **`MANIPULADOS_INTERNOS_CAMPOS`** ampliado: descripción, unidades (real), tiempo total, **retractilar (bool)** → condicionales: `unidades_por_paquete` (ej. 25), `num_paquetes` (calc), notas.
+  - **`MANIPULADOS_INTERNOS_CAMPOS`** ampliado: descripción, unidades (real), tiempo total, **retractilar** / **etiquetar** / **encajar** (bools) → condicionales: uds. por paquete retractilar/etiqueta; Encajar = caja + `estuches_por_bulto` + bultos/pico/palets (como Engomado; 14 ago).
   - **`PROCESO_CAMPOS_CONFIG`** actualizado: CTP (sin output/encadenado), Desbroce (`outputField: estuches_desbrozados`, `outputUnit: estuches`, `inputFrom: [10]`), Engomado (`inputFrom: [22, 10]` — Desbroce tiene prioridad), Manipulados (`inputFrom: [12, 22, 10]`).
 - **`planificacion-ots-ejecucion-tab.tsx`** — semáforo:
   - Nueva rama Desbroce (ID 22): hojas × poses → estuches.
@@ -1001,12 +1001,12 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 | **Pool hijas cerradas** | Todas las hijas al expandir; cerradas en verde sin checkbox. |
 | **Filtro próximo paso** | Tipos **Guillotina** y **Desbroce** (`planificacion-ambito.ts` + migración `20260623210000`). |
 | **Impresión** | `inputFromProcessIds: [17]` — badge y prefill desde salida guillotina (`hojas_finales`), no hojas compradas. |
-| **Manipulados** | Checkbox **Etiquetar** + uds./paquete etiqueta; cálculo `num_paquetes` / `num_paquetes_etiqueta`. |
+| **Manipulados** | Checkbox **Etiquetar** + uds./paquete etiqueta; cálculo `num_paquetes` / `num_paquetes_etiqueta`. **14 ago:** Encajar + flags en wizard — `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`. |
 | **Merma troquel** | Semáforo en paso posterior (475 vs 500 → amarillo AJUSTADO ±5%). |
 
 ### Pendiente
 
-- [ ] **Externos:** formato hojas en badge, prefill hojas recibidas, encadenado despacho → recepción (dejado para otra sesión).
+- [x] **Externos:** captura hojas al Enviado/Recibido (`ExternoCantidadDialog`); encadenado troquel desde `hojas_recibidas_muelle`. ⏳ Muelle: netas vs brutas.
 - [ ] Afinar campos de horas en PDF HR (algunos procesos aún no mapean todos los campos reales).
 - [ ] Filtro **Externo** en pool (requiere tipo `externo` en catálogo).
 
@@ -1114,3 +1114,30 @@ Pendiente: H1/H2 recuento global; lista OTs piloto con Emma/Ramón.
 ### Smoke
 
 - OT **98015**: Imprimir fuera → Externos 1600/1400 → insertar Desbroce en cola viva.
+- Noche 13 ago (`325429d`): wizard no wipe; Ruta prepend + flechas. Campo 14 ago: OT **36286**.
+
+---
+
+## Manipulados Encajar + entrada Producción ✅ **14 ago 2026**
+
+> Fuente: `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`.
+
+### Hecho
+
+- **Encajar** en proceso 15: mismos campos de embalaje que Engomado (`estuches_por_bulto`, no alias de retractilar).
+- Wizard: flags Retractilar / Etiquetar / Encajar siembran `datos_proceso` + descripción.
+- Pool: sin lápiz de redespacho (queda en OTs Despachadas).
+- `/produccion` redirige a `/produccion/ots`.
+
+### Smoke
+
+- OT **36286**: retractilar/etiquetar 25, MN1L 2500, 28.800 uds → 1.152 paquetes, 12 bultos, 1 palet.
+
+### Archivos
+
+| Pieza | Ruta |
+|-------|------|
+| Config / tipo | `hoja-ruta-campos-config.ts` |
+| Seed wizard | `despacho-wizard-shared.ts` (`procesoDatos.manipulados`) |
+| Mesa | `planificacion-ots-ejecucion-tab.tsx` (`enrichManipuladoDatosProceso`) |
+| Portada | `src/app/produccion/page.tsx` |

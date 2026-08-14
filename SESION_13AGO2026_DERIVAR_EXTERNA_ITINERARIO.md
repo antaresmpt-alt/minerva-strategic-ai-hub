@@ -1,8 +1,9 @@
 # Sesión 13 ago 2026 — Imprimir fuera, Anular al Pool, ajustar itinerario vivo
 
-> **Fuente de esta jornada.** Commits en `main`: `1addf8d`, `622fc7b`. Deploy: Vercel rama `main`.  
+> **Fuente de esta jornada.** Commits en `main`: `1addf8d`, `622fc7b`, `325429d` (noche: no wipe + prepend). Deploy: Vercel rama `main`.  
 > **Caso de campo:** OT **98015** (impresión externa + recepción + hueco Desbroce).  
-> **Brief relacionado:** Bloque 9 §15.6.12 (`MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`).
+> **Brief relacionado:** Bloque 9 §15.6.12 (`MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`).  
+> **Día siguiente (14 ago):** Encajar / flags wizard / portada — `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`.
 
 ---
 
@@ -53,7 +54,9 @@ Oculto si la ejecución ya está `en_curso` o `pausada`.
 
 ### Prueba planta — OT 98015
 
-Flujo comprobado: Imprimir fuera desde Pool → cola Externos → envío (1600 hojas brutas) → recibir 1400 netas → siguiente paso interno.
+**Flujo comprobado:** Imprimir fuera desde Pool → cola Externos → **modal de cantidad al Enviado** (1600 hojas brutas) → recibir 1400 netas → siguiente paso interno.
+
+La captura envío/recepción (`ExternoCantidadDialog` + `fetchExternoEnvioBrief`) **ya estaba** al marcar Enviado/Recibido; no era trabajo de esta sesión. Prefill desde impresión/guillotina/despacho; troquel encadena `hojas_recibidas_muelle`.
 
 **Aceptado de momento:** en muelle / envío salen las **brutas** (lo enviado). Las netas se indican en observaciones / recepción. Futuro: que muelle muestre las netas pedidas, no las brutas.
 
@@ -168,6 +171,8 @@ El wizard **no** pinta los pasos hechos en verde (eso es el diálogo Ruta). El l
 - Plan engomado desde salida troquel (sigue en backlog Bloque 9).
 - OCR albarán / sobrantes al cierre.
 
+**14 ago (otra sesión):** Encajar en Manipulados + flags wizard + `/produccion` → OTs. Campo Ruta en OT **36286**. Ver `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`.
+
 ---
 
 ## 8. Archivos tocados
@@ -176,6 +181,7 @@ El wizard **no** pinta los pasos hechos en verde (eso es el diálogo Ruta). El l
 |--------|-----|
 | `1addf8d` | Derivar a 21, anular→Pool, acción mesa/ejecución, tests |
 | `622fc7b` | `insertarPasosEnColaViva`, `AjustarItinerarioDialog`, wizard `forceMode`, cableado OTs Despachadas |
+| `325429d` | Wizard: no wipe de pasos hechos; picker Ruta `prepend` + flechas ↑↓ |
 
 Archivos clave:
 

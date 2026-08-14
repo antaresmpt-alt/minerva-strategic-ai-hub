@@ -2,7 +2,7 @@
 
 > Documento de contexto técnico generado automáticamente.
 > Proyecto: **minerva-strategic-ai-hub** · Next.js 16 + React 19 + Supabase.
-> Fecha de generación: 13 de junio de 2026 · **Última actualización: 13 agosto 2026** (imprimir fuera + itinerario vivo; ver `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`).
+> Fecha de generación: 13 de junio de 2026 · **Última actualización: 14 agosto 2026** (Encajar Manipulados + portada OTs; ver `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`).
 
 ---
 
@@ -1742,15 +1742,15 @@ Handoff y backlog: `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` **§0**.
 |---------|-----------------|
 | `src/lib/hoja-ruta-campos-config.ts` | Config-driven: definición de campos por proceso (ver sección 3). Incluye `formatInputField` / `formatOutputField` por proceso (Fase FORMATO). |
 | `src/types/planificacion-mesa.ts` | Tipos de la mesa/ejecución (ver sección 4). Campos `formatoAnterior` / `formatoAnteriorOrigenNombre` en `MesaEjecucion`. |
-| `src/components/produccion/planificacion/planificacion-ots-ejecucion-tab.tsx` | Tarjeta de ejecución: prefill cantidad + **formato encadenado**, derivaciones (`computeDerivedDatosProceso`), semáforos, banner "Formato pliego de entrada", persistencia en todas las acciones. En troquel (`proceso_id=10`): `enrichTroquelDatosProceso` normaliza aliases (`num_figuras`→`poses`, `hojas_a_troquelar`→`hojas_troquelar`) y rellena corte/pinza/expulsor desde catálogo aunque el seed de despacho ya exista. Engomado: alias `unidades_por_paquete`→`estuches_por_bulto` + bultos/palet del catálogo de cajas. |
-| `src/lib/despacho-wizard-shared.ts` | Seed de `datos_proceso` al despachar. Troquel escribe claves canónicas (`poses`, `hojas_troquelar`); engomado escribe `estuches_por_bulto` (+ alias). |
+| `src/components/produccion/planificacion/planificacion-ots-ejecucion-tab.tsx` | Tarjeta de ejecución: prefill cantidad + **formato encadenado**, derivaciones (`computeDerivedDatosProceso`), semáforos, banner "Formato pliego de entrada", persistencia en todas las acciones. En troquel (`proceso_id=10`): `enrichTroquelDatosProceso` normaliza aliases (`num_figuras`→`poses`, `hojas_a_troquelar`→`hojas_troquelar`) y rellena corte/pinza/expulsor desde catálogo aunque el seed de despacho ya exista. Engomado: alias `unidades_por_paquete`→`estuches_por_bulto` + bultos/palet del catálogo de cajas. Manipulados (15): retractilar/etiquetar + **Encajar** (`enrichManipuladoDatosProceso`; no alias retractilar→bulto). |
+| `src/lib/despacho-wizard-shared.ts` | Seed de `datos_proceso` al despachar. Troquel escribe claves canónicas (`poses`, `hojas_troquelar`); engomado escribe `estuches_por_bulto` (+ alias). Manipulados: flags retractilar/etiquetar/encajar + descripción. |
 | `src/lib/maestro-promedios-calc.ts` / `maestro-promedios-update.ts` / `maestro-prefill.ts` | Motor mediana/moda/millar; recálculo selectivo; prefill despacho; panel + PDF ficha (`articulos-maestro-ficha-pdf.ts`). Guillotina/desbroce: mediana absoluta. |
 | `src/utils/supabase/client.ts` | Cliente browser Supabase **singleton** (evita contención de lock GoTrue al abrir Pool + Pipeline). |
 
 ### Páginas de Producción (`src/app/produccion/*/page.tsx`)
 `almacen` · `articulos` (Maestro) · `ejecucion` · `etiquetas-digital` · `externos` · `fichas` ·
 `fichas-tecnicas` · `hoja-ruta-test` · `muelle` · `ordenes` · `ots` (despacho) · `pipeline` ·
-`troqueles`.
+`troqueles`. La raíz `/produccion` redirige a `/produccion/ots` (14 ago).
 
 ---
 
@@ -1801,7 +1801,21 @@ Handoff y backlog: `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` **§0**.
 | `src/lib/derivar-impresion-externa.ts` | `derivarOtAImpresionExterna` (1/2 → 21), `devolverHuecoMesaAlPool`, `puedeMostrarImprimirFueraMesa` |
 | `src/lib/prod-ot-itinerario-client.ts` | `insertarPasosEnColaViva` (no borra pasos en marcha/finalizados) |
 | `src/components/produccion/ots/ajustar-itinerario-dialog.tsx` | UI botón Ruta en OTs Despachadas |
-| `DespachoWizardDialog` | Props `forceMode` + `userRole` — guardar con compra si admin/oficina_tecnica/gerencia |
+| `DespachoWizardDialog` | Props `forceMode` + `userRole` — guardar con compra si admin/oficina_tecnica/gerencia. Con pasos bloqueados no hace replace total del itinerario (`325429d`). |
+
+---
+
+## 10. Novedades 14 ago 2026 (Manipulados / entrada)
+
+> Detalle: `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`.
+
+| Módulo | Función |
+|--------|---------|
+| `hoja-ruta-campos-config.ts` | Encajar condicional en proceso 15 (`estuches_por_bulto`, caja, pico/palets) |
+| `despacho-wizard-shared.ts` | `DespachoWizardManipuladoDatos` + seed/parse flags |
+| `planificacion-ots-ejecucion-tab.tsx` | `enrichManipuladoDatosProceso` (no alias retractilar → bulto) |
+| `planificacion-pool-ots-tab-v2.tsx` | Sin lápiz de wizard |
+| `src/app/produccion/page.tsx` | `redirect("/produccion/ots")` |
 
 ---
 
