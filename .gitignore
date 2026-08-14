@@ -40,6 +40,11 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Claude Code (ajustes locales de esa herramienta; no mezclar con Cursor)
+.claude/
+
+# typescript
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

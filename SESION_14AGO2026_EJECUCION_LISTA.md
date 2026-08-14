@@ -26,7 +26,7 @@ Reglas de cola:
 - Orden: **en curso** → **pausada** → **por hacer**.
 - Al entrar, si hay una **en curso**, queda expandida.
 - Expandir = el `ExecutionCard` de siempre (no se recortan campos). Lazy-mount: el formulario no existe hasta abrir.
-- Cerrada: no se reabre ni se editan cantidades. Banner «Proceso cerrado · solo consulta».
+- Cerrada: no se reabre ni se editan cantidades. Banner «Proceso cerrado · solo consulta». **Sin deshacer cierre en v1.**
 - El reloj (p. ej. 71 h en CTP de prueba) también sirve de **atasco**: OT en curso días = investigar (espera de cliente, no cerrada, etc.). Pausar con motivo congela el semáforo en ámbar.
 
 Filtros: Activas · En curso · Pausadas · Por hacer · Terminadas de hoy · Finalizadas (tope 200) · Todas (activas + histórico reciente).

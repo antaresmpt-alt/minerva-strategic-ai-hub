@@ -252,7 +252,7 @@ src/components/produccion/planificacion/
 | 8 | Contenedor / formas / hijas | 🔄 FORMATO–8.1 ✅ · **8.2 wizard MVP ✅** · 8.3 parcial · **8.4 cierre barco ✅** · **8.5 convergencia 📋 diseño** · 8.6 futuro · **captura envío externos ✅** |
 | 9 | Material, cartelas, stock, calendario prod. | ✅ 9.0–9.6d + 9.4 + **§15.6.12 derivar a externa (13 ago)**. ⏳ Plan engomado desde troquel; sobrantes al cierre; OCR 9.7 baja |
 | 10 | Presupuestos | ⏸ Futuro (más miga; tras Minerva estable) |
-| 11 | Calendario = master planificar / lanzar | 🔄 **Éxito de uso** (Carlos/Jordi). Ampliar con cuidado: planificar sí; lanzar suave (pool/mesa) + conflictos de máquina |
+| 11 | Calendario = master planificar / lanzar | 🔄 **Éxito de uso** (Carlos/Jordi). Ampliar con cuidado: planificar sí; lanzar suave (pool/mesa) + conflictos de máquina. Sin reordenar el menú (convive con Pool/Mesa/Pipeline) |
 | 12 | Roles, permisos, landing por perfil | 📋 **Documentado** — operario→ejecución; gestor→home rico. **14 ago:** 1 tableta/máquina (Ramón). Aparcado de código; crítico antes usuarios masivos |
 
 Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
@@ -352,7 +352,7 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 
 19. **Cartelas impresión (18 jul 2026)**: **1 copia** por palet (antes 2). Confirmado Emma/Ramón.
 
-20. **Bloque 11 — Calendario como master (28 jul idea · 11 ago matiz)**: quieren planificar **y** desplazar desde calendario; visión Albert de home ≠ Pipeline sino calendario. **Lanzar con cuidado:** preferible a pool/mesa sin pisar slots ajenos; o provisional + confirmar plan. **Conflictos de máquina/día** (Carlos día 9 vs Antonio ya tiene día 8) → bloquear o avisar fuerte. Brief: `MINERVA_BLOQUE11_…`.
+20. **Bloque 11 — Calendario como master (28 jul idea · 11 ago matiz)**: quieren planificar **y** desplazar desde calendario; visión Albert de home ≠ Pipeline sino calendario. **Lanzar con cuidado:** preferible a pool/mesa sin pisar slots ajenos; o provisional + confirmar plan. **Conflictos de máquina/día** (Carlos día 9 vs Antonio ya tiene día 8) → bloquear o avisar fuerte. **No reordenar el menú** mientras se amplía: calendario convive con Pool/Mesa/Pipeline. Brief: `MINERVA_BLOQUE11_…`.
 
 21. **Paralelo septiembre (11 ago 2026)**: no smoke fijo 10–20; por tanda de despacho elegir **~3 OTs** y seguir E2E en Minerva. Cierre contenedor MVP: **barco listo cuando todas las hijas terminan** (8.4) ✅. Convergencia física = 8.5 documentada, sin código aún.
 
