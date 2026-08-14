@@ -1,15 +1,16 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 14 ago 2026 (Encajar Manipulados + flags wizard + portada → OTs; sesión `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`. Día anterior: imprimir fuera / itinerario vivo.)
+> Última actualización: 14 ago 2026 tarde (lista gorda OTs en ejecución + perf; `SESION_14AGO2026_EJECUCION_LISTA.md`. Mañana: Encajar Manipulados. Día anterior: imprimir fuera / itinerario vivo.)
 
 ---
 
 ## 🧩 Cómo usar este contexto
 
 **Uso recomendado con IA:**
-1. Pegar siempre este archivo (`MINERVA_HUB_CONTEXTO_MAESTRO.md`).
-2. Añadir solo el brief de la fase activa si aplica:
+1. **No duplicar en claude.ai Project** (copia muerta). Cursor / Claude Code leen el repo; `CLAUDE.md` ya apunta aquí.
+2. Pegar siempre este archivo (`MINERVA_HUB_CONTEXTO_MAESTRO.md`) si el chat no carga `@` del repo.
+3. Añadir solo el brief de la fase activa si aplica:
    - `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md`
    - `MINERVA_BLOQUE7_ODOO_ALBARANES.md`
    - `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`
@@ -17,10 +18,11 @@
    - `MINERVA_BLOQUE10_PRESUPUESTOS.md` (futuro)
    - `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` (calendario = master planificar/lanzar)
    - `MINERVA_BLOQUE12_ROLES_PERMISOS_NAVEGACION.md` (landing por perfil — sept)
-3. Añadir `MINERVA_CONTEXTO_TECNICO.md` solo si la IA necesita detalles técnicos del repo.
-4. Si el tema es mesa / externos / itinerario post-despacho: `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`.
-5. Si el tema es Manipulados / Encajar / entrada a Producción: `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`.
-6. Al cerrar una fase, actualizar este maestro + `FASES_HOJA_RUTA_DIGITAL.md`.
+4. Añadir `MINERVA_CONTEXTO_TECNICO.md` solo si la IA necesita detalles técnicos del repo.
+5. Si el tema es mesa / externos / itinerario post-despacho: `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`.
+6. Si el tema es Manipulados / Encajar / entrada a Producción: `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`.
+7. Si el tema es cola de mesa / tableta / ejecución: `SESION_14AGO2026_EJECUCION_LISTA.md`.
+8. Al cerrar una fase, actualizar este maestro + `FASES_HOJA_RUTA_DIGITAL.md`.
 
 **Jerarquía documental:**
 | Documento | Rol |
@@ -35,7 +37,8 @@
 | `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` | Calendario OT como master de planificar + lanzar (con cuidado). |
 | `MINERVA_REUNION_HOJA_RUTA_JUEVES.md` | Guía reunión demo 98010 + preguntas §12. |
 | `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md` | Sesión 13 ago: imprimir fuera, anular al Pool, ajustar itinerario / reeditar despacho. |
-| `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md` | Sesión 14 ago: Encajar en Manipulados, flags wizard, Pool sin lápiz, `/produccion` → OTs. |
+| `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md` | Sesión 14 ago (mañana): Encajar en Manipulados, flags wizard, Pool sin lápiz, `/produccion` → OTs. |
+| `SESION_14AGO2026_EJECUCION_LISTA.md` | Sesión 14 ago (tarde): lista gorda ejecución, semáforo, perf, tableta por máquina (Ramón). |
 | `MINERVA_BRIEFING.md` | Onboarding narrativo largo; útil, pero secundario frente a este maestro. |
 
 ---
@@ -235,14 +238,14 @@ src/lib/hoja-ruta/
   hoja-ruta-formatters.ts               ← helpers compartidos modal/PDF
   hoja-ruta-pdf.ts                      ← exportador PDF acompañante
 src/components/produccion/planificacion/
-  planificacion-ots-ejecucion-tab.tsx   ← ejecución en mesa + semáforo
+  planificacion-ots-ejecucion-tab.tsx   ← lista gorda + ExecutionCard lazy (14 ago tarde)
 ```
 
 ### Estado de bloques
 
 | Bloque | Descripción | Estado |
 |--------|-------------|--------|
-| 1–4 | Motor HR, captura, HojaRutaOtDialog, PDF | ✅ **~100%** operativo (pulidos menores Digital/Guillotina/PDF). **14 ago:** Encajar en Manipulados + flags wizard |
+| 1–4 | Motor HR, captura, HojaRutaOtDialog, PDF | ✅ **~100%** operativo (pulidos menores Digital/Guillotina/PDF). **14 ago:** Encajar + lista gorda ejecución |
 | 5 | Etiquetas digital (Hugo) + puente Rita→Hugo | ✅ **Módulo más maduro** (meses en uso). ⏳ Solo falta lanzar OTs despachadas digital → hoja Hugo (o seguir entrada manual) |
 | 6 | Producidas / cierre OT | ✅ MVP + promedios + oficiales + clone. ✅ Cierre **contenedor** 8.4 (snapshot barco) |
 | 7 | Expedición / Albarán | ⏸ **Aparcado** hasta decisión Odoo |
@@ -250,7 +253,7 @@ src/components/produccion/planificacion/
 | 9 | Material, cartelas, stock, calendario prod. | ✅ 9.0–9.6d + 9.4 + **§15.6.12 derivar a externa (13 ago)**. ⏳ Plan engomado desde troquel; sobrantes al cierre; OCR 9.7 baja |
 | 10 | Presupuestos | ⏸ Futuro (más miga; tras Minerva estable) |
 | 11 | Calendario = master planificar / lanzar | 🔄 **Éxito de uso** (Carlos/Jordi). Ampliar con cuidado: planificar sí; lanzar suave (pool/mesa) + conflictos de máquina |
-| 12 | Roles, permisos, landing por perfil | 📋 **Documentado** — operario→ejecución; gestor→home rico. Aparcado de implementación inmediata; crítico antes usuarios masivos |
+| 12 | Roles, permisos, landing por perfil | 📋 **Documentado** — operario→ejecución; gestor→home rico. **14 ago:** 1 tableta/máquina (Ramón). Aparcado de código; crítico antes usuarios masivos |
 
 Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 
@@ -270,13 +273,15 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [x] **Captura envío/recepción externos** (modal al Enviado/Recibido; 98015 1600/1400)
 - [x] **Manipulados Encajar + flags wizard** (14 ago — OT 36286)
 - [x] **Entrada Producción** (14 ago): `/produccion` → `/produccion/ots`; lápiz fuera del Pool
+- [x] **OTs en ejecución lista gorda** (14 ago tarde): semáforo, lazy parte, terminadas de hoy; perf query activas (`7ed10a9`, `4a57f03`)
 - [ ] **Prefill horas** al añadir proceso en Ruta
 - [ ] **Bloque 6.x** (opcional rápido): avisos calidad al cierre; comparar versiones OT
 - [ ] **Bloque 11** (con cuidado): planificar/mover desde calendario; lanzar ≠ pisar plan de otra máquina — `MINERVA_BLOQUE11_…`
-- [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor — `MINERVA_BLOQUE12_…` (no abrir ya; default gestor = maestro OTs)
+- [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor; tableta = máquina — `MINERVA_BLOQUE12_…` (no abrir ya; default gestor = maestro OTs)
 - [ ] **Bloque 5 puente**: Rita lanza OTs a Hugo (no bloquea paralelo si Hugo sigue a mano)
 
 ### Hecho reciente (jul–ago)
+- [x] **14 ago tarde:** lista gorda OTs en ejecución + perf tableta — `SESION_14AGO2026_EJECUCION_LISTA.md`
 - [x] **14 ago:** Encajar en Manipulados, flags Retractilar/Etiquetar/Encajar en wizard, Pool sin lápiz, portada → OTs — `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`
 - [x] **13 ago:** imprimir fuera (1/2→21), anular mesa→Pool, ajustar itinerario vivo, wizard despacho forzado (sin wipe) — `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`
 - [x] Bloque 6 MVP + engomado prep/tiraje + promedios A–D + oficiales + decimales `.`/, + clone overwrite (horas/caja/CTP) + 3 OTs en resumen
@@ -297,12 +302,13 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 2. ~~**8.4** cierre contenedor~~ ✅ MVP (11 ago)
 3. ~~**9** derivar a externa~~ ✅ 13 ago (Pool/mesa/ejecución + OT 98015)
 4. ~~**Manipulados Encajar + entrada OTs**~~ ✅ 14 ago (OT 36286)
-5. Pulir fricción de planta (horas al añadir en Ruta; Digital/Guillotina/PDF)
-6. Muelle: netas pedidas vs brutas enviadas (impresión externa) — consciente, no urgente
-7. Afinados B6 / B11 suave (virtualizar Pipeline solo si sigue lento)
-8. **Bloque 12** al acercarse usuarios nuevos
-9. **B5** puente Rita→Hugo si sobra
-10. **8.5** convergencia (solo si un barco real lo exige) · **B7 / B10** aparcados
+5. ~~**Lista gorda ejecución + perf**~~ ✅ 14 ago tarde (`7ed10a9`, `4a57f03`)
+6. Pulir fricción de planta (horas al añadir en Ruta; Digital/Guillotina/PDF)
+7. Muelle: netas pedidas vs brutas enviadas (impresión externa) — consciente, no urgente
+8. Afinados B6 / B11 suave (virtualizar Pipeline solo si sigue lento)
+9. **Bloque 12** al acercarse usuarios nuevos (tableta = máquina)
+10. **B5** puente Rita→Hugo si sobra
+11. **8.5** convergencia (solo si un barco real lo exige) · **B7 / B10** aparcados
 
 ---
 
@@ -336,7 +342,7 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 
 14. **Bloque 8.1.1 — contenedor en campo (18 jun 2026)**: compra conjunta en padre; hijas heredan material en pool. Progreso barco = **pasos finalizados / pasos totales** (todas las hijas). Pool lateral mesa filtra por `planificacionTipoPaso` del itinerario (sin OTs con paso distinto ni `null`). Merma impresión: `brutas − merma = netas`. Troquel: prefill desde salida impresión. OT demo: **98010** (3 hijas). Rama: `feature/bloque8.1-pool-mesa-ejecucion-fixes`.
 
-15. **Roles, permisos y navegación → Bloque 12 (23 jun diseño · 11 ago formalizado)**: capa transversal. Sistema actual híbrido (`permissions.ts` + `role_permissions`). MVP sept: landing operario→ejecución / gestor→home / Hugo→etiquetas; menú que oculta. Multi-rol y permiso por máquina = después. **Implementación aparcada** hasta afinar Pipeline/producción; crítica antes de usuarios masivos. Brief: `MINERVA_BLOQUE12_…` · diseño: `MINERVA_ROLES_Y_NAVEGACION.md`.
+15. **Roles, permisos y navegación → Bloque 12 (23 jun diseño · 11 ago formalizado · 14 ago tabletas)**: capa transversal. Sistema actual híbrido (`permissions.ts` + `role_permissions`). MVP sept: landing operario→ejecución / gestor→home / Hugo→etiquetas; menú que oculta. **Campo Ramón 14 ago:** una tableta **por máquina** (impresión/troquel/engomado); turnos distintos, no concurrentes (Abraham/David). Multi-rol y permiso por máquina = después. **Implementación aparcada.** Brief: `MINERVA_BLOQUE12_…` · diseño: `MINERVA_ROLES_Y_NAVEGACION.md`.
 
 16. **Bloque 8.1.2 — agrupación maestro y despachadas (23 jun 2026)**: misma UX barco que Pool/Pipeline en **Maestro OTs** y **OTs despachadas** (`ots-contenedor-display.ts`, expandir hijas lazy). Filtro vista: agrupado | solo simples | solo contenedores | todas planas. Maestro paginado excluye hijas en servidor cuando no es vista plana.
 
@@ -354,6 +360,8 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 
 23. **Manipulados y entrada (14 ago 2026)**: Encajar vive en proceso 15 (no en Engomado) con `estuches_por_bulto` distinto de retractilar. Redespacho solo en OTs Despachadas (Pool sin lápiz). `/produccion` redirige al maestro de OTs hasta Bloque 12.
 
+24. **Cola de ejecución táctil (14 ago 2026 tarde)**: lista gorda + semáforo; parte completo lazy al expandir; terminadas ocultas (filtro «de hoy» readonly). Query solo activas + catálogos cacheados; pestañas Planificación lazy. Tableta de planta = **máquina**, no persona. Detalle: `SESION_14AGO2026_EJECUCION_LISTA.md`.
+
 ## 📁 Estructura de carpetas relevante
 
 ```
@@ -362,14 +370,14 @@ src/
   components/
     produccion/
       hoja-ruta/          ← DatosProcesoForm, HojaRutaOtDialog
-      planificacion/      ← ejecución en mesa, pipeline
+      planificacion/      ← ejecución lista gorda, pipeline (pestañas lazy 14 ago)
   lib/
     hoja-ruta-campos-config.ts
     hoja-ruta-formato-encadenado.ts   ← encadenado formato pliego (Bloque 8 Fase FORMATO)
     derivar-impresion-externa.ts      ← imprimir fuera + anular mesa→Pool (13 ago)
     prod-ot-itinerario-client.ts      ← replace total + insertarPasosEnColaViva
     despacho-wizard-shared.ts         ← seed flags Manipulados (14 ago)
-    supabase-query-chunks.ts          ← .in() troceados + concurrencia 5 (Pool/Pipeline)
+    supabase-query-chunks.ts          ← .in() troceados + concurrencia 5 (Pool/Pipeline/ejecución)
     planificacion-analytics-query.ts
     sys-parametros-sobreproduccion.ts
   types/

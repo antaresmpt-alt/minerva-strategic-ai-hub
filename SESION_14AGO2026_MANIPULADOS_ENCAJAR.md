@@ -113,3 +113,5 @@ Archivos clave:
 - Muelle: mostrar netas pedidas en vez de brutas.
 - Plan engomado desde salida troquel; OCR / sobrantes al cierre.
 - Bloques 11 / 12 / 5 / 8.5 — no abrir ahora; pulir fricción de planta hacia TEST septiembre.
+
+Tarde del mismo día: lista gorda de OTs en ejecución — `SESION_14AGO2026_EJECUCION_LISTA.md`.

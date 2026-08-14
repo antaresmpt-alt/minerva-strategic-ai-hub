@@ -2,7 +2,7 @@
 
 > Documento de contexto técnico generado automáticamente.
 > Proyecto: **minerva-strategic-ai-hub** · Next.js 16 + React 19 + Supabase.
-> Fecha de generación: 13 de junio de 2026 · **Última actualización: 14 agosto 2026** (Encajar Manipulados + portada OTs; ver `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`).
+> Fecha de generación: 13 de junio de 2026 · **Última actualización: 14 agosto 2026** (lista gorda ejecución + Encajar; `SESION_14AGO2026_EJECUCION_LISTA.md`).
 
 ---
 
@@ -1742,9 +1742,10 @@ Handoff y backlog: `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` **§0**.
 |---------|-----------------|
 | `src/lib/hoja-ruta-campos-config.ts` | Config-driven: definición de campos por proceso (ver sección 3). Incluye `formatInputField` / `formatOutputField` por proceso (Fase FORMATO). |
 | `src/types/planificacion-mesa.ts` | Tipos de la mesa/ejecución (ver sección 4). Campos `formatoAnterior` / `formatoAnteriorOrigenNombre` en `MesaEjecucion`. |
-| `src/components/produccion/planificacion/planificacion-ots-ejecucion-tab.tsx` | Tarjeta de ejecución: prefill cantidad + **formato encadenado**, derivaciones (`computeDerivedDatosProceso`), semáforos, banner "Formato pliego de entrada", persistencia en todas las acciones. En troquel (`proceso_id=10`): `enrichTroquelDatosProceso` normaliza aliases (`num_figuras`→`poses`, `hojas_a_troquelar`→`hojas_troquelar`) y rellena corte/pinza/expulsor desde catálogo aunque el seed de despacho ya exista. Engomado: alias `unidades_por_paquete`→`estuches_por_bulto` + bultos/palet del catálogo de cajas. Manipulados (15): retractilar/etiquetar + **Encajar** (`enrichManipuladoDatosProceso`; no alias retractilar→bulto). |
+| `src/components/produccion/planificacion/planificacion-ots-ejecucion-tab.tsx` | Lista gorda (semáforo, lazy `ExecutionCard`); query por filtro (activas, no `select *`); catálogos cacheados. Prefill + formato encadenado, derivaciones, persistencia en todas las acciones. Troquel: `enrichTroquelDatosProceso`. Engomado: alias `unidades_por_paquete`→`estuches_por_bulto`. Manipulados (15): Encajar (`enrichManipuladoDatosProceso`; no alias retractilar→bulto). |
 | `src/lib/despacho-wizard-shared.ts` | Seed de `datos_proceso` al despachar. Troquel escribe claves canónicas (`poses`, `hojas_troquelar`); engomado escribe `estuches_por_bulto` (+ alias). Manipulados: flags retractilar/etiquetar/encajar + descripción. |
 | `src/lib/maestro-promedios-calc.ts` / `maestro-promedios-update.ts` / `maestro-prefill.ts` | Motor mediana/moda/millar; recálculo selectivo; prefill despacho; panel + PDF ficha (`articulos-maestro-ficha-pdf.ts`). Guillotina/desbroce: mediana absoluta. |
+| `src/components/produccion/planificacion/planificacion-ots-page.tsx` | Subpestañas Planificación montadas **solo al abrir** (`dynamic` + `subtab ===`), como el maestro de OTs. |
 | `src/utils/supabase/client.ts` | Cliente browser Supabase **singleton** (evita contención de lock GoTrue al abrir Pool + Pipeline). |
 
 ### Páginas de Producción (`src/app/produccion/*/page.tsx`)
@@ -1816,6 +1817,18 @@ Handoff y backlog: `MINERVA_BLOQUE6_HISTORICO_PRODUCIDAS.md` **§0**.
 | `planificacion-ots-ejecucion-tab.tsx` | `enrichManipuladoDatosProceso` (no alias retractilar → bulto) |
 | `planificacion-pool-ots-tab-v2.tsx` | Sin lápiz de wizard |
 | `src/app/produccion/page.tsx` | `redirect("/produccion/ots")` |
+
+---
+
+## 11. Novedades 14 ago 2026 tarde (lista ejecución / tableta)
+
+> Detalle: `SESION_14AGO2026_EJECUCION_LISTA.md`.
+
+| Módulo | Función |
+|--------|---------|
+| `planificacion-ots-ejecucion-tab.tsx` | Lista gorda, semáforo, lazy card, filtro terminadas de hoy, query activas |
+| `planificacion-ots-page.tsx` | `dynamic` + montar subpestaña solo al abrir |
+| `/produccion/ejecucion` | `tabletMode` (sin Excel/PDF); shell `onlyExecution` si no hay módulo producción |
 
 ---
 

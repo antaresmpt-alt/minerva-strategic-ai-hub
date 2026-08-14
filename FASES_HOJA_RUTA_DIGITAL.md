@@ -576,14 +576,14 @@ PDF compacto para acompañar la OT entre departamentos (sustituto papel de la ho
 🔄 **Bloque 8**: FORMATO–8.1 ✅ · **8.2 wizard MVP ✅** · 8.3 parcial · **8.4 cierre barco ✅** · **8.5 convergencia 📋** · 8.6 futuro. Fuente: `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
 ✅ **Bloque 9**: 9.0–9.6d + calendario prod. ✅ Derivar→imp. externa §15.6.12 (13 ago). ⏳ OCR/sobrantes baja. `MINERVA_BLOQUE9_…` · `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`.
 📋 **Bloque 11**: calendario en uso (Carlos/Jordi); lanzar con cuidado — `MINERVA_BLOQUE11_…`.
-📋 **Bloque 12**: roles/landing por perfil documentado (11 ago), implementación aparcada — `MINERVA_BLOQUE12_…` + `MINERVA_ROLES_Y_NAVEGACION.md`. Hasta entonces `/produccion` → maestro OTs (14 ago).
+📋 **Bloque 12**: roles/landing por perfil documentado (11 ago), implementación aparcada — `MINERVA_BLOQUE12_…` + `MINERVA_ROLES_Y_NAVEGACION.md`. Hasta entonces `/produccion` → maestro OTs (14 ago). **Campo:** 1 tableta/máquina. Cola ejecución = lista gorda en `main` (`SESION_14AGO2026_EJECUCION_LISTA.md`).
 
-> Mapa vivo y prioridades paralelo septiembre: **`MINERVA_HUB_CONTEXTO_MAESTRO.md`** (actualizado 14 ago 2026).
+> Mapa vivo y prioridades paralelo septiembre: **`MINERVA_HUB_CONTEXTO_MAESTRO.md`** (actualizado 14 ago 2026 tarde).
 
 
 ---
 
-**Última actualización**: 14 de agosto de 2026 — Encajar en Manipulados + flags wizard + portada → OTs (`SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`). 13 ago: §15.6.12 + itinerario vivo.
+**Última actualización**: 14 de agosto de 2026 — lista gorda ejecución + Encajar Manipulados (`SESION_14AGO2026_EJECUCION_LISTA.md`, `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`). 13 ago: §15.6.12 + itinerario vivo.
 
 ---
 
@@ -1141,3 +1141,5 @@ Pendiente: H1/H2 recuento global; lista OTs piloto con Emma/Ramón.
 | Seed wizard | `despacho-wizard-shared.ts` (`procesoDatos.manipulados`) |
 | Mesa | `planificacion-ots-ejecucion-tab.tsx` (`enrichManipuladoDatosProceso`) |
 | Portada | `src/app/produccion/page.tsx` |
+
+Tarde del mismo día (lista gorda / tableta): `SESION_14AGO2026_EJECUCION_LISTA.md`.

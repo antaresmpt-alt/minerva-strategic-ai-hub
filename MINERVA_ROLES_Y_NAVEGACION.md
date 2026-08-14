@@ -4,7 +4,7 @@
 > Complementa `MINERVA_HUB_CONTEXTO_MAESTRO.md`. No describe un bloque funcional concreto, sino una **capa transversal** que afecta a toda la app.
 >
 > **Estado:** 📋 Diseño / análisis — implementación = **Bloque 12** (`MINERVA_BLOQUE12_ROLES_PERMISOS_NAVEGACION.md`). El sistema actual de permisos sigue vigente hasta entonces.
-> **Creado:** 23 jun 2026. **Actualizado:** 11 ago 2026 (promovido a Bloque 12; MVP sept = landing + menú por perfil).
+> **Actualizado:** 14 ago 2026 (tableta por máquina, Ramón; lista gorda ejecución en `main`).
 > **Idea central:** cada usuario debe entrar en **"su Minerva"** — ver solo lo que le toca, hacer solo lo que le toca. Admin/Gerencia ven todo.
 
 **Relacionado:** brief implementación → `MINERVA_BLOQUE12_ROLES_PERMISOS_NAVEGACION.md` · permisos de almacén → `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` · roles de planta → `MINERVA_HUB_CONTEXTO_MAESTRO.md`.
@@ -102,7 +102,7 @@ Al entrar, cada usuario ve **solo su mundo**:
 - **Emma / Ramón:** Cartelas + Stock.
 - **Rita (digital/etiquetas):** su flujo de etiquetas + acabados.
 - **Marc / Gemma (CTP):** preimpresión + lo que necesiten de producción.
-- **Abraham (impresión):** ejecución de **su** máquina (CD 102), idealmente solo esa.
+- **Abraham (impresión):** ejecución en la tableta de **su** máquina (CD 102). Ramón 14 ago: una tableta por máquina; Abraham y David = turnos, misma tableta.
 - **Comercial:** ventas / SEM / SEO.
 - **Admin / Gerencia:** **todo**.
 
@@ -134,6 +134,7 @@ Van acopladas: el rediseño de permisos (Ejes 1–3) **habilita** una navegació
 - Usuarios reales futuros sustituirán a los provisionales por departamento (`logistica@`, `almacen@`, `digital@`…): Rita→digital, Marc→ctp, Abraham→impresión (idealmente solo CD 102), etc.
 - Cada **nuevo módulo** que se cree se diseña pensando en **función fina** (ej. separar `cartelas` de `stock`) para facilitar la migración a los Ejes 1–3.
 - **11 ago 2026:** Formalizado como **Bloque 12**. MVP = landing por perfil (operario → ejecución; gestor → home rico; Hugo → etiquetas) + menú que oculta. Multi-rol / recurso = después. Implementación **aparcada** hasta afinar Pipeline/producción; imprescindible antes de usuarios masivos en paralelo.
+- **14 ago 2026:** Ramón confirma **una tableta por máquina** (impresión, troquel, engomado). No personal ni por departamento. Turnos distintos en la misma tableta. Lista gorda de ejecución en `main`; el menú gordo que se ve en tableta es porque se entra de **admin**. Ver `SESION_14AGO2026_EJECUCION_LISTA.md`.
 
 ---
 
@@ -143,3 +144,4 @@ Van acopladas: el rediseño de permisos (Ejes 1–3) **habilita** una navegació
 |-------|--------|
 | 23 jun 2026 | Creación. Parte A (permisos: estado real, límites, plan 3 ejes, permisos Bloque 9). Parte B (navegación: objetivo "Minerva de cada uno", relación permiso↔pantalla, pendientes). Decisiones registradas. |
 | 11 ago 2026 | Enlace a Bloque 12; prioridad sept; MVP landing; decisión de no abrir implementación aún. |
+| 14 ago 2026 | Tableta = máquina (Ramón); turnos secuenciales; ejecución lista gorda en `main`. |

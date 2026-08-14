@@ -3,7 +3,7 @@
 > Brief de implementación del **rediseño de identidad / “su Minerva”**.
 > Diseño detallado (estado actual del código, ejes 1–3, límites): `MINERVA_ROLES_Y_NAVEGACION.md`.
 >
-> **Estado:** 📋 Capturado 11 ago 2026 — **sin implementación aún**. Manel lo aparca de cabeza ahora; se retoma antes/durante el paralelo de septiembre con usuarios nuevos.
+> **Estado:** 📋 Capturado 11 ago 2026 — **sin implementación aún** (landing/menú). 14 ago: dato Ramón tableta/máquina + lista gorda ejecución en `main`.
 > **Prioridad estratégica:** alta para septiembre (usuarios reales de planta + gestores). No bloquea Pipeline / 8.4 / afinados en curso.
 
 **Complementa:** `MINERVA_HUB_CONTEXTO_MAESTRO.md` · `MINERVA_ROLES_Y_NAVEGACION.md` · permisos almacén en `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`.
@@ -34,9 +34,11 @@ Para el paralelo: **cada persona entra en su mundo** — el maquinista solo marc
 
 Pantalla casi única: **ejecución de proceso** (iniciar / rellenar / cerrar).
 
-- Landing → mesa / pestaña de ejecución de **su** sección (idealmente filtrada a su máquina más adelante).
+- Landing → `/produccion/ejecucion` (shell ya recorta menú si solo tiene módulo `produccion_ejecucion`).
+- Filtro a **su máquina** (Ramón 14 ago: **una tableta por máquina**; turnos Abraham/David en la misma tableta, no a la vez).
 - El resto (despacho, pipeline, maestro, stock avanzado…) **transparente / oculto**.
 - Roles típicos hoy: `impresion`, `digital`, `troquelado`, `engomado`, `ctp`, (y análogos).
+- Desbroce / manipulados: tableta **no confirmada** (Ramón no lo sabe).
 
 ### 2.2 Gestores
 
@@ -61,11 +63,13 @@ Admin / gerencia: acceso total (como hoy `FULL_ACCESS_ROLES`).
 Orden práctico (no reescribir permisos de cero):
 
 1. **Landing por perfil**  
-   - Operario → `/produccion` ejecución (o ruta directa a su mesa).  
+   - Operario → `/produccion/ejecucion` (cola de su máquina cuando B12 filtre).  
    - Gestor → calendario o home acordado.  
    - Hugo → etiquetas digital.
 
    **Interino 14 ago (no es B12):** `/produccion` redirige al maestro de OTs para todo el mundo con módulo producción. Sustituir esta redirección cuando se abra el landing por rol.
+
+   **Campo 14 ago (Ramón):** 1 tableta/máquina (impresión, troquel, engomado; Teikit a confirmar). No tableta personal. Identidad = quién está de turno en esa máquina.
 
 2. **Menú que oculta** lo no permitido (no solo “bloqueado al entrar”).
 
@@ -112,6 +116,7 @@ Detalle de límites (un rol por usuario, granularidad módulo…): ver Parte A d
 ## 6. Criterios de hecho (MVP)
 
 - [ ] Login operario → aterriza en ejecución; no ve menú de despacho/maestro/settings (salvo admin).
+- [ ] Tableta de máquina muestra (idealmente) solo esa cola; admin sigue viendo todas.
 - [ ] Login gestor → aterriza en home acordado; ve módulos de su rol.
 - [ ] Login Hugo → etiquetas.
 - [ ] Al menos un usuario real por perfil piloto (impresión, troquel, engomado, CTP, OT, gerencia).
@@ -134,3 +139,4 @@ Detalle de límites (un rol por usuario, granularidad módulo…): ver Parte A d
 | Fecha | Cambio |
 |-------|--------|
 | 11 ago 2026 | Creación Bloque 12 a partir de sesión Manel: paralelo sept, dos mundos (marcador vs gestor), MVP landing+menú, aparcado de implementación inmediata a favor de Pipeline/afinados. |
+| 14 ago 2026 | Ramón: 1 tableta/máquina (no personal); turnos secuenciales. Lista gorda ejecución ya en `main` (admin aún ve menús). `SESION_14AGO2026_EJECUCION_LISTA.md`. |
