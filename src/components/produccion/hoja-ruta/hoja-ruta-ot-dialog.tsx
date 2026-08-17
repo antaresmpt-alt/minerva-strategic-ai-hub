@@ -25,6 +25,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { HojaRutaContenedorPanel } from "@/components/produccion/hoja-ruta/hoja-ruta-contenedor-panel";
+import { PasoAdminActions } from "@/components/produccion/planificacion/paso-admin-actions";
+import type { PasoItinerarioConsumo } from "@/lib/cartela-ejecucion";
+import type { DatosProcesoGenerico } from "@/lib/hoja-ruta-campos-config";
 import {
   STEP_ACCENT_STYLES,
   STEP_BADGE_STYLES,
@@ -64,6 +67,7 @@ import {
   isOtPendienteRevision,
   resolveNextCierreVersion,
 } from "@/lib/prod-ot-cierre";
+import { buildCierreCalidadAvisos } from "@/lib/prod-ot-cierre-avisos";
 import { puedeCerrarOt, type ProfileConPermisos } from "@/lib/prod-ot-cierre-permisos";
 import { PROCESO_ENGOMADO_ID } from "@/lib/despacho-wizard-shared";
 import {
@@ -152,7 +156,26 @@ function HojaRutaHeader({ data }: { data: HojaRutaData }) {
   );
 }
 
-function HojaRutaPasosDetail({ data }: { data: HojaRutaData }) {
+function pasosItinerarioFromHojaRuta(pasos: HojaRutaPaso[]): PasoItinerarioConsumo[] {
+  return pasos.map((p) => ({
+    procesoId: p.procesoId,
+    orden: p.orden,
+  }));
+}
+
+function HojaRutaPasosDetail({
+  data,
+  profile,
+  onRefresh,
+}: {
+  data: HojaRutaData;
+  profile: ProfileConPermisos | null;
+  onRefresh?: () => void;
+}) {
+  const pasosItinerario = useMemo(
+    () => pasosItinerarioFromHojaRuta(data.pasos),
+    [data.pasos],
+  );
   return (
     <>
       {data.pasos.length > 0 ? (
@@ -308,6 +331,12 @@ function HojaRutaPasosDetail({ data }: { data: HojaRutaData }) {
                           {fmtCantidad(p.externo.hojasEnviadas)}
                         </span>
                       ) : null}
+                      {typeof p.datosProceso?.hojas_netas === "number" ? (
+                        <span>
+                          <span className="font-medium">Hojas netas a recibir:</span>{" "}
+                          {fmtCantidad(p.datosProceso.hojas_netas)}
+                        </span>
+                      ) : null}
                       {p.externo.hojasRecibidasMuelle != null ? (
                         <span>
                           <span className="font-medium">Hojas recibidas:</span>{" "}
@@ -343,6 +372,25 @@ function HojaRutaPasosDetail({ data }: { data: HojaRutaData }) {
                       <p className="text-xs text-slate-600">Obs: {p.externo.observaciones}</p>
                     ) : null}
                   </div>
+                ) : null}
+
+                {p.estado === "finalizado" && data.otId ? (
+                  <PasoAdminActions
+                    compact
+                    profile={profile}
+                    pasosItinerario={pasosItinerario}
+                    onSuccess={onRefresh}
+                    paso={{
+                      pasoId: p.pasoId,
+                      otNumero: data.otNumero,
+                      otId: data.otId,
+                      procesoId: p.procesoId,
+                      procesoNombre: p.procesoNombre,
+                      estado: p.estado,
+                      datosProceso: (p.datosProceso ?? {}) as DatosProcesoGenerico,
+                      horasReales: p.ejecucion?.horasReales ?? null,
+                    }}
+                  />
                 ) : null}
               </div>
             );
@@ -681,6 +729,7 @@ export function HojaRutaOtDialog({
       horasCoherentes: horasOk,
       incidenciasRevisadas: incidenciasOk,
       embalajeInformado: embalajeOk,
+      calidadAvisos: buildCierreCalidadAvisos(data).map((a) => a.message),
     };
   }, [loadResult]);
 
@@ -802,7 +851,7 @@ export function HojaRutaOtDialog({
           ) : drillHijaOt && hijaData ? (
             <div className="space-y-4">
               <HojaRutaHeader data={hijaData} />
-              <HojaRutaPasosDetail data={hijaData} />
+              <HojaRutaPasosDetail data={hijaData} profile={profile} onRefresh={() => void loadHija(drillHijaOt)} />
             </div>
           ) : loadResult.kind === "contenedor" ? (
             <div className="space-y-4">
@@ -812,7 +861,7 @@ export function HojaRutaOtDialog({
           ) : (
             <div className="space-y-4">
               <HojaRutaHeader data={loadResult.data} />
-              <HojaRutaPasosDetail data={loadResult.data} />
+              <HojaRutaPasosDetail data={loadResult.data} profile={profile} onRefresh={() => void load()} />
             </div>
           )}
         </div>

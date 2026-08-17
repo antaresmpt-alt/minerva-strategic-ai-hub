@@ -5,6 +5,7 @@ import {
   Archive,
   Ban,
   FileSpreadsheet,
+  GitCompare,
   Loader2,
   RefreshCw,
   RotateCcw,
@@ -17,6 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ProducidaSnapshotDialog } from "@/components/produccion/producidas/producida-snapshot-dialog";
+import { ProducidaVersionesCompareDialog } from "@/components/produccion/producidas/producida-versiones-compare-dialog";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { errorMessageFromUnknown } from "@/lib/error-message";
 import { fmtCantidad, fmtDate } from "@/lib/hoja-ruta/hoja-ruta-formatters";
@@ -37,6 +39,16 @@ export function ProducidasPage() {
   const [soloExcluidas, setSoloExcluidas] = useState(false);
   const [selected, setSelected] = useState<ProdOtProducidaRow | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [compareOt, setCompareOt] = useState<string | null>(null);
+  const [compareOpen, setCompareOpen] = useState(false);
+
+  const versionCountByOt = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of rows) {
+      m.set(r.ot_numero, (m.get(r.ot_numero) ?? 0) + 1);
+    }
+    return m;
+  }, [rows]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -209,6 +221,7 @@ export function ProducidasPage() {
                   <th className="px-3 py-2 text-right">Horas</th>
                   <th className="px-3 py-2">Cierre</th>
                   <th className="px-3 py-2">Flags</th>
+                  <th className="px-3 py-2 w-24" />
                 </tr>
               </thead>
               <tbody>
@@ -271,6 +284,23 @@ export function ProducidasPage() {
                         ) : null}
                       </div>
                     </td>
+                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                      {(versionCountByOt.get(r.ot_numero) ?? 0) > 1 ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 gap-1 px-2 text-xs"
+                          onClick={() => {
+                            setCompareOt(r.ot_numero);
+                            setCompareOpen(true);
+                          }}
+                        >
+                          <GitCompare className="size-3.5" />
+                          v.
+                        </Button>
+                      ) : null}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -284,6 +314,12 @@ export function ProducidasPage() {
         open={detailOpen}
         onOpenChange={setDetailOpen}
         onRowUpdated={handleRowUpdated}
+      />
+      <ProducidaVersionesCompareDialog
+        open={compareOpen}
+        onOpenChange={setCompareOpen}
+        otNumero={compareOt}
+        allRows={rows}
       />
     </div>
   );

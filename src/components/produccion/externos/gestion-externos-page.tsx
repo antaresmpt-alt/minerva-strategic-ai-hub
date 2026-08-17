@@ -994,6 +994,8 @@ export function GestionExternosPage() {
   const [cantidadBrief, setCantidadBrief] = useState<ExternoEnvioBrief | null>(null);
   const [cantidadBriefLoading, setCantidadBriefLoading] = useState(false);
   const [cantidadHojas, setCantidadHojas] = useState("");
+  const [cantidadHojasNetas, setCantidadHojasNetas] = useState("");
+  const hojasNetasEnvioRef = useRef<number | null>(null);
   const [cantidadPalets, setCantidadPalets] = useState("");
   const [cantidadObs, setCantidadObs] = useState("");
 
@@ -2428,11 +2430,13 @@ export function GestionExternosPage() {
     );
     setCantidadBrief(null);
     setCantidadBriefLoading(true);
+    hojasNetasEnvioRef.current = null;
     try {
       const brief = await fetchExternoEnvioBrief(supabase, {
         otNumero: getOtDisplay(row),
         otPasoId: row.ot_paso_id,
         hojasYaEnSeguimiento: row.hojas_enviadas,
+        envioYaConfirmado: row.estado === "Enviado",
       });
       if (modo === "recibido") {
         const rec = resolveExternoRecibidoHojasSugeridas({
@@ -2445,9 +2449,17 @@ export function GestionExternosPage() {
           hojasSugeridasOrigen: rec.hojasSugeridasOrigen,
         });
         setCantidadHojas(rec.hojasSugeridas != null ? String(rec.hojasSugeridas) : "");
+        setCantidadHojasNetas("");
       } else {
         setCantidadBrief(brief);
         setCantidadHojas(brief.hojasSugeridas != null ? String(brief.hojasSugeridas) : "");
+        setCantidadHojasNetas(
+          brief.hojasNetasSugeridas != null
+            ? String(brief.hojasNetasSugeridas)
+            : brief.hojasSugeridas != null
+              ? String(brief.hojasSugeridas)
+              : "",
+        );
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "No se pudieron cargar los datos de la OT.";
@@ -2464,6 +2476,7 @@ export function GestionExternosPage() {
             ? String(row.hojas_enviadas)
             : "",
       );
+      setCantidadHojasNetas("");
     } finally {
       setCantidadBriefLoading(false);
     }
@@ -2543,7 +2556,12 @@ export function GestionExternosPage() {
     patch: Record<string, string | number | null>,
   ) {
     const dp: Record<string, unknown> = {};
-    if (typeof patch.hojas_enviadas === "number") dp.hojas_enviadas = patch.hojas_enviadas;
+    if (typeof patch.hojas_enviadas === "number") {
+      dp.hojas_enviadas = patch.hojas_enviadas;
+      dp.hojas_brutas = patch.hojas_enviadas;
+    }
+    const netas = hojasNetasEnvioRef.current ?? parseHojasPositive(cantidadHojasNetas);
+    if (netas != null) dp.hojas_netas = netas;
     if (typeof patch.hojas_recibidas_muelle === "number") {
       dp.hojas_recibidas_muelle = patch.hojas_recibidas_muelle;
       dp.numero_hojas = patch.hojas_recibidas_muelle;
@@ -2559,6 +2577,16 @@ export function GestionExternosPage() {
     if (hojas == null) {
       toast.error("Indica un número de hojas mayor que 0.");
       return;
+    }
+    let hojasNetas: number | null = null;
+    if (cantidadModo === "enviado") {
+      hojasNetas = parseHojasPositive(cantidadHojasNetas) ?? hojas;
+      if (hojasNetas > hojas) {
+        toast.error("Las hojas netas a recibir no pueden ser más que las brutas enviadas.");
+        return;
+      }
+      setCantidadHojasNetas(String(hojasNetas));
+      hojasNetasEnvioRef.current = hojasNetas;
     }
     const palets = parseHojasPositive(cantidadPalets);
     const obs = cantidadObs.trim();
@@ -6143,9 +6171,17 @@ export function GestionExternosPage() {
         brief={cantidadBrief}
         briefLoading={cantidadBriefLoading}
         hojas={cantidadHojas}
+        hojasNetas={cantidadHojasNetas}
         palets={cantidadPalets}
         observaciones={cantidadObs}
-        onHojasChange={setCantidadHojas}
+        onHojasChange={(v) => {
+          const prev = cantidadHojas;
+          setCantidadHojas(v);
+          if (cantidadModo === "enviado" && (cantidadHojasNetas === prev || !cantidadHojasNetas)) {
+            setCantidadHojasNetas(v);
+          }
+        }}
+        onHojasNetasChange={setCantidadHojasNetas}
         onPaletsChange={setCantidadPalets}
         onObservacionesChange={setCantidadObs}
         onConfirm={() => void confirmCantidadDialog()}

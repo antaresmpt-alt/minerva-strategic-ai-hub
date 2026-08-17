@@ -61,6 +61,8 @@ describe("resolveExternoEnvioBrief", () => {
     expect(brief.tintas).toBe("5");
     expect(brief.hojasSugeridas).toBe(1100);
     expect(brief.hojasSugeridasOrigen).toMatch(/Impresión/i);
+    expect(brief.hojasNetasSugeridas).toBe(1100);
+    expect(brief.hojasNetasSugeridasOrigen).toMatch(/brutas/i);
   });
 
   it("cae a despacho si no hay pasos útiles", () => {
@@ -79,7 +81,80 @@ describe("resolveExternoEnvioBrief", () => {
     expect(brief.formatoOrigen).toMatch(/Despacho/);
     expect(brief.material).toBe("Folding 295g");
     expect(brief.tintas).toBe("4");
-    expect(brief.hojasSugeridas).toBe(3000);
+    expect(brief.hojasSugeridas).toBe(3200);
+    expect(brief.hojasSugeridasOrigen).toMatch(/brutas/i);
+    expect(brief.hojasNetasSugeridas).toBe(3200);
+  });
+
+  it("ignora el 200 del plan en seguimiento hasta que el envío esté confirmado", () => {
+    const brief = resolveExternoEnvioBrief({
+      despacho: {
+        material: "Folding",
+        gramaje: 350,
+        tamanoHoja: "65x92",
+        tintas: "4",
+        hojasNetas: 200,
+        hojasBrutas: 1000,
+      },
+      pasos: [
+        {
+          id: "g",
+          orden: 2,
+          procesoId: 17,
+          estado: "finalizado",
+          datosProceso: { tamano_final: "65x46", hojas_finales: 2000 },
+        },
+        {
+          id: "ext",
+          orden: 3,
+          procesoId: 21,
+          estado: "disponible",
+          datosProceso: null,
+        },
+      ],
+      currentPasoId: "ext",
+      hojasYaEnSeguimiento: 200,
+      envioYaConfirmado: false,
+    });
+    expect(brief.hojasSugeridas).toBe(2000);
+    expect(brief.hojasSugeridasOrigen).toMatch(/Guillotina/i);
+    expect(brief.hojasNetasSugeridas).toBe(2000);
+  });
+
+  it("reutiliza hojas del seguimiento si el envío ya está confirmado", () => {
+    const brief = resolveExternoEnvioBrief({
+      despacho: {
+        material: "Folding",
+        gramaje: 350,
+        tamanoHoja: "65x92",
+        tintas: "4",
+        hojasNetas: 200,
+        hojasBrutas: 1000,
+      },
+      pasos: [
+        {
+          id: "g",
+          orden: 2,
+          procesoId: 17,
+          estado: "finalizado",
+          datosProceso: { hojas_finales: 2000 },
+        },
+        {
+          id: "ext",
+          orden: 3,
+          procesoId: 21,
+          estado: "disponible",
+          datosProceso: { hojas_netas: 1800 },
+        },
+      ],
+      currentPasoId: "ext",
+      hojasYaEnSeguimiento: 1950,
+      envioYaConfirmado: true,
+      hojasNetasYaInformadas: 1800,
+    });
+    expect(brief.hojasSugeridas).toBe(1950);
+    expect(brief.hojasNetasSugeridas).toBe(1800);
+    expect(brief.hojasNetasSugeridasOrigen).toMatch(/informado/i);
   });
 });
 

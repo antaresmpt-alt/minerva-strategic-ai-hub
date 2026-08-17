@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 14 ago 2026 tarde (lista gorda OTs en ejecución + perf; `SESION_14AGO2026_EJECUCION_LISTA.md`. Mañana: Encajar Manipulados. Día anterior: imprimir fuera / itinerario vivo.)
+> Última actualización: 17 ago 2026 (OT 98016 E2E: cartela admin, Ramón brutas/netas, muelle netas deseadas, troquel pisa plan con recibidas; `SESION_17AGO2026_PREFILL_RUTA_MUELLE_B6.md`).
 
 ---
 
@@ -22,7 +22,8 @@
 5. Si el tema es mesa / externos / itinerario post-despacho: `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`.
 6. Si el tema es Manipulados / Encajar / entrada a Producción: `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`.
 7. Si el tema es cola de mesa / tableta / ejecución: `SESION_14AGO2026_EJECUCION_LISTA.md`.
-8. Al cerrar una fase, actualizar este maestro + `FASES_HOJA_RUTA_DIGITAL.md`.
+8. Si el tema es prefill Ruta / muelle / cartela admin / envío Ramón: `SESION_17AGO2026_PREFILL_RUTA_MUELLE_B6.md`.
+9. Al cerrar una fase, actualizar este maestro + `FASES_HOJA_RUTA_DIGITAL.md`.
 
 **Jerarquía documental:**
 | Documento | Rol |
@@ -39,6 +40,7 @@
 | `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md` | Sesión 13 ago: imprimir fuera, anular al Pool, ajustar itinerario / reeditar despacho. |
 | `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md` | Sesión 14 ago (mañana): Encajar en Manipulados, flags wizard, Pool sin lápiz, `/produccion` → OTs. |
 | `SESION_14AGO2026_EJECUCION_LISTA.md` | Sesión 14 ago (tarde): lista gorda ejecución, semáforo, perf, tableta por máquina (Ramón). |
+| `SESION_17AGO2026_PREFILL_RUTA_MUELLE_B6.md` | Sesión 17 ago: prefill Ruta, cartela admin, Ramón brutas/netas, muelle, OT 98016 E2E. |
 | `MINERVA_BRIEFING.md` | Onboarding narrativo largo; útil, pero secundario frente a este maestro. |
 
 ---
@@ -116,8 +118,8 @@ Software a medida para la planta de producción gráfica/impresión de la empres
 ### ✅ Gestión de Externos (Ramón)
 - Módulo para gestionar proveedores externos
 - **13 ago:** «Imprimir fuera» (1/2 → 21) desde Pool/mesa/ejecución. OT **98015** validada. Detalle: `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`.
-- **Captura envío/recepción:** al marcar Enviado o Recibido, modal obligatorio de hojas/palets (`ExternoCantidadDialog`). Prefill desde impresión/guillotina/despacho. Troquel encadena `hojas_recibidas_muelle`.
-- ⏳ Muelle: mostrar netas pedidas (hoy salen brutas enviadas).
+- **Captura envío/recepción:** modal al Enviado/Recibido. Ramón informa **brutas enviadas** + **netas a recibir** (default = brutas). Prefill brutas desde paso anterior cerrado (Guillotina/impresión), no desde el plan de despacho.
+- **Muelle externos:** Juan ve **enviadas** y **netas deseadas**; apunta **recibidas**. Aviso fuerte solo si recibidas < netas. Encadenado al siguiente paso = recibidas.
 - Integrado con el módulo de Hoja de Ruta (proceso "Externo" usa este módulo)
 
 ### ✅ Etiquetas (Hugo) — módulo más maduro
@@ -261,7 +263,7 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 
 ## 🔜 Tareas pendientes inmediatas
 
-### Retomar aquí (14 ago 2026 — camino a TEST septiembre)
+### Retomar aquí (17 ago 2026 — camino a TEST septiembre)
 - [x] **Pipeline**: modo **compacto por defecto** (+ preferencia localStorage; `?compact=0` = extendida) (11 ago)
 - [x] **Pipeline UX**: «Listo para cerrar» en pendientes de revisión (paso actual + badge) (11 ago)
 - [x] **Pipeline perf**: `fetchAllInChunks` concurrencia 5; olas desp→(arch∥ot∥pool∥hijas)→pasos→(ejec∥ext); filtros search/incidencias/externo/estado en cliente; índice `despachado_at` (11 ago)
@@ -274,13 +276,18 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [x] **Manipulados Encajar + flags wizard** (14 ago — OT 36286)
 - [x] **Entrada Producción** (14 ago): `/produccion` → `/produccion/ots`; lápiz fuera del Pool
 - [x] **OTs en ejecución lista gorda** (14 ago tarde): semáforo, lazy parte, terminadas de hoy; perf query activas (`7ed10a9`, `4a57f03`)
-- [ ] **Prefill horas** al añadir proceso en Ruta
-- [ ] **Bloque 6.x** (opcional rápido): avisos calidad al cierre; comparar versiones OT
+- [x] **Prefill horas** al añadir proceso en Ruta — ✅ validado 98016
+- [x] **Bloque 6.x** avisos calidad al cierre + comparar versiones OT — ✅ código; comparar OK en 98009
+- [x] **Muelle externos** enviadas + **netas deseadas** + recibidas → encadenado — ✅ 98016 (1850 / 1800)
+- [x] **Cartela admin** en paso cerrado (corregir/editar; reabrir admin/gerencia) — ✅ 98016 Guillotina palet 99018
+- [x] **Ramón brutas/netas** al Enviado; no usar el 200 del plan — ✅ 98016
+- [x] **Troquelado** pisa `hojas_troquelar` con recibidas del anterior — 17 ago tarde
 - [ ] **Bloque 11** (con cuidado): planificar/mover desde calendario; lanzar ≠ pisar plan de otra máquina — `MINERVA_BLOQUE11_…`
 - [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor; tableta = máquina — `MINERVA_BLOQUE12_…` (no abrir ya; default gestor = maestro OTs)
 - [ ] **Bloque 5 puente**: Rita lanza OTs a Hugo (no bloquea paralelo si Hugo sigue a mano)
 
 ### Hecho reciente (jul–ago)
+- [x] **17 ago:** OT 98016 E2E (Ruta, cartela, Imprimir fuera, Ramón/Juan, plastificado, troquel) — `SESION_17AGO2026_PREFILL_RUTA_MUELLE_B6.md`
 - [x] **14 ago tarde:** lista gorda OTs en ejecución + perf tableta — `SESION_14AGO2026_EJECUCION_LISTA.md`
 - [x] **14 ago:** Encajar en Manipulados, flags Retractilar/Etiquetar/Encajar en wizard, Pool sin lápiz, portada → OTs — `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`
 - [x] **13 ago:** imprimir fuera (1/2→21), anular mesa→Pool, ajustar itinerario vivo, wizard despacho forzado (sin wipe) — `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`
@@ -291,24 +298,18 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [x] Usuarios CTP / gerencia / OT (jun–jul)
 
 ### Prioridad media
-- [ ] Pulir Digital / Guillotina; PDF acompañante con feedback planta
+- [ ] Pulir Digital / Guillotina; PDF acompañante — **aparcado** hasta TEST con Rita + Patricia/Paula (OK v1 primera tanda; ver sesión 17 ago)
 - [ ] 8.6 / engomado por ref. solo si barcos multi-ref diarios lo exigen
 - [ ] **8.5** convergencia B/C cuando un barco real lo pida (docs listos en Bloque 8)
 - [ ] 9.7 OCR albarán (baja); sobrantes al cierre (B6+B9)
 - [ ] Preguntas §12 planta (CTP hija) si hace falta antes de 8.4 fino
 
-### Siguiente foco (orden sugerido 14 ago)
-1. ~~**Pipeline** (rápido + compacto + carga)~~ ✅ compacto + Listo para cerrar + perf fetch (11 ago)
-2. ~~**8.4** cierre contenedor~~ ✅ MVP (11 ago)
-3. ~~**9** derivar a externa~~ ✅ 13 ago (Pool/mesa/ejecución + OT 98015)
-4. ~~**Manipulados Encajar + entrada OTs**~~ ✅ 14 ago (OT 36286)
-5. ~~**Lista gorda ejecución + perf**~~ ✅ 14 ago tarde (`7ed10a9`, `4a57f03`)
-6. Pulir fricción de planta (horas al añadir en Ruta; Digital/Guillotina/PDF)
-7. Muelle: netas pedidas vs brutas enviadas (impresión externa) — consciente, no urgente
-8. Afinados B6 / B11 suave (virtualizar Pipeline solo si sigue lento)
-9. **Bloque 12** al acercarse usuarios nuevos (tableta = máquina)
-10. **B5** puente Rita→Hugo si sobra
-11. **8.5** convergencia (solo si un barco real lo exige) · **B7 / B10** aparcados
+### Siguiente foco (orden sugerido 17 ago tarde)
+1. ~~Prefill Ruta / muelle / B6 / cartela / Ramón-Juan~~ ✅ 98016 + commit
+2. **Bloque 11** (con cuidado) · **Bloque 12** (sept, usuarios) · **B5** Rita→Hugo
+3. Cartelas: desasignar / asignar otro palet (planta usa stock distinto al asignado)
+4. Digital/Guillotina/PDF — feedback planta en TEST, no antes
+5. **8.5** convergencia · **B7 / B10** aparcados
 
 ---
 

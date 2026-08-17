@@ -1,6 +1,7 @@
 "use client";
 
-import { Clock, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, Clock, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -28,6 +29,7 @@ import {
   roundHorasEjecucion,
   sumHorasDeclaradasDatosProceso,
 } from "@/lib/planificacion-ejecucion-horas";
+import { parseCartelaConsumoFromDatos } from "@/lib/cartela-stock-consumo";
 
 type CerrarProcesoDialogProps = {
   open: boolean;
@@ -60,9 +62,15 @@ export function CerrarProcesoDialog({
   onConfirm,
   saving,
 }: CerrarProcesoDialogProps) {
+  const [cartelasOtCount, setCartelasOtCount] = useState(0);
   const fields = getCerrarProcesoHourFields(procesoId);
   const declaradas = sumHorasDeclaradasDatosProceso(procesoId, datosDraft);
   const muestraCartela = procesoUsaCartela(procesoId, pasosItinerario);
+  const cartelaObligatoria = muestraCartela && cartelasOtCount > 0;
+  const cartelaParsed = parseCartelaConsumoFromDatos(datosDraft);
+  const cartelaCompleta =
+    cartelaParsed.idStock != null && cartelaParsed.hojas != null && cartelaParsed.hojas > 0;
+  const faltaCartela = cartelaObligatoria && !cartelaCompleta;
   const primerConsumoId = resolvePrimerProcesoConsumoMaterial(pasosItinerario ?? []);
   const esCandidatoSinConsumo =
     procesoEsCandidatoConsumoMaterial(procesoId) &&
@@ -166,13 +174,28 @@ export function CerrarProcesoDialog({
         ) : null}
 
         {muestraCartela ? (
-          <CartelaCierreBlock
-            key={open ? "open" : "closed"}
-            otNumero={otNumero}
-            procesoId={procesoId}
-            datosDraft={datosDraft}
-            onDatosChange={onDatosChange}
-          />
+          <>
+            {faltaCartela ? (
+              <p className="flex items-start gap-2 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <span>
+                  <strong>Cartela obligatoria.</strong> Esta OT tiene{" "}
+                  {cartelasOtCount === 1 ? "una cartela asignada" : `${cartelasOtCount} cartelas asignadas`}.
+                  Indica ID Stock y hojas consumidas antes de cerrar; si no, no se descontará stock
+                  y tendrás que corregirlo después desde la hoja de ruta.
+                </span>
+              </p>
+            ) : null}
+            <CartelaCierreBlock
+              key={open ? "open" : "closed"}
+              otNumero={otNumero}
+              procesoId={procesoId}
+              datosDraft={datosDraft}
+              onDatosChange={onDatosChange}
+              obligatorio={cartelaObligatoria}
+              onCartelasOtCount={setCartelasOtCount}
+            />
+          </>
         ) : null}
 
         <DialogFooter className="gap-2 sm:gap-0">
@@ -182,7 +205,7 @@ export function CerrarProcesoDialog({
           <Button
             type="button"
             className="bg-[#002147] text-white hover:bg-[#001735]"
-            disabled={saving || declaradas == null || declaradas <= 0}
+            disabled={saving || declaradas == null || declaradas <= 0 || faltaCartela}
             onClick={onConfirm}
           >
             {saving ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}

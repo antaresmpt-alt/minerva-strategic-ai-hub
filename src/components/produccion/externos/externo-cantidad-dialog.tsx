@@ -27,9 +27,11 @@ type ExternoCantidadDialogProps = {
   brief: ExternoEnvioBrief | null;
   briefLoading: boolean;
   hojas: string;
+  hojasNetas: string;
   palets: string;
   observaciones: string;
   onHojasChange: (v: string) => void;
+  onHojasNetasChange: (v: string) => void;
   onPaletsChange: (v: string) => void;
   onObservacionesChange: (v: string) => void;
   onConfirm: () => void;
@@ -47,9 +49,11 @@ export function ExternoCantidadDialog({
   brief,
   briefLoading,
   hojas,
+  hojasNetas,
   palets,
   observaciones,
   onHojasChange,
+  onHojasNetasChange,
   onPaletsChange,
   onObservacionesChange,
   onConfirm,
@@ -57,7 +61,7 @@ export function ExternoCantidadDialog({
 }: ExternoCantidadDialogProps) {
   const isEnvio = modo === "enviado";
   const title = isEnvio ? "Confirmar envío a externo" : "Confirmar recepción";
-  const hojasLabel = isEnvio ? "Hojas enviadas" : "Hojas recibidas";
+  const hojasLabel = isEnvio ? "Hojas enviadas (brutas)" : "Hojas recibidas";
 
   const meta = [procesoNombre, proveedorNombre, acabadoNombre].filter(Boolean).join(" · ");
 
@@ -109,7 +113,7 @@ export function ExternoCantidadDialog({
               inputMode="numeric"
               value={hojas}
               onChange={(e) => onHojasChange(e.target.value)}
-              placeholder="ej. 1100"
+              placeholder="ej. 2000"
               autoFocus
             />
             {brief?.hojasSugeridas != null && brief.hojasSugeridasOrigen ? (
@@ -119,6 +123,22 @@ export function ExternoCantidadDialog({
               </p>
             ) : null}
           </div>
+          {isEnvio ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="ext-cant-hojas-netas">Hojas netas a recibir *</Label>
+              <Input
+                id="ext-cant-hojas-netas"
+                inputMode="numeric"
+                value={hojasNetas}
+                onChange={(e) => onHojasNetasChange(e.target.value)}
+                placeholder="Mínimo de hojas buenas"
+              />
+              <p className="text-[11px] text-slate-500">
+                Por defecto igual que brutas. Baja el número si esperas merma
+                (impresión) o quieres un colchón.
+              </p>
+            </div>
+          ) : null}
           <div className="space-y-1.5">
             <Label htmlFor="ext-cant-palets">Palets (opcional)</Label>
             <Input

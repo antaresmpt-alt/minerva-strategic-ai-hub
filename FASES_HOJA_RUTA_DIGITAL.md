@@ -1006,7 +1006,7 @@ Maestro (`tipo_engomado_habitual`) → Despacho (`tipo_engomado`, editable, list
 
 ### Pendiente
 
-- [x] **Externos:** captura hojas al Enviado/Recibido (`ExternoCantidadDialog`); encadenado troquel desde `hojas_recibidas_muelle`. ⏳ Muelle: netas vs brutas.
+- [x] **Externos:** captura hojas al Enviado/Recibido (`ExternoCantidadDialog`); Ramón **brutas + netas**; Juan ve ambas; encadenado troquel desde `hojas_recibidas_muelle`. ✅ 17 ago OT 98016.
 - [ ] Afinar campos de horas en PDF HR (algunos procesos aún no mapean todos los campos reales).
 - [ ] Filtro **Externo** en pool (requiere tipo `externo` en catálogo).
 

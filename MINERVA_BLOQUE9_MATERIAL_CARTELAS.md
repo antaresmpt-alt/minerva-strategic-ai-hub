@@ -4,7 +4,7 @@
 > Tema: recepción de material, cartelas de palet, stock libre y trazabilidad.
 > Complementa `MINERVA_HUB_CONTEXTO_MAESTRO.md`, `FASES_HOJA_RUTA_DIGITAL.md` y briefings Bloques 6 y 7.
 >
-> **Estado:** ✅ **9.0–9.6d + 9.4 A/B/C** + **Calendario Producción** (18 jul 2026) — cartelas (impresión **1 copia**), Stock ATP, consumo guillotina/impresión/troquel/imp. externa, planificador OTs Jordi. **Validado E2E:** OT **98013**. ✅ **§15.6.12 derivar a externa (13 ago)** — OT **98015**. ⏳ Plan engomado desde troquel, 9.7 OCR, cierre OT sobrantes (Bloque 6).
+> **Estado:** ✅ **9.0–9.6d + 9.4 A/B/C** + **Calendario Producción** (18 jul 2026) — cartelas (impresión **1 copia**), Stock ATP, consumo guillotina/impresión/troquel/imp. externa, planificador OTs Jordi. **Validado E2E:** OT **98013**. ✅ **§15.6.12 derivar a externa (13 ago)** — OT **98015**. ✅ **17 ago:** corregir cartela en paso cerrado (98016 palet 99018); Ramón brutas/netas + muelle netas deseadas. ⏳ Plan engomado desde troquel, 9.7 OCR, cierre OT sobrantes (Bloque 6). Desasignar/reasignar palet de una OT: pendiente.
 > **Origen:** Optimus + cartelas CARPAPSA (15 jun 2026).
 > **Actualizado:** 14 ago 2026 — sesiones 13–14 ago (itinerario vivo + Encajar); §15.14 / `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`.
 > **PENDIENTE:** H1/H2 recuento global. Ubicación por filas de material (catálogo UI sin definir en planta). Ajuste impresión A6 física vs A4 PDF.

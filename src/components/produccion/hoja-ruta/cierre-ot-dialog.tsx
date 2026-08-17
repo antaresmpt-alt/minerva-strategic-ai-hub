@@ -22,6 +22,8 @@ export type CierrePrevioChecklistData = {
   horasCoherentes: boolean;
   incidenciasRevisadas: boolean;
   embalajeInformado: boolean;
+  /** Bloque 6.x — avisos de calidad de datos (no bloquean). */
+  calidadAvisos?: string[];
   /** Fase 8.4 — cierre de barco */
   modoContenedor?: boolean;
   hijasTotal?: number;
@@ -77,6 +79,7 @@ export function CierreOtDialog({
     !checklist.horasCoherentes ||
     !checklist.incidenciasRevisadas ||
     !checklist.embalajeInformado;
+  const calidadAvisos = checklist.calidadAvisos ?? [];
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -155,6 +158,16 @@ export function CierreOtDialog({
                   Algunos checks son informativos. Puedes cerrar igualmente si los datos son
                   correctos.
                 </span>
+              </div>
+            ) : null}
+            {calidadAvisos.length > 0 ? (
+              <div className="mt-2 space-y-1 rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-900">
+                <p className="font-semibold">Revisión de calidad de datos</p>
+                <ul className="list-disc space-y-0.5 pl-4">
+                  {calidadAvisos.map((msg) => (
+                    <li key={msg}>{msg}</li>
+                  ))}
+                </ul>
               </div>
             ) : null}
           </div>

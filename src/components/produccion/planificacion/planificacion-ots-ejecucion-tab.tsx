@@ -26,7 +26,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { PasoAdminActions } from "@/components/produccion/planificacion/paso-admin-actions";
 import { CerrarProcesoDialog } from "@/components/produccion/planificacion/cerrar-proceso-dialog";
+import type { ProfileConPermisos } from "@/lib/prod-ot-cierre-permisos";
 import { CtpEjecucionRequisitosBlock } from "@/components/produccion/planificacion/ctp-ejecucion-requisitos-block";
 import { aplicarConsumoCartelaSiCorresponde, validarCartelaConsumoAntesCerrar } from "@/lib/cartela-stock-consumo";
 import { procesoUsaCartela, type PasoItinerarioConsumo } from "@/lib/cartela-ejecucion";
@@ -368,15 +370,30 @@ function enrichTroquelDatosProceso(
     }
   }
 
-  // Hojas plan: proceso anterior → alias seed → brutas despacho.
-  if (isDatoProcesoEmpty(next.hojas_troquelar)) {
-    const hojasDesdeAnterior =
-      salidaProcesoAnterior != null && Number.isFinite(salidaProcesoAnterior)
-        ? Math.max(0, Math.trunc(salidaProcesoAnterior))
-        : null;
-    if (hojasDesdeAnterior != null && hojasDesdeAnterior > 0) {
-      next.hojas_troquelar = hojasDesdeAnterior;
-    } else if (!isDatoProcesoEmpty(next.hojas_a_troquelar)) {
+  // Hojas de trabajo: salida real del proceso anterior pisa el plan de despacho
+  // (igual que Desbroce). El plan se guarda en hojas_troquelar_plan.
+  const salida =
+    salidaProcesoAnterior != null && Number.isFinite(salidaProcesoAnterior)
+      ? Math.max(0, Math.trunc(salidaProcesoAnterior))
+      : null;
+  if (salida != null && salida > 0) {
+    const prevWorking = toFiniteNum(next.hojas_troquelar);
+    if (
+      isDatoProcesoEmpty(next.hojas_troquelar_plan) &&
+      prevWorking != null &&
+      prevWorking > 0 &&
+      prevWorking !== salida
+    ) {
+      next.hojas_troquelar_plan = prevWorking;
+    }
+    next.hojas_troquelar = salida;
+    const prevTroqueladas = toFiniteNum(next.hojas_troqueladas);
+    if (prevTroqueladas == null || prevTroqueladas === prevWorking) {
+      next.hojas_troqueladas = salida;
+      if (isDatoProcesoEmpty(next.hojas_merma)) next.hojas_merma = 0;
+    }
+  } else if (isDatoProcesoEmpty(next.hojas_troquelar)) {
+    if (!isDatoProcesoEmpty(next.hojas_a_troquelar)) {
       next.hojas_troquelar = next.hojas_a_troquelar;
     } else if (despacho?.hojasBrutas != null && despacho.hojasBrutas > 0) {
       next.hojas_troquelar = Math.max(0, Math.trunc(despacho.hojasBrutas));
@@ -1017,6 +1034,7 @@ export function PlanificacionOtsEjecucionTab({
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [planificacionRole, setPlanificacionRole] = useState<string | null>(null);
+  const [adminProfile, setAdminProfile] = useState<ProfileConPermisos | null>(null);
   const [hojaRutaOt, setHojaRutaOt] = useState<string | null>(null);
   const [pasosItinerarioPorOtId, setPasosItinerarioPorOtId] = useState<
     Map<string, PasoItinerarioFormato[]>
@@ -1042,13 +1060,16 @@ export function PlanificacionOtsEjecucionTab({
         if (uid) {
           const { data: prof } = await supabase
             .from("profiles")
-            .select("role")
+            .select("id, role, puede_cerrar_ot, puede_reabrir_ot")
             .eq("id", uid)
             .maybeSingle();
           roleRead =
             prof && typeof (prof as { role?: unknown }).role === "string"
               ? String((prof as { role: string }).role).trim() || null
               : null;
+          setAdminProfile(prof as ProfileConPermisos | null);
+        } else {
+          setAdminProfile(null);
         }
         roleRef.current = roleRead;
         roleLoadedRef.current = true;
@@ -2383,6 +2404,8 @@ export function PlanificacionOtsEjecucionTab({
                         onPause={(motivo, patch, dp) => void pauseExecution(row, motivo, patch, dp)}
                         onResume={(pausesNext, patch, dp) => void resumeExecution(row, pausesNext, patch, dp)}
                         onOpenHojaRuta={() => setHojaRutaOt(row.ot)}
+                        adminProfile={adminProfile}
+                        onAdminSuccess={() => void loadData()}
                       />
                     </div>
                   ) : null}
@@ -2417,6 +2440,8 @@ function ExecutionCard({
   onPause,
   onResume,
   onOpenHojaRuta,
+  adminProfile,
+  onAdminSuccess,
 }: {
   row: MesaEjecucion;
   despacho: DespachoInfo | null;
@@ -2445,6 +2470,8 @@ function ExecutionCard({
     datosProcesoUpdate?: DatosProcesoGenerico | null,
   ) => void;
   onOpenHojaRuta: () => void;
+  adminProfile: ProfileConPermisos | null;
+  onAdminSuccess: () => void;
 }) {
   const [incidencia, setIncidencia] = useState(row.incidencia ?? "");
   const [accion, setAccion] = useState(row.accionCorrectiva ?? "");
@@ -2824,9 +2851,30 @@ function ExecutionCard({
       </div>
 
       {!canEdit ? (
-        <p className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] text-slate-600">
-          Proceso cerrado · solo consulta. No se puede reabrir ni cambiar cantidades.
-        </p>
+        <>
+          <p className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] text-slate-600">
+            Proceso cerrado · solo consulta para operario.
+          </p>
+          {row.estadoEjecucion === "finalizada" && row.otId && row.otPasoId ? (
+            <PasoAdminActions
+              profile={adminProfile}
+              pasosItinerario={pasosItinerario}
+              onSuccess={onAdminSuccess}
+              paso={{
+                pasoId: String(row.otPasoId),
+                otNumero: row.ot,
+                otId: row.otId,
+                procesoId: row.procesoId,
+                procesoNombre: null,
+                estado: "finalizado",
+                datosProceso: (row.datosProcesoJson as DatosProcesoGenerico) ?? {},
+                ejecucionId: row.id,
+                mesaTrabajoId: row.mesaTrabajoId,
+                horasReales: row.horasReales,
+              }}
+            />
+          ) : null}
+        </>
       ) : null}
 
       {despacho ? (

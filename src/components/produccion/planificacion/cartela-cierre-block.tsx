@@ -34,6 +34,10 @@ type CartelaCierreBlockProps = {
   procesoId: number | null;
   datosDraft: DatosProcesoGenerico;
   onDatosChange: (datos: DatosProcesoGenerico) => void;
+  /** Si true, la cartela es obligatoria (OT con cartelas asignadas al cierre). */
+  obligatorio?: boolean;
+  /** Notifica cuántas cartelas tiene la OT (para aviso en padre). */
+  onCartelasOtCount?: (count: number) => void;
 };
 
 function readIdStockFromDatos(datos: DatosProcesoGenerico): number | null {
@@ -54,6 +58,8 @@ export function CartelaCierreBlock({
   procesoId,
   datosDraft,
   onDatosChange,
+  obligatorio = false,
+  onCartelasOtCount,
 }: CartelaCierreBlockProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const datosRef = useRef(datosDraft);
@@ -81,21 +87,51 @@ export function CartelaCierreBlock({
     onDatosChangeRef.current(datos);
   }, []);
 
+  const autoSelectedRef = useRef(false);
+
   useEffect(() => {
-    if (hojasPrefilledRef.current || initialHojas != null) return;
-    const suggested = suggestHojasConsumoCartela(procesoId, datosDraft);
-    if (suggested == null) return;
-    hojasPrefilledRef.current = true;
-    setHojasInput(String(suggested));
-    const idFromDraft = readIdStockFromDatos(datosRef.current);
-    const idFromInput = normalizeIdStockInput(idInput);
-    const idStock = idFromDraft ?? idFromInput;
-    if (idStock != null) {
-      emitDatos(
-        applyCartelaToDatos(datosRef.current, paletPreview, idStock, suggested),
-      );
+    onCartelasOtCount?.(cartelasOt.length);
+  }, [cartelasOt.length, onCartelasOtCount]);
+
+  // Auto-seleccionar única cartela asignada y prefijar hojas sugeridas
+  useEffect(() => {
+    if (autoSelectedRef.current || loadingCartelas || cartelasOt.length !== 1) return;
+    if (readIdStockFromDatos(datosRef.current) != null) return;
+
+    autoSelectedRef.current = true;
+    const option = cartelasOt[0]!;
+    const suggested =
+      readHojasFromDatos(datosRef.current) ??
+      suggestHojasConsumoCartela(procesoId, datosRef.current);
+
+    setModoTextoLibre(false);
+    setIdInput(formatIdStockDisplay(option.idStock));
+    if (suggested != null) {
+      hojasPrefilledRef.current = true;
+      setHojasInput(String(suggested));
     }
-  }, [procesoId, datosDraft, initialHojas, idInput, paletPreview, emitDatos]);
+
+    void (async () => {
+      try {
+        const palet = await fetchPaletByIdStock(supabase, option.idStock);
+        setPaletPreview(palet);
+        setLookupState(palet ? "found" : "not_found");
+        emitDatos(
+          applyCartelaToDatos(
+            datosRef.current,
+            palet,
+            option.idStock,
+            suggested ?? null,
+          ),
+        );
+      } catch {
+        setLookupState("error");
+        emitDatos(
+          applyCartelaToDatos(datosRef.current, null, option.idStock, suggested ?? null),
+        );
+      }
+    })();
+  }, [cartelasOt, loadingCartelas, procesoId, supabase, emitDatos]);
 
   // Cargar cartelas asignadas a esta OT
   useEffect(() => {
@@ -198,9 +234,18 @@ export function CartelaCierreBlock({
       <div className="flex items-start gap-2">
         <Package className="mt-0.5 size-4 shrink-0 text-[#002147]" aria-hidden />
         <div className="flex-1">
-          <p className="text-sm font-semibold text-[#002147]">Cartela / material usado</p>
+          <p className="text-sm font-semibold text-[#002147]">
+            Cartela / material usado
+            {obligatorio ? (
+              <span className="ml-1 font-normal text-red-700">· obligatorio</span>
+            ) : (
+              <span className="ml-1 font-normal text-slate-500">· opcional</span>
+            )}
+          </p>
           <p className="text-xs text-slate-500">
-            Opcional. Si indicas ID Stock, las hojas son obligatorias para descontar stock.
+            {obligatorio
+              ? "Esta OT tiene cartela asignada. Debes indicar ID Stock y hojas para descontar stock al cerrar."
+              : "Si indicas ID Stock, las hojas son obligatorias para descontar stock."}
           </p>
         </div>
       </div>
@@ -232,7 +277,7 @@ export function CartelaCierreBlock({
             </div>
             <div>
               <Label htmlFor="cerrar-hojas-cartela-select" className="text-xs text-slate-600">
-                Hojas consumidas (opcional)
+                Hojas consumidas{obligatorio ? "" : " (opcional)"}
               </Label>
               <Input
                 id="cerrar-hojas-cartela-select"
@@ -276,7 +321,7 @@ export function CartelaCierreBlock({
           </div>
           <div>
             <Label htmlFor="cerrar-hojas-cartela" className="text-xs text-slate-600">
-              Hojas consumidas (opcional)
+              Hojas consumidas{obligatorio ? "" : " (opcional)"}
             </Label>
             <Input
               id="cerrar-hojas-cartela"

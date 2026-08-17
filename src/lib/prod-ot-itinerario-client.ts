@@ -2,6 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { DespachoItinerarioSlot } from "@/components/produccion/ots/despacho-itinerario-picker";
 import { PROCESO_DESBROCE_ID } from "@/lib/hoja-ruta-campos-config";
+import {
+  buildDatosProcesoForItinerarioSlot,
+  fetchItinerarioSeedContext,
+} from "@/lib/prod-ot-itinerario-seed";
 
 export const TABLE_PROD_OT_PASOS = "prod_ot_pasos";
 export const TABLE_PROD_OTS_GENERAL = "prod_ots_general";
@@ -15,6 +19,9 @@ export type ProdOtPasoVista = {
 };
 
 const ESTADOS_EDITABLES = new Set(["pendiente", "disponible"]);
+
+/** Orden temporal al liberar slots (ot_id, orden) antes de insertar la cola nueva. */
+const COLA_VIVA_TEMP_ORDEN_BASE = 100000;
 
 /**
  * Solo se permite sustituir o borrar el itinerario si ningún paso ha entrado
@@ -171,25 +178,46 @@ export async function insertarPasosEnColaViva(
   otId: string,
   pasosActuales: ProdOtPasoVista[],
   newSlots: DespachoItinerarioSlot[],
+  otNumero?: string | null,
 ): Promise<void> {
   const locked = pasosActuales.filter(
     (p) => !ESTADOS_EDITABLES.has(String(p.estado ?? "").trim().toLowerCase()),
   );
-  const editableIds = pasosActuales
-    .filter((p) =>
-      ESTADOS_EDITABLES.has(String(p.estado ?? "").trim().toLowerCase()),
-    )
-    .map((p) => p.id);
+  const editablePasos = pasosActuales.filter((p) =>
+    ESTADOS_EDITABLES.has(String(p.estado ?? "").trim().toLowerCase()),
+  );
+  const editableIds = editablePasos.map((p) => p.id);
+  const ordenRollback = editablePasos.map((p) => ({ id: p.id, orden: p.orden }));
 
+  const preservedDatosByKey = new Map<string, Record<string, unknown>>();
   if (editableIds.length > 0) {
+    const { data: editableRows, error: errLoadEditable } = await supabase
+      .from(TABLE_PROD_OT_PASOS)
+      .select("id, datos_proceso")
+      .in("id", editableIds);
+    if (errLoadEditable) throw errLoadEditable;
+    for (const raw of editableRows ?? []) {
+      const r = raw as { id?: string; datos_proceso?: unknown };
+      const id = String(r.id ?? "").trim();
+      if (!id) continue;
+      if (r.datos_proceso && typeof r.datos_proceso === "object") {
+        preservedDatosByKey.set(
+          id,
+          r.datos_proceso as Record<string, unknown>,
+        );
+      }
+    }
+  }
+
+  if (newSlots.length === 0) {
+    if (editableIds.length === 0) return;
     const { error: errDel } = await supabase
       .from(TABLE_PROD_OT_PASOS)
       .delete()
       .in("id", editableIds);
     if (errDel) throw errDel;
+    return;
   }
-
-  if (newSlots.length === 0) return;
 
   const nextOrden =
     locked.length > 0 ? Math.max(...locked.map((p) => p.orden)) + 1 : 1;
@@ -213,18 +241,118 @@ export async function insertarPasosEnColaViva(
         : null;
   }
 
-  const pasoRows = newSlots.map((s, i) => ({
-    ot_id: otId,
-    orden: nextOrden + i,
-    proceso_id: s.procesoId,
-    maquina_id: s.procesoId === PROCESO_DESBROCE_ID ? desbroceMaquinaId : null,
-    estado: i === 0 && !hasEnMarcha ? "disponible" : "pendiente",
-  }));
+  let seedCtx = null;
+  if (otNumero?.trim()) {
+    const lockedPasosRows: Array<{
+      proceso_id: number;
+      datos_proceso?: unknown;
+    }> = [];
+    if (locked.length > 0) {
+      const lockedIds = locked.map((p) => p.id);
+      const { data: lockedRows, error: errLocked } = await supabase
+        .from(TABLE_PROD_OT_PASOS)
+        .select("proceso_id, datos_proceso")
+        .in("id", lockedIds);
+      if (errLocked) throw errLocked;
+      for (const raw of lockedRows ?? []) {
+        const r = raw as { proceso_id?: number; datos_proceso?: unknown };
+        if (typeof r.proceso_id === "number") {
+          lockedPasosRows.push({
+            proceso_id: r.proceso_id,
+            datos_proceso: r.datos_proceso,
+          });
+        }
+      }
+    }
+    seedCtx = await fetchItinerarioSeedContext(
+      supabase,
+      otNumero,
+      lockedPasosRows,
+      newSlots.map((s) => s.procesoId),
+    );
+  }
 
-  const { error: errIns } = await supabase
-    .from(TABLE_PROD_OT_PASOS)
-    .insert(pasoRows);
-  if (errIns) throw errIns;
+  const pasoRows = newSlots.map((s, i) => {
+    const preserved = preservedDatosByKey.get(s.key);
+    const datosProceso =
+      seedCtx != null
+        ? buildDatosProcesoForItinerarioSlot(s, seedCtx, preserved)
+        : preserved && Object.keys(preserved).length > 0
+          ? preserved
+          : null;
+    return {
+      ot_id: otId,
+      orden: nextOrden + i,
+      proceso_id: s.procesoId,
+      maquina_id:
+        s.procesoId === PROCESO_DESBROCE_ID ? desbroceMaquinaId : null,
+      estado: i === 0 && !hasEnMarcha ? "disponible" : "pendiente",
+      ...(datosProceso ? { datos_proceso: datosProceso } : {}),
+    };
+  });
+
+  async function restoreEditableOrden(): Promise<void> {
+    if (ordenRollback.length === 0) return;
+    const results = await Promise.all(
+      ordenRollback.map(({ id, orden }) =>
+        supabase
+          .from(TABLE_PROD_OT_PASOS)
+          .update({ orden })
+          .eq("id", id),
+      ),
+    );
+    for (const r of results) {
+      if (r.error) throw r.error;
+    }
+  }
+
+  let bumpedOrden = false;
+  if (editableIds.length > 0) {
+    const bumpResults = await Promise.all(
+      ordenRollback.map(({ id }, i) =>
+        supabase
+          .from(TABLE_PROD_OT_PASOS)
+          .update({ orden: COLA_VIVA_TEMP_ORDEN_BASE + i })
+          .eq("id", id),
+      ),
+    );
+    for (const r of bumpResults) {
+      if (r.error) throw r.error;
+    }
+    bumpedOrden = true;
+  }
+
+  let insertedIds: string[] = [];
+  try {
+    const { data: inserted, error: errIns } = await supabase
+      .from(TABLE_PROD_OT_PASOS)
+      .insert(pasoRows)
+      .select("id");
+    if (errIns) throw errIns;
+    insertedIds = (inserted ?? [])
+      .map((raw) => String((raw as { id?: string }).id ?? "").trim())
+      .filter(Boolean);
+
+    if (editableIds.length > 0) {
+      const { error: errDel } = await supabase
+        .from(TABLE_PROD_OT_PASOS)
+        .delete()
+        .in("id", editableIds);
+      if (errDel) throw errDel;
+    }
+  } catch (e) {
+    if (insertedIds.length > 0) {
+      const { error: rollbackInsErr } = await supabase
+        .from(TABLE_PROD_OT_PASOS)
+        .delete()
+        .in("id", insertedIds);
+      if (rollbackInsErr) throw rollbackInsErr;
+    }
+    if (bumpedOrden) {
+      await restoreEditableOrden();
+    }
+    throw e;
+  }
 }
 
 /**

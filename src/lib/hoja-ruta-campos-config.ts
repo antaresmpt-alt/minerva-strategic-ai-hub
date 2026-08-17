@@ -423,10 +423,11 @@ const TROQUELADO_CAMPOS: CampoDefinicion[] = [
   },
   {
     id: 'hojas_troquelar',
-    label: 'Hojas a troquelar (plan)',
+    label: 'Hojas a troquelar',
     tipo: 'number',
     min: 0,
     width: 'third',
+    hint: 'Si el paso anterior ya cerró, se rellena con lo recibido.',
   },
   // — Poses y pinza compactos (valores pequeños) —
   {
@@ -616,11 +617,19 @@ const EXTERNO_CAMPOS_COMUNES: CampoDefinicion[] = [
   },
   {
     id: 'hojas_enviadas',
-    label: 'Hojas enviadas',
+    label: 'Hojas enviadas (brutas)',
     tipo: 'number',
     min: 0,
     width: 'half',
     hint: 'Cantidad enviada al proveedor externo.',
+  },
+  {
+    id: 'hojas_netas',
+    label: 'Hojas netas a recibir',
+    tipo: 'number',
+    min: 0,
+    width: 'half',
+    hint: 'Mínimo de hojas buenas que se espera de vuelta.',
   },
   {
     id: 'hojas_recibidas_muelle',

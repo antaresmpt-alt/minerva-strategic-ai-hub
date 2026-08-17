@@ -276,7 +276,7 @@ export function ExternosItinerarioPoolTab({
           fecha_envio: null,
           fecha_prevista: fechaPrevIso,
           notas_logistica: `Desde itinerario: ${row.proceso_nombre}`.trim(),
-          hojas_enviadas: row.num_hojas_netas ?? row.num_hojas_brutas ?? null,
+          hojas_enviadas: null,
           unidades: null,
           prioridad: null,
           palets: null,

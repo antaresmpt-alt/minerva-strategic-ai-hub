@@ -18,6 +18,7 @@ import {
   DespachoItinerarioPicker,
   type DespachoItinerarioSlot,
 } from "@/components/produccion/ots/despacho-itinerario-picker";
+import { formatSupabaseErrorMessage } from "@/lib/despacho-wizard-shared";
 import {
   fetchProdOtGeneralIdByNumPedido,
   fetchProdOtPasosVista,
@@ -124,18 +125,24 @@ export function AjustarItinerarioDialog({
     try {
       // Re-fetch to get the freshest state before writing
       const allPasos = await fetchProdOtPasosVista(supabase, otId);
-      await insertarPasosEnColaViva(supabase, otId, allPasos, editableSlots);
+      await insertarPasosEnColaViva(
+        supabase,
+        otId,
+        allPasos,
+        editableSlots,
+        otNumero,
+      );
       toast.success("Itinerario actualizado.");
       onOpenChange(false);
       onGuardado?.();
     } catch (e) {
       toast.error(
-        e instanceof Error ? e.message : "Error guardando el itinerario.",
+        formatSupabaseErrorMessage(e, "Error guardando el itinerario."),
       );
     } finally {
       setSaving(false);
     }
-  }, [editableSlots, onGuardado, onOpenChange, otId, supabase]);
+  }, [editableSlots, onGuardado, onOpenChange, otId, otNumero, supabase]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

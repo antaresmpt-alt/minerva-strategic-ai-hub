@@ -29,8 +29,12 @@ export type ExternoEnvioBrief = {
   formatoOrigen: string | null;
   material: string | null;
   tintas: string | null;
+  /** Hojas brutas a enviar (lo que sale en el palet). */
   hojasSugeridas: number | null;
   hojasSugeridasOrigen: string | null;
+  /** Mínimo de hojas buenas a recibir. Por defecto = brutas. */
+  hojasNetasSugeridas: number | null;
+  hojasNetasSugeridasOrigen: string | null;
 };
 
 function asStr(v: unknown): string | null {
@@ -79,6 +83,10 @@ export function resolveExternoEnvioBrief(args: {
   currentPasoId?: string | null;
   currentOrden?: number | null;
   hojasYaEnSeguimiento?: number | null;
+  /** True si Ramón ya confirmó el envío: entonces sí se reutilizan las hojas del seguimiento. */
+  envioYaConfirmado?: boolean;
+  /** Netas ya informadas en el paso (datos_proceso). */
+  hojasNetasYaInformadas?: number | null;
 }): ExternoEnvioBrief {
   const { despacho, pasos } = args;
   const current = args.currentPasoId
@@ -149,23 +157,34 @@ export function resolveExternoEnvioBrief(args: {
   if (!tintas) tintas = asStr(despacho?.tintas);
 
   const ya = asPositiveInt(args.hojasYaEnSeguimiento);
-  const hojasNetas = asPositiveInt(despacho?.hojasNetas);
-  const hojasBrutas = asPositiveInt(despacho?.hojasBrutas);
+  const hojasNetasPlan = asPositiveInt(despacho?.hojasNetas);
+  const hojasBrutasPlan = asPositiveInt(despacho?.hojasBrutas);
+  const netasYa = asPositiveInt(args.hojasNetasYaInformadas);
 
   let hojasSugeridas: number | null = null;
   let hojasSugeridasOrigen: string | null = null;
-  if (ya != null) {
+  if (args.envioYaConfirmado && ya != null) {
     hojasSugeridas = ya;
     hojasSugeridasOrigen = "Seguimiento externo";
   } else if (hojasDePaso != null) {
     hojasSugeridas = hojasDePaso;
     hojasSugeridasOrigen = hojasDePasoOrigen;
-  } else if (hojasNetas != null) {
-    hojasSugeridas = hojasNetas;
-    hojasSugeridasOrigen = "Despacho (netas)";
-  } else if (hojasBrutas != null) {
-    hojasSugeridas = hojasBrutas;
+  } else if (hojasBrutasPlan != null) {
+    hojasSugeridas = hojasBrutasPlan;
     hojasSugeridasOrigen = "Despacho (brutas)";
+  } else if (hojasNetasPlan != null) {
+    hojasSugeridas = hojasNetasPlan;
+    hojasSugeridasOrigen = "Despacho (netas)";
+  }
+
+  let hojasNetasSugeridas: number | null = null;
+  let hojasNetasSugeridasOrigen: string | null = null;
+  if (netasYa != null) {
+    hojasNetasSugeridas = netasYa;
+    hojasNetasSugeridasOrigen = "Ya informado";
+  } else if (hojasSugeridas != null) {
+    hojasNetasSugeridas = hojasSugeridas;
+    hojasNetasSugeridasOrigen = "Igual que brutas";
   }
 
   return {
@@ -175,6 +194,8 @@ export function resolveExternoEnvioBrief(args: {
     tintas,
     hojasSugeridas,
     hojasSugeridasOrigen,
+    hojasNetasSugeridas,
+    hojasNetasSugeridasOrigen,
   };
 }
 
@@ -211,6 +232,7 @@ export async function fetchExternoEnvioBrief(
     otNumero: string;
     otPasoId?: string | null;
     hojasYaEnSeguimiento?: number | null;
+    envioYaConfirmado?: boolean;
   },
 ): Promise<ExternoEnvioBrief> {
   const ot = String(args.otNumero ?? "").trim();
@@ -264,12 +286,19 @@ export async function fetchExternoEnvioBrief(
     }
   }
 
+  const currentPaso = pasoId
+    ? pasos.find((p) => String(p.id ?? "") === pasoId)
+    : null;
+  const hojasNetasYaInformadas = asPositiveInt(currentPaso?.datosProceso?.hojas_netas);
+
   return resolveExternoEnvioBrief({
     despacho,
     pasos,
     currentPasoId: pasoId || null,
     currentOrden,
     hojasYaEnSeguimiento: args.hojasYaEnSeguimiento,
+    envioYaConfirmado: args.envioYaConfirmado === true,
+    hojasNetasYaInformadas,
   });
 }
 

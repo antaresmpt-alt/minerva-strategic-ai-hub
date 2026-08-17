@@ -48,6 +48,7 @@ import {
 import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
 import { normalizeCompraEstado } from "@/lib/compras-material-estados";
 import { isCompraVisibleEnMuelle } from "@/lib/muelle-compras";
+import { mergeDatosProcesoExternoPaso } from "@/lib/externos-envio-brief";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
@@ -110,8 +111,15 @@ type MuelleCardRow = {
 type MuelleExternoCardRow = {
   id: string;
   ot_numero: string;
-  /** Cantidad pedida (`prod_seguimiento_externos.unidades`). */
+  ot_paso_id: string | null;
+  /** Cantidad pedida / esperada (`prod_seguimiento_externos.unidades`). */
   unidades: number | null;
+  /** Hojas enviadas al proveedor (informe Ramón). */
+  hojas_enviadas: number | null;
+  /** Mínimo de hojas buenas que Ramón espera de vuelta. */
+  hojas_netas: number | null;
+  /** Hojas ya registradas en recepciones previas. */
+  hojas_recibidas_muelle: number | null;
   cliente_nombre: string;
   trabajo_titulo: string;
   estado: string;
@@ -128,6 +136,64 @@ type MultiRecepcionDraft = {
   hojas: string;
   palets: string;
 };
+
+async function persistExternoRecepcionMuelle(
+  supabase: ReturnType<typeof createSupabaseBrowserClient>,
+  row: MuelleExternoCardRow,
+  rec: number,
+  opts: {
+    albaran: string;
+    notasExtra: string;
+    estado: string;
+    esParcial: boolean;
+    esCierreFinal: boolean;
+  },
+): Promise<void> {
+  const alb = opts.albaran.trim();
+  const extra = opts.notasExtra.trim();
+  const prev = (row.notas_logistica ?? "").trim();
+  const bloques: string[] = [];
+  if (prev) bloques.push(prev);
+  const tag = opts.esParcial ? "[Muelle parcial]" : "[Muelle]";
+  if (alb) bloques.push(`${tag} Albarán: ${alb}`);
+  const env = row.hojas_enviadas;
+  const netas = row.hojas_netas;
+  const extraCant =
+    env != null && Number.isFinite(env)
+      ? netas != null && Number.isFinite(netas)
+        ? `${tag} Cant. recibida: ${rec} h (enviadas: ${env}, netas deseadas: ${netas})`
+        : `${tag} Cant. recibida: ${rec} h (enviadas: ${env})`
+      : row.unidades != null && Number.isFinite(row.unidades)
+        ? `${tag} Cant. recibida: ${rec} h (pedidas: ${row.unidades})`
+        : `${tag} Cant. recibida: ${rec} h`;
+  bloques.push(extraCant);
+  if (opts.esCierreFinal && row.estado === "Parcial") {
+    bloques.push(extra ? `[Cierre final]: ${extra}` : "[Cierre final]: ");
+  } else if (extra) {
+    bloques.push(`${tag} ${extra}`);
+  }
+  const notas_logistica = bloques.length > 0 ? bloques.join("\n") : null;
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from(TABLE_SEGUIMIENTO_EXTERNOS)
+    .update({
+      estado: opts.estado,
+      hojas_recibidas_muelle: rec,
+      unidades_recibidas_muelle: rec,
+      fecha_recepcion_muelle: now,
+      notas_logistica,
+      updated_at: now,
+    })
+    .eq("id", row.id);
+  if (error) throw error;
+  if (row.ot_paso_id) {
+    await mergeDatosProcesoExternoPaso(supabase, row.ot_paso_id, {
+      hojas_recibidas_muelle: rec,
+      numero_hojas: rec,
+      unidades_recibidas_muelle: rec,
+    });
+  }
+}
 
 function otDisplayFromSeguimientoRaw(raw: Record<string, unknown>): string {
   const o = String(raw.OT ?? "").trim();
@@ -404,7 +470,7 @@ export function MuelleRecepcionPage() {
       const { data: seg, error: sErr } = await supabase
         .from(TABLE_SEGUIMIENTO_EXTERNOS)
         .select(
-          "id, OT, id_pedido, cliente_nombre, trabajo_titulo, estado, proveedor_id, acabado_id, fecha_prevista, f_entrega_ot, notas_logistica, unidades, updated_at, created_at"
+          "id, OT, id_pedido, ot_paso_id, cliente_nombre, trabajo_titulo, estado, proveedor_id, acabado_id, fecha_prevista, f_entrega_ot, notas_logistica, unidades, hojas_enviadas, hojas_recibidas_muelle, updated_at, created_at"
         )
         .in("estado", [...MUELLE_EXTERNO_ESTADOS])
         .order("updated_at", { ascending: false })
@@ -469,7 +535,14 @@ export function MuelleRecepcionPage() {
         return {
           id: String(raw.id ?? ""),
           ot_numero: otDisplayFromSeguimientoRaw(raw),
+          ot_paso_id:
+            typeof raw.ot_paso_id === "string" && raw.ot_paso_id.trim()
+              ? raw.ot_paso_id.trim()
+              : null,
           unidades: unidadesParsed,
+          hojas_enviadas: rawNumHojas(raw.hojas_enviadas),
+          hojas_netas: null,
+          hojas_recibidas_muelle: rawNumHojas(raw.hojas_recibidas_muelle),
           cliente_nombre: String(raw.cliente_nombre ?? "").trim() || "—",
           trabajo_titulo: String(raw.trabajo_titulo ?? "").trim() || "—",
           estado: String(raw.estado ?? "").trim() || "—",
@@ -481,6 +554,32 @@ export function MuelleRecepcionPage() {
           notas_logistica: (raw.notas_logistica as string | null) ?? null,
         };
       });
+
+      const pasoIds = [
+        ...new Set(merged.map((r) => r.ot_paso_id).filter((id): id is string => Boolean(id))),
+      ];
+      if (pasoIds.length > 0) {
+        const netasByPaso = new Map<string, number>();
+        for (let i = 0; i < pasoIds.length; i += 80) {
+          const chunk = pasoIds.slice(i, i + 80);
+          const { data: pasoRows, error: pasoErr } = await supabase
+            .from("prod_ot_pasos")
+            .select("id, datos_proceso")
+            .in("id", chunk);
+          if (pasoErr) throw pasoErr;
+          for (const p of pasoRows ?? []) {
+            const row = p as { id: string; datos_proceso: Record<string, unknown> | null };
+            const n = rawNumHojas(row.datos_proceso?.hojas_netas);
+            if (n != null) netasByPaso.set(row.id, n);
+          }
+        }
+        for (const row of merged) {
+          if (row.ot_paso_id) {
+            row.hojas_netas = netasByPaso.get(row.ot_paso_id) ?? null;
+          }
+        }
+      }
+
       setExternoRows(merged);
     } catch (e) {
       console.error(e);
@@ -906,30 +1005,13 @@ export function MuelleRecepcionPage() {
     const rec = externoCantRecNum!;
     setExternoSaving(true);
     try {
-      const alb = externoAlbaran.trim();
-      const extra = externoNotas.trim();
-      const prev = (activeExterno.notas_logistica ?? "").trim();
-      const bloques: string[] = [];
-      if (prev) bloques.push(prev);
-      if (alb) bloques.push(`[Muelle parcial] Albarán: ${alb}`);
-      const esp = activeExterno.unidades;
-      bloques.push(
-        esp != null && Number.isFinite(esp)
-          ? `[Muelle parcial] Cant. recibida: ${rec} uds (pedidas: ${esp})`
-          : `[Muelle parcial] Cant. recibida: ${rec} uds`
-      );
-      if (extra) bloques.push(`[Muelle parcial] ${extra}`);
-      const notas_logistica = bloques.length > 0 ? bloques.join("\n") : null;
-      const now = new Date().toISOString();
-      const { error } = await supabase
-        .from(TABLE_SEGUIMIENTO_EXTERNOS)
-        .update({
-          estado: "Parcial",
-          notas_logistica,
-          updated_at: now,
-        })
-        .eq("id", activeExterno.id);
-      if (error) throw error;
+      await persistExternoRecepcionMuelle(supabase, activeExterno, rec, {
+        albaran: externoAlbaran,
+        notasExtra: externoNotas,
+        estado: "Parcial",
+        esParcial: true,
+        esCierreFinal: false,
+      });
       toast.success("Recepción parcial registrada (sigue en muelle hasta el cierre).");
       onSheetOpenChange(false);
       await loadExternoRows();
@@ -954,31 +1036,13 @@ export function MuelleRecepcionPage() {
     const rec = externoCantRecNum!;
     setExternoSaving(true);
     try {
-      const alb = externoAlbaran.trim();
-      const extra = externoNotas.trim();
-      const prev = (activeExterno.notas_logistica ?? "").trim();
-      const bloques: string[] = [];
-      if (prev) bloques.push(prev);
-      if (alb) bloques.push(`[Muelle] Albarán: ${alb}`);
-      bloques.push(`[Muelle] Cant. recibida: ${rec} uds`);
-      if (activeExterno.estado === "Parcial") {
-        bloques.push(
-          extra ? `[Cierre final]: ${extra}` : "[Cierre final]: "
-        );
-      } else if (extra) {
-        bloques.push(extra);
-      }
-      const notas_logistica = bloques.length > 0 ? bloques.join("\n") : null;
-      const now = new Date().toISOString();
-      const { error } = await supabase
-        .from(TABLE_SEGUIMIENTO_EXTERNOS)
-        .update({
-          estado: "Recibido",
-          notas_logistica,
-          updated_at: now,
-        })
-        .eq("id", activeExterno.id);
-      if (error) throw error;
+      await persistExternoRecepcionMuelle(supabase, activeExterno, rec, {
+        albaran: externoAlbaran,
+        notasExtra: externoNotas,
+        estado: "Recibido",
+        esParcial: false,
+        esCierreFinal: activeExterno.estado === "Parcial",
+      });
       toast.success("Recepción finalizada. Trabajo en estado Recibido.");
       onSheetOpenChange(false);
       await loadExternoRows();
@@ -1391,13 +1455,29 @@ export function MuelleRecepcionPage() {
                               />
                               <span
                                 className="shrink-0 rounded-md border border-slate-200/90 bg-white px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[#002147]"
-                                title="Cantidad pedida"
+                                title={
+                                  row.hojas_enviadas != null
+                                    ? "Hojas enviadas al proveedor"
+                                    : "Cantidad pedida"
+                                }
                               >
-                                {row.unidades != null &&
-                                Number.isFinite(row.unidades)
-                                  ? `${row.unidades} uds`
-                                  : "Sin cant."}
+                                {row.hojas_enviadas != null &&
+                                Number.isFinite(row.hojas_enviadas)
+                                  ? `Env. ${row.hojas_enviadas} h`
+                                  : row.unidades != null &&
+                                      Number.isFinite(row.unidades)
+                                    ? `${row.unidades} uds`
+                                    : "Sin cant."}
                               </span>
+                              {row.hojas_netas != null &&
+                              Number.isFinite(row.hojas_netas) ? (
+                                <span
+                                  className="shrink-0 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-emerald-900"
+                                  title="Hojas netas mínimas que Ramón espera de vuelta"
+                                >
+                                  Netas {row.hojas_netas} h
+                                </span>
+                              ) : null}
                             </div>
                             <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-600">
                               {row.estado?.trim() || "—"}
@@ -1887,17 +1967,47 @@ export function MuelleRecepcionPage() {
               </DialogHeader>
 
               <div
-                className="mx-1 mt-3 rounded-lg border border-[#002147]/20 bg-[#002147]/[0.04] px-3 py-2.5 text-sm leading-snug text-[#002147] shadow-inner"
+                className="mx-1 mt-3 space-y-1.5 rounded-lg border border-[#002147]/20 bg-[#002147]/[0.04] px-3 py-2.5 text-sm leading-snug text-[#002147] shadow-inner"
                 role="region"
-                aria-label="Cantidad pedida"
+                aria-label="Referencia de cantidades"
               >
-                <span className="font-semibold">Cantidad esperada:</span>{" "}
-                <span className="tabular-nums">
-                  {activeExterno.unidades != null &&
-                  Number.isFinite(activeExterno.unidades)
-                    ? `${activeExterno.unidades} unidades`
-                    : "— (sin dato en sistema)"}
-                </span>
+                {activeExterno.hojas_enviadas != null &&
+                Number.isFinite(activeExterno.hojas_enviadas) ? (
+                  <p>
+                    <span className="font-semibold">Enviadas (producción):</span>{" "}
+                    <span className="tabular-nums">
+                      {activeExterno.hojas_enviadas} hojas
+                    </span>
+                  </p>
+                ) : null}
+                {activeExterno.hojas_netas != null &&
+                Number.isFinite(activeExterno.hojas_netas) ? (
+                  <p>
+                    <span className="font-semibold">Netas deseadas:</span>{" "}
+                    <span className="tabular-nums">
+                      {activeExterno.hojas_netas} hojas
+                    </span>
+                    <span className="ml-1 text-xs font-normal text-muted-foreground">
+                      (mínimo que Ramón espera de vuelta)
+                    </span>
+                  </p>
+                ) : null}
+                {activeExterno.unidades != null &&
+                Number.isFinite(activeExterno.unidades) ? (
+                  <p>
+                    <span className="font-semibold">Pedidas / esperadas:</span>{" "}
+                    <span className="tabular-nums">
+                      {activeExterno.unidades} uds
+                    </span>
+                  </p>
+                ) : null}
+                {!activeExterno.hojas_enviadas &&
+                (activeExterno.unidades == null ||
+                  !Number.isFinite(activeExterno.unidades)) ? (
+                  <p className="text-muted-foreground">
+                    Sin referencia de cantidad en sistema.
+                  </p>
+                ) : null}
               </div>
 
               <div className="flex flex-col gap-4 px-1 py-4">
@@ -1913,7 +2023,9 @@ export function MuelleRecepcionPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="muelle-ext-cant">Cantidad recibida</Label>
+                  <Label htmlFor="muelle-ext-cant">
+                    Hojas recibidas (dato real)
+                  </Label>
                   <Input
                     id="muelle-ext-cant"
                     inputMode="numeric"
@@ -1942,10 +2054,30 @@ export function MuelleRecepcionPage() {
                     rows={5}
                     className="resize-y border-slate-300 bg-white text-base shadow-inner"
                   />
-                  {activeExterno.unidades != null &&
-                  Number.isFinite(activeExterno.unidades) &&
+                  {activeExterno.hojas_netas != null &&
+                  Number.isFinite(activeExterno.hojas_netas) &&
                   externoCantRecNum !== null &&
-                  externoCantRecNum < activeExterno.unidades ? (
+                  externoCantRecNum < activeExterno.hojas_netas ? (
+                    <p className="text-xs text-amber-800">
+                      Recibidas por debajo de las netas deseadas (
+                      {activeExterno.hojas_netas} h). Anótalo en notas si procede.
+                      Puedes finalizar igualmente.
+                    </p>
+                  ) : activeExterno.hojas_enviadas != null &&
+                    Number.isFinite(activeExterno.hojas_enviadas) &&
+                    externoCantRecNum !== null &&
+                    externoCantRecNum < activeExterno.hojas_enviadas ? (
+                    <p className="text-xs text-slate-600">
+                      Recibidas por debajo de las enviadas
+                      {activeExterno.hojas_netas != null
+                        ? `, dentro del margen de merma (netas ${activeExterno.hojas_netas} h)`
+                        : ""}
+                      . Anótalo en notas si procede.
+                    </p>
+                  ) : activeExterno.unidades != null &&
+                    Number.isFinite(activeExterno.unidades) &&
+                    externoCantRecNum !== null &&
+                    externoCantRecNum < activeExterno.unidades ? (
                     <p className="text-xs text-amber-800">
                       Cantidad por debajo de la pedida: usa «Recepción parcial», o
                       «Finalizar recepción» si cierras el trabajo aunque no cuadre

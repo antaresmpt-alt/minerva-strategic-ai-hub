@@ -78,10 +78,10 @@ Admin/gerencia pueden cerrar/reabrir **siempre** por rol; el resto necesita `pue
 ### ⏭️ Próxima sesión (prioridad sugerida)
 
 1. **Promedios maestro** — ✅ Pasos A–D + UI + PDF ficha + **validación real 30 jul** (M-00003, Q=8000 en 98014). Ver `PLAN_PRUEBA_PROMEDIOS_MAESTRO.md`.
-2. **Cierre contenedor / hijas** (Fase 8.4) — fuera del MVP simple.
-3. **Comparar versiones** de la misma OT (v1 vs v2 tras reabrir) en UI Producidas.
+2. **Cierre contenedor / hijas** (Fase 8.4) — ✅ MVP 11 ago.
+3. **Comparar versiones** de la misma OT (v1 vs v2 tras reabrir) en UI Producidas — ✅ **17 ago** (`producida-versiones-compare-dialog.tsx`; OK en 98009).
 4. **UX Pipeline** — ✅ **11 ago**: «Listo para cerrar» / último paso en Paso actual + badge; compacto por defecto.
-5. **Calidad datos al cierre**: avisar fuerte si producida ≫ pedida (ej. 99906: 1000→2100) o gramaje 0; no bloquea MVP.
+5. **Calidad datos al cierre**: avisar fuerte si producida ≫ pedida o gramaje 0; no bloquea MVP — ✅ **17 ago** (`prod-ot-cierre-avisos.ts`; pendiente prueba campo).
 6. **Backlog UX**: teclado numérico `.` en horas; clone despacho copia horas/embalaje; oficiales editables en Maestro.
 
 ### Decisiones ya cerradas (no reabrir en brainstorm)

@@ -468,7 +468,7 @@ export function DespachoWizardDialog({
           supabase
             .from(TABLE_OT_DESPACHADAS)
             .select(
-              "tintas, material, tamano_hoja, gramaje, num_hojas_brutas, num_hojas_netas, horas_entrada, horas_tiraje, horas_estimadas_troquelado, horas_estimadas_engomado, tipo_engomado, troquel, poses, acabado_pral, notas, referencia_id, ot_anterior_numero, ot_anterior_id"
+              "tintas, material, tamano_hoja, gramaje, num_hojas_brutas, num_hojas_netas, horas_entrada, horas_tiraje, horas_estimadas_troquelado, horas_estimadas_engomado, horas_engomado_preparacion, horas_engomado_tiraje, tipo_engomado, troquel, poses, acabado_pral, notas, referencia_id, ot_anterior_numero, ot_anterior_id"
             )
             .eq("ot_numero", sel.num_pedido)
             .maybeSingle(),
@@ -1799,37 +1799,6 @@ export function DespachoWizardDialog({
               "Cabecera/material guardados. Itinerario con pasos hechos no se tocó — usa «Ajustar itinerario» (Ruta) para la cola pendiente.",
             );
           } else {
-            // Solo la cola pendiente puede cambiar; merge seed en pasos hechos sin tocar estado.
-            for (const p of locked) {
-              const slot = itinerarioSlots.find((s) => s.procesoId === p.procesoId);
-              if (!slot) continue;
-              const seed = buildDatosProcesoSeed(
-                slot.procesoId,
-                form,
-                procesoDatos,
-                procesoIdsInRoute,
-              );
-              const { data: pasoRow } = await supabase
-                .from(TABLE_OT_PASOS)
-                .select("datos_proceso")
-                .eq("id", p.id)
-                .maybeSingle();
-              const merged = mergeDatosProcesoSeed(
-                (pasoRow?.datos_proceso as Record<string, unknown> | null) ?? null,
-                seed ??
-                  (slot.procesoId === PROCESO_CTP_ID
-                    ? buildCtpRequisitosSeedFromWizard(procesoDatos.ctp)
-                    : null),
-                slot.procesoId,
-              );
-              if (merged) {
-                const { error: errUpd } = await supabase
-                  .from(TABLE_OT_PASOS)
-                  .update({ datos_proceso: merged })
-                  .eq("id", p.id);
-                if (errUpd) throw errUpd;
-              }
-            }
             const pendingSlots = itinerarioSlots.slice(locked.length);
             const currentPending = pasosVista.filter((p) => {
               const e = String(p.estado ?? "").trim().toLowerCase();
@@ -1846,10 +1815,50 @@ export function DespachoWizardDialog({
                 selectedRowId,
                 pasosVista,
                 pendingSlots,
+                otInput.trim(),
               );
               toast.info(
                 "Itinerario: pasos hechos intactos; cola pendiente actualizada.",
               );
+            }
+            // Siempre sembrar cabecera→datos_proceso (también si la cola no cambió).
+            const { data: pasosNow, error: errPasosNow } = await supabase
+              .from(TABLE_OT_PASOS)
+              .select("id, proceso_id, datos_proceso")
+              .eq("ot_id", selectedRowId)
+              .order("orden", { ascending: true });
+            if (errPasosNow) throw errPasosNow;
+            const n = Math.min(
+              itinerarioSlots.length,
+              (pasosNow ?? []).length,
+            );
+            for (let i = 0; i < n; i++) {
+              const slot = itinerarioSlots[i]!;
+              const paso = pasosNow![i] as {
+                id: string;
+                proceso_id: number;
+                datos_proceso?: unknown;
+              };
+              if (paso.proceso_id !== slot.procesoId) continue;
+              const seed = buildDatosProcesoSeed(
+                slot.procesoId,
+                form,
+                procesoDatos,
+                procesoIdsInRoute,
+              );
+              const merged = mergeDatosProcesoSeed(
+                (paso.datos_proceso as Record<string, unknown> | null) ?? null,
+                seed ??
+                  (slot.procesoId === PROCESO_CTP_ID
+                    ? buildCtpRequisitosSeedFromWizard(procesoDatos.ctp)
+                    : null),
+                slot.procesoId,
+              );
+              const { error: errUpd } = await supabase
+                .from(TABLE_OT_PASOS)
+                .update({ datos_proceso: merged })
+                .eq("id", paso.id);
+              if (errUpd) throw errUpd;
             }
           }
         } else {
