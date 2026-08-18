@@ -3,7 +3,7 @@
 > **Fuente de verdad de este módulo.** No es un parche de sesión: es maquinaria permanente de inventario.
 > Complementa `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` (ATP, cartelas, consumo). Si hay contradicción sobre *liberar / recomprar / aviso formato*, **manda este documento**.
 >
-> **Estado:** 📋 **Spec cerrada 18 ago 2026.** Código: no empezado.
+> **Estado:** 🚀 **9.8.1 + 9.8.1b implementados 18 ago 2026.** Pendiente merge a `main` + prueba en OT 98019.
 > **OT laboratorio:** **98019** (clone 98016, maestro, *no despachada*).
 > **Sesión de acuerdo:** `SESION_18AGO2026_STOP_MATERIAL.md`.
 >
@@ -204,9 +204,10 @@ Disciplina: **probar en 98019 antes de abrir la siguiente.**
 
 | Fase | Qué | Modelo | PR / riesgo |
 |------|-----|--------|-------------|
-| **9.8.1 + 9.8.1b** | Liberar reserva + movimiento ledger + notas palet + **arreglar gate de compra** | **Sonnet** (ledger) + Composer para el allowlist UI | **Mismo PR. 1b es bloqueante.** |
+| **9.8.1 + 9.8.1b** | Liberar reserva + movimiento ledger + notas palet + **arreglar gate de compra** | **Sonnet** (ledger) + Composer para el allowlist UI | ✅ **Implementado + 98019-A validada 18 ago.** Pendiente **merge**. |
+| **9.8.1c** | **Auditoría legacy stock** — grep + sync consumo 9.4 + Cartelas ATP | Composer | ✅ **Hecho 18 ago noche** (migración + UI; repair #10984) |
 | **9.8.2** | Aviso CTP + Guillotina (`formato_papel` vs cartela / corte) | **Composer** | Lectura; no corrompe stock |
-| **9.8.3** | Compra corrección: 2.ª fila, tipo, histórico, sync `estado_material` | **Sonnet** | Estados compras + despachadas |
+| **9.8.3** | Compra corrección P2 + **salida explícita de estado STOP** (`estado_material` al cartelar/consumir) + sync post-consumo 9.4 | **Sonnet** | Estados compras + despachadas + palet legacy |
 | **9.8.4** | Asignar stock libre → OT (Juan); buscar por material/gramaje/`formato` | **Composer** | |
 | **9.8.5** | RPC `prod_stock_revertir_consumo` simétrica | **Sonnet** | Inventario real |
 | **9.8.6** | Popup redespacho asistido tras reasignar | **Composer** | |
@@ -241,6 +242,27 @@ Allowlist inicial (normalizada):
 **9.8.3** añadirá además botón privilegiado **«Generar compra de corrección»** que no dependa del lote “solo si sin pedido”. Hasta que exista, 9.8.1b tiene que dejar el lote usable tras liberar.
 
 Regla de sync: al actualizar una OC **histórica** Recibida, **no** pise `estado_material` de la OT si hay liberación / corrección pendiente. Fuente = compra **activa de cobertura** o constante STOP.
+
+### 9.8.1c — auditoría legacy stock (18 ago, post-98019-A)
+
+**Pregunta:** ¿Qué lee `prod_stock_palets.estado` / `ot_destino_numero` fuera de `stock_palets_atp` + bridge?
+
+**Respuesta (grep):**
+
+| Sitio | Qué lee | ¿Miente hoy? |
+|-------|---------|--------------|
+| **`stock-page.tsx`** | Vista `stock_palets_atp` → `estado_derivado` | ✅ No (Agotado correcto en #10984) |
+| **`cartelas-page.tsx`** | Tabla `prod_stock_palets` + bridge; badge mezcla OTs + `cantidad_actual`, **fallback `palet.estado`** si físico=0 | ⚠️ Sí — #10984 puede seguir «reservado» en Cartelas |
+| **`cartela-wizard-dialog.tsx`** | Escribe `estado` al crear; preview usa `p.estado` | Solo al crear |
+| **`prod_stock_registrar_consumo`** (9.4) | Actualiza `cantidad_actual` + bridge reserva; **no toca `estado` ni limpia fila bridge OT** | ⚠️ Origen de #8 |
+| **`prod_stock_liberar_reserva`** (9.8.1) | Limpia bridge + `ot_destino_numero` + `estado=disponible` | ✅ |
+| **`stock-optimus-import.ts`** | Escribe `ot_destino_numero` si 1 OT | Import legacy |
+| **`cartela-ejecucion.ts`** | Solo `cantidad_actual` (dropdown cartelas) | ✅ |
+| **`cartela-print` / pool** | No usan `estado` del palet para badge | ✅ |
+
+**Conclusión P1:** La migración 9.2 ya documentó `estado` como **LEGACY** («No mantener a mano; preferir la vista»). El bug no es conceptualmente nuevo — es **deuda no cerrada**: Cartelas y el RPC de consumo siguen en el camino legacy. **Fix mínimo antes/dentro de 9.8.3:** (a) consumo 9.4 sincroniza `estado` coherente o elimina dependencia; (b) Cartelas usa misma lógica que `estado_derivado`; (c) opcional borrar fila bridge cuando reserva=0 y físico=0.
+
+**Observaciones CTP (#4):** confirmado en código — `ExecutionCard` con `key={row.id}-${row.updatedAt}` remonta tras cada `loadData()`; `useState(row.observaciones)` no re-sincroniza. Coincide con lazy-mount (14 ago): texto en pantalla puede perderse antes del patch. Fix: key estable + sync campos comunes o guardado en blur.
 
 ---
 
@@ -294,29 +316,55 @@ No es un tercer módulo: es 9.8.4 sobre palets que nunca tuvieron reserva, más 
 
 ### 98019-A (CTP, sin consumo) — prueba reina de 9.8.1–3 + 6
 
-1. Despachar 65×92 / corte Guillotina 65×46 (a propósito, como 98016).
-2. Generar compra → muelle → cartelar → reservar OT.
-3. CTP: debe salir aviso 9.8.2 (cuando exista); si aún no, STOP manual.
-4. Liberar cartela (rol privilegiado). Comprobar:
+**Progreso 18 ago noche (Manel):** pasos 1–5 en curso ✅. Detalle abajo.
+
+1. Despachar 65×92 / corte Guillotina 65×46 (a propósito, como 98016). ✅
+2. Generar compra → muelle → cartelar → reservar OT. ✅ P1 + cartela `#99019` (prueba).
+3. CTP: debe salir aviso 9.8.2 (cuando exista); si aún no, STOP manual. ✅ Pausado (motivo «Otros») → reanudado → **cerrado 24 h** (18 ago ~21:15). ⚠️ **Observaciones STOP no persistieron** en `prod_mesa_ejecuciones.observaciones` (null en BD) — bug UI; ver §12.1.
+4. Liberar cartela (rol privilegiado). Comprobar: ✅
    - palet sin reserva OT; `cantidad_libre` = físico;
    - movimiento con `ot_origen_numero = 98019`;
    - notas palet legibles;
    - **OC 1 sigue en Compras** (no borrada);
    - `estado_material` permite **nueva** compra (9.8.1b).
-5. Camino B: 2.ª compra 72×102 → recibir → cartelar → asignar.
-6. Popup redespacho (9.8.6) o lápiz: 72×102 / 72×51.
-7. Guillotina ve instrucción nueva.
-8. **Histórico:** OC1 65×92 visible; OC2 72×102 activa; cartela 1 libre con procedencia; cartela 2 reservada a 98019.
+   - Reimpresión cartela `(stock libre)` para pegar en palet físico. ✅
+5. Camino B: 2.ª compra 72×102 → recibir → cartelar → asignar. ✅
+   - **Workaround validado:** duplicar P1 en Compras → **P2** (mismo OT 98019, formato 72×102, notas RECOMPRA). El botón «Generar compras en lote» en Despachadas **sigue sin crear P2** (toast «ya tenían registro») → **9.8.3 pendiente**.
+   - Cartela nueva `#10984` reservada 98019 (albarán RECOMPRA; no marcada prueba — OK para demo).
+6. Popup redespacho (9.8.6) o lápiz: 72×102 / 72×51. ✅ **Lápiz** (popup 9.8.6 no existe aún). Despacho `tamano_hoja = 72X102`. Guillotina plan `72X102 → 72X51`.
+7. Guillotina ve instrucción nueva. ✅ Mesa Miguel: entrada 72X102, salida 72X51, cartela **`#10984`** (no `#99019`).
+8. **Histórico:** OC1 65×92 Recibido; OC2 72×102 Recibido; cartela `#99019` **libre** 1000 h 65×92 con notas liberación; cartela `#10984` **consumida** (0 h, cierre Guillotina 9.4). PDF `hoja-ruta-98019.pdf` 18 ago 21:25 OK.
+
+**Veredicto 98019-A (18 ago ~21:26):** **VALIDADA en planta** para 9.8.1 + 9.8.1b + lápiz + consumo Guillotina con cartela correcta. **No cierra el bloque 9.8:** faltan 9.8.2, 9.8.3, 9.8.4–6.
+
+**Huecos vistos en esta corrida (no bloquean el veredicto A):**
+- `estado_material` de 98019 sigue `'Sin material asignado (liberado)'` **después** de asignar `#10984` y consumirla. Badge STOP queda sucio.
+- Observaciones CTP no persistieron (§12.1).
+- Palet `#10984` queda `estado = reservado` con `cantidad_actual = 0` y fila bridge `cantidad_reservada = 0` (consumo 9.4 no limpia reserva residual).
 
 ### 98019-B (post-Guillotina) — tras 9.8.5
 
 Consumo registrado → revertir RPC → formato palet 65×46 + nota → liberar → recompra o stock.
+
+**OT laboratorio mañana:** **98020** (alta 18 ago noche, **no despachada**). Mismo SEGLE triplo; título `[lab STOP material · clone 98016 · caso B post-guillotina]`. Despacho inicial igual que A: 65×92 / 65×46 → compra → guillotina **con consumo** → STOP a mitad (9.8.5 cuando exista).
 
 ### 98019-C (stock libre)
 
 Cartelar palet libre (p. ej. 75×105) → oficina elige stock → Juan asigna → lápiz con refilado Miguel.
 
 Si 98019 ya está “sucia” de A, clonar **98020** para B/C. No mezclar estados en la misma OT si confunde la prueba.
+
+### 12.1 Bug conocido — observaciones CTP/ejecución no persisten
+
+**Reportado 18 ago (98019 CTP):** operario escribe en «Observaciones» (p. ej. texto STOP formato material) pero al reanudar/cerrar el campo aparece vacío y en BD queda `null`.
+
+**Verificado en Supabase:** ejecución CTP 98019 (`65189d8e-…`) → `observaciones = null`, pausa «Otros» → `observaciones_pausa = null`. Horas sí guardadas (24 h).
+
+**Hipótesis técnica:** `ExecutionCard` se remonta con `key={row.id}-${row.updatedAt}` tras cada `loadData()`; si el texto se teclea después de pausar y antes de Guardar/Reanudar/Cerrar, o hay un refresh intermedio, se pierde el estado local sin llegar al patch.
+
+**Workaround planta:** pulsar **Guardar** explícitamente tras escribir observaciones, antes de pausar/reanudar/cerrar.
+
+**Fix pendiente:** quitar remount agresivo + sincronizar campos comunes desde `row` sin pisar edición local; opcional copiar observaciones a `observaciones_pausa` al pausar.
 
 ---
 

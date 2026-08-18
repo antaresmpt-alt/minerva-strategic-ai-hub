@@ -12,8 +12,9 @@ import {
   Search,
   SlidersHorizontal,
   Trash2,
+  Unlink,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -26,8 +27,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import {
   openCartelaPrintWindow,
   printCartelasWindow,
@@ -40,8 +51,14 @@ import {
   otTitulosFromMetadata,
 } from "@/lib/cartelas-ot-metadata";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
+import { errorMessageFromUnknown } from "@/lib/error-message";
 import { fetchFotosByRecepcionIds, mergeFotoUrls } from "@/lib/recepcion-fotos-fetch";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import {
+  deriveEstadoDerivado,
+  estadoDerivadoLabelCartelas,
+  sumReservaDuraTotal,
+} from "@/lib/stock-atp-derive";
 import type {
   AlbaranPendienteGroup,
   AlbaranRecepcionLine,
@@ -53,6 +70,8 @@ import { CartelaWizardDialog, type CartelaWizardCreatedInfo } from "./cartela-wi
 import { RecepcionStockDialog } from "./recepcion-stock-dialog";
 import { RecepcionFotosPanel } from "@/components/produccion/recepcion/recepcion-fotos-panel";
 
+const ROLES_LIBERAR = new Set(["admin", "oficina_tecnica", "gerencia"]);
+
 const supabase = createSupabaseBrowserClient();
 
 const ESTADO_COLORS: Record<string, string> = {
@@ -60,6 +79,7 @@ const ESTADO_COLORS: Record<string, string> = {
   reservado: "bg-blue-100 text-blue-800 border-blue-200",
   parcial: "bg-amber-100 text-amber-800 border-amber-200",
   consumido: "bg-slate-100 text-slate-500 border-slate-200",
+  agotado: "bg-slate-100 text-slate-500 border-slate-200",
 };
 
 /** PostgREST puede tipar joins FK como objeto o array según los tipos generados. */
@@ -91,6 +111,12 @@ export function CartelasPage() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardGrupo, setWizardGrupo] = useState<AlbaranPendienteGroup | null>(null);
   const [stockDialogOpen, setStockDialogOpen] = useState(false);
+
+  // ── Bloque 9.8.1 — Liberar reserva ───────────────────────────────────────
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [liberarPalet, setLiberarPalet] = useState<ProdStockPaletConOts | null>(null);
+  const [liberarOtNumero, setLiberarOtNumero] = useState<string>("");
+  const [liberarDialogOpen, setLiberarDialogOpen] = useState(false);
 
   // ── Carga bandeja pendientes ──────────────────────────────────────────
   const loadPendientes = useCallback(async () => {
@@ -333,9 +359,7 @@ export function CartelasPage() {
             (typeof prov?.nombre === "string" ? prov.nombre : null);
           return {
             ...p,
-            ots:
-              otsByPalet[p.id] ??
-              (p.ot_destino_numero ? [p.ot_destino_numero] : []),
+            ots: otsByPalet[p.id] ?? [],
             otsReservas: reservasByPalet[p.id] ?? [],
             proveedor_nombre: proveedorNombre,
           };
@@ -356,6 +380,35 @@ export function CartelasPage() {
   useEffect(() => {
     if (tab === "cartelas") loadCartelas();
   }, [tab, loadCartelas]);
+
+  // Cargar rol del usuario para el botón Liberar (9.8.1)
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        const uid = typeof authUser?.id === "string" && authUser.id.trim().length > 0
+          ? authUser.id.trim()
+          : null;
+        if (!uid || cancelled) return;
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", uid)
+          .maybeSingle();
+        if (!cancelled) {
+          setUserRole(
+            prof && typeof (prof as { role?: unknown }).role === "string"
+              ? String((prof as { role: string }).role).trim() || null
+              : null,
+          );
+        }
+      } catch {
+        // non-critical
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // ── Filtro búsqueda cartelas creadas ─────────────────────────────────
   const filteredCartelas = useMemo(() => {
@@ -460,6 +513,19 @@ export function CartelasPage() {
     } else if (tab !== "cartelas") {
       setTab("cartelas");
     }
+  }
+
+  function handleAbrirLiberarDialog(palet: ProdStockPaletConOts, otNumero: string) {
+    setLiberarPalet(palet);
+    setLiberarOtNumero(otNumero);
+    setLiberarDialogOpen(true);
+  }
+
+  function handleLiberarDone() {
+    setLiberarDialogOpen(false);
+    setLiberarPalet(null);
+    setLiberarOtNumero("");
+    loadCartelas();
   }
 
   async function handleDeletePrueba(palet: ProdStockPaletConOts) {
@@ -761,10 +827,12 @@ export function CartelasPage() {
               <CartelaListRow
                 key={palet.id}
                 palet={palet}
+                userRole={userRole}
                 onPrint={() => handlePrint(palet)}
                 onDeletePrueba={
                   palet.es_prueba ? () => handleDeletePrueba(palet) : undefined
                 }
+                onLiberarOt={(otNumero) => handleAbrirLiberarDialog(palet, otNumero)}
               />
             ))}
           </div>
@@ -788,6 +856,17 @@ export function CartelasPage() {
         onClose={() => setStockDialogOpen(false)}
         onCreated={handleStockRecepcionCreated}
       />
+
+      {/* Diálogo liberar reserva 9.8.1 */}
+      {liberarPalet && (
+        <LiberarReservaDialog
+          open={liberarDialogOpen}
+          palet={liberarPalet}
+          otNumero={liberarOtNumero}
+          onClose={() => setLiberarDialogOpen(false)}
+          onDone={handleLiberarDone}
+        />
+      )}
     </div>
   );
 }
@@ -921,14 +1000,24 @@ function AlbaranCard({
 
 function CartelaListRow({
   palet,
+  userRole,
   onPrint,
   onDeletePrueba,
+  onLiberarOt,
 }: {
   palet: ProdStockPaletConOts;
+  userRole: string | null;
   onPrint: () => void;
   onDeletePrueba?: () => void;
+  onLiberarOt?: (otNumero: string) => void;
 }) {
-  const estadoClass = ESTADO_COLORS[palet.estado] ?? "";
+  const otsConReserva = palet.ots;
+  const reservadaDura = sumReservaDuraTotal(palet.otsReservas ?? []);
+  const estadoDerivado = deriveEstadoDerivado(palet.cantidad_actual, reservadaDura);
+  const estadoUi = estadoDerivadoLabelCartelas(estadoDerivado);
+  const estadoClass = ESTADO_COLORS[estadoDerivado] ?? ESTADO_COLORS[estadoUi] ?? "";
+  const puedeLiberar = userRole != null && ROLES_LIBERAR.has(userRole);
+
   return (
     <div className="flex items-center gap-3 rounded-md border bg-white px-3 py-2 text-sm hover:bg-slate-50 transition-colors">
       {/* ID Stock */}
@@ -961,10 +1050,10 @@ function CartelaListRow({
         </div>
         <div className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
           {palet.nota_entrega && <span>Alb. {palet.nota_entrega}</span>}
-          {palet.ots.length > 0 && (
-            <span>OT(s): {palet.ots.join(", ")}</span>
+          {otsConReserva.length > 0 && (
+            <span>OT(s): {otsConReserva.join(", ")}</span>
           )}
-          {palet.ots.length === 0 && (
+          {otsConReserva.length === 0 && (
             <span className="text-emerald-600">stock libre</span>
           )}
         </div>
@@ -985,11 +1074,26 @@ function CartelaListRow({
         variant="outline"
         className={`shrink-0 text-xs ${estadoClass}`}
       >
-        {palet.estado}
+        {estadoUi}
       </Badge>
 
-      {/* Imprimir / borrar prueba */}
+      {/* Liberar OT / Imprimir / Borrar prueba */}
       <div className="flex shrink-0 items-center gap-0.5">
+        {/* Botón Liberar (9.8.1) — visible solo a roles privilegiados y si hay OTs */}
+        {puedeLiberar && otsConReserva.length > 0 && onLiberarOt &&
+          otsConReserva.map((ot) => (
+            <Button
+              key={ot}
+              size="icon"
+              variant="ghost"
+              className="size-7 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+              onClick={() => onLiberarOt(ot)}
+              title={`Liberar reserva OT ${ot}`}
+            >
+              <Unlink className="size-3.5" />
+            </Button>
+          ))
+        }
         {onDeletePrueba ? (
           <Button
             size="icon"
@@ -1012,5 +1116,170 @@ function CartelaListRow({
         </Button>
       </div>
     </div>
+  );
+}
+
+// ── Diálogo de liberación de reserva (9.8.1) ─────────────────────────────────
+
+function LiberarReservaDialog({
+  open,
+  palet,
+  otNumero,
+  onClose,
+  onDone,
+}: {
+  open: boolean;
+  palet: ProdStockPaletConOts;
+  otNumero: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [autorizadoPor, setAutorizadoPor] = useState("");
+  const [motivo, setMotivo] = useState("");
+  const [nuevoFormato, setNuevoFormato] = useState("");
+  const [saving, setSaving] = useState(false);
+  const autorizadoRef = useRef<HTMLInputElement>(null);
+
+  // Limpiar al abrir
+  useEffect(() => {
+    if (open) {
+      setAutorizadoPor("");
+      setMotivo("");
+      setNuevoFormato("");
+      setSaving(false);
+      setTimeout(() => autorizadoRef.current?.focus(), 50);
+    }
+  }, [open]);
+
+  async function handleConfirmar() {
+    const quien = autorizadoPor.trim();
+    if (!quien) {
+      toast.error("Indica quién autoriza la liberación (obligatorio para el ledger).");
+      autorizadoRef.current?.focus();
+      return;
+    }
+    setSaving(true);
+    try {
+      const { error } = await supabase.rpc("prod_stock_liberar_reserva", {
+        p_palet_id: palet.id,
+        p_ot_numero: otNumero,
+        p_autorizado_por: quien,
+        p_notas: motivo.trim() || null,
+        p_nuevo_formato: nuevoFormato.trim() || null,
+      });
+      if (error) throw error;
+      toast.success(
+        `Reserva de cartela #${palet.id_stock} liberada de OT ${otNumero}.`,
+      );
+      onDone();
+    } catch (e) {
+      toast.error(`Error al liberar: ${errorMessageFromUnknown(e)}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const materialDesc = [
+    palet.material_nombre ?? palet.descripcion_material,
+    palet.gramaje ? `${palet.gramaje} gr` : null,
+    palet.formato,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v && !saving) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Unlink className="size-4 text-amber-600" />
+            Liberar reserva de OT
+          </DialogTitle>
+          <DialogDescription>
+            Cartela{" "}
+            <span className="font-semibold text-slate-800">
+              #{palet.id_stock}
+            </span>{" "}
+            {materialDesc && (
+              <span className="text-slate-600">— {materialDesc}</span>
+            )}
+            <br />
+            Se liberará la reserva para{" "}
+            <span className="font-semibold text-slate-800">OT {otNumero}</span>.
+            El material quedará libre para reasignar. Queda registrado en el ledger.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="lib-autorizado" className="text-sm font-medium">
+              Autorizado por <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="lib-autorizado"
+              ref={autorizadoRef}
+              placeholder="Nombre de quien autoriza (Ramón, Juan…)"
+              value={autorizadoPor}
+              onChange={(e) => setAutorizadoPor(e.target.value)}
+              disabled={saving}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="lib-motivo" className="text-sm font-medium">
+              Motivo / nota
+            </Label>
+            <Textarea
+              id="lib-motivo"
+              placeholder="Ej: Formato incorrecto — cartela 65×92 no cubre pliego troquel 72×102"
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              rows={3}
+              disabled={saving}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="lib-formato" className="text-sm font-medium">
+              Nuevo formato del palet{" "}
+              <span className="text-slate-400 font-normal text-xs">
+                (solo si ya fue cortado; p. ej. 65×46)
+              </span>
+            </Label>
+            <Input
+              id="lib-formato"
+              placeholder="Dejar vacío si el material está sin cortar"
+              value={nuevoFormato}
+              onChange={(e) => setNuevoFormato(e.target.value)}
+              disabled={saving}
+            />
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            Cancelar
+          </Button>
+          <Button
+            variant="default"
+            className="bg-amber-600 hover:bg-amber-700 text-white"
+            onClick={() => void handleConfirmar()}
+            disabled={saving || !autorizadoPor.trim()}
+          >
+            {saving ? (
+              <>
+                <Loader2 className="size-4 animate-spin mr-1" />
+                Liberando…
+              </>
+            ) : (
+              <>
+                <Unlink className="size-4 mr-1" />
+                Confirmar liberación
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

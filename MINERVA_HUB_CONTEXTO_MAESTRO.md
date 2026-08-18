@@ -287,7 +287,7 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [x] **Ramón brutas/netas** al Enviado; no usar el 200 del plan — ✅ 98016
 - [x] **Troquelado** pisa `hojas_troquelar` con recibidas del anterior — 17 ago tarde
 - [x] **Spec 9.8** reasignación/STOP + OT laboratorio **98019** — 18 ago (`MINERVA_BLOQUE9_REASIGNACION_STOP.md`)
-- [ ] **9.8.1 + 9.8.1b** (mismo PR, bloqueante): liberar reserva + allowlist `estadoMaterialPermiteNuevaCompra` — Sonnet
+- [x] **9.8.1 + 9.8.1b** (mismo PR, bloqueante): liberar reserva + allowlist `estadoMaterialPermiteNuevaCompra` — implementado 18 ago; **98019-A validada en planta** (lápiz 72×102/72×51 + Guillotina cartela `#10984`)
 - [ ] **Bloque 11** (con cuidado): planificar/mover desde calendario; lanzar ≠ pisar plan de otra máquina — `MINERVA_BLOQUE11_…`
 - [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor; tableta = máquina — `MINERVA_BLOQUE12_…` (no abrir ya; default gestor = maestro OTs)
 - [ ] **Bloque 5 puente**: Rita lanza OTs a Hugo (no bloquea paralelo si Hugo sigue a mano)
@@ -312,7 +312,7 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [ ] Preguntas §12 planta (CTP hija) si hace falta antes de 8.4 fino
 
 ### Siguiente foco (orden sugerido 18 ago)
-1. **9.8.1 + 9.8.1b** (mismo PR): liberar reserva + allowlist compra — `MINERVA_BLOQUE9_REASIGNACION_STOP.md` · OT **98019**
+1. **9.8.3** compra corrección P2 desde Despachadas (duplicar P1 es workaround) — `MINERVA_BLOQUE9_REASIGNACION_STOP.md` · OT **98019** ya sucia de A
 2. 9.8.2 aviso CTP/Guillotina → 9.8.3 compra corrección → 9.8.4 asignar libre → 9.8.5 revertir consumo → 9.8.6 redespacho
 3. **Bloque 11** (con cuidado) · **Bloque 12** (sept) · **B5** Rita→Hugo — no mezclar con 9.8
 4. Digital/Guillotina/PDF — feedback planta en TEST

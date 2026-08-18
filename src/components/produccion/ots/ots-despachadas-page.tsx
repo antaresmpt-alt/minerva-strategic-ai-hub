@@ -80,6 +80,9 @@ import type { ProdOtTipoHija } from "@/types/prod-ots";
 import type { OtsDespachadasTableRow } from "@/types/prod-ots-despachadas";
 import type { ProdReferenciaRow } from "@/types/prod-referencias";
 import { cn } from "@/lib/utils";
+import {
+  PERMITE_NUEVA_COMPRA_NORMALIZED,
+} from "@/lib/compras-material-estados";
 
 const TABLE_DESPACHADAS = "produccion_ot_despachadas";
 const TABLE_MASTER = "prod_ots_general";
@@ -210,15 +213,15 @@ function normalizeEstadoMaterialParaMatch(
 }
 
 /**
- * True si la OT aún no tiene flujo de compra (texto tipo «sin orden…»).
- * Heurística acordada: contiene "sin" tras normalizar.
+ * True si la OT puede arrancar un nuevo flujo de compra.
+ * Bloque 9.8.1b: allowlist explícita (PERMITE_NUEVA_COMPRA_NORMALIZED).
+ * Sustituye la heurística frágil includes("sin") que no cubría estados STOP.
  */
 function estadoMaterialPermiteNuevaCompra(
   estado: string | null | undefined
 ): boolean {
   const n = normalizeEstadoMaterialParaMatch(estado);
-  if (!n) return true;
-  return n.includes("sin");
+  return PERMITE_NUEVA_COMPRA_NORMALIZED.has(n);
 }
 
 function estadoMaterialEsGestionCerrada(

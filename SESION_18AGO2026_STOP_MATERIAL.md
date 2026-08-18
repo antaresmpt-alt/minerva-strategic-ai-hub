@@ -44,5 +44,23 @@ Detalle y plan de prueba: el brief de bloque §8 y §12.
 
 ## Retomar
 
-- [ ] Manel: despachar 98019 (65×92 / 65×46) cuando se vaya a probar Caso A.
-- [ ] Código: **9.8.1 + 9.8.1b** (Sonnet). Ver brief §8 y §17.
+- [x] 98019-A validada 18 ago noche (ver brief §12).
+- [x] **9.8.1 + 9.8.1b + 9.8.1c** implementados — merge pendiente (Manel).
+- [ ] Mañana: **9.8.2** aviso formato CTP/Guillotina.
+- [ ] Mañana: **98020** caso B (post-guillotina con consumo).
+
+---
+
+## OT 98020 (caso B — mañana)
+
+| Campo | Valor |
+|--------|--------|
+| `num_pedido` | **98020** |
+| Cliente | COSMECEUTICAL CONCEPT S.L. (SEGLE COSMETICS) |
+| Título | … **[lab STOP material · clone 98016 · caso B post-guillotina]** |
+| Cantidad | 5000 |
+| Despachada | **No** |
+| Pedido cliente | `LAB-STOP-98020` |
+| Entrega | 2026-09-11 |
+
+Flujo: igual que 98019-A hasta **Guillotina con consumo**; parar para revertir/liberar (9.8.5). **98019** ya sucia — no reutilizar.

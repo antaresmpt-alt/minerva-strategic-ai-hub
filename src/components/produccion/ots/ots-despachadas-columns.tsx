@@ -29,6 +29,10 @@ import { formatDateDDMMYY } from "@/components/produccion/ots/master-ots-table-h
 import type { WithOtContenedorDisplay } from "@/lib/ots-contenedor-display";
 import { isOtRowSelectableForCompraMaterial } from "@/lib/ots-contenedor-display";
 import type { PlanificacionOtTipoFiltroUi } from "@/lib/planificacion-contenedor-query";
+import {
+  STOP_MATERIAL_LIBERADO,
+  STOP_PENDIENTE_CORRECCION,
+} from "@/lib/compras-material-estados";
 
 /** Datos «Tipo Excel» desde `prod_troqueles` (clave = `num_troquel` en minúsculas). */
 export type TroquelExcelTooltip = {
@@ -66,6 +70,9 @@ function bucketEstadoMaterial(estado: string | null | undefined): BucketEstadoMa
   if (n === "material recibido" || n === "recepcionada") return "verde";
   if (n === "material parcialmente recibido") return "amarillo";
   if (n === "compra cancelada") return "sin_orden";
+  // Bloque 9.8 — estados STOP: rojo para visibilidad máxima
+  if (n === STOP_MATERIAL_LIBERADO.toLowerCase()) return "naranja";
+  if (n === STOP_PENDIENTE_CORRECCION.toLowerCase()) return "naranja";
   return "otro";
 }
 

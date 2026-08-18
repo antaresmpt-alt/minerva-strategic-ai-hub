@@ -66,6 +66,7 @@ import {
 import {
   COMPRAS_MATERIAL_ESTADOS,
   estadoMaterialDesdeEstadoCompra,
+  esEstadoMaterialStop,
   normalizeCompraEstado,
 } from "@/lib/compras-material-estados";
 import { esPrioridadStockAmarilla } from "@/lib/compras-material-prioridad";
@@ -1107,11 +1108,21 @@ export function ComprasMaterialPage() {
         const ot = row?.ot_numero;
         const mat = estadoMaterialDesdeEstadoCompra(estado);
         if (ot && mat) {
-          const { error: dErr } = await supabase
+          // Guard 9.8.1b: no pisar estado STOP activo (liberación / corrección).
+          // La compra histórica puede estar en "Recibido" mientras la OT está
+          // pendiente de reasignación; no debemos decir "Material recibido".
+          const { data: despRow } = await supabase
             .from(TABLE_DESPACHADAS)
-            .update({ estado_material: mat })
-            .eq("ot_numero", ot);
-          if (dErr) console.warn(dErr);
+            .select("estado_material")
+            .eq("ot_numero", ot)
+            .maybeSingle();
+          if (!esEstadoMaterialStop(despRow?.estado_material)) {
+            const { error: dErr } = await supabase
+              .from(TABLE_DESPACHADAS)
+              .update({ estado_material: mat })
+              .eq("ot_numero", ot);
+            if (dErr) console.warn(dErr);
+          }
         }
         if (esRecibido && row) {
           const { data: existente, error: exErr } = await supabase
@@ -1485,11 +1496,19 @@ export function ComprasMaterialPage() {
       if (u1) throw u1;
 
       for (const ot of ots) {
-        const { error: u2 } = await supabase
+        // Guard 9.8.1b: no pisar estado STOP activo en la OT.
+        const { data: despRow2 } = await supabase
           .from(TABLE_DESPACHADAS)
-          .update({ estado_material: "Orden compra generada" })
-          .eq("ot_numero", ot);
-        if (u2) throw u2;
+          .select("estado_material")
+          .eq("ot_numero", ot)
+          .maybeSingle();
+        if (!esEstadoMaterialStop(despRow2?.estado_material)) {
+          const { error: u2 } = await supabase
+            .from(TABLE_DESPACHADAS)
+            .update({ estado_material: "Orden compra generada" })
+            .eq("ot_numero", ot);
+          if (u2) throw u2;
+        }
       }
 
       const {
