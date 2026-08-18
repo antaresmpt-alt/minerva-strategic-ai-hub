@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: 17 ago 2026 (OT 98016 E2E: cartela admin, Ramón brutas/netas, muelle netas deseadas, troquel pisa plan con recibidas; `SESION_17AGO2026_PREFILL_RUTA_MUELLE_B6.md`).
+> Última actualización: 18 ago 2026 (spec Bloque 9.8 reasignación/STOP material; OT laboratorio **98019**; `MINERVA_BLOQUE9_REASIGNACION_STOP.md`).
 
 ---
 
@@ -15,6 +15,7 @@
    - `MINERVA_BLOQUE7_ODOO_ALBARANES.md`
    - `MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`
    - `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`
+   - `MINERVA_BLOQUE9_REASIGNACION_STOP.md` (9.8: liberar/reasignar/recomprar; OT 98019)
    - `MINERVA_BLOQUE10_PRESUPUESTOS.md` (futuro)
    - `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` (calendario = master planificar/lanzar)
    - `MINERVA_BLOQUE12_ROLES_PERMISOS_NAVEGACION.md` (landing por perfil — sept)
@@ -23,7 +24,8 @@
 6. Si el tema es Manipulados / Encajar / entrada a Producción: `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`.
 7. Si el tema es cola de mesa / tableta / ejecución: `SESION_14AGO2026_EJECUCION_LISTA.md`.
 8. Si el tema es prefill Ruta / muelle / cartela admin / envío Ramón: `SESION_17AGO2026_PREFILL_RUTA_MUELLE_B6.md`.
-9. Al cerrar una fase, actualizar este maestro + `FASES_HOJA_RUTA_DIGITAL.md`.
+9. Si el tema es desasignar cartela / STOP formato / recompra: `MINERVA_BLOQUE9_REASIGNACION_STOP.md` (+ `SESION_18AGO2026_STOP_MATERIAL.md`).
+10. Al cerrar una fase, actualizar este maestro + `FASES_HOJA_RUTA_DIGITAL.md`.
 
 **Jerarquía documental:**
 | Documento | Rol |
@@ -41,6 +43,8 @@
 | `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md` | Sesión 14 ago (mañana): Encajar en Manipulados, flags wizard, Pool sin lápiz, `/produccion` → OTs. |
 | `SESION_14AGO2026_EJECUCION_LISTA.md` | Sesión 14 ago (tarde): lista gorda ejecución, semáforo, perf, tableta por máquina (Ramón). |
 | `SESION_17AGO2026_PREFILL_RUTA_MUELLE_B6.md` | Sesión 17 ago: prefill Ruta, cartela admin, Ramón brutas/netas, muelle, OT 98016 E2E. |
+| `MINERVA_BLOQUE9_REASIGNACION_STOP.md` | Bloque 9.8: liberar/reasignar cartela, compra corrección, aviso formato, ledger. OT **98019**. |
+| `SESION_18AGO2026_STOP_MATERIAL.md` | Sesión 18 ago: acuerdo spec 9.8 + alta 98019 (sin código). |
 | `MINERVA_BRIEFING.md` | Onboarding narrativo largo; útil, pero secundario frente a este maestro. |
 
 ---
@@ -252,7 +256,7 @@ src/components/produccion/planificacion/
 | 6 | Producidas / cierre OT | ✅ MVP + promedios + oficiales + clone. ✅ Cierre **contenedor** 8.4 (snapshot barco) |
 | 7 | Expedición / Albarán | ⏸ **Aparcado** hasta decisión Odoo |
 | 8 | Contenedor / formas / hijas | 🔄 FORMATO–8.1 ✅ · **8.2 wizard MVP ✅** · 8.3 parcial · **8.4 cierre barco ✅** · **8.5 convergencia 📋 diseño** · 8.6 futuro · **captura envío externos ✅** |
-| 9 | Material, cartelas, stock, calendario prod. | ✅ 9.0–9.6d + 9.4 + **§15.6.12 derivar a externa (13 ago)**. ⏳ Plan engomado desde troquel; sobrantes al cierre; OCR 9.7 baja |
+| 9 | Material, cartelas, stock, calendario prod. | ✅ 9.0–9.6d + 9.4 + **§15.6.12** (13 ago). 📋 **9.8 reasignación/STOP** spec 18 ago (`MINERVA_BLOQUE9_REASIGNACION_STOP.md`, OT **98019**). ⏳ OCR 9.7; fotos 9.10; sobrantes cierre |
 | 10 | Presupuestos | ⏸ Futuro (más miga; tras Minerva estable) |
 | 11 | Calendario = master planificar / lanzar | 🔄 **Éxito de uso** (Carlos/Jordi). Ampliar con cuidado: planificar sí; lanzar suave (pool/mesa) + conflictos de máquina. Sin reordenar el menú (convive con Pool/Mesa/Pipeline) |
 | 12 | Roles, permisos, landing por perfil | 📋 **Documentado** — operario→ejecución; gestor→home rico. **14 ago:** 1 tableta/máquina (Ramón). Aparcado de código; crítico antes usuarios masivos |
@@ -263,7 +267,7 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 
 ## 🔜 Tareas pendientes inmediatas
 
-### Retomar aquí (17 ago 2026 — camino a TEST septiembre)
+### Retomar aquí (18 ago 2026 — camino a TEST septiembre)
 - [x] **Pipeline**: modo **compacto por defecto** (+ preferencia localStorage; `?compact=0` = extendida) (11 ago)
 - [x] **Pipeline UX**: «Listo para cerrar» en pendientes de revisión (paso actual + badge) (11 ago)
 - [x] **Pipeline perf**: `fetchAllInChunks` concurrencia 5; olas desp→(arch∥ot∥pool∥hijas)→pasos→(ejec∥ext); filtros search/incidencias/externo/estado en cliente; índice `despachado_at` (11 ago)
@@ -282,11 +286,14 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [x] **Cartela admin** en paso cerrado (corregir/editar; reabrir admin/gerencia) — ✅ 98016 Guillotina palet 99018
 - [x] **Ramón brutas/netas** al Enviado; no usar el 200 del plan — ✅ 98016
 - [x] **Troquelado** pisa `hojas_troquelar` con recibidas del anterior — 17 ago tarde
+- [x] **Spec 9.8** reasignación/STOP + OT laboratorio **98019** — 18 ago (`MINERVA_BLOQUE9_REASIGNACION_STOP.md`)
+- [ ] **9.8.1 + 9.8.1b** (mismo PR, bloqueante): liberar reserva + allowlist `estadoMaterialPermiteNuevaCompra` — Sonnet
 - [ ] **Bloque 11** (con cuidado): planificar/mover desde calendario; lanzar ≠ pisar plan de otra máquina — `MINERVA_BLOQUE11_…`
 - [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor; tableta = máquina — `MINERVA_BLOQUE12_…` (no abrir ya; default gestor = maestro OTs)
 - [ ] **Bloque 5 puente**: Rita lanza OTs a Hugo (no bloquea paralelo si Hugo sigue a mano)
 
 ### Hecho reciente (jul–ago)
+- [x] **18 ago:** spec Bloque 9.8 + OT **98019** en maestro (sin código) — `SESION_18AGO2026_STOP_MATERIAL.md`
 - [x] **17 ago:** OT 98016 E2E (Ruta, cartela, Imprimir fuera, Ramón/Juan, plastificado, troquel) — `SESION_17AGO2026_PREFILL_RUTA_MUELLE_B6.md`
 - [x] **14 ago tarde:** lista gorda OTs en ejecución + perf tableta — `SESION_14AGO2026_EJECUCION_LISTA.md`
 - [x] **14 ago:** Encajar en Manipulados, flags Retractilar/Etiquetar/Encajar en wizard, Pool sin lápiz, portada → OTs — `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`
@@ -304,11 +311,11 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [ ] 9.7 OCR albarán (baja); sobrantes al cierre (B6+B9)
 - [ ] Preguntas §12 planta (CTP hija) si hace falta antes de 8.4 fino
 
-### Siguiente foco (orden sugerido 17 ago tarde)
-1. ~~Prefill Ruta / muelle / B6 / cartela / Ramón-Juan~~ ✅ 98016 + commit
-2. **Bloque 11** (con cuidado) · **Bloque 12** (sept, usuarios) · **B5** Rita→Hugo
-3. Cartelas: desasignar / asignar otro palet (planta usa stock distinto al asignado)
-4. Digital/Guillotina/PDF — feedback planta en TEST, no antes
+### Siguiente foco (orden sugerido 18 ago)
+1. **9.8.1 + 9.8.1b** (mismo PR): liberar reserva + allowlist compra — `MINERVA_BLOQUE9_REASIGNACION_STOP.md` · OT **98019**
+2. 9.8.2 aviso CTP/Guillotina → 9.8.3 compra corrección → 9.8.4 asignar libre → 9.8.5 revertir consumo → 9.8.6 redespacho
+3. **Bloque 11** (con cuidado) · **Bloque 12** (sept) · **B5** Rita→Hugo — no mezclar con 9.8
+4. Digital/Guillotina/PDF — feedback planta en TEST
 5. **8.5** convergencia · **B7 / B10** aparcados
 
 ---
@@ -337,7 +344,7 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 
 11. **Encadenado formato de pliego (17 jun 2026, Fase FORMATO ✅)**: por **orden de itinerario** (`prod_ot_pasos.orden`), no por tipo de proceso global. `tamano_hoja` en despacho = **Formato compra** (solo referencia de compra). Guillotina: `tamano_inicial` ← anterior, `tamano_final` → siguiente. Impresión/externos hojas: `formato_hojas`. Troquelado: `tamano_corte` es el troquel (independiente); banner muestra pliego de entrada. Módulo: `hoja-ruta-formato-encadenado.ts`. Probado OT 98009 (commit `aadad81`).
 
-12. **Bloque 9 — Cartelas y stock (18 jul 2026)**: **9.0–9.6d + 9.4 A/B/C** en `main`. Consumo cartela guillotina/impresión/troquel/imp. externa. **Sesión 18 jul:** Calendario Producción UX (pastillas, progreso HR, mini-modal, PDF grid + listado papel), impresión cartela **1 copia**, fix crash menú PDF. Briefing §15.10–15.12: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`. **§15.6.12 ✅ 13 ago:** «Imprimir fuera» Pool/mesa/ejecución (1/2 → 21). Detalle: `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`.
+12. **Bloque 9 — Cartelas y stock (18 jul 2026)**: **9.0–9.6d + 9.4 A/B/C** en `main`. Consumo cartela guillotina/impresión/troquel/imp. externa. **Sesión 18 jul:** Calendario Producción UX (pastillas, progreso HR, mini-modal, PDF grid + listado papel), impresión cartela **1 copia**, fix crash menú PDF. Briefing §15.10–15.12: `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`. **§15.6.12 ✅ 13 ago:** «Imprimir fuera» Pool/mesa/ejecución (1/2 → 21). Detalle: `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`. **9.8 📋 18 ago:** reasignar/STOP — ledger manda, no anular OC, 9.8.1b allowlist en el mismo PR que liberar. Brief: `MINERVA_BLOQUE9_REASIGNACION_STOP.md`. OT lab **98019**.
 
 13. **Higiene operativa (18 jun 2026)**: `bultos_por_palet_default` de Gabri versionado en migración seed (`20260618143200`). Plantillas offset: **Desbroce** insertado entre Troquelado y Engomado en 5 rutas (`20260618143000`). Rol usuario CTP = **`ctp`** (no `preimpresion`); permisos `produccion` + `produccion_ejecucion` en BD y `permissions.ts`. Marc/Gemma: usuarios aún no creados en Supabase.
 
@@ -362,6 +369,8 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 23. **Manipulados y entrada (14 ago 2026)**: Encajar vive en proceso 15 (no en Engomado) con `estuches_por_bulto` distinto de retractilar. Redespacho solo en OTs Despachadas (Pool sin lápiz). `/produccion` redirige al maestro de OTs hasta Bloque 12.
 
 24. **Cola de ejecución táctil (14 ago 2026 tarde)**: lista gorda + semáforo; parte completo lazy al expandir; terminadas ocultas (filtro «de hoy» readonly). Query solo activas + catálogos cacheados; pestañas Planificación lazy. Tableta de planta = **máquina**, no persona. Detalle: `SESION_14AGO2026_EJECUCION_LISTA.md`.
+
+25. **Bloque 9.8 — Reasignación / STOP (18 ago 2026, spec)**: el ledger ATP manda, no las líneas de Optimus; no fiarse de que el usuario marque. Liberar reserva ≠ anular compra. 2.ª OC (no borrar la 1.ª). `ot_origen_numero` en movimientos; formato real en palet. 9.8.1b allowlist de compra **en el mismo PR** que 9.8.1. Oficina decide camino; Juan asigna stock libre. OT lab **98019**. Brief: `MINERVA_BLOQUE9_REASIGNACION_STOP.md`.
 
 ## 📁 Estructura de carpetas relevante
 

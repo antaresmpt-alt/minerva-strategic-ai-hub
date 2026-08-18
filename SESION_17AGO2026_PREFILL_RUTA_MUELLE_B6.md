@@ -155,7 +155,7 @@ Verificación local: `tsc --noEmit` OK · vitest `externos-envio-brief.test.ts` 
 - Fix: igual que Desbroce — si hay salida real del anterior, pisa el campo de trabajo y guarda el plan en `hojas_troquelar_plan`.
 
 ### Pendiente (hablar otro día)
-- Desasignar/reasignar cartela de una OT cuando en planta se usa otro palet por prisa.
+- ~~Desasignar/reasignar cartela~~ → spec **9.8** 18 ago: `MINERVA_BLOQUE9_REASIGNACION_STOP.md` (OT **98019**).
 - Cabecera despacho 98016 (netas 200 del plan) — no bloquea el flujo; Ramón ya no depende de eso al enviar.
 
 ---
@@ -164,5 +164,5 @@ Verificación local: `tsc --noEmit` OK · vitest `externos-envio-brief.test.ts` 
 
 - [x] Prueba de campo 98016 (Ruta, cartela, Imprimir fuera, Ramón, Juan, plastificado, troquel).
 - [x] Commit + push a `main`.
-- [ ] Siguiente foco maestro: Bloque 11 / 12 / 5 según calendario TEST.
-- [ ] Cartelas: flujo desasignar / asignar otro palet.
+- [x] Cartelas desasignar/reasignar: spec 9.8 (18 ago) — `MINERVA_BLOQUE9_REASIGNACION_STOP.md`.
+- [ ] Siguiente foco: **9.8.1 + 9.8.1b** (no Bloque 11 hasta cerrar STOP).

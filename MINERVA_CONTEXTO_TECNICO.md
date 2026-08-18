@@ -2,7 +2,7 @@
 
 > Documento de contexto técnico generado automáticamente.
 > Proyecto: **minerva-strategic-ai-hub** · Next.js 16 + React 19 + Supabase.
-> Fecha de generación: 13 de junio de 2026 · **Última actualización: 17 agosto 2026** (OT 98016 E2E; `SESION_17AGO2026_PREFILL_RUTA_MUELLE_B6.md`).
+> Fecha de generación: 13 de junio de 2026 · **Última actualización: 18 agosto 2026** (spec 9.8 STOP; `MINERVA_BLOQUE9_REASIGNACION_STOP.md`; OT 98019).
 
 ---
 

@@ -4,12 +4,12 @@
 > Tema: recepción de material, cartelas de palet, stock libre y trazabilidad.
 > Complementa `MINERVA_HUB_CONTEXTO_MAESTRO.md`, `FASES_HOJA_RUTA_DIGITAL.md` y briefings Bloques 6 y 7.
 >
-> **Estado:** ✅ **9.0–9.6d + 9.4 A/B/C** + **Calendario Producción** (18 jul 2026) — cartelas (impresión **1 copia**), Stock ATP, consumo guillotina/impresión/troquel/imp. externa, planificador OTs Jordi. **Validado E2E:** OT **98013**. ✅ **§15.6.12 derivar a externa (13 ago)** — OT **98015**. ✅ **17 ago:** corregir cartela en paso cerrado (98016 palet 99018); Ramón brutas/netas + muelle netas deseadas. ⏳ Plan engomado desde troquel, 9.7 OCR, cierre OT sobrantes (Bloque 6). Desasignar/reasignar palet de una OT: pendiente.
+> **Estado:** ✅ **9.0–9.6d + 9.4 A/B/C** + **Calendario Producción** (18 jul 2026) — cartelas (impresión **1 copia**), Stock ATP, consumo guillotina/impresión/troquel/imp. externa, planificador OTs Jordi. **Validado E2E:** OT **98013**. ✅ **§15.6.12 derivar a externa (13 ago)** — OT **98015**. ✅ **17 ago:** corregir cartela en paso cerrado (98016 palet 99018); Ramón brutas/netas + muelle netas deseadas. 📋 **9.8 reasignación/STOP** — spec 18 ago: `MINERVA_BLOQUE9_REASIGNACION_STOP.md` (OT **98019**; código no empezado). ⏳ Plan engomado desde troquel, 9.7 OCR, 9.10 fotos, cierre OT sobrantes (Bloque 6).
 > **Origen:** Optimus + cartelas CARPAPSA (15 jun 2026).
-> **Actualizado:** 14 ago 2026 — sesiones 13–14 ago (itinerario vivo + Encajar); §15.14 / `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`.
-> **PENDIENTE:** H1/H2 recuento global. Ubicación por filas de material (catálogo UI sin definir en planta). Ajuste impresión A6 física vs A4 PDF.
+> **Actualizado:** 18 ago 2026 — 9.8 spec STOP/reasignar. Antes: 14 ago sesiones 13–14; §15.14 / `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`.
+> **PENDIENTE:** 9.8 código (1+1b primero). H1/H2 recuento global. Ubicación por filas de material (catálogo UI sin definir en planta). Ajuste impresión A6 física vs A4 PDF.
 
-**Relacionado:** sobrantes → Bloque 6 · expedición → Bloque 7 · material contenedor/hijas → Bloque 8 · FSC → maestro artículos.
+**Relacionado:** sobrantes → Bloque 6 · expedición → Bloque 7 · material contenedor/hijas → Bloque 8 · FSC → maestro artículos · **liberar/reasignar/STOP → `MINERVA_BLOQUE9_REASIGNACION_STOP.md` (9.8)**.
 
 ---
 
@@ -716,6 +716,9 @@ Cartela 10.301: 1.400h · OT 35851 · estado parcial
 Vista Stock: "OT 35851 — déficit 100h (pendiente reponer)"
 ```
 
+**STOP / soltar palet de una OT (formato incorrecto, 18 ago):** no es el mismo flujo que “urgencias 100h OT-A → OT-B”. Liberar reserva + compra corrección + aviso CTP está en **`MINERVA_BLOQUE9_REASIGNACION_STOP.md` (fase 9.8)**. OT laboratorio **98019**.
+
+
 **Déficit y `material_status` (Bloque 8):** en MVP el déficit es **nota visible en vista Stock** (y en detalle de cartela/OT). **No** conectar al semáforo `material_status` de pool/mesa hasta que los movimientos estén rodados (fase 9.4+). Destino futuro: recalcular semáforo cuando el stock por palet sea fiable.
 
 ### 7.7 Consumo en producción
@@ -873,8 +876,9 @@ No bloquean 9.0–9.4. Se encadenan cuando el flujo administrativo de cartelas f
 | **9.5** | **Puente muelle → administración**: bandeja «Recepciones en muelle pendientes de cartelar» (foto + datos del muelle ya guardados) | ✅ **7 jul 2026** — `RecepcionFotosPanel` en bandeja + wizard; `fetchFotosByRecepcionIds`; hojas/notas muelle por línea |
 | **9.6** | Recepción **STOCK sin OC** y albarán **multi-línea** (varias OTs / líneas en un mismo envío) | ✅ **9.6a–d 9 jul** — STOCK: `RecepcionStockDialog`; opción C: aviso muelle + wizard suma OTs; **opción B: recepción multi-línea en muelle** (§15.9.4) |
 | **9.7** | **Sugerencia desde foto** (Gemini Vision u OCR asistido): prefill proveedor, nº albarán, líneas, kilos — **siempre confirmación humana** (patrón import externos Optimus) |
-| **9.8** | Adjuntar/reenlazar fotos muelle en flujo de cartelado; menos papel físico circulando |
+| **9.8** | **Reasignación / STOP material** — liberar reserva, compra corrección, aviso formato, revertir consumo. Spec: `MINERVA_BLOQUE9_REASIGNACION_STOP.md`. OT lab **98019**. |
 | **9.9** | **Búsqueda inteligente de material (NL → cartelas)**: ✅ **7 jul 2026** — LLM extrae criterios → query sobre `stock_palets_atp` → tabla + resumen con IDs reales (sin alucinación). API `POST /api/gemini/stock-analyze`. |
+| **9.10** | Adjuntar/reenlazar fotos muelle en flujo de cartelado; menos papel físico circulando *(antes numerado 9.8; 18 ago se cede 9.8 a STOP)* |
 
 ```text
 [Fase A — primero]
@@ -1065,7 +1069,8 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 | Sync Optimus v2 | ✅ | Diff nuevos/actualizados/no en Excel + `last_seen_in_optimus_import_at` (§15.9.3) |
 | Pool «Ver cartelas» | ✅ | Diálogo lazy con `#ID Stock` por OT (§15.9.5) |
 | 9.7 — Sugerencia desde foto (IA) | ⏳ | Confirmación humana obligatoria |
-| 9.8 — Fotos/adjuntos en flujo cartelas | ⏳ | |
+| 9.8 — Reasignación / STOP | 📋 spec 18 ago | `MINERVA_BLOQUE9_REASIGNACION_STOP.md` · OT **98019** · código: 9.8.1+1b primero |
+| 9.10 — Fotos/adjuntos en flujo cartelas | ⏳ | Antes 9.8; renumerado 18 ago |
 
 ---
 
