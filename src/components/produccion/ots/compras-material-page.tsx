@@ -32,6 +32,10 @@ import * as XLSX from "xlsx";
 
 import { ComprasMaterialDailyGrid } from "@/components/produccion/ots/compras-material-daily-grid";
 import { ComprasMaterialWeeklyBoard } from "@/components/produccion/ots/compras-material-weekly-board";
+import {
+  ComprasMaterialManualDialog,
+  type ManualCompraInitialValues,
+} from "@/components/produccion/ots/compras-material-manual-dialog";
 import { createComprasMaterialColumns } from "@/components/produccion/ots/compras-material-columns";
 import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
 import { Button } from "@/components/ui/button";
@@ -297,6 +301,27 @@ function abrirGmailSolicitudMaterialBulk(
   return { subject, body };
 }
 
+function buildManualInitialFromRow(
+  row: ComprasMaterialTableRow,
+  posicion: string,
+  notasCompra: string,
+): ManualCompraInitialValues {
+  return {
+    ot: normalizeOtNumeroInput(row.ot_numero),
+    posicion,
+    proveedorId: row.proveedor_id?.trim() ?? "",
+    material: row.material?.trim() ?? "",
+    gramaje:
+      row.gramaje != null && Number.isFinite(row.gramaje) ? String(row.gramaje) : "",
+    formato: row.tamano_hoja?.trim() ?? "",
+    hojasNetas: row.num_hojas_netas != null ? String(row.num_hojas_netas) : "",
+    hojasBrutas: row.num_hojas_brutas != null ? String(row.num_hojas_brutas) : "",
+    cliente: row.cliente?.trim() ?? "",
+    titulo: row.titulo?.trim() ?? "",
+    notasCompra,
+  };
+}
+
 export function ComprasMaterialPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const { umbrales: umbralesOtsCompras } = useSysParametrosOtsCompras();
@@ -355,21 +380,10 @@ export function ComprasMaterialPage() {
   const [pendingCompraCorreo, setPendingCompraCorreo] =
     useState<PendingCompraCorreoEnvio | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
-  const [manualSaving, setManualSaving] = useState(false);
-  const [manualKeepOpen, setManualKeepOpen] = useState(true);
   /** True cuando el form manual es una compra de corrección (9.8.3 — salida STOP). */
   const [isCorreccionFlow, setIsCorreccionFlow] = useState(false);
-  const [manualOt, setManualOt] = useState("");
-  const [manualPosicion, setManualPosicion] = useState("1");
-  const [manualProveedorId, setManualProveedorId] = useState("");
-  const [manualMaterial, setManualMaterial] = useState("");
-  const [manualGramaje, setManualGramaje] = useState("");
-  const [manualFormato, setManualFormato] = useState("");
-  const [manualHojasNetas, setManualHojasNetas] = useState("");
-  const [manualHojasBrutas, setManualHojasBrutas] = useState("");
-  const [manualCliente, setManualCliente] = useState("");
-  const [manualTitulo, setManualTitulo] = useState("");
-  const [manualNotasCompra, setManualNotasCompra] = useState("");
+  const [manualInitialValues, setManualInitialValues] =
+    useState<ManualCompraInitialValues | null>(null);
 
   /** Rol del usuario actual — para gates de permisos 9.8.3. */
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -1042,58 +1056,26 @@ export function ComprasMaterialPage() {
   const openManualDuplicate = useCallback(
     (row: ComprasMaterialTableRow) => {
       const nextPos = sugerirSiguientePosicionOt(row.ot_numero);
-      setManualOt(normalizeOtNumeroInput(row.ot_numero));
-      setManualPosicion(String(nextPos));
-      setManualProveedorId(row.proveedor_id?.trim() ?? "");
-      setManualMaterial(row.material?.trim() ?? "");
-      setManualGramaje(
-        row.gramaje != null && Number.isFinite(row.gramaje)
-          ? String(row.gramaje)
-          : ""
+      setManualInitialValues(
+        buildManualInitialFromRow(row, String(nextPos), row.notas?.trim() ?? ""),
       );
-      setManualFormato(row.tamano_hoja?.trim() ?? "");
-      setManualHojasNetas(
-        row.num_hojas_netas != null ? String(row.num_hojas_netas) : ""
-      );
-      setManualHojasBrutas(
-        row.num_hojas_brutas != null ? String(row.num_hojas_brutas) : ""
-      );
-      setManualCliente(row.cliente?.trim() ?? "");
-      setManualTitulo(row.titulo?.trim() ?? "");
-      setManualNotasCompra(row.notas?.trim() ?? "");
       setIsCorreccionFlow(false);
       setManualOpen(true);
     },
-    [sugerirSiguientePosicionOt]
+    [sugerirSiguientePosicionOt],
   );
 
   /** Abre el form de compra pre-rellenado con el flujo de corrección STOP (9.8.3). */
   const openCorreccionCompra = useCallback(
     (row: ComprasMaterialTableRow) => {
       const nextPos = sugerirSiguientePosicionOt(row.ot_numero);
-      setManualOt(normalizeOtNumeroInput(row.ot_numero));
-      setManualPosicion(String(nextPos));
-      setManualProveedorId(row.proveedor_id?.trim() ?? "");
-      setManualMaterial(row.material?.trim() ?? "");
-      setManualGramaje(
-        row.gramaje != null && Number.isFinite(row.gramaje)
-          ? String(row.gramaje)
-          : ""
+      setManualInitialValues(
+        buildManualInitialFromRow(row, String(nextPos), "Compra de corrección (9.8.3)"),
       );
-      setManualFormato(row.tamano_hoja?.trim() ?? "");
-      setManualHojasNetas(
-        row.num_hojas_netas != null ? String(row.num_hojas_netas) : ""
-      );
-      setManualHojasBrutas(
-        row.num_hojas_brutas != null ? String(row.num_hojas_brutas) : ""
-      );
-      setManualCliente(row.cliente?.trim() ?? "");
-      setManualTitulo(row.titulo?.trim() ?? "");
-      setManualNotasCompra("Compra de corrección (9.8.3)");
       setIsCorreccionFlow(true);
       setManualOpen(true);
     },
-    [sugerirSiguientePosicionOt]
+    [sugerirSiguientePosicionOt],
   );
 
   const patchNombreProveedorLocal = useCallback(
@@ -1787,140 +1769,11 @@ export function ComprasMaterialPage() {
     toast.success(`PDF descargado (${rowsParaExportar.length} fila(s) de la vista actual).`);
   }, [rowsParaExportar, viewMode, planCursor, weekMondayForBoard]);
 
-  const resetManualForm = useCallback(() => {
-    setManualOt("");
-    setManualPosicion("1");
-    setManualProveedorId("");
-    setManualMaterial("");
-    setManualGramaje("");
-    setManualFormato("");
-    setManualHojasNetas("");
-    setManualHojasBrutas("");
-    setManualCliente("");
-    setManualTitulo("");
-    setManualNotasCompra("");
+  const openManualEntrada = useCallback(() => {
+    setManualInitialValues(null);
+    setIsCorreccionFlow(false);
+    setManualOpen(true);
   }, []);
-
-  const manualOtNumero = normalizeOtNumeroInput(manualOt);
-  const manualNumCompra = buildNumCompraFromOt(manualOtNumero);
-  const manualPosicionTrim = manualPosicion.trim();
-  const manualPosicionParsed = /^\d+$/.test(manualPosicionTrim)
-    ? Number(manualPosicionTrim)
-    : Number.NaN;
-  const manualPosicionValid =
-    manualPosicionTrim !== "" &&
-    Number.isInteger(manualPosicionParsed) &&
-    manualPosicionParsed >= 1;
-
-  const guardarManualCompra = useCallback(async () => {
-    const ot = normalizeOtNumeroInput(manualOt);
-    const numCompra = buildNumCompraFromOt(ot);
-    const proveedorId = manualProveedorId.trim();
-    const material = manualMaterial.trim();
-    const clienteNombre = manualCliente.trim();
-    const trabajoTitulo = manualTitulo.trim();
-    const notasCompra = manualNotasCompra.trim();
-    if (!manualPosicionValid) {
-      toast.error("Posición debe ser un entero mayor o igual que 1.");
-      return;
-    }
-    if (!ot || !numCompra || !proveedorId || !material) {
-      toast.error("Completa OT, Nº compra, proveedor y material.");
-      return;
-    }
-
-    const gramaje = parseOptionalDecimalInput(manualGramaje);
-    const tamanoHoja = manualFormato.trim() || null;
-    const numHojasNetas = parseOptionalIntInput(manualHojasNetas);
-    const numHojasBrutas = parseOptionalIntInput(manualHojasBrutas);
-
-    setManualSaving(true);
-    try {
-      const { error: insertErr } = await supabase.from(TABLE_COMPRA).insert({
-        ot_numero: ot,
-        num_compra: numCompra,
-        posicion: manualPosicionParsed,
-        cliente_nombre: clienteNombre || null,
-        trabajo_titulo: trabajoTitulo || null,
-        proveedor_id: proveedorId,
-        material,
-        gramaje,
-        tamano_hoja: tamanoHoja,
-        num_hojas_netas: numHojasNetas,
-        num_hojas_brutas: numHojasBrutas,
-        notas: notasCompra || null,
-        estado: "Pendiente",
-      });
-      if (insertErr) throw insertErr;
-
-      // 9.8.3: en corrección, actualizar también estado_material → STOP_PENDIENTE_CORRECCION
-      const despPayload: Record<string, unknown> = {
-        material,
-        gramaje,
-        tamano_hoja: tamanoHoja,
-        num_hojas_netas: numHojasNetas,
-        num_hojas_brutas: numHojasBrutas,
-      };
-      if (isCorreccionFlow) {
-        despPayload.estado_material = STOP_PENDIENTE_CORRECCION;
-      }
-      const { error: updDespErr } = await supabase
-        .from(TABLE_DESPACHADAS)
-        .update(despPayload)
-        .eq("ot_numero", ot);
-      if (updDespErr) throw updDespErr;
-
-      toast.success(
-        isCorreccionFlow
-          ? "Compra de corrección creada. OT marcada como «Pendiente compra de corrección»."
-          : "Material guardado en compras con estado «Pendiente»."
-      );
-      void loadRows();
-
-      if (manualKeepOpen) {
-        setManualMaterial("");
-        setManualGramaje("");
-        setManualFormato("");
-        setManualHojasNetas("");
-        setManualHojasBrutas("");
-        setManualNotasCompra("");
-        setManualPosicion(String(manualPosicionParsed + 1));
-      } else {
-        setManualOpen(false);
-        setIsCorreccionFlow(false);
-        resetManualForm();
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : "No se pudo guardar la solicitud de material."
-      );
-    } finally {
-      setManualSaving(false);
-    }
-  }, [
-    isCorreccionFlow,
-    loadRows,
-    manualFormato,
-    manualGramaje,
-    manualHojasBrutas,
-    manualHojasNetas,
-    manualKeepOpen,
-    manualMaterial,
-    manualNotasCompra,
-    manualPosicionParsed,
-    manualPosicionValid,
-    manualNumCompra,
-    manualPosicion,
-    manualOt,
-    manualCliente,
-    manualProveedorId,
-    manualTitulo,
-    resetManualForm,
-    supabase,
-  ]);
 
   const solicitarButton = (
     <Button
@@ -2133,7 +1986,7 @@ export function ComprasMaterialPage() {
                 variant="outline"
                 size="sm"
                 className="gap-1.5"
-                onClick={() => setManualOpen(true)}
+                onClick={openManualEntrada}
               >
                 <FilePlus2 className="size-4 text-[#002147]/80" aria-hidden />
                 Entrada Compra Manual
@@ -2302,7 +2155,7 @@ export function ComprasMaterialPage() {
               variant="outline"
               size="sm"
               className="gap-1.5"
-              onClick={() => setManualOpen(true)}
+              onClick={openManualEntrada}
             >
               <FilePlus2 className="size-4 text-[#002147]/80" aria-hidden />
               Entrada Compra Manual
@@ -2754,237 +2607,20 @@ export function ComprasMaterialPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog
+      <ComprasMaterialManualDialog
         open={manualOpen}
         onOpenChange={(open) => {
           setManualOpen(open);
           if (!open) {
             setIsCorreccionFlow(false);
-            resetManualForm();
+            setManualInitialValues(null);
           }
         }}
-      >
-        <DialogContent className="max-h-[min(92vh,700px)] max-w-3xl gap-0 overflow-hidden p-0 sm:max-w-3xl">
-          <DialogHeader className="border-b border-slate-100 px-4 py-3">
-            <DialogTitle className="text-base">
-              {isCorreccionFlow ? "Compra de corrección" : "Solicitar material"}
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              Alta manual en <span className="font-mono">{TABLE_COMPRA}</span> con
-              lógica multi-línea por OT, Nº compra y posición.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid max-h-[min(62vh,560px)] gap-3 overflow-y-auto px-4 py-3 sm:grid-cols-2">
-            <div className="grid gap-1">
-              <Label htmlFor="manual-ot" className="text-xs">
-                OT
-              </Label>
-              <Input
-                id="manual-ot"
-                value={manualOt}
-                onChange={(e) =>
-                  setManualOt(normalizeOtNumeroInput(e.target.value))
-                }
-                onBlur={(e) =>
-                  setManualOt(normalizeOtNumeroInput(e.target.value))
-                }
-                placeholder="Ej. 38514"
-                inputMode="numeric"
-                className="h-8 text-xs"
-              />
-            </div>
-            <div className="grid gap-1">
-              <Label htmlFor="manual-num-compra" className="text-xs">
-                Nº compra
-              </Label>
-              <Input
-                id="manual-num-compra"
-                readOnly
-                type="text"
-                value={manualNumCompra}
-                placeholder="OCM-XXXXX"
-                tabIndex={-1}
-                aria-readonly
-                className="h-8 cursor-not-allowed bg-slate-100 font-mono text-xs text-slate-600 selection:bg-transparent"
-              />
-            </div>
-            <div className="grid gap-1">
-              <Label htmlFor="manual-posicion" className="text-xs">
-                P
-              </Label>
-              <Input
-                id="manual-posicion"
-                type="number"
-                min={1}
-                step={1}
-                inputMode="numeric"
-                value={manualPosicion}
-                onChange={(e) => setManualPosicion(e.target.value)}
-                onKeyDown={(e) => {
-                  if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
-                    e.preventDefault();
-                  }
-                }}
-                placeholder="1"
-                className={cn(
-                  "h-8 text-xs",
-                  !manualPosicionValid && "border-red-500 focus-visible:ring-red-500"
-                )}
-              />
-            </div>
-            <div className="grid gap-1">
-              <NativeSelect
-                label="Proveedor"
-                options={[
-                  { value: "", label: "Seleccionar proveedor" },
-                  ...proveedoresPapelCarton.map((p) => ({
-                    value: p.id,
-                    label: p.nombre,
-                  })),
-                ]}
-                value={manualProveedorId}
-                onChange={(e) => setManualProveedorId(e.target.value)}
-                className="h-8 text-xs"
-              />
-            </div>
-            <div className="grid gap-1">
-              <Label htmlFor="manual-material" className="text-xs">
-                Material
-              </Label>
-              <Input
-                id="manual-material"
-                value={manualMaterial}
-                onChange={(e) => setManualMaterial(e.target.value)}
-                placeholder="Ej. Estucado mate"
-                className="h-8 text-xs"
-              />
-            </div>
-            <div className="grid gap-1">
-              <Label htmlFor="manual-gramaje" className="text-xs">
-                Gramaje
-              </Label>
-              <Input
-                id="manual-gramaje"
-                type="number"
-                step="any"
-                value={manualGramaje}
-                onChange={(e) => setManualGramaje(e.target.value)}
-                placeholder="Ej. 350"
-                className="h-8 text-xs"
-              />
-            </div>
-            <div className="grid gap-1">
-              <Label htmlFor="manual-formato" className="text-xs">
-                Formato
-              </Label>
-              <Input
-                id="manual-formato"
-                value={manualFormato}
-                onChange={(e) => setManualFormato(e.target.value)}
-                placeholder="Ej. 70x100"
-                className="h-8 text-xs"
-              />
-            </div>
-            <div className="grid gap-1">
-              <Label htmlFor="manual-hojas-netas" className="text-xs">
-                Hojas netas
-              </Label>
-              <Input
-                id="manual-hojas-netas"
-                type="number"
-                inputMode="numeric"
-                value={manualHojasNetas}
-                onChange={(e) => setManualHojasNetas(e.target.value)}
-                placeholder="Ej. 1000"
-                className="h-8 text-xs"
-              />
-            </div>
-            <div className="grid gap-1">
-              <Label htmlFor="manual-hojas-brutas" className="text-xs">
-                Hojas brutas
-              </Label>
-              <Input
-                id="manual-hojas-brutas"
-                type="number"
-                inputMode="numeric"
-                value={manualHojasBrutas}
-                onChange={(e) => setManualHojasBrutas(e.target.value)}
-                placeholder="Ej. 1200"
-                className="h-8 text-xs"
-              />
-            </div>
-            <div className="grid gap-1">
-              <Label htmlFor="manual-cliente" className="text-xs">
-                Cliente
-              </Label>
-              <Input
-                id="manual-cliente"
-                value={manualCliente}
-                onChange={(e) => setManualCliente(e.target.value)}
-                placeholder="Cliente"
-                className="h-8 text-xs"
-              />
-            </div>
-            <div className="grid gap-1 sm:col-span-2">
-              <Label htmlFor="manual-titulo" className="text-xs">
-                Título del trabajo
-              </Label>
-              <Input
-                id="manual-titulo"
-                value={manualTitulo}
-                onChange={(e) => setManualTitulo(e.target.value)}
-                placeholder="Título del trabajo"
-                className="h-8 text-xs"
-              />
-            </div>
-            <div className="grid gap-1 sm:col-span-2">
-              <Label htmlFor="manual-notas-compra" className="text-xs">
-                Notas compra (Jordi)
-              </Label>
-              <Textarea
-                id="manual-notas-compra"
-                rows={3}
-                value={manualNotasCompra}
-                onChange={(e) => setManualNotasCompra(e.target.value)}
-                placeholder="Instrucciones para recepción (opcional)"
-                className="resize-y text-xs leading-snug"
-              />
-            </div>
-          </div>
-          <DialogFooter className="gap-2 border-t border-slate-100 px-4 py-3 sm:flex-row sm:justify-between">
-            <label className="inline-flex items-center gap-2 text-xs text-slate-700">
-              <Checkbox
-                checked={manualKeepOpen}
-                onCheckedChange={(v) => setManualKeepOpen(v === true)}
-                aria-label="Mantener abierto para entrada múltiple"
-              />
-              Entrada múltiple (mantener abierto)
-            </label>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setManualOpen(false)}
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                disabled={manualSaving || !manualPosicionValid || !manualNumCompra}
-                onClick={() => void guardarManualCompra()}
-              >
-                {manualSaving ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  "Guardar material"
-                )}
-              </Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        isCorreccionFlow={isCorreccionFlow}
+        initialValues={manualInitialValues}
+        proveedores={proveedoresPapelCarton}
+        onSaved={() => void loadRows()}
+      />
 
       <Dialog
         open={recepcionFotosModal.open}

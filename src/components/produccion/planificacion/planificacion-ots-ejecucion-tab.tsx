@@ -3,6 +3,7 @@
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
+  AlertTriangle,
   CheckCircle2,
   ChevronDown,
   FileSpreadsheet,
@@ -54,7 +55,9 @@ import {
   getPlanificacionTipoMaquinaFilter,
   PLANIFICACION_TIPOS_MAQUINA,
 } from "@/lib/planificacion-ambito";
+import { useFormatoMargenParametros } from "@/hooks/use-formato-margen-parametros";
 import { useSysParametrosSobreproduccion } from "@/hooks/use-sys-parametros-sobreproduccion";
+import { formatoCabeAvisoEjecucion } from "@/lib/formato-cabe-ejecucion";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { fetchAllInChunks } from "@/lib/supabase-query-chunks";
 import { cn } from "@/lib/utils";
@@ -2392,6 +2395,11 @@ export function PlanificacionOtsEjecucionTab({
                         margenesSobreproduccion={margenesSobreproduccion}
                         desviacion={desviacion}
                         saving={savingId === row.id}
+                        pasosOt={
+                          row.otId
+                            ? (pasosItinerarioPorOtId.get(row.otId) ?? [])
+                            : []
+                        }
                         pasosItinerario={
                           row.otId
                             ? pasosItinerarioParaConsumo(pasosItinerarioPorOtId.get(row.otId) ?? [])
@@ -2432,6 +2440,7 @@ function ExecutionCard({
   margenesSobreproduccion,
   desviacion,
   saving,
+  pasosOt,
   pasosItinerario,
   onPatch,
   onBegin,
@@ -2454,6 +2463,7 @@ function ExecutionCard({
   margenesSobreproduccion: SobreproduccionMargenesParametros;
   desviacion: number | null;
   saving: boolean;
+  pasosOt: PasoItinerarioFormato[];
   pasosItinerario: PasoItinerarioConsumo[];
   onPatch: (patch: Record<string, unknown>, datosProcesoUpdate?: DatosProcesoGenerico | null) => void;
   onBegin: (patch: Record<string, unknown>, datosProcesoUpdate?: DatosProcesoGenerico | null) => void;
@@ -2709,6 +2719,37 @@ function ExecutionCard({
     [row.procesoId],
   );
 
+  const { margenes } = useFormatoMargenParametros();
+  const formatoAvisoMsg = useMemo(
+    () =>
+      row.procesoId == null
+        ? null
+        : formatoCabeAvisoEjecucion({
+            procesoId: row.procesoId,
+            troquelCode: despacho?.troquel,
+            midesTroquel: despacho?.tamanoCorte,
+            tamanoHojaCompra: despacho?.tamanoHoja,
+            pasosOt,
+            formatoAnterior: row.formatoAnterior,
+            formatoAnteriorOrigenProcesoId: row.procesoAnteriorId,
+            formatoAnteriorOrigenNombre: row.formatoAnteriorOrigenNombre,
+            datosProcesoActual: datosProcesoLocal,
+            margenes,
+          }),
+    [
+      row.procesoId,
+      row.procesoAnteriorId,
+      row.formatoAnterior,
+      row.formatoAnteriorOrigenNombre,
+      despacho?.troquel,
+      despacho?.tamanoCorte,
+      despacho?.tamanoHoja,
+      pasosOt,
+      datosProcesoLocal,
+      margenes,
+    ],
+  );
+
   const isPendingStart = row.estadoEjecucion === "pendiente_inicio";
   const canEdit = row.estadoEjecucion !== "finalizada" && row.estadoEjecucion !== "cancelada";
 
@@ -2910,7 +2951,7 @@ function ExecutionCard({
         </div>
       ) : null}
 
-      {row.formatoAnterior ? (
+      {row.formatoAnterior && row.procesoId !== PROCESO_CTP_ID ? (
         <div className="mt-2 rounded border border-sky-200 bg-sky-50/80 px-2 py-1.5 text-[10px] text-sky-900">
           <span className="font-medium">Formato pliego de entrada</span>
           {" · "}
@@ -2923,6 +2964,13 @@ function ExecutionCard({
               · El tamaño de corte del troquel es independiente del pliego.
             </span>
           ) : null}
+        </div>
+      ) : null}
+
+      {formatoAvisoMsg ? (
+        <div className="mt-2 flex items-start gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-[10px] text-amber-900">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
+          <span>{formatoAvisoMsg}</span>
         </div>
       ) : null}
 

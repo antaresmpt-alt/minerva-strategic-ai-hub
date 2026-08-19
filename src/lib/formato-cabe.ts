@@ -133,20 +133,25 @@ export function checkFormatoCabe(
   return { cabe: false, canCheck: true, requiredAncho, requiredAlto };
 }
 
+/** Origen del formato usado en la comprobación (hoja de ruta / despacho). */
+export type FormatoCabeOrigen = "GUILLOTINA" | "IMPRESION" | "DESPACHO";
+
 /** Formatea el resultado como mensaje de aviso para el usuario. */
 export function formatoCabeAvisoMsg(
   result: FormatoCabeResult,
   formatoPapel: string,
   troquelCode: string,
   margenes: MargenesImpr,
+  origen?: FormatoCabeOrigen | null,
 ): string | null {
   if (!result.canCheck || result.cabe) return null;
   const req = result.requiredAncho != null && result.requiredAlto != null
     ? ` Mínimo estimado: ${(result.requiredAncho / 10).toFixed(1)}×${(result.requiredAlto / 10).toFixed(1)} cm.`
     : "";
+  const papelLabel = origen ? `${formatoPapel} (${origen})` : formatoPapel;
   return (
     `Estimación: con márgenes mínimos (pinza ${margenes.pinza} mm, superior ${margenes.superior} mm, ` +
-    `laterales ${margenes.lateral} mm/lado), el papel ${formatoPapel} podría ser demasiado pequeño ` +
+    `laterales ${margenes.lateral} mm/lado), el papel ${papelLabel} podría ser demasiado pequeño ` +
     `para el troquel ${troquelCode}.${req} ` +
     `Verificar con CTP/troquelador. No bloquea.`
   );

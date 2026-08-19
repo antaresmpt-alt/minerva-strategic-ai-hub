@@ -25,6 +25,7 @@ import {
 } from "@/components/produccion/ots/referencia-minerva-picker";
 import { TroquelPickerField } from "@/components/produccion/ots/troquel-picker-field";
 import { checkFormatoCabe, formatoCabeAvisoMsg } from "@/lib/formato-cabe";
+import { resolveFormatoPapelDespacho } from "@/lib/formato-cabe-ejecucion";
 import { useFormatoMargenParametros } from "@/hooks/use-formato-margen-parametros";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -369,14 +370,20 @@ export function DespachoWizardDialog({
     if (!troquelCode) return null;
     const mides = troquelInfo?.mides;
     if (!mides) return null;
-    // Formato relevante: guillotina final (mm) > impresión (mm) > compra (cm)
-    const guillFinal = procesoDatos.guillotina.tamano_final.trim();
-    const impFormato = procesoDatos.impresion.formato_hojas.trim();
-    const compra = form.tamano_hoja.trim();
-    const papel = guillFinal || impFormato || compra;
-    if (!papel) return null;
-    const result = checkFormatoCabe(papel, mides, margenesImpr);
-    return formatoCabeAvisoMsg(result, papel, troquelCode, margenesImpr);
+    const resuelto = resolveFormatoPapelDespacho({
+      guillotinaTamanoFinal: procesoDatos.guillotina.tamano_final,
+      impresionFormatoHojas: procesoDatos.impresion.formato_hojas,
+      tamanoHojaCompra: form.tamano_hoja,
+    });
+    if (!resuelto) return null;
+    const result = checkFormatoCabe(resuelto.formato, mides, margenesImpr);
+    return formatoCabeAvisoMsg(
+      result,
+      resuelto.formato,
+      troquelCode,
+      margenesImpr,
+      resuelto.origen,
+    );
   }, [form.troquel, form.tamano_hoja, troquelInfo, margenesImpr, procesoDatos.guillotina.tamano_final, procesoDatos.impresion.formato_hojas]);
   const [cajasEmbalaje, setCajasEmbalaje] = useState<CajaEmbalajeOption[]>([]);
   const [itinerarioOverrides, setItinerarioOverrides] = useState<

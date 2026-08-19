@@ -51,6 +51,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
 import { useFormatoMargenParametros } from "@/hooks/use-formato-margen-parametros";
 import { checkFormatoCabe, formatoCabeAvisoMsg } from "@/lib/formato-cabe";
+import { resolveFormatoPapelDespacho } from "@/lib/formato-cabe-ejecucion";
 import {
   fetchProdOtGeneralIdByNumPedido,
   fetchProdOtPasosVista,
@@ -523,14 +524,23 @@ export function OtsDespachadasPage({
   // ── Bloque 9.8.2 — Aviso formato troquel vs papel ────────────────────────
   const formatoAvisoMsg = useMemo(() => {
     const troquelCode = editForm.troquel.trim();
-    const papel = editForm.tamano_hoja.trim();
-    if (!troquelCode || !papel) return null;
+    if (!troquelCode) return null;
     const key = troquelCode.toLowerCase();
     const troquelData = troquelExcelByCodigo.get(key);
     const mides = troquelData?.mides;
     if (!mides) return null;
-    const result = checkFormatoCabe(papel, mides, margenesImpr);
-    return formatoCabeAvisoMsg(result, papel, troquelCode, margenesImpr);
+    const resuelto = resolveFormatoPapelDespacho({
+      tamanoHojaCompra: editForm.tamano_hoja,
+    });
+    if (!resuelto) return null;
+    const result = checkFormatoCabe(resuelto.formato, mides, margenesImpr);
+    return formatoCabeAvisoMsg(
+      result,
+      resuelto.formato,
+      troquelCode,
+      margenesImpr,
+      resuelto.origen,
+    );
   }, [editForm.troquel, editForm.tamano_hoja, troquelExcelByCodigo, margenesImpr]);
   const [editOtGeneralId, setEditOtGeneralId] = useState<string | null>(null);
   const [editPasosVista, setEditPasosVista] = useState<ProdOtPasoVista[]>([]);
