@@ -147,7 +147,7 @@ Albarán común Caso C: `G23-PRUEBA STOCK LIBRE` · proveedor CARPAPSA.
 
 **Workaround validado:** **Anular hueco mesa → Devolver al Pool** (`devolverHuecoMesaAlPool`) → replanificar → mesa.
 
-**Producto final (acordado):** al STOP material completo debería **cascadear**: revertir/reabrir paso N **+ anular mesas de pasos > N** + pool `en_transito`. Ver §7.1.
+**Producto final (acordado):** acción explícita **«STOP material: reset planificación»** con confirmación — **no** cascade silencioso dentro de `revertir_consumo`/`reabrirPasoAdmin`. Ver §7.1 y brief §18.1 / §19.
 
 ### 6.2 Asignar stock libre — solo en Cartelas creadas
 
@@ -158,7 +158,8 @@ Albarán común Caso C: `G23-PRUEBA STOCK LIBRE` · proveedor CARPAPSA.
 ### 6.3 Partir palet en cartela de prueba
 
 - `prod_stock_split_palet` copia `es_prueba=true` pero usa secuencia production → **#10985** en lugar de 99xxx.
-- Filtro UI «Mostrar pruebas» usa `es_prueba`, no rango id — cartela existe pero confunde en lab.
+- Filtro UI «Mostrar pruebas» usa **`es_prueba`**, no rango id — confunde en lab pero **no hay riesgo** de colarse en informes reales.
+- **Lección positiva (P1 del brief):** cuando el criterio de verdad es un **campo explícito** (`es_prueba`) y no una convención visual (id ≥ 99xxx), el sistema aguanta aunque el número sorprenda. Ejemplo a replicar en otros filtros.
 
 ### 6.4 Stock — KPI «Hojas reservadas»
 
@@ -190,11 +191,13 @@ Commit `14fc084`: antes `reabrirPasoAdmin` fallaba al actualizar mesa (tabla ine
 
 | # | Tarea | Descripción |
 |---|--------|-------------|
-| **7.1** | **Cascade planificación STOP** | Al `revertir_consumo` y/o `reabrirPasoAdmin(paso N)`: anular huecos mesa + ejecuciones no finalizadas de pasos **> N**; devolver pool `en_transito` si no queda plan activo. Alternativa UX: botón único **«STOP material: reset planificación»**. |
+| **7.1** | **Reset planificación STOP (confirmado)** | Botón explícito **«STOP material: reset planificación»** (hoja de ruta / admin): lista huecos mesa a anular (pasos > N), confirmación *«Se van a anular N huecos de mesa planificados. ¿Continuar?»*, luego `devolverHuecoMesaAlPool` + pool `en_transito`. **No** enganchar cascade silencioso a `revertir_consumo` ni `reabrirPasoAdmin` — coherente con P5 «aviso + confirmación antes de acción destructiva». |
 | **7.2** | **Asignar OT en detalle Stock** | Mismo `AsignarOtDialog` / RPC `prod_stock_asignar_palet_ot` que Cartelas creadas. |
 | **7.3** | **Cartelas creadas — búsqueda server-side** | Buscar por `id_stock`, albarán, OT sin depender del límite 200 filas. |
 
 ### P1 — Completar fases 9.8 pendientes
+
+> **Prioridad confirmada (revisión 19 ago noche):** liberar reserva, compra corrección y revertir consumo están gateados a **`admin` / `oficina_tecnica` / `gerencia`**. Ramón/Juan solo ejecutan **9.8.4** (asignar stock libre). El workaround manual P1→P2 lo hace Zaida/Manel con contexto — **P1 correcto**, no bloqueante operativa diaria.
 
 | # | Fase | Tarea |
 |---|------|--------|
@@ -233,13 +236,13 @@ Commit `14fc084`: antes `reabrirPasoAdmin` fallaba al actualizar mesa (tabla ine
 | 9.8.5 | ✅ `main` | 98020-B (#99021 revert) |
 | 9.8.6 | 📋 lápiz | Redespacho manual OK |
 | Compra sin OT | ✅ `main` | OCM-STOCK + #99022 |
-| Cascade planificación | 📋 | Workaround anular→Pool |
+| Cascade planificación | 📋 | Workaround anular→Pool; mañana botón confirmado §19 |
 
 ---
 
 ## 9. Retomar mañana
 
-1. Leer §7 (backlog priorizado) — empezar por **7.1 cascade STOP**.
+1. Leer §7 (backlog priorizado) — empezar por **7.1 reset planificación STOP** (botón + confirmación; ver brief §19).
 2. Brief bloque: `MINERVA_BLOQUE9_REASIGNACION_STOP.md` §18.
 3. Si se repite lab: OT **98021** limpia.
 4. Migraciones pendientes de aplicar en remoto (si no están): `20260819200000_*`, `20260819200100_*`.

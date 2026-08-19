@@ -296,7 +296,7 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [x] **Fix reabrir paso** mesa (`prod_mesa_planificacion_trabajos`) — `14fc084`
 - [ ] **9.8.3** compra corrección P2 desde Despachadas
 - [ ] **9.8.6** popup redespacho asistido
-- [ ] **Cascade STOP planificación** (reabrir/revertir → anular mesas posteriores + pool) — P0 mañana
+- [ ] **Reset planificación STOP** (botón + confirmación; brief §19) — P0 mañana
 - [ ] **Asignar OT en Stock** + **Cartelas búsqueda server-side** — P0 mañana
 - [ ] **Bloque 11** (con cuidado): planificar/mover desde calendario; lanzar ≠ pisar plan de otra máquina — `MINERVA_BLOQUE11_…`
 - [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor; tableta = máquina — `MINERVA_BLOQUE12_…` (no abrir ya; default gestor = maestro OTs)
@@ -304,7 +304,7 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 
 ### Prioridad inmediata (20 ago 2026)
 
-1. **Cascade STOP planificación** — ver brief §18 / `SESION_19AGO2026_STOP_MATERIAL_98020.md` §7.1
+1. **Reset planificación STOP** (botón + confirmación) — brief §19 / sesión 19 ago §7.1
 2. **Asignar OT en Stock** + **Cartelas server-side search**
 3. **9.8.3** compra corrección · **9.8.6** redespacho popup
 4. Polish: observaciones CTP, KPI reservas blandas, `estado_material` sync
@@ -330,7 +330,7 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [ ] Preguntas §12 planta (CTP hija) si hace falta antes de 8.4 fino
 
 ### Siguiente foco (orden sugerido 20 ago)
-1. **Cascade STOP planificación** + **Asignar OT en Stock** — brief §18 / sesión 19 ago
+1. **Reset planificación STOP** + **Asignar OT en Stock** — brief §19
 2. **9.8.3** compra corrección · **9.8.6** redespacho popup
 3. Polish 9.8 (observaciones CTP, KPI reservas, `estado_material`)
 4. **Bloque 11** (con cuidado) · **Bloque 12** (sept) · **B5** Rita→Hugo

@@ -1162,7 +1162,7 @@ Principio: el ledger ATP manda (no las líneas de Optimus); no fiarse de que el 
 | 9.8.5 | ✅ | RPC `prod_stock_revertir_consumo` — 98020-B |
 | 9.8.6 | 📋 | Redespacho asistido — lápiz OK |
 | Compra sin OT | ✅ | `c93205e` — OCM-STOCK |
-| Cascade planificación STOP | 📋 | P0 mañana — hoy manual Anular→Pool |
+| Cascade planificación STOP | 📋 | P0 mañana — botón confirmado §19 (no cascade silencioso) |
 
 Fotos/adjuntos del roadmap viejo (antes 9.8) → **9.10**.
 

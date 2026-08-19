@@ -459,11 +459,13 @@ Nada de esto retrasa el PR **9.8.1 + 9.8.1b**.
 
 | # | Tarea | Notas |
 |---|--------|-------|
-| 18.1 | **Cascade planificación STOP** | `revertir_consumo` y/o `reabrirPasoAdmin(N)` → anular mesas/ejecuciones pasos > N; pool `en_transito`. O botón «STOP material: reset planificación». Hoy: solo manual «Anular → Pool». |
+| 18.1 | **Reset planificación STOP** | Botón explícito «STOP material: reset planificación» + confirmación (*«Se van a anular N huecos de mesa…»*). Lista huecos pasos > N, luego anular mesa/ejecución + pool `en_transito`. **No** cascade automático dentro de `revertir_consumo`/`reabrirPasoAdmin` (P5: confirmación antes de acción destructiva). Hoy: manual «Anular → Pool». |
 | 18.2 | **Asignar OT en detalle Stock** | Mismo RPC/UI que Cartelas creadas (🔗). |
 | 18.3 | **Cartelas creadas — búsqueda server-side** | Por id/albarán/OT; no depender de límite 200 filas. |
 
 ### P1 — Fases 9.8 pendientes
+
+> Roles: liberar / revertir / compra corrección = **`admin` \| `oficina_tecnica` \| `gerencia`**. Juan = solo 9.8.4. Workaround P1→P2 no lo ejecuta planta sin contexto → **P1 bien ubicado**, no urgente como P0.
 
 | # | Fase | Tarea |
 |---|------|--------|
@@ -488,3 +490,13 @@ Nada de esto retrasa el PR **9.8.1 + 9.8.1b**.
 |---|--------|
 | 18.13 | OT **98021** limpia para repetir A/B/C. |
 | 18.14 | E2E cerrar impresión 98020 (no bloqueante 9.8). |
+
+---
+
+## 19. Decisiones diseño — revisión 19 ago noche (antes de picar 7.1)
+
+| # | Decisión | Motivo |
+|---|----------|--------|
+| 19.1 | **Reset planificación = botón + confirmación**, no side-effect de revertir/reabrir | Coherente con P5 y con anular mesa→Pool, redespacho, cierre OT: no borrar huecos planificados sin que alguien lo confirme (p. ej. engomado ya reservado en mesa). |
+| 19.2 | **P1 (9.8.3 / 9.8.6) se mantiene** | Gate de roles: solo oficina/gerencia en liberar, revertir y compra corrección; Juan solo 9.8.4. Riesgo «alguien sin contexto se lía» no aplica a Ramón/Emma. |
+| 19.3 | **`es_prueba` como verdad** (§6.3 sesión 98020) | El id #10985 confunde en lab pero el flag impide mezclar prueba con producción — reforzar «campo explícito, no convención de ID». |
