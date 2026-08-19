@@ -27,8 +27,8 @@ import type { DatosProcesoGenerico } from "@/lib/hoja-ruta-campos-config";
 import {
   corregirCartelaPasoAdmin,
   editarDatosPasoAdmin,
+  fetchConsumoRevertibleDelPaso,
   fetchPasosItinerarioAdmin,
-  fetchUltimoConsumoDelPaso,
   reabrirPasoAdmin,
   revertirConsumoPasoAdmin,
   siguientePasoIniciado,
@@ -85,6 +85,7 @@ export function PasoAdminActions({
   const [autorizadoPor, setAutorizadoPor] = useState("");
   const [notasRevertir, setNotasRevertir] = useState("");
   const [nuevoFormato, setNuevoFormato] = useState("");
+  const [hojasResultantes, setHojasResultantes] = useState("");
 
   const esFinalizado = paso.estado === "finalizado";
   const showEditar = esFinalizado && puedeEditarPasoAdmin(profile);
@@ -102,7 +103,7 @@ export function PasoAdminActions({
   // Carga el último consumo del paso para saber si mostrar el botón de revertir
   useEffect(() => {
     if (!esFinalizado || !puedeRevertirConsumoPasoAdmin(profile) || !procesoUsaCartela(paso.procesoId, pasosItinerario)) return;
-    void fetchUltimoConsumoDelPaso(supabase, paso.pasoId)
+    void fetchConsumoRevertibleDelPaso(supabase, paso.pasoId)
       .then(setUltimoConsumo)
       .catch(() => setUltimoConsumo(null));
   }, [esFinalizado, profile, paso.procesoId, paso.pasoId, pasosItinerario, supabase]);
@@ -190,18 +191,38 @@ export function PasoAdminActions({
     }
     setSaving(true);
     try {
+      const hojasParsed = hojasResultantes.trim()
+        ? Number(hojasResultantes.replace(/\D/g, ""))
+        : null;
+      if (
+        hojasResultantes.trim() &&
+        (!Number.isFinite(hojasParsed) || (hojasParsed ?? 0) < 0)
+      ) {
+        toast.error("Las hojas resultantes deben ser un entero ≥ 0.");
+        setSaving(false);
+        return;
+      }
       await revertirConsumoPasoAdmin(supabase, {
         paletId: ultimoConsumo.palet_id,
         cantidad: ultimoConsumo.cantidad,
         otNumero: paso.otNumero,
+        pasoId: paso.pasoId,
         autorizadoPor: autorizado,
         notas: notasRevertir.trim() || null,
         nuevoFormato: nuevoFormato.trim() || null,
+        nuevaCantidad: hojasParsed,
       });
+      const hojasMsg =
+        hojasParsed != null
+          ? ` Palet quedará con ${hojasParsed.toLocaleString("es-ES")} h${
+              nuevoFormato.trim() ? ` @ ${nuevoFormato.trim()}` : ""
+            }.`
+          : "";
       toast.success(
-        `Consumo revertido: ${ultimoConsumo.cantidad.toLocaleString("es-ES")} h devueltas al palet. OT marcada como STOP.`,
+        `Consumo revertido: ${ultimoConsumo.cantidad.toLocaleString("es-ES")} h devueltas al palet.${hojasMsg} OT marcada como STOP.`,
       );
       setRevertirOpen(false);
+      setHojasResultantes("");
       setUltimoConsumo(null);
       onSuccess?.();
     } catch (e) {
@@ -293,6 +314,7 @@ export function PasoAdminActions({
               setAutorizadoPor("");
               setNotasRevertir("");
               setNuevoFormato("");
+              setHojasResultantes("");
               setRevertirOpen(true);
             }}
           >
@@ -410,17 +432,38 @@ export function PasoAdminActions({
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="revertir-formato">
-                Nuevo formato del palet tras el corte (opcional)
-              </Label>
-              <Input
-                id="revertir-formato"
-                placeholder="p. ej. 65x46"
-                value={nuevoFormato}
-                onChange={(e) => setNuevoFormato(e.target.value)}
-              />
+              <Label>Palet tras el corte (opcional — Caso B)</Label>
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="min-w-[7rem] flex-1 space-y-1">
+                  <Label htmlFor="revertir-hojas" className="text-xs font-normal text-slate-500">
+                    Hojas
+                  </Label>
+                  <Input
+                    id="revertir-hojas"
+                    placeholder="Ej. 2000"
+                    inputMode="numeric"
+                    value={hojasResultantes}
+                    onChange={(e) => setHojasResultantes(e.target.value)}
+                  />
+                </div>
+                <span className="pb-2 text-sm text-slate-500">@</span>
+                <div className="min-w-[7rem] flex-1 space-y-1">
+                  <Label htmlFor="revertir-formato" className="text-xs font-normal text-slate-500">
+                    Formato
+                  </Label>
+                  <Input
+                    id="revertir-formato"
+                    placeholder="Ej. 65x46"
+                    value={nuevoFormato}
+                    onChange={(e) => setNuevoFormato(e.target.value)}
+                  />
+                </div>
+              </div>
               <p className="text-xs text-slate-500">
-                Indica el formato resultante si el palet ya fue cortado (p. ej. Caso B guillotina).
+                Se revierten{" "}
+                <strong>{ultimoConsumo?.cantidad?.toLocaleString("es-ES") ?? "–"} h</strong> del
+                consumo registrado. Si indicas hojas @ formato, el palet queda con ese stock real
+                (p. ej. 2000 h @ 65×46 tras guillotina).
               </p>
             </div>
           </div>

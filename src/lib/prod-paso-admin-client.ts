@@ -54,7 +54,7 @@ export type MovimientoConsumo = {
   created_at: string;
 };
 
-/** Obtiene el último movimiento de consumo del paso (para revertir). */
+/** Obtiene el último movimiento de consumo del paso (sin comprobar si ya se revirtió). */
 export async function fetchUltimoConsumoDelPaso(
   supabase: SupabaseClient,
   pasoId: string,
@@ -71,6 +71,42 @@ export async function fetchUltimoConsumoDelPaso(
   return data as MovimientoConsumo | null;
 }
 
+async function consumoNetoPendiente(
+  supabase: SupabaseClient,
+  paletId: string,
+  otNumero: string,
+): Promise<number> {
+  const { data, error } = await supabase
+    .from("prod_stock_movimientos")
+    .select("tipo, cantidad")
+    .eq("palet_id", paletId)
+    .eq("ot_numero", otNumero)
+    .in("tipo", ["consumo", "ajuste"]);
+  if (error) throw new Error(error.message || "No se pudo calcular el consumo neto.");
+  let net = 0;
+  for (const row of data ?? []) {
+    const cantidad = typeof row.cantidad === "number" ? row.cantidad : 0;
+    if (row.tipo === "consumo") net += cantidad;
+    else if (row.tipo === "ajuste") net -= cantidad;
+  }
+  return net;
+}
+
+/**
+ * Consumo del paso que aún puede revertirse (ledger neto palet+OT > 0).
+ * Tras una reversión exitosa devuelve null → oculta el botón en hoja de ruta.
+ */
+export async function fetchConsumoRevertibleDelPaso(
+  supabase: SupabaseClient,
+  pasoId: string,
+): Promise<MovimientoConsumo | null> {
+  const consumo = await fetchUltimoConsumoDelPaso(supabase, pasoId);
+  if (!consumo?.ot_numero?.trim()) return consumo;
+  const net = await consumoNetoPendiente(supabase, consumo.palet_id, consumo.ot_numero.trim());
+  if (net <= 0) return null;
+  return { ...consumo, cantidad: Math.min(consumo.cantidad, net) };
+}
+
 /** Revierte el consumo de cartela de un paso finalizado (9.8.5). */
 export async function revertirConsumoPasoAdmin(
   supabase: SupabaseClient,
@@ -78,9 +114,12 @@ export async function revertirConsumoPasoAdmin(
     paletId: string;
     cantidad: number;
     otNumero: string;
+    pasoId?: string | null;
     autorizadoPor: string;
     notas?: string | null;
     nuevoFormato?: string | null;
+    /** Stock real tras corte (Caso B). Si se indica, fija cantidad_actual en el palet. */
+    nuevaCantidad?: number | null;
   },
 ): Promise<void> {
   const { error } = await supabase.rpc("prod_stock_revertir_consumo", {
@@ -90,6 +129,8 @@ export async function revertirConsumoPasoAdmin(
     p_autorizado_por: params.autorizadoPor,
     p_notas: params.notas ?? null,
     p_nuevo_formato: params.nuevoFormato ?? null,
+    p_paso_id: params.pasoId ?? null,
+    p_nueva_cantidad: params.nuevaCantidad ?? null,
   });
   if (error) throw new Error(error.message || "No se pudo revertir el consumo.");
 }

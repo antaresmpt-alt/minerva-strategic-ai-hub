@@ -68,6 +68,20 @@ function buildNumCompraFromOt(otNumero: string): string {
   return `OCM-${ot}`;
 }
 
+function buildNumCompraStockLibre(): string {
+  const d = new Date();
+  const ymd = [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, "0"),
+    String(d.getDate()).padStart(2, "0"),
+  ].join("");
+  const hm = [
+    String(d.getHours()).padStart(2, "0"),
+    String(d.getMinutes()).padStart(2, "0"),
+  ].join("");
+  return `OCM-STOCK-${ymd}-${hm}`;
+}
+
 const EMPTY_FORM: ManualCompraInitialValues = {
   ot: "",
   posicion: "1",
@@ -101,16 +115,22 @@ export function ComprasMaterialManualDialog({
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [saving, setSaving] = useState(false);
   const [keepOpen, setKeepOpen] = useState(true);
+  const [esStockLibre, setEsStockLibre] = useState(false);
+  const [numCompraManual, setNumCompraManual] = useState("");
   const [form, setForm] = useState<ManualCompraInitialValues>(EMPTY_FORM);
 
   useEffect(() => {
     if (!open) return;
     setForm(initialValues ?? EMPTY_FORM);
     setKeepOpen(true);
+    setEsStockLibre(false);
+    setNumCompraManual(buildNumCompraStockLibre());
   }, [open, initialValues]);
 
   const otNumero = normalizeOtNumeroInput(form.ot);
-  const numCompra = buildNumCompraFromOt(otNumero);
+  const numCompra = esStockLibre
+    ? numCompraManual.trim()
+    : buildNumCompraFromOt(otNumero);
   const posicionTrim = form.posicion.trim();
   const posicionParsed = /^\d+$/.test(posicionTrim) ? Number(posicionTrim) : Number.NaN;
   const posicionValid =
@@ -123,16 +143,24 @@ export function ComprasMaterialManualDialog({
   );
 
   const guardar = useCallback(async () => {
-    const ot = normalizeOtNumeroInput(form.ot);
-    const num = buildNumCompraFromOt(ot);
+    const ot = esStockLibre ? null : normalizeOtNumeroInput(form.ot);
+    const num = esStockLibre ? numCompraManual.trim() : buildNumCompraFromOt(form.ot);
     const proveedorId = form.proveedorId.trim();
     const material = form.material.trim();
     if (!posicionValid) {
       toast.error("Posición debe ser un entero mayor o igual que 1.");
       return;
     }
-    if (!ot || !num || !proveedorId || !material) {
-      toast.error("Completa OT, Nº compra, proveedor y material.");
+    if (!num || !proveedorId || !material) {
+      toast.error(
+        esStockLibre
+          ? "Completa Nº compra, proveedor y material."
+          : "Completa OT, Nº compra, proveedor y material.",
+      );
+      return;
+    }
+    if (!esStockLibre && !ot) {
+      toast.error("Indica la OT o marca «Stock libre (sin OT)».");
       return;
     }
 
@@ -142,7 +170,10 @@ export function ComprasMaterialManualDialog({
       const tamanoHoja = form.formato.trim() || null;
       const numHojasNetas = parseOptionalIntInput(form.hojasNetas);
       const numHojasBrutas = parseOptionalIntInput(form.hojasBrutas);
-      const notasCompra = form.notasCompra.trim();
+      const notasBase = form.notasCompra.trim();
+      const notasCompra = esStockLibre
+        ? [notasBase, "[STOCK LIBRE — sin OT]"].filter(Boolean).join(" ")
+        : notasBase || null;
 
       const { error: insertErr } = await supabase.from(TABLE_COMPRA).insert({
         ot_numero: ot,
@@ -156,31 +187,35 @@ export function ComprasMaterialManualDialog({
         tamano_hoja: tamanoHoja,
         num_hojas_netas: numHojasNetas,
         num_hojas_brutas: numHojasBrutas,
-        notas: notasCompra || null,
+        notas: notasCompra,
         estado: "Pendiente",
       });
       if (insertErr) throw insertErr;
 
-      const despPayload: Record<string, unknown> = {
-        material,
-        gramaje,
-        tamano_hoja: tamanoHoja,
-        num_hojas_netas: numHojasNetas,
-        num_hojas_brutas: numHojasBrutas,
-      };
-      if (isCorreccionFlow) {
-        despPayload.estado_material = STOP_PENDIENTE_CORRECCION;
+      if (!esStockLibre && ot) {
+        const despPayload: Record<string, unknown> = {
+          material,
+          gramaje,
+          tamano_hoja: tamanoHoja,
+          num_hojas_netas: numHojasNetas,
+          num_hojas_brutas: numHojasBrutas,
+        };
+        if (isCorreccionFlow) {
+          despPayload.estado_material = STOP_PENDIENTE_CORRECCION;
+        }
+        const { error: updDespErr } = await supabase
+          .from(TABLE_DESPACHADAS)
+          .update(despPayload)
+          .eq("ot_numero", ot);
+        if (updDespErr) throw updDespErr;
       }
-      const { error: updDespErr } = await supabase
-        .from(TABLE_DESPACHADAS)
-        .update(despPayload)
-        .eq("ot_numero", ot);
-      if (updDespErr) throw updDespErr;
 
       toast.success(
-        isCorreccionFlow
-          ? "Compra de corrección creada. OT marcada como «Pendiente compra de corrección»."
-          : "Material guardado en compras con estado «Pendiente».",
+        esStockLibre
+          ? "Compra de stock libre creada. Recibe en muelle y cartela sin OT."
+          : isCorreccionFlow
+            ? "Compra de corrección creada. OT marcada como «Pendiente compra de corrección»."
+            : "Material guardado en compras con estado «Pendiente».",
       );
       onSaved();
 
@@ -195,6 +230,9 @@ export function ComprasMaterialManualDialog({
           notasCompra: "",
           posicion: String(posicionParsed + 1),
         }));
+        if (esStockLibre) {
+          setNumCompraManual(buildNumCompraStockLibre());
+        }
       } else {
         onOpenChange(false);
       }
@@ -205,9 +243,11 @@ export function ComprasMaterialManualDialog({
       setSaving(false);
     }
   }, [
+    esStockLibre,
     form,
     isCorreccionFlow,
     keepOpen,
+    numCompraManual,
     onOpenChange,
     onSaved,
     posicionParsed,
@@ -228,33 +268,60 @@ export function ComprasMaterialManualDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="grid max-h-[min(62vh,560px)] gap-3 overflow-y-auto px-4 py-3 sm:grid-cols-2">
-          <div className="grid gap-1">
-            <Label htmlFor="manual-ot" className="text-xs">
-              OT
-            </Label>
-            <Input
-              id="manual-ot"
-              value={form.ot}
-              onChange={(e) => patch({ ot: normalizeOtNumeroInput(e.target.value) })}
-              onBlur={(e) => patch({ ot: normalizeOtNumeroInput(e.target.value) })}
-              placeholder="Ej. 38514"
-              inputMode="numeric"
-              className="h-8 text-xs"
-            />
-          </div>
-          <div className="grid gap-1">
+          {!isCorreccionFlow ? (
+            <label className="flex items-center gap-2 text-xs text-slate-700 sm:col-span-2">
+              <Checkbox
+                checked={esStockLibre}
+                onCheckedChange={(v) => {
+                  const checked = v === true;
+                  setEsStockLibre(checked);
+                  if (checked) {
+                    setNumCompraManual(buildNumCompraStockLibre());
+                  }
+                }}
+                aria-label="Compra de stock libre sin OT"
+              />
+              Stock libre (sin OT) — cartelar y asignar después a una OT (Caso C)
+            </label>
+          ) : null}
+          {!esStockLibre ? (
+            <div className="grid gap-1">
+              <Label htmlFor="manual-ot" className="text-xs">
+                OT
+              </Label>
+              <Input
+                id="manual-ot"
+                value={form.ot}
+                onChange={(e) => patch({ ot: normalizeOtNumeroInput(e.target.value) })}
+                onBlur={(e) => patch({ ot: normalizeOtNumeroInput(e.target.value) })}
+                placeholder="Ej. 38514"
+                inputMode="numeric"
+                className="h-8 text-xs"
+              />
+            </div>
+          ) : null}
+          <div className={`grid gap-1 ${esStockLibre ? "sm:col-span-2" : ""}`}>
             <Label htmlFor="manual-num-compra" className="text-xs">
               Nº compra
             </Label>
             <Input
               id="manual-num-compra"
-              readOnly
+              readOnly={!esStockLibre}
               type="text"
               value={numCompra}
-              placeholder="OCM-XXXXX"
-              tabIndex={-1}
-              aria-readonly
-              className="h-8 cursor-not-allowed bg-slate-100 font-mono text-xs text-slate-600 selection:bg-transparent"
+              onChange={
+                esStockLibre
+                  ? (e) => setNumCompraManual(e.target.value.toUpperCase())
+                  : undefined
+              }
+              placeholder={esStockLibre ? "OCM-STOCK-…" : "OCM-XXXXX"}
+              tabIndex={esStockLibre ? 0 : -1}
+              aria-readonly={!esStockLibre}
+              className={
+                esStockLibre
+                  ? "h-8 font-mono text-xs"
+                  : "h-8 cursor-not-allowed bg-slate-100 font-mono text-xs text-slate-600 selection:bg-transparent"
+              }
             />
           </div>
           <div className="grid gap-1">
@@ -416,7 +483,7 @@ export function ComprasMaterialManualDialog({
             <Button
               type="button"
               size="sm"
-              disabled={saving || !posicionValid || !numCompra}
+              disabled={saving || !posicionValid || !numCompra || (!esStockLibre && !otNumero)}
               onClick={() => void guardar()}
             >
               {saving ? <Loader2 className="size-4 animate-spin" /> : "Guardar material"}

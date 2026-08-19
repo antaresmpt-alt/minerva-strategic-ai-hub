@@ -232,11 +232,13 @@ export function CartelasPage() {
         group.cartelas_prueba_existentes +=
           cartelasPruebaByRecepcion[recepcionId] ?? 0;
 
+        const compraOt = String(compra?.ot_numero ?? "").trim();
+        const sinOtCompra = !esStock && !compraOt;
         const line: AlbaranRecepcionLine = {
           recepcion_id: recepcionId,
           compra_id: r.compra_id ? String(r.compra_id) : compra?.id ? String(compra.id) : null,
-          tipo_recepcion: esStock ? "stock_libre" : "oc",
-          ot_numero: esStock ? "" : String(compra?.ot_numero ?? ""),
+          tipo_recepcion: esStock || sinOtCompra ? "stock_libre" : "oc",
+          ot_numero: esStock || sinOtCompra ? "" : compraOt,
           material: esStock
             ? typeof r.material_nombre === "string"
               ? r.material_nombre

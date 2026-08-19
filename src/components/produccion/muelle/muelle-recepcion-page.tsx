@@ -1657,7 +1657,7 @@ export function MuelleRecepcionPage() {
                       <div className="min-w-0 flex-1 space-y-2">
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
                           <span className="font-mono font-semibold text-[#002147]">
-                            OT {r.ot_numero}
+                            {r.ot_numero ? `OT ${r.ot_numero}` : "STOCK libre"}
                           </span>
                           <span className="text-slate-500">· {r.num_compra || "—"}</span>
                           <span className="text-slate-500 truncate">
