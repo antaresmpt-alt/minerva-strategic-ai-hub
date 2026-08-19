@@ -65,19 +65,28 @@ export type FormatoCabeResult = {
 };
 
 /**
- * Comprueba si el papel cabe para el troquel con márgenes mínimos.
+ * Umbral para autodetectar si el formato está en cm o mm.
+ * Si ambas dimensiones son ≤ MAX_CM_DIM → se asume cm (×10).
+ * Si alguna es > MAX_CM_DIM → se asume mm (ya en mm).
  *
- * @param formatoPapel - Formato del papel (ej. "72x102" o "650x460").
+ * 162 cm = 1620 mm = máximo formato de máquinas grandes (KBA Rapida 162).
+ * Formatos standard de compra: 65×92, 72×102, 75×105, 100×140, 120×160 (todos ≤ 162).
+ * Formatos post-guillotina en mm: 500×590, 650×920, etc. (todos > 162).
+ */
+const MAX_CM_DIM = 162;
+
+/**
+ * Comprueba si el papel cabe para el troquel con márgenes mínimos.
+ * Autodetecta si el formato del papel está en cm o mm.
+ *
+ * @param formatoPapel - Formato del papel (ej. "72x102" en cm o "650x460" en mm).
  * @param midesTroquel - Medida de corte del troquel en **mm** (ej. "649.5x447.45").
  * @param margenes     - Márgenes en mm. Por defecto: MARGENES_IMPR_DEFAULT.
- * @param papelEnMm    - Si true, el formato del papel ya está en mm.
- *                        Si false (default), se asume cm y se convierte ×10.
  */
 export function checkFormatoCabe(
   formatoPapel: string,
   midesTroquel: string,
   margenes: MargenesImpr = MARGENES_IMPR_DEFAULT,
-  papelEnMm = false,
 ): FormatoCabeResult {
   const papel = parseDimensions(formatoPapel);
   const troquel = parseDimensions(midesTroquel);
@@ -86,7 +95,9 @@ export function checkFormatoCabe(
     return { cabe: true, canCheck: false, requiredAncho: null, requiredAlto: null };
   }
 
-  const factor = papelEnMm ? 1 : 10;
+  // Autodetección: si ambas dimensiones ≤ 162 → cm (×10); si alguna > 162 → ya en mm
+  const esCm = papel[0] <= MAX_CM_DIM && papel[1] <= MAX_CM_DIM;
+  const factor = esCm ? 10 : 1;
   const [pw_mm, ph_mm] = [papel[0] * factor, papel[1] * factor];
   const [t1, t2] = troquel; // ya en mm
   const { pinza, superior, lateral } = margenes;

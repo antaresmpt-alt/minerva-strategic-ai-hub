@@ -375,8 +375,7 @@ export function DespachoWizardDialog({
     const compra = form.tamano_hoja.trim();
     const papel = guillFinal || impFormato || compra;
     if (!papel) return null;
-    const enMm = !!(guillFinal || impFormato);
-    const result = checkFormatoCabe(papel, mides, margenesImpr, enMm);
+    const result = checkFormatoCabe(papel, mides, margenesImpr);
     return formatoCabeAvisoMsg(result, papel, troquelCode, margenesImpr);
   }, [form.troquel, form.tamano_hoja, troquelInfo, margenesImpr, procesoDatos.guillotina.tamano_final, procesoDatos.impresion.formato_hojas]);
   const [cajasEmbalaje, setCajasEmbalaje] = useState<CajaEmbalajeOption[]>([]);
