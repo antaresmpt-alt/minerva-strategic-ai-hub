@@ -44,7 +44,7 @@ export function parseDimensions(text: string): [number, number] | null {
   const clean = String(text ?? "")
     .trim()
     .replace(/\s*(mm|cm|m)\s*$/i, "")
-    .replace(",", ".")
+    .replace(/,/g, ".")
     .replace(/\s/g, "");
   const m = clean.match(/^(\d+(?:\.\d+)?)[xX×](\d+(?:\.\d+)?)$/);
   if (!m) return null;
