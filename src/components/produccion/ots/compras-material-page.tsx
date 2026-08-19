@@ -371,6 +371,9 @@ export function ComprasMaterialPage() {
   const [manualTitulo, setManualTitulo] = useState("");
   const [manualNotasCompra, setManualNotasCompra] = useState("");
 
+  /** Rol del usuario actual — para gates de permisos 9.8.3. */
+  const [userRole, setUserRole] = useState<string | null>(null);
+
   const loadProveedoresPapelCarton = useCallback(async () => {
     try {
       const mapProviders = (provs: { id: string; nombre: string | null }[]) =>
@@ -429,6 +432,24 @@ export function ComprasMaterialPage() {
   useEffect(() => {
     void loadProveedoresPapelCarton();
   }, [loadProveedoresPapelCarton]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.id) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", user.id)
+            .maybeSingle();
+          setUserRole((profile as { role?: string | null } | null)?.role ?? null);
+        }
+      } catch {
+        /* sin rol, el botón queda oculto */
+      }
+    })();
+  }, [supabase]);
 
   useEffect(() => {
     void (async () => {
@@ -1146,15 +1167,20 @@ export function ComprasMaterialPage() {
         const ot = row?.ot_numero;
         const mat = estadoMaterialDesdeEstadoCompra(estado);
         if (ot && mat) {
-          // Guard 9.8.3: solo bloquear cuando OT está LIBERADA sin compra activa.
-          // STOP_PENDIENTE_CORRECCION permite que la compra P2 propague su progreso
-          // (Pendiente → Generada → Confirmado → Recibido = salida del STOP).
+          // Guard 9.8.3: bloquear propagación según estado STOP activo.
+          // - STOP_MATERIAL_LIBERADO: bloquea todo (no hay compra de corrección activa).
+          // - STOP_PENDIENTE_CORRECCION: propaga Pendiente/Generada/Confirmado,
+          //   pero NO "Material recibido" — la OT sale del STOP solo vía 9.8.4
+          //   (asignar palet físico), no por la mera recepción en el muelle.
           const { data: despRow } = await supabase
             .from(TABLE_DESPACHADAS)
             .select("estado_material")
             .eq("ot_numero", ot)
             .maybeSingle();
-          if (!esEstadoMaterialStopBloqueado(despRow?.estado_material)) {
+          const currentEstado = (despRow?.estado_material ?? "").trim();
+          const isStopCorreccion = currentEstado === STOP_PENDIENTE_CORRECCION;
+          const skipRecibido = isStopCorreccion && mat === "Material recibido";
+          if (!esEstadoMaterialStopBloqueado(currentEstado) && !skipRecibido) {
             const { error: dErr } = await supabase
               .from(TABLE_DESPACHADAS)
               .update({ estado_material: mat })
@@ -1354,6 +1380,7 @@ export function ComprasMaterialPage() {
         },
         onOpenRecepcionFotos: openRecepcionFotos,
         onCorreccion: openCorreccionCompra,
+        userRole,
         proveedoresPapelCarton,
         isRowCheckboxDisabled,
         isSavingRow,

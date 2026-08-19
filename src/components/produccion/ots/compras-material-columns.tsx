@@ -128,6 +128,8 @@ export type ComprasMaterialColumnsContext = {
   onOpenRecepcionFotos: (row: ComprasMaterialTableRow) => void;
   /** Abre el formulario de compra de corrección para OTs en estado STOP_MATERIAL_LIBERADO (9.8.3). */
   onCorreccion: (row: ComprasMaterialTableRow) => void;
+  /** Rol del usuario actual — para gate de permiso del botón de corrección (9.8.3). */
+  userRole: string | null;
   proveedoresPapelCarton: { id: string; nombre: string }[];
   isRowCheckboxDisabled: (row: ComprasMaterialTableRow) => boolean;
   isSavingRow: (rowId: string) => boolean;
@@ -186,10 +188,12 @@ export function createComprasMaterialColumns(
       enableSorting: false,
       header: () => <span className="sr-only">Acciones compra múltiple</span>,
       cell: ({ row }) => {
+        const ROLES_CORRECCION = new Set(["admin", "gerencia", "oficina_tecnica"]);
         const esStop = row.original.otEstadoMaterial?.trim() === STOP_MATERIAL_LIBERADO;
+        const puedeCorreccion = esStop && ROLES_CORRECCION.has(ctx.userRole ?? "");
         return (
           <div className="flex justify-center gap-0.5 px-0.5 py-0.5">
-            {esStop ? (
+            {puedeCorreccion ? (
               <Button
                 type="button"
                 variant="ghost"
