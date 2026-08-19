@@ -4,6 +4,7 @@ import {
   AlertCircle,
   CheckCircle2,
   ClipboardList,
+  Link2,
   Loader2,
   Package,
   Plus,
@@ -117,6 +118,9 @@ export function CartelasPage() {
   const [liberarPalet, setLiberarPalet] = useState<ProdStockPaletConOts | null>(null);
   const [liberarOtNumero, setLiberarOtNumero] = useState<string>("");
   const [liberarDialogOpen, setLiberarDialogOpen] = useState(false);
+  // ── Bloque 9.8.4 — Asignar stock libre a OT ──────────────────────────────
+  const [asignarPalet, setAsignarPalet] = useState<ProdStockPaletConOts | null>(null);
+  const [asignarDialogOpen, setAsignarDialogOpen] = useState(false);
 
   // ── Carga bandeja pendientes ──────────────────────────────────────────
   const loadPendientes = useCallback(async () => {
@@ -528,6 +532,17 @@ export function CartelasPage() {
     loadCartelas();
   }
 
+  function handleAbrirAsignarDialog(palet: ProdStockPaletConOts) {
+    setAsignarPalet(palet);
+    setAsignarDialogOpen(true);
+  }
+
+  function handleAsignarDone() {
+    setAsignarDialogOpen(false);
+    setAsignarPalet(null);
+    loadCartelas();
+  }
+
   async function handleDeletePrueba(palet: ProdStockPaletConOts) {
     if (!palet.es_prueba) return;
     const ok = window.confirm(
@@ -833,6 +848,7 @@ export function CartelasPage() {
                   palet.es_prueba ? () => handleDeletePrueba(palet) : undefined
                 }
                 onLiberarOt={(otNumero) => handleAbrirLiberarDialog(palet, otNumero)}
+                onAsignarOt={() => handleAbrirAsignarDialog(palet)}
               />
             ))}
           </div>
@@ -865,6 +881,16 @@ export function CartelasPage() {
           otNumero={liberarOtNumero}
           onClose={() => setLiberarDialogOpen(false)}
           onDone={handleLiberarDone}
+        />
+      )}
+
+      {/* Diálogo asignar stock libre a OT 9.8.4 */}
+      {asignarPalet && (
+        <AsignarOtDialog
+          open={asignarDialogOpen}
+          palet={asignarPalet}
+          onClose={() => setAsignarDialogOpen(false)}
+          onDone={handleAsignarDone}
         />
       )}
     </div>
@@ -1004,12 +1030,14 @@ function CartelaListRow({
   onPrint,
   onDeletePrueba,
   onLiberarOt,
+  onAsignarOt,
 }: {
   palet: ProdStockPaletConOts;
   userRole: string | null;
   onPrint: () => void;
   onDeletePrueba?: () => void;
   onLiberarOt?: (otNumero: string) => void;
+  onAsignarOt?: () => void;
 }) {
   const otsConReserva = palet.ots;
   const reservadaDura = sumReservaDuraTotal(palet.otsReservas ?? []);
@@ -1017,6 +1045,7 @@ function CartelaListRow({
   const estadoUi = estadoDerivadoLabelCartelas(estadoDerivado);
   const estadoClass = ESTADO_COLORS[estadoDerivado] ?? ESTADO_COLORS[estadoUi] ?? "";
   const puedeLiberar = userRole != null && ROLES_LIBERAR.has(userRole);
+  const esDisponible = estadoDerivado === "disponible" && palet.cantidad_actual > 0;
 
   return (
     <div className="flex items-center gap-3 rounded-md border bg-white px-3 py-2 text-sm hover:bg-slate-50 transition-colors">
@@ -1077,7 +1106,7 @@ function CartelaListRow({
         {estadoUi}
       </Badge>
 
-      {/* Liberar OT / Imprimir / Borrar prueba */}
+      {/* Liberar OT / Asignar OT / Imprimir / Borrar prueba */}
       <div className="flex shrink-0 items-center gap-0.5">
         {/* Botón Liberar (9.8.1) — visible solo a roles privilegiados y si hay OTs */}
         {puedeLiberar && otsConReserva.length > 0 && onLiberarOt &&
@@ -1094,6 +1123,18 @@ function CartelaListRow({
             </Button>
           ))
         }
+        {/* Botón Asignar a OT (9.8.4) — visible en palets disponibles */}
+        {esDisponible && onAsignarOt && (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+            onClick={onAsignarOt}
+            title="Asignar a OT (stock libre)"
+          >
+            <Link2 className="size-3.5" />
+          </Button>
+        )}
         {onDeletePrueba ? (
           <Button
             size="icon"
@@ -1275,6 +1316,153 @@ function LiberarReservaDialog({
               <>
                 <Unlink className="size-4 mr-1" />
                 Confirmar liberación
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Diálogo asignar stock libre a OT (9.8.4) ─────────────────────────────────
+
+function AsignarOtDialog({
+  open,
+  palet,
+  onClose,
+  onDone,
+}: {
+  open: boolean;
+  palet: ProdStockPaletConOts;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [otNumero, setOtNumero] = useState("");
+  const [notas, setNotas] = useState("");
+  const [saving, setSaving] = useState(false);
+  const otRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) {
+      setOtNumero("");
+      setNotas("");
+      setSaving(false);
+      setTimeout(() => otRef.current?.focus(), 50);
+    }
+  }, [open]);
+
+  async function handleConfirmar() {
+    const ot = otNumero.trim();
+    if (!ot) {
+      toast.error("Indica el número de OT a asignar.");
+      otRef.current?.focus();
+      return;
+    }
+    setSaving(true);
+    try {
+      const { error } = await supabase.rpc("prod_stock_asignar_palet_ot", {
+        p_palet_id: palet.id,
+        p_ot_numero: ot,
+        p_cantidad_reservada: null,
+        p_notas: notas.trim() || null,
+      });
+      if (error) throw error;
+      toast.success(`Cartela #${palet.id_stock} asignada a OT ${ot}. Material en stock asignado.`);
+      onDone();
+    } catch (e) {
+      toast.error(`Error al asignar: ${errorMessageFromUnknown(e)}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const materialDesc = [
+    palet.material_nombre ?? palet.descripcion_material,
+    palet.gramaje ? `${palet.gramaje} gr` : null,
+    palet.formato,
+    `${palet.cantidad_actual.toLocaleString("es-ES")} h`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v && !saving) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Link2 className="size-4 text-emerald-600" />
+            Asignar stock libre a OT
+          </DialogTitle>
+          <DialogDescription>
+            Cartela{" "}
+            <span className="font-semibold text-slate-800">
+              #{palet.id_stock}
+            </span>{" "}
+            {materialDesc && (
+              <span className="text-slate-600">— {materialDesc}</span>
+            )}
+            <br />
+            Asigna esta cartela a una OT en estado STOP. Juan puede hacer
+            esta acción sin rol especial. Queda registrado en el ledger.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="asig-ot" className="text-sm font-medium">
+              OT destino <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="asig-ot"
+              ref={otRef}
+              placeholder="Ej. 98020"
+              value={otNumero}
+              onChange={(e) => setOtNumero(e.target.value)}
+              disabled={saving}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="asig-notas" className="text-sm font-medium">
+              Notas{" "}
+              <span className="text-slate-400 font-normal text-xs">
+                (opcional)
+              </span>
+            </Label>
+            <Textarea
+              id="asig-notas"
+              placeholder="Motivo de la asignación, instrucción de oficina…"
+              rows={2}
+              value={notas}
+              onChange={(e) => setNotas(e.target.value)}
+              disabled={saving}
+            />
+          </div>
+          <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+            La OT saldrá del estado STOP y el palet quedará reservado para ella.
+            Asegúrate de que oficina ya ha decidido usar este stock.
+          </p>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            Cancelar
+          </Button>
+          <Button
+            variant="default"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            onClick={() => void handleConfirmar()}
+            disabled={saving || !otNumero.trim()}
+          >
+            {saving ? (
+              <>
+                <Loader2 className="size-4 animate-spin mr-1" />
+                Asignando…
+              </>
+            ) : (
+              <>
+                <Link2 className="size-4 mr-1" />
+                Confirmar asignación
               </>
             )}
           </Button>
