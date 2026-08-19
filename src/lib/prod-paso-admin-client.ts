@@ -12,6 +12,8 @@ import {
 } from "@/lib/cartela-stock-consumo";
 import type { DatosProcesoGenerico } from "@/lib/hoja-ruta-campos-config";
 
+const TABLE_MESA_PLAN = "prod_mesa_planificacion_trabajos";
+
 export type PasoItinerarioAdmin = {
   id: string;
   orden: number;
@@ -286,13 +288,13 @@ export async function reabrirPasoAdmin(
 
   if (params.mesaTrabajoId) {
     const { error: mesaErr } = await supabase
-      .from("prod_mesa_trabajo")
+      .from(TABLE_MESA_PLAN)
       .update({ estado_mesa: "confirmado" })
       .eq("id", params.mesaTrabajoId);
     if (mesaErr) throw new Error(mesaErr.message || "No se pudo actualizar la mesa.");
   } else if (mesaTrabajoId) {
     const { error: mesaErr } = await supabase
-      .from("prod_mesa_trabajo")
+      .from(TABLE_MESA_PLAN)
       .update({ estado_mesa: "confirmado" })
       .eq("id", mesaTrabajoId);
     if (mesaErr) throw new Error(mesaErr.message || "No se pudo actualizar la mesa.");

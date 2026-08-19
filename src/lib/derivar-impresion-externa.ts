@@ -18,6 +18,36 @@ const EJECUCION_INICIADA = new Set(["en_curso", "pausada"]);
 const TABLE_MESA = "prod_mesa_planificacion_trabajos";
 const TABLE_EJECUCIONES = "prod_mesa_ejecuciones";
 const TABLE_POOL = "prod_planificacion_pool";
+const TABLE_OT_PASOS = "prod_ot_pasos";
+
+/** Tras anular ejecución sin finalizar: evita paso atascado en en_marcha sin hueco en mesa. */
+async function revertirPasoItinerarioTrasAnularEjecucion(
+  supabase: SupabaseClient,
+  ejecucionId: string,
+): Promise<void> {
+  const id = String(ejecucionId ?? "").trim();
+  if (!id) return;
+
+  const { data: ejRow, error: ejErr } = await supabase
+    .from(TABLE_EJECUCIONES)
+    .select("ot_paso_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (ejErr) throw ejErr;
+
+  const otPasoId = String((ejRow as { ot_paso_id?: string | null } | null)?.ot_paso_id ?? "").trim();
+  if (!otPasoId) return;
+
+  const { error: pasoErr } = await supabase
+    .from(TABLE_OT_PASOS)
+    .update({
+      estado: "disponible",
+      fecha_inicio: null,
+    })
+    .eq("id", otPasoId)
+    .in("estado", ["en_marcha", "pausado"]);
+  if (pasoErr) throw pasoErr;
+}
 
 export type PasoDerivarImpresion = {
   id: string;
@@ -135,6 +165,9 @@ async function liberarMesaActivaSiNoIniciada(
       })
       .in("id", pendientes);
     if (cancelErr) throw cancelErr;
+    for (const ejId of pendientes) {
+      await revertirPasoItinerarioTrasAnularEjecucion(supabase, ejId);
+    }
   }
 
   const { error: delMesaErr } = await supabase
@@ -187,6 +220,7 @@ export async function devolverHuecoMesaAlPool(
       .eq("id", ejecucionId)
       .in("estado_ejecucion", ["pendiente_inicio", "en_curso", "pausada"]);
     if (cancelErr) throw cancelErr;
+    await revertirPasoItinerarioTrasAnularEjecucion(supabase, ejecucionId);
   }
 
   const { error: delErr } = await supabase.from(TABLE_MESA).delete().eq("id", mesaId);
