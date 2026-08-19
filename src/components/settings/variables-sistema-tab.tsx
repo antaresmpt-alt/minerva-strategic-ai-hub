@@ -34,6 +34,10 @@ import {
   type SysParamSobreproduccionClave,
   type SysParametroSobreproduccionRow,
 } from "@/lib/sys-parametros-sobreproduccion";
+import {
+  MARGENES_IMPR_DEFAULT,
+  SYS_PARAM_MARGENES,
+} from "@/lib/formato-cabe";
 
 type SysParametroRow = SysParametroOtsCompraRow | SysParametroSobreproduccionRow;
 
@@ -69,6 +73,37 @@ const DESCRIPCION_SOBREPROD_FALLBACK: Record<
   [SYS_PARAM_CLAVE_SOBREPROD_ENGOMADO]:
     "Si la proyección de Engomado supera el pedido por encima de este porcentaje, se muestra aviso de sobreproducción.",
 };
+
+type MargenImprClave = (typeof SYS_PARAM_MARGENES)[keyof typeof SYS_PARAM_MARGENES];
+const MARGENES_IMPR_CLAVES: MargenImprClave[] = Object.values(SYS_PARAM_MARGENES);
+
+const TITULO_MARGEN_IMPR: Record<MargenImprClave, string> = {
+  [SYS_PARAM_MARGENES.pinza]: "Margen pinza (mm)",
+  [SYS_PARAM_MARGENES.superior]: "Margen superior (mm)",
+  [SYS_PARAM_MARGENES.lateral]: "Margen lateral por lado (mm)",
+};
+
+const DESCRIPCION_MARGEN_IMPR: Record<MargenImprClave, string> = {
+  [SYS_PARAM_MARGENES.pinza]:
+    "Margen inferior / agarre de la máquina (pinza). Se aplica en la comprobación de formato troquel vs papel.",
+  [SYS_PARAM_MARGENES.superior]:
+    "Margen superior del papel. Se aplica junto con la pinza para el total vertical.",
+  [SYS_PARAM_MARGENES.lateral]:
+    "Margen lateral a CADA lado del papel (total lateral = valor × 2). Se aplica para el ancho útil.",
+};
+
+function draftMargenImprToValores(
+  draft: Record<MargenImprClave, string>,
+): Record<string, number> | null {
+  const out: Record<string, number> = {};
+  for (const clave of MARGENES_IMPR_CLAVES) {
+    const raw = draft[clave].trim();
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) return null;
+    out[clave] = n;
+  }
+  return out;
+}
 
 function draftToValores(
   draft: Record<SysParamOtsComprasClave, string>
@@ -134,6 +169,13 @@ export function VariablesSistemaTab() {
       DEFAULT_SOBREPRODUCCION_MARGENES.engomado
     ),
   }));
+  const [draftMargenImpr, setDraftMargenImpr] = useState<
+    Record<MargenImprClave, string>
+  >(() => ({
+    [SYS_PARAM_MARGENES.pinza]: String(MARGENES_IMPR_DEFAULT.pinza),
+    [SYS_PARAM_MARGENES.superior]: String(MARGENES_IMPR_DEFAULT.superior),
+    [SYS_PARAM_MARGENES.lateral]: String(MARGENES_IMPR_DEFAULT.lateral),
+  }));
 
   const applyRows = useCallback((rows: SysParametroRow[]) => {
     const map: Partial<Record<SysParamOtsComprasClave, SysParametroOtsCompraRow>> =
@@ -167,6 +209,19 @@ export function VariablesSistemaTab() {
       [SYS_PARAM_CLAVE_SOBREPROD_TROQUELADO]: String(sobreprod.troquelado),
       [SYS_PARAM_CLAVE_SOBREPROD_ENGOMADO]: String(sobreprod.engomado),
     });
+    const margenDraft: Record<MargenImprClave, string> = {
+      [SYS_PARAM_MARGENES.pinza]: String(MARGENES_IMPR_DEFAULT.pinza),
+      [SYS_PARAM_MARGENES.superior]: String(MARGENES_IMPR_DEFAULT.superior),
+      [SYS_PARAM_MARGENES.lateral]: String(MARGENES_IMPR_DEFAULT.lateral),
+    };
+    for (const r of rows) {
+      const v = r.valor_num != null ? Number(r.valor_num) : Number.NaN;
+      if (!Number.isFinite(v) || v < 0) continue;
+      if (MARGENES_IMPR_CLAVES.includes(r.clave as MargenImprClave)) {
+        margenDraft[r.clave as MargenImprClave] = String(v);
+      }
+    }
+    setDraftMargenImpr(margenDraft);
   }, []);
 
   const fetchRows = useCallback(async () => {
@@ -245,6 +300,38 @@ export function VariablesSistemaTab() {
       setSaving(false);
     }
   }, [draft, fetchRows]);
+
+  const valoresMargenImprParseados = useMemo(
+    () => draftMargenImprToValores(draftMargenImpr),
+    [draftMargenImpr]
+  );
+
+  const handleGuardarMargenImpr = useCallback(async () => {
+    const valores = draftMargenImprToValores(draftMargenImpr);
+    if (!valores) {
+      toast.error("Introduce valores numéricos válidos (≥ 0) en los tres campos.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/admin/sys-parametros", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ valores }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok) {
+        toast.error(data.error ?? "No se pudo guardar.");
+        return;
+      }
+      toast.success("Márgenes de impresión actualizados.");
+      await fetchRows();
+    } catch {
+      toast.error("No se pudo guardar.");
+    } finally {
+      setSaving(false);
+    }
+  }, [draftMargenImpr, fetchRows]);
 
   const handleGuardarSobreprod = useCallback(async () => {
     const valores = draftSobreprodToValores(draftSobreprod);
@@ -446,6 +533,79 @@ export function VariablesSistemaTab() {
             </>
           ) : (
             "Guardar márgenes"
+          )}
+        </Button>
+      </CardContent>
+    </Card>
+    <Card className="border-border/80 shadow-sm">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-lg">
+          Producción &gt; Márgenes de impresión (formato vs troquel)
+        </CardTitle>
+        <CardDescription>
+          Márgenes mínimos que se usan en el aviso de formato de papel (9.8.2).
+          Cuando el papel seleccionado no deja suficiente espacio útil para el
+          troquel más estos márgenes, la app muestra un aviso ámbar no
+          bloqueante. Valores en milímetros.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {loadError ? (
+          <p className="text-sm text-destructive" role="alert">
+            {loadError}
+          </p>
+        ) : null}
+
+        {loading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+            Cargando parámetros…
+          </div>
+        ) : null}
+
+        <div className="space-y-5">
+          {MARGENES_IMPR_CLAVES.map((clave) => (
+            <div key={clave} className="space-y-2">
+              <Label
+                htmlFor={`sys-param-${clave}`}
+                className="text-sm font-medium"
+              >
+                {TITULO_MARGEN_IMPR[clave]}
+              </Label>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {DESCRIPCION_MARGEN_IMPR[clave]}
+              </p>
+              <Input
+                id={`sys-param-${clave}`}
+                type="number"
+                min={0}
+                step={0.5}
+                className="max-w-[12rem] font-mono text-sm"
+                disabled={loading}
+                value={draftMargenImpr[clave]}
+                onChange={(e) =>
+                  setDraftMargenImpr((prev) => ({
+                    ...prev,
+                    [clave]: e.target.value,
+                  }))
+                }
+              />
+            </div>
+          ))}
+        </div>
+
+        <Button
+          type="button"
+          onClick={() => void handleGuardarMargenImpr()}
+          disabled={loading || saving || !valoresMargenImprParseados}
+        >
+          {saving ? (
+            <>
+              <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
+              Guardando…
+            </>
+          ) : (
+            "Guardar márgenes de impresión"
           )}
         </Button>
       </CardContent>

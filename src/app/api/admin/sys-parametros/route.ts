@@ -9,11 +9,15 @@ import {
   SYS_PARAM_SOBREPROD_CLAVES,
   type SysParametroSobreproduccionRow,
 } from "@/lib/sys-parametros-sobreproduccion";
+import { SYS_PARAM_MARGENES } from "@/lib/formato-cabe";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+
+const SYS_PARAM_MARGENES_CLAVES = Object.values(SYS_PARAM_MARGENES);
 
 const SYS_PARAM_ALLOWED_CLAVES = [
   ...SYS_PARAM_OTS_COMPRAS_CLAVES,
   ...SYS_PARAM_SOBREPROD_CLAVES,
+  ...SYS_PARAM_MARGENES_CLAVES,
 ] as const;
 
 type SysParametroRow =
