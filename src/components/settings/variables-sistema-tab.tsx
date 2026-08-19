@@ -99,7 +99,7 @@ function draftMargenImprToValores(
   for (const clave of MARGENES_IMPR_CLAVES) {
     const raw = draft[clave].trim();
     const n = Number(raw);
-    if (!Number.isFinite(n) || n < 0) return null;
+    if (!Number.isFinite(n) || n <= 0) return null;
     out[clave] = n;
   }
   return out;
@@ -309,7 +309,7 @@ export function VariablesSistemaTab() {
   const handleGuardarMargenImpr = useCallback(async () => {
     const valores = draftMargenImprToValores(draftMargenImpr);
     if (!valores) {
-      toast.error("Introduce valores numéricos válidos (≥ 0) en los tres campos.");
+      toast.error("Introduce valores numéricos positivos (> 0) en los tres campos.");
       return;
     }
     setSaving(true);

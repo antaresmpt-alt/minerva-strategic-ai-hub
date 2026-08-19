@@ -81,7 +81,8 @@ export async function PUT(request: Request) {
     for (const [clave, raw] of Object.entries(valores)) {
       if (!allowed.has(clave)) continue;
       const n = Number(raw);
-      if (!Number.isFinite(n) || n < 0) {
+      const isMargen = new Set<string>(SYS_PARAM_MARGENES_CLAVES).has(clave);
+      if (!Number.isFinite(n) || n < 0 || (isMargen && n <= 0)) {
         return NextResponse.json(
           { error: `Valor numérico inválido para ${clave}` },
           { status: 400 }
