@@ -24,6 +24,8 @@ import {
   type ReferenciaMinervaValue,
 } from "@/components/produccion/ots/referencia-minerva-picker";
 import { TroquelPickerField } from "@/components/produccion/ots/troquel-picker-field";
+import { checkFormatoCabe, formatoCabeAvisoMsg } from "@/lib/formato-cabe";
+import { useFormatoMargenParametros } from "@/hooks/use-formato-margen-parametros";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -360,6 +362,17 @@ export function DespachoWizardDialog({
   const [modoContenedor, setModoContenedor] = useState(false);
   const [formas, setFormas] = useState<DespachoFormaState[]>([]);
   const [troquelInfo, setTroquelInfo] = useState<TroquelInfoPanel | null>(null);
+  const { margenes: margenesImpr } = useFormatoMargenParametros();
+
+  const wizFormatoAvisoMsg = useMemo(() => {
+    const troquelCode = form.troquel.trim();
+    const papel = form.tamano_hoja.trim();
+    if (!troquelCode || !papel) return null;
+    const mides = troquelInfo?.mides;
+    if (!mides) return null;
+    const result = checkFormatoCabe(papel, mides, margenesImpr);
+    return formatoCabeAvisoMsg(result, papel, troquelCode, margenesImpr);
+  }, [form.troquel, form.tamano_hoja, troquelInfo, margenesImpr]);
   const [cajasEmbalaje, setCajasEmbalaje] = useState<CajaEmbalajeOption[]>([]);
   const [itinerarioOverrides, setItinerarioOverrides] = useState<
     Record<string, DespachoItinerarioSlot[] | null>
@@ -2569,6 +2582,12 @@ export function DespachoWizardDialog({
                 ) : null}
               </div>
             ) : null}
+            {wizFormatoAvisoMsg && (
+              <div className="sm:col-span-2 mt-1.5 flex items-start gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-900">
+                <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
+                <span>{wizFormatoAvisoMsg}</span>
+              </div>
+            )}
             <div className="grid gap-1">
               <Label htmlFor="wiz-poses" className="text-xs">
                 Poses
