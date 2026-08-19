@@ -22,6 +22,8 @@ export type ComprasMaterialTableRow = {
   estado: string | null;
   /** Notas internas de compra (Jordi). */
   notas: string | null;
+  /** Estado de material de la OT (`produccion_ot_despachadas.estado_material`). Usado para mostrar el botón "Compra de corrección" en estado STOP. */
+  otEstadoMaterial: string | null;
   /** Última nota registrada desde muelle para esta compra. */
   ultima_recepcion_nota: string | null;
   /** Fecha de la última recepción con nota. */

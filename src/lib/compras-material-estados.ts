@@ -33,13 +33,24 @@ export type StopEstadoMaterial = (typeof STOP_ESTADOS)[number];
 
 /**
  * True si el texto corresponde a un estado STOP de material (9.8.x).
- * Usar para evitar que syncs de compras pisen un estado STOP activo.
+ * Usar para guards que necesitan detectar cualquier estado STOP.
  */
 export function esEstadoMaterialStop(
   estado: string | null | undefined
 ): boolean {
   const t = (estado ?? "").trim();
   return (STOP_ESTADOS as readonly string[]).includes(t);
+}
+
+/**
+ * True si el estado STOP bloquea la propagación de cambios de compra.
+ * Solo STOP_MATERIAL_LIBERADO bloquea — no hay compra de corrección activa.
+ * STOP_PENDIENTE_CORRECCION permite que la compra P2 propague su progreso.
+ */
+export function esEstadoMaterialStopBloqueado(
+  estado: string | null | undefined
+): boolean {
+  return (estado ?? "").trim() === STOP_MATERIAL_LIBERADO;
 }
 
 // ── Bloque 9.8.1b — Allowlist nueva compra ───────────────────────────────────

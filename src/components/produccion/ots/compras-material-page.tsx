@@ -67,7 +67,10 @@ import {
   COMPRAS_MATERIAL_ESTADOS,
   estadoMaterialDesdeEstadoCompra,
   esEstadoMaterialStop,
+  esEstadoMaterialStopBloqueado,
   normalizeCompraEstado,
+  STOP_MATERIAL_LIBERADO,
+  STOP_PENDIENTE_CORRECCION,
 } from "@/lib/compras-material-estados";
 import { esPrioridadStockAmarilla } from "@/lib/compras-material-prioridad";
 import {
@@ -354,6 +357,8 @@ export function ComprasMaterialPage() {
   const [manualOpen, setManualOpen] = useState(false);
   const [manualSaving, setManualSaving] = useState(false);
   const [manualKeepOpen, setManualKeepOpen] = useState(true);
+  /** True cuando el form manual es una compra de corrección (9.8.3 — salida STOP). */
+  const [isCorreccionFlow, setIsCorreccionFlow] = useState(false);
   const [manualOt, setManualOt] = useState("");
   const [manualPosicion, setManualPosicion] = useState("1");
   const [manualProveedorId, setManualProveedorId] = useState("");
@@ -501,6 +506,7 @@ export function ComprasMaterialPage() {
           tamano_hoja: string | null;
           num_hojas_brutas: number | null;
           num_hojas_netas: number | null;
+          estado_material: string | null;
         }
       >();
 
@@ -508,7 +514,7 @@ export function ComprasMaterialPage() {
         const { data: despRows, error: dErr } = await supabase
           .from(TABLE_DESPACHADAS)
           .select(
-            "ot_numero, material, gramaje, tamano_hoja, num_hojas_brutas, num_hojas_netas, despachado_at"
+            "ot_numero, material, gramaje, tamano_hoja, num_hojas_brutas, num_hojas_netas, despachado_at, estado_material"
           )
           .in("ot_numero", ots)
           .order("despachado_at", { ascending: false });
@@ -535,6 +541,7 @@ export function ComprasMaterialPage() {
                 : nn != null
                   ? Number(nn)
                   : null,
+            estado_material: (raw.estado_material as string | null) ?? null,
           });
         }
       }
@@ -633,6 +640,7 @@ export function ComprasMaterialPage() {
           estado: (r.estado as string | null) ?? null,
           notas:
             String((r.notas as string | null | undefined) ?? "").trim() || null,
+          otEstadoMaterial: d?.estado_material ?? null,
           ultima_recepcion_nota: null,
           ultima_recepcion_fecha: null,
           ultima_recepcion_por: null,
@@ -1032,6 +1040,36 @@ export function ComprasMaterialPage() {
       setManualCliente(row.cliente?.trim() ?? "");
       setManualTitulo(row.titulo?.trim() ?? "");
       setManualNotasCompra(row.notas?.trim() ?? "");
+      setIsCorreccionFlow(false);
+      setManualOpen(true);
+    },
+    [sugerirSiguientePosicionOt]
+  );
+
+  /** Abre el form de compra pre-rellenado con el flujo de corrección STOP (9.8.3). */
+  const openCorreccionCompra = useCallback(
+    (row: ComprasMaterialTableRow) => {
+      const nextPos = sugerirSiguientePosicionOt(row.ot_numero);
+      setManualOt(normalizeOtNumeroInput(row.ot_numero));
+      setManualPosicion(String(nextPos));
+      setManualProveedorId(row.proveedor_id?.trim() ?? "");
+      setManualMaterial(row.material?.trim() ?? "");
+      setManualGramaje(
+        row.gramaje != null && Number.isFinite(row.gramaje)
+          ? String(row.gramaje)
+          : ""
+      );
+      setManualFormato(row.tamano_hoja?.trim() ?? "");
+      setManualHojasNetas(
+        row.num_hojas_netas != null ? String(row.num_hojas_netas) : ""
+      );
+      setManualHojasBrutas(
+        row.num_hojas_brutas != null ? String(row.num_hojas_brutas) : ""
+      );
+      setManualCliente(row.cliente?.trim() ?? "");
+      setManualTitulo(row.titulo?.trim() ?? "");
+      setManualNotasCompra("Compra de corrección (9.8.3)");
+      setIsCorreccionFlow(true);
       setManualOpen(true);
     },
     [sugerirSiguientePosicionOt]
@@ -1108,15 +1146,15 @@ export function ComprasMaterialPage() {
         const ot = row?.ot_numero;
         const mat = estadoMaterialDesdeEstadoCompra(estado);
         if (ot && mat) {
-          // Guard 9.8.1b: no pisar estado STOP activo (liberación / corrección).
-          // La compra histórica puede estar en "Recibido" mientras la OT está
-          // pendiente de reasignación; no debemos decir "Material recibido".
+          // Guard 9.8.3: solo bloquear cuando OT está LIBERADA sin compra activa.
+          // STOP_PENDIENTE_CORRECCION permite que la compra P2 propague su progreso
+          // (Pendiente → Generada → Confirmado → Recibido = salida del STOP).
           const { data: despRow } = await supabase
             .from(TABLE_DESPACHADAS)
             .select("estado_material")
             .eq("ot_numero", ot)
             .maybeSingle();
-          if (!esEstadoMaterialStop(despRow?.estado_material)) {
+          if (!esEstadoMaterialStopBloqueado(despRow?.estado_material)) {
             const { error: dErr } = await supabase
               .from(TABLE_DESPACHADAS)
               .update({ estado_material: mat })
@@ -1315,6 +1353,7 @@ export function ComprasMaterialPage() {
           }
         },
         onOpenRecepcionFotos: openRecepcionFotos,
+        onCorreccion: openCorreccionCompra,
         proveedoresPapelCarton,
         isRowCheckboxDisabled,
         isSavingRow,
@@ -1331,6 +1370,7 @@ export function ComprasMaterialPage() {
       onFechaPrevistaCommit,
       onProveedorChange,
       openManualDuplicate,
+      openCorreccionCompra,
       openEdit,
       openRecepcionFotos,
       proveedoresPapelCarton,
@@ -1502,7 +1542,8 @@ export function ComprasMaterialPage() {
           .select("estado_material")
           .eq("ot_numero", ot)
           .maybeSingle();
-        if (!esEstadoMaterialStop(despRow2?.estado_material)) {
+        // Guard 9.8.3: solo bloquear STOP_MATERIAL_LIBERADO (sin compra activa).
+        if (!esEstadoMaterialStopBloqueado(despRow2?.estado_material)) {
           const { error: u2 } = await supabase
             .from(TABLE_DESPACHADAS)
             .update({ estado_material: "Orden compra generada" })
@@ -1785,19 +1826,28 @@ export function ComprasMaterialPage() {
       });
       if (insertErr) throw insertErr;
 
+      // 9.8.3: en corrección, actualizar también estado_material → STOP_PENDIENTE_CORRECCION
+      const despPayload: Record<string, unknown> = {
+        material,
+        gramaje,
+        tamano_hoja: tamanoHoja,
+        num_hojas_netas: numHojasNetas,
+        num_hojas_brutas: numHojasBrutas,
+      };
+      if (isCorreccionFlow) {
+        despPayload.estado_material = STOP_PENDIENTE_CORRECCION;
+      }
       const { error: updDespErr } = await supabase
         .from(TABLE_DESPACHADAS)
-        .update({
-          material,
-          gramaje,
-          tamano_hoja: tamanoHoja,
-          num_hojas_netas: numHojasNetas,
-          num_hojas_brutas: numHojasBrutas,
-        })
+        .update(despPayload)
         .eq("ot_numero", ot);
       if (updDespErr) throw updDespErr;
 
-      toast.success("Material guardado en compras con estado «Pendiente».");
+      toast.success(
+        isCorreccionFlow
+          ? "Compra de corrección creada. OT marcada como «Pendiente compra de corrección»."
+          : "Material guardado en compras con estado «Pendiente»."
+      );
       void loadRows();
 
       if (manualKeepOpen) {
@@ -1810,6 +1860,7 @@ export function ComprasMaterialPage() {
         setManualPosicion(String(manualPosicionParsed + 1));
       } else {
         setManualOpen(false);
+        setIsCorreccionFlow(false);
         resetManualForm();
       }
     } catch (err) {
@@ -1823,6 +1874,7 @@ export function ComprasMaterialPage() {
       setManualSaving(false);
     }
   }, [
+    isCorreccionFlow,
     loadRows,
     manualFormato,
     manualGramaje,
@@ -2680,13 +2732,16 @@ export function ComprasMaterialPage() {
         onOpenChange={(open) => {
           setManualOpen(open);
           if (!open) {
+            setIsCorreccionFlow(false);
             resetManualForm();
           }
         }}
       >
         <DialogContent className="max-h-[min(92vh,700px)] max-w-3xl gap-0 overflow-hidden p-0 sm:max-w-3xl">
           <DialogHeader className="border-b border-slate-100 px-4 py-3">
-            <DialogTitle className="text-base">Solicitar material</DialogTitle>
+            <DialogTitle className="text-base">
+              {isCorreccionFlow ? "Compra de corrección" : "Solicitar material"}
+            </DialogTitle>
             <DialogDescription className="text-xs">
               Alta manual en <span className="font-mono">{TABLE_COMPRA}</span> con
               lógica multi-línea por OT, Nº compra y posición.

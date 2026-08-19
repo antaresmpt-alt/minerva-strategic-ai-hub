@@ -8,6 +8,7 @@ import {
   Camera,
   CopyPlus,
   Package,
+  RefreshCcw,
   StickyNote,
   Pencil,
   Trash2,
@@ -21,7 +22,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { COMPRAS_MATERIAL_ESTADOS } from "@/lib/compras-material-estados";
+import { COMPRAS_MATERIAL_ESTADOS, STOP_MATERIAL_LIBERADO } from "@/lib/compras-material-estados";
 import { diasDesdeHastaFecha } from "@/lib/compras-material-prioridad";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import type { OtsComprasUmbralesParametros } from "@/lib/sys-parametros-ots-compras";
@@ -125,6 +126,8 @@ export type ComprasMaterialColumnsContext = {
   onDuplicate: (row: ComprasMaterialTableRow) => void;
   onDelete: (row: ComprasMaterialTableRow) => void;
   onOpenRecepcionFotos: (row: ComprasMaterialTableRow) => void;
+  /** Abre el formulario de compra de corrección para OTs en estado STOP_MATERIAL_LIBERADO (9.8.3). */
+  onCorreccion: (row: ComprasMaterialTableRow) => void;
   proveedoresPapelCarton: { id: string; nombre: string }[];
   isRowCheckboxDisabled: (row: ComprasMaterialTableRow) => boolean;
   isSavingRow: (rowId: string) => boolean;
@@ -179,24 +182,41 @@ export function createComprasMaterialColumns(
     },
     {
       id: "acciones_multi",
-      size: 44,
+      size: 60,
       enableSorting: false,
       header: () => <span className="sr-only">Acciones compra múltiple</span>,
-      cell: ({ row }) => (
-        <div className="flex justify-center px-0.5 py-0.5">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="size-7 shrink-0"
-            onClick={() => ctx.onDuplicate(row.original)}
-            aria-label={`Duplicar línea ${row.original.num_compra}`}
-            title="Duplicar línea (P siguiente)"
-          >
-            <CopyPlus className="size-3.5 text-[#002147]" aria-hidden />
-          </Button>
-        </div>
-      ),
+      cell: ({ row }) => {
+        const esStop = row.original.otEstadoMaterial?.trim() === STOP_MATERIAL_LIBERADO;
+        return (
+          <div className="flex justify-center gap-0.5 px-0.5 py-0.5">
+            {esStop ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="size-7 shrink-0 text-orange-600 hover:bg-orange-50 hover:text-orange-700"
+                onClick={() => ctx.onCorreccion(row.original)}
+                aria-label={`Compra de corrección OT ${row.original.ot_numero}`}
+                title="Compra de corrección (OT en STOP — 9.8.3)"
+              >
+                <RefreshCcw className="size-3.5" aria-hidden />
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="size-7 shrink-0"
+                onClick={() => ctx.onDuplicate(row.original)}
+                aria-label={`Duplicar línea ${row.original.num_compra}`}
+                title="Duplicar línea (P siguiente)"
+              >
+                <CopyPlus className="size-3.5 text-[#002147]" aria-hidden />
+              </Button>
+            )}
+          </div>
+        );
+      },
     },
     {
       id: "stock",
