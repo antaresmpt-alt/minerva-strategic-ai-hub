@@ -2441,11 +2441,29 @@ export function DespachoWizardDialog({
                       Cargando acabados…
                     </SelectItem>
                   ) : (
-                    acabadosOpciones.map((a) => (
-                      <SelectItem key={a.id} value={a.nombre}>
-                        {a.nombre}
-                      </SelectItem>
-                    ))
+                    (() => {
+                      const cur = String(ext.acabado_detalle ?? "").trim();
+                      const hasCur =
+                        !cur ||
+                        acabadosOpciones.some(
+                          (a) => String(a.nombre ?? "").trim() === cur,
+                        );
+                      return [
+                        !hasCur ? (
+                          <SelectItem
+                            key="__cur-acabado-detalle__"
+                            value={cur}
+                          >
+                            {cur}
+                          </SelectItem>
+                        ) : null,
+                        ...acabadosOpciones.map((a) => (
+                          <SelectItem key={a.id} value={a.nombre}>
+                            {a.nombre}
+                          </SelectItem>
+                        )),
+                      ];
+                    })()
                   )}
                 </SelectContent>
               </Select>
@@ -2470,6 +2488,24 @@ export function DespachoWizardDialog({
                         <SelectItem value="IMPRESIÓN">IMPRESIÓN</SelectItem>
                       ) : null}
                       <SelectItem value="—">— (sin acabado cara)</SelectItem>
+                      {(() => {
+                        const cur = String(ext.acabado_cara ?? "").trim();
+                        const inOptions =
+                          !cur ||
+                          cur === "IMPRESIÓN" ||
+                          cur === "—" ||
+                          acabadosOpciones.some(
+                            (a) => String(a.nombre ?? "").trim() === cur,
+                          );
+                        return !inOptions ? (
+                          <SelectItem
+                            key="__cur-acabado-cara__"
+                            value={cur}
+                          >
+                            {cur}
+                          </SelectItem>
+                        ) : null;
+                      })()}
                       {acabadosOpciones.map((a) => (
                         <SelectItem key={`cara-${a.id}`} value={a.nombre}>
                           {a.nombre}
@@ -2497,6 +2533,23 @@ export function DespachoWizardDialog({
                   ) : (
                     <>
                       <SelectItem value="—">— (sin acabado dorso)</SelectItem>
+                      {(() => {
+                        const cur = String(ext.acabado_dorso ?? "").trim();
+                        const inOptions =
+                          !cur ||
+                          cur === "—" ||
+                          acabadosOpciones.some(
+                            (a) => String(a.nombre ?? "").trim() === cur,
+                          );
+                        return !inOptions ? (
+                          <SelectItem
+                            key="__cur-acabado-dorso__"
+                            value={cur}
+                          >
+                            {cur}
+                          </SelectItem>
+                        ) : null;
+                      })()}
                       {acabadosOpciones.map((a) => (
                         <SelectItem key={`dorso-${a.id}`} value={a.nombre}>
                           {a.nombre}
