@@ -67,15 +67,17 @@ export type FormatoCabeResult = {
 /**
  * Comprueba si el papel cabe para el troquel con márgenes mínimos.
  *
- * @param formatoPapel - Formato del papel en **cm** (ej. "72x102" o "72X102").
- *                       Se convierte internamente a mm multiplicando × 10.
+ * @param formatoPapel - Formato del papel (ej. "72x102" o "650x460").
  * @param midesTroquel - Medida de corte del troquel en **mm** (ej. "649.5x447.45").
  * @param margenes     - Márgenes en mm. Por defecto: MARGENES_IMPR_DEFAULT.
+ * @param papelEnMm    - Si true, el formato del papel ya está en mm.
+ *                        Si false (default), se asume cm y se convierte ×10.
  */
 export function checkFormatoCabe(
   formatoPapel: string,
   midesTroquel: string,
   margenes: MargenesImpr = MARGENES_IMPR_DEFAULT,
+  papelEnMm = false,
 ): FormatoCabeResult {
   const papel = parseDimensions(formatoPapel);
   const troquel = parseDimensions(midesTroquel);
@@ -84,8 +86,8 @@ export function checkFormatoCabe(
     return { cabe: true, canCheck: false, requiredAncho: null, requiredAlto: null };
   }
 
-  // Papel: formato expresado en cm → convertir a mm
-  const [pw_mm, ph_mm] = [papel[0] * 10, papel[1] * 10];
+  const factor = papelEnMm ? 1 : 10;
+  const [pw_mm, ph_mm] = [papel[0] * factor, papel[1] * factor];
   const [t1, t2] = troquel; // ya en mm
   const { pinza, superior, lateral } = margenes;
   const totalVertical = pinza + superior;

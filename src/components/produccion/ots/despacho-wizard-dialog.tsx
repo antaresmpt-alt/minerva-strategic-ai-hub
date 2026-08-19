@@ -366,13 +366,19 @@ export function DespachoWizardDialog({
 
   const wizFormatoAvisoMsg = useMemo(() => {
     const troquelCode = form.troquel.trim();
-    const papel = form.tamano_hoja.trim();
-    if (!troquelCode || !papel) return null;
+    if (!troquelCode) return null;
     const mides = troquelInfo?.mides;
     if (!mides) return null;
-    const result = checkFormatoCabe(papel, mides, margenesImpr);
+    // Formato relevante: guillotina final (mm) > impresión (mm) > compra (cm)
+    const guillFinal = procesoDatos.guillotina.tamano_final.trim();
+    const impFormato = procesoDatos.impresion.formato_hojas.trim();
+    const compra = form.tamano_hoja.trim();
+    const papel = guillFinal || impFormato || compra;
+    if (!papel) return null;
+    const enMm = !!(guillFinal || impFormato);
+    const result = checkFormatoCabe(papel, mides, margenesImpr, enMm);
     return formatoCabeAvisoMsg(result, papel, troquelCode, margenesImpr);
-  }, [form.troquel, form.tamano_hoja, troquelInfo, margenesImpr]);
+  }, [form.troquel, form.tamano_hoja, troquelInfo, margenesImpr, procesoDatos.guillotina.tamano_final, procesoDatos.impresion.formato_hojas]);
   const [cajasEmbalaje, setCajasEmbalaje] = useState<CajaEmbalajeOption[]>([]);
   const [itinerarioOverrides, setItinerarioOverrides] = useState<
     Record<string, DespachoItinerarioSlot[] | null>
