@@ -209,6 +209,10 @@ function normalizeEstadoMaterialParaMatch(
   return (estado ?? "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    // Algunos estados persisten en BD con formato "markdown"/string literal
+    // (p. ej. "\"Sin orden compra\""). Para comparaciones necesitamos un match
+    // semántico, no por puntuación superficial.
+    .replace(/["'`*“”‘’«»]/g, "")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
