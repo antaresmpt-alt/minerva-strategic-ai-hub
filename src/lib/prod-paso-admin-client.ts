@@ -44,6 +44,54 @@ export async function pasoYaTieneConsumoCartela(
   return (data?.length ?? 0) > 0;
 }
 
+export type MovimientoConsumo = {
+  id: string;
+  palet_id: string;
+  cantidad: number;
+  ot_numero: string | null;
+  created_at: string;
+};
+
+/** Obtiene el último movimiento de consumo del paso (para revertir). */
+export async function fetchUltimoConsumoDelPaso(
+  supabase: SupabaseClient,
+  pasoId: string,
+): Promise<MovimientoConsumo | null> {
+  const { data, error } = await supabase
+    .from("prod_stock_movimientos")
+    .select("id, palet_id, cantidad, ot_numero, created_at")
+    .eq("paso_id", pasoId)
+    .eq("tipo", "consumo")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message || "No se pudo recuperar el consumo.");
+  return data as MovimientoConsumo | null;
+}
+
+/** Revierte el consumo de cartela de un paso finalizado (9.8.5). */
+export async function revertirConsumoPasoAdmin(
+  supabase: SupabaseClient,
+  params: {
+    paletId: string;
+    cantidad: number;
+    otNumero: string;
+    autorizadoPor: string;
+    notas?: string | null;
+    nuevoFormato?: string | null;
+  },
+): Promise<void> {
+  const { error } = await supabase.rpc("prod_stock_revertir_consumo", {
+    p_palet_id: params.paletId,
+    p_cantidad: params.cantidad,
+    p_ot_numero: params.otNumero,
+    p_autorizado_por: params.autorizadoPor,
+    p_notas: params.notas ?? null,
+    p_nuevo_formato: params.nuevoFormato ?? null,
+  });
+  if (error) throw new Error(error.message || "No se pudo revertir el consumo.");
+}
+
 export async function fetchPasosItinerarioAdmin(
   supabase: SupabaseClient,
   otId: string,

@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { AlertTriangle, Loader2, Package, Pencil, RotateCcw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Loader2, Package, Pencil, RotateCcw, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { CartelaCierreBlock } from "@/components/produccion/planificacion/cartela-cierre-block";
 import { DatosProcesoForm } from "@/components/produccion/hoja-ruta/datos-proceso-form";
 import {
@@ -25,13 +28,17 @@ import {
   corregirCartelaPasoAdmin,
   editarDatosPasoAdmin,
   fetchPasosItinerarioAdmin,
+  fetchUltimoConsumoDelPaso,
   reabrirPasoAdmin,
+  revertirConsumoPasoAdmin,
   siguientePasoIniciado,
+  type MovimientoConsumo,
 } from "@/lib/prod-paso-admin-client";
 import {
   puedeCorregirCartelaPaso,
   puedeEditarPasoAdmin,
   puedeReabrirPasoAdmin,
+  puedeRevertirConsumoPasoAdmin,
 } from "@/lib/prod-paso-admin-permisos";
 import type { ProfileConPermisos } from "@/lib/prod-ot-cierre-permisos";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -69,10 +76,15 @@ export function PasoAdminActions({
   const [editOpen, setEditOpen] = useState(false);
   const [cartelaOpen, setCartelaOpen] = useState(false);
   const [reabrirOpen, setReabrirOpen] = useState(false);
+  const [revertirOpen, setRevertirOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [datosEdit, setDatosEdit] = useState<DatosProcesoGenerico>(paso.datosProceso);
   const [datosCartela, setDatosCartela] = useState<DatosProcesoGenerico>(paso.datosProceso);
   const [puedeReabrir, setPuedeReabrir] = useState<boolean | null>(null);
+  const [ultimoConsumo, setUltimoConsumo] = useState<MovimientoConsumo | null | undefined>(undefined);
+  const [autorizadoPor, setAutorizadoPor] = useState("");
+  const [notasRevertir, setNotasRevertir] = useState("");
+  const [nuevoFormato, setNuevoFormato] = useState("");
 
   const esFinalizado = paso.estado === "finalizado";
   const showEditar = esFinalizado && puedeEditarPasoAdmin(profile);
@@ -81,6 +93,19 @@ export function PasoAdminActions({
     puedeCorregirCartelaPaso(profile) &&
     procesoUsaCartela(paso.procesoId, pasosItinerario);
   const showReabrirBtn = esFinalizado && puedeReabrirPasoAdmin(profile);
+  const showRevertirBtn =
+    esFinalizado &&
+    puedeRevertirConsumoPasoAdmin(profile) &&
+    procesoUsaCartela(paso.procesoId, pasosItinerario) &&
+    ultimoConsumo != null; // null = checked, no hay; undefined = aún cargando
+
+  // Carga el último consumo del paso para saber si mostrar el botón de revertir
+  useEffect(() => {
+    if (!esFinalizado || !puedeRevertirConsumoPasoAdmin(profile) || !procesoUsaCartela(paso.procesoId, pasosItinerario)) return;
+    void fetchUltimoConsumoDelPaso(supabase, paso.pasoId)
+      .then(setUltimoConsumo)
+      .catch(() => setUltimoConsumo(null));
+  }, [esFinalizado, profile, paso.procesoId, paso.pasoId, pasosItinerario, supabase]);
 
   const cartelaIncompleta = useMemo(() => {
     const parsed = parseCartelaConsumoFromDatos(paso.datosProceso);
@@ -97,7 +122,7 @@ export function PasoAdminActions({
     }
   }, [showReabrirBtn, supabase, paso.otId, paso.pasoId]);
 
-  if (!showEditar && !showCartela && !showReabrirBtn) return null;
+  if (!showEditar && !showCartela && !showReabrirBtn && !showRevertirBtn) return null;
 
   const btnClass = compact ? "h-7 gap-1 px-2 text-[11px]" : "h-8 gap-1.5 text-xs";
 
@@ -151,6 +176,36 @@ export function PasoAdminActions({
       onSuccess?.();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo corregir la cartela.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRevertirConsumo = async () => {
+    if (!ultimoConsumo) return;
+    const autorizado = autorizadoPor.trim();
+    if (!autorizado) {
+      toast.error("Indica quién autoriza la reversión.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await revertirConsumoPasoAdmin(supabase, {
+        paletId: ultimoConsumo.palet_id,
+        cantidad: ultimoConsumo.cantidad,
+        otNumero: paso.otNumero,
+        autorizadoPor: autorizado,
+        notas: notasRevertir.trim() || null,
+        nuevoFormato: nuevoFormato.trim() || null,
+      });
+      toast.success(
+        `Consumo revertido: ${ultimoConsumo.cantidad.toLocaleString("es-ES")} h devueltas al palet. OT marcada como STOP.`,
+      );
+      setRevertirOpen(false);
+      setUltimoConsumo(null);
+      onSuccess?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo revertir el consumo.");
     } finally {
       setSaving(false);
     }
@@ -228,6 +283,23 @@ export function PasoAdminActions({
             Reabrir paso
           </Button>
         ) : null}
+        {showRevertirBtn ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={`${btnClass} border-orange-300 bg-orange-50 text-orange-900 hover:bg-orange-100`}
+            onClick={() => {
+              setAutorizadoPor("");
+              setNotasRevertir("");
+              setNuevoFormato("");
+              setRevertirOpen(true);
+            }}
+          >
+            <Undo2 className="size-3.5" />
+            Revertir consumo
+          </Button>
+        ) : null}
       </div>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
@@ -296,6 +368,79 @@ export function PasoAdminActions({
             >
               {saving ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
               Confirmar y descontar stock
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={revertirOpen} onOpenChange={setRevertirOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Revertir consumo de cartela</DialogTitle>
+            <DialogDescription>
+              OT {paso.otNumero}
+              {paso.procesoNombre ? ` · ${paso.procesoNombre}` : ""}. Se devolverán{" "}
+              <strong>{ultimoConsumo?.cantidad?.toLocaleString("es-ES") ?? "–"} h</strong> al palet
+              y la OT quedará marcada como <em>Sin material asignado</em>. Acción irreversible
+              (queda auditada en el ledger de stock).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <p className="rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-900">
+              Usa esta acción solo si el corte fue erróneo (material incorrecto). Tras revertir,
+              genera la compra de corrección desde Compras (9.8.3).
+            </p>
+            <div className="space-y-1">
+              <Label htmlFor="revertir-autorizado">Autorizado por *</Label>
+              <Input
+                id="revertir-autorizado"
+                placeholder="Nombre completo"
+                value={autorizadoPor}
+                onChange={(e) => setAutorizadoPor(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="revertir-notas">Motivo (opcional)</Label>
+              <Textarea
+                id="revertir-notas"
+                placeholder="Material cortado incorrectamente, formato equivocado…"
+                rows={2}
+                value={notasRevertir}
+                onChange={(e) => setNotasRevertir(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="revertir-formato">
+                Nuevo formato del palet tras el corte (opcional)
+              </Label>
+              <Input
+                id="revertir-formato"
+                placeholder="p. ej. 65x46"
+                value={nuevoFormato}
+                onChange={(e) => setNuevoFormato(e.target.value)}
+              />
+              <p className="text-xs text-slate-500">
+                Indica el formato resultante si el palet ya fue cortado (p. ej. Caso B guillotina).
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={saving}
+              onClick={() => setRevertirOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              className="bg-orange-600 text-white hover:bg-orange-700"
+              disabled={saving || !autorizadoPor.trim()}
+              onClick={() => void handleRevertirConsumo()}
+            >
+              {saving ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
+              Revertir consumo
             </Button>
           </DialogFooter>
         </DialogContent>
