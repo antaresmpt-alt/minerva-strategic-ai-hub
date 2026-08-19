@@ -3,8 +3,8 @@
 > **Fuente de verdad de este módulo.** No es un parche de sesión: es maquinaria permanente de inventario.
 > Complementa `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` (ATP, cartelas, consumo). Si hay contradicción sobre *liberar / recomprar / aviso formato*, **manda este documento**.
 >
-> **Estado:** 🚀 **9.8.1 + 9.8.1b implementados 18 ago 2026.** Pendiente merge a `main` + prueba en OT 98019.
-> **OT laboratorio:** **98019** (clone 98016, maestro, *no despachada*).
+> **Estado:** ✅ **9.8.1–9.8.2 + 9.8.4 + 9.8.5 + compra sin OT en `main` (19 ago 2026).** Lab **98020** A+B+C validado en planta. Pendiente: **9.8.3**, **9.8.6**, **cascade planificación STOP** (§18).
+> **OT laboratorio:** **98019** (caso A, 18 ago) · **98020** (A+B+C encadenados, 19 ago). Clonar **98021** para repetir lab limpio.
 > **Sesión de acuerdo:** `SESION_18AGO2026_STOP_MATERIAL.md`.
 >
 > **Numeración:** el roadmap B9 tenía «9.8 fotos/adjuntos» *sin empezar* (baja). **9.8 queda para este módulo** (prioridad planta). Fotos/adjuntos pasa a **9.10**. **9.9** (IA Stock) no se toca.
@@ -354,6 +354,22 @@ Cartelar palet libre (p. ej. 75×105) → oficina elige stock → Juan asigna �
 
 Si 98019 ya está “sucia” de A, clonar **98020** para B/C. No mezclar estados en la misma OT si confunde la prueba.
 
+### 98020 — lab A+B+C (19 ago 2026) ✅ VALIDADO EN PLANTA
+
+> Detalle exhaustivo: **`SESION_19AGO2026_STOP_MATERIAL_98020.md`**.
+
+**OT:** 98020 · SEGLE triplo · despacho inicial erróneo 65×92/65×46 · troquel 72×102.
+
+| Caso | Qué se probó | Veredicto |
+|------|--------------|-----------|
+| **A** | CTP aviso 9.8.2 · liberar · recompra P2 manual · lápiz 72×102→72×51 · guillotina | ✅ |
+| **B** | Guillotina 65×46 + consumo `#99021` · badge persiste en impresión · **revertir consumo** 9.8.5 | ✅ |
+| **C** | Compra `OCM-STOCK-…` sin OT · cartela `#99022` · split → `#10985` · asignar 98020 · guillotina consume #10985 · impresión 72×51 / 2000 h | ✅ |
+
+**Cartelas finales lab:** `#99020` libre (A) · `#99021` 65×46 libre (B) · `#99022` 750 h libre · `#10985` consumida en guillotina C.
+
+**Fricción principal (no invalida 9.8):** tras reabrir guillotina, impresión seguía en mesa; hizo falta **Anular → Pool** manual. Backlog producto final §18.
+
 ### 12.1 Bug conocido — observaciones CTP/ejecución no persisten
 
 **Reportado 18 ago (98019 CTP):** operario escribe en «Observaciones» (p. ej. texto STOP formato material) pero al reanudar/cerrar el campo aparece vacío y en BD queda `null`.
@@ -429,6 +445,46 @@ Nada de esto retrasa el PR **9.8.1 + 9.8.1b**.
 
 ## 17. Retomar (siguiente chat)
 
-1. Despachar **98019** en UI (Manel) con 65×92 / 65×46 cuando se vaya a probar A.
-2. Código: **9.8.1 + 9.8.1b** con **Sonnet** (Agent). No mezclar 9.8.2 en el mismo PR salvo que sea trivial de lectura y no retrase el ledger.
-3. Marcar esta fase ✅ aquí y en el maestro al merge.
+1. ~~Despachar 98019 / 98020~~ — **hecho** (98019-A 18 ago; 98020 A+B+C 19 ago).
+2. ~~9.8.2 · 9.8.4 · 9.8.5 · compra sin OT~~ — **en `main`** (`acca03b`, `14fc084`, `c93205e`).
+3. **Mañana 20 ago:** backlog §18 (cascade STOP + polish). Sesión: `SESION_19AGO2026_STOP_MATERIAL_98020.md`.
+
+---
+
+## 18. Backlog producto final (20 ago 2026 — acordado tras lab 98020)
+
+> Criterio: todo lo que hoy requirió workaround manual debería quedar resuelto para planta.
+
+### P0 — Operativa STOP
+
+| # | Tarea | Notas |
+|---|--------|-------|
+| 18.1 | **Cascade planificación STOP** | `revertir_consumo` y/o `reabrirPasoAdmin(N)` → anular mesas/ejecuciones pasos > N; pool `en_transito`. O botón «STOP material: reset planificación». Hoy: solo manual «Anular → Pool». |
+| 18.2 | **Asignar OT en detalle Stock** | Mismo RPC/UI que Cartelas creadas (🔗). |
+| 18.3 | **Cartelas creadas — búsqueda server-side** | Por id/albarán/OT; no depender de límite 200 filas. |
+
+### P1 — Fases 9.8 pendientes
+
+| # | Fase | Tarea |
+|---|------|--------|
+| 18.4 | 9.8.3 | Compra corrección P2 desde Despachadas (`tipo=correccion`, `compra_origen_id`). |
+| 18.5 | 9.8.6 | Popup redespacho asistido tras liberar/asignar. |
+
+### P2 — Polish / deuda
+
+| # | Tarea |
+|---|--------|
+| 18.6 | Toast reabrir: avisar que OT sigue en mesa (no vuelve al Pool). |
+| 18.7 | Split palet prueba → id_stock coherente o aviso. |
+| 18.8 | Stock KPI reservas blandas. |
+| 18.9 | Pool semáforo material con stock libre + histórico compras. |
+| 18.10 | Fix observaciones CTP (§12.1). |
+| 18.11 | Sync `estado_material` tras asignar/consumir. |
+| 18.12 | Consumo 9.4: limpiar bridge/`estado` legacy. |
+
+### P3 — Lab opcional
+
+| # | Tarea |
+|---|--------|
+| 18.13 | OT **98021** limpia para repetir A/B/C. |
+| 18.14 | E2E cerrar impresión 98020 (no bloqueante 9.8). |

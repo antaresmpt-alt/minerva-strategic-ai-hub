@@ -45,22 +45,14 @@ Detalle y plan de prueba: el brief de bloque §8 y §12.
 ## Retomar
 
 - [x] 98019-A validada 18 ago noche (ver brief §12).
-- [x] **9.8.1 + 9.8.1b + 9.8.1c** implementados — merge pendiente (Manel).
-- [ ] Mañana: **9.8.2** aviso formato CTP/Guillotina.
-- [ ] Mañana: **98020** caso B (post-guillotina con consumo).
+- [x] **9.8.1 + 9.8.1b + 9.8.1c** en `main`.
+- [x] **9.8.2** aviso formato — `acca03b`.
+- [x] **98020** casos A+B+C validados 19 ago — ver **`SESION_19AGO2026_STOP_MATERIAL_98020.md`**.
 
 ---
 
-## OT 98020 (caso B — mañana)
+## OT 98020 (lab A+B+C — 19 ago) ✅
 
-| Campo | Valor |
-|--------|--------|
-| `num_pedido` | **98020** |
-| Cliente | COSMECEUTICAL CONCEPT S.L. (SEGLE COSMETICS) |
-| Título | … **[lab STOP material · clone 98016 · caso B post-guillotina]** |
-| Cantidad | 5000 |
-| Despachada | **No** |
-| Pedido cliente | `LAB-STOP-98020` |
-| Entrega | 2026-09-11 |
+Ver sesión completa: **`SESION_19AGO2026_STOP_MATERIAL_98020.md`**.
 
-Flujo: igual que 98019-A hasta **Guillotina con consumo**; parar para revertir/liberar (9.8.5). **98019** ya sucia — no reutilizar.
+Resumen: misma OT encadenó Caso A (CTP/liberar), B (revertir consumo `#99021`), C (stock libre `#10985` → guillotina → impresión 72×51 / 2000 h). Backlog mañana: brief §18.

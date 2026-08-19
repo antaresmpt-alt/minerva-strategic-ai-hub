@@ -583,7 +583,7 @@ PDF compacto para acompañar la OT entre departamentos (sustituto papel de la ho
 
 ---
 
-**Última actualización**: 18 de agosto de 2026 — spec Bloque 9.8 reasignación/STOP (`MINERVA_BLOQUE9_REASIGNACION_STOP.md`, OT 98019). 17 ago: 98016 E2E. 14 ago: lista gorda + Encajar.
+**Última actualización**: 19 de agosto de 2026 — Bloque 9.8 lab **98020** validado (`SESION_19AGO2026_STOP_MATERIAL_98020.md`). Código 9.8.2/4/5 en `main`. 18 ago: 98019-A. 17 ago: 98016 E2E.
 
 ---
 
@@ -1146,21 +1146,23 @@ Tarde del mismo día (lista gorda / tableta): `SESION_14AGO2026_EJECUCION_LISTA.
 
 ---
 
-## Bloque 9.8 — Reasignación cartelas / STOP material 📋 **spec 18 ago 2026**
+## Bloque 9.8 — Reasignación cartelas / STOP material ✅ **lab validado 19 ago 2026**
 
-> Fuente: `MINERVA_BLOQUE9_REASIGNACION_STOP.md` · sesión: `SESION_18AGO2026_STOP_MATERIAL.md`.
-> OT laboratorio: **98019** (clone 98016, no despachada). Código: no empezado.
+> Fuente: `MINERVA_BLOQUE9_REASIGNACION_STOP.md` · sesiones: `SESION_18AGO2026_STOP_MATERIAL.md` · **`SESION_19AGO2026_STOP_MATERIAL_98020.md`**
+> OT laboratorio: **98019** (caso A, 18 ago) · **98020** (A+B+C, 19 ago). Backlog producto final: brief §18.
 
 Principio: el ledger ATP manda (no las líneas de Optimus); no fiarse de que el usuario marque. Liberar reserva ≠ anular compra.
 
 | Fase | Estado | Notas |
 |------|--------|--------|
-| 9.8.1 + **9.8.1b** | 📋 | Mismo PR, 1b **bloqueante**: liberar reserva + allowlist compra (no `includes("sin")`) |
-| 9.8.2 | 📋 | Aviso CTP + Guillotina (`formato_papel` vs cartela) |
-| 9.8.3 | 📋 | Compra de corrección (2.ª fila; no borrar la 1.ª) |
-| 9.8.4 | 📋 | Asignar stock libre → OT (Juan; oficina elige el camino) |
-| 9.8.5 | 📋 | RPC `prod_stock_revertir_consumo` |
-| 9.8.6 | 📋 | Redespacho asistido tras reasignar |
+| 9.8.1 + **9.8.1b** | ✅ | Liberar reserva + allowlist compra — 98019-A + 98020-A |
+| 9.8.2 | ✅ | Aviso CTP + Guillotina + Impresión — `acca03b` |
+| 9.8.3 | 📋 | Compra corrección P2 — workaround duplicar P1 |
+| 9.8.4 | ✅ | Asignar stock libre → OT — 98020-C |
+| 9.8.5 | ✅ | RPC `prod_stock_revertir_consumo` — 98020-B |
+| 9.8.6 | 📋 | Redespacho asistido — lápiz OK |
+| Compra sin OT | ✅ | `c93205e` — OCM-STOCK |
+| Cascade planificación STOP | 📋 | P0 mañana — hoy manual Anular→Pool |
 
 Fotos/adjuntos del roadmap viejo (antes 9.8) → **9.10**.
 
