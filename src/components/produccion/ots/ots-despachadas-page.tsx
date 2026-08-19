@@ -8,7 +8,7 @@ import {
   type RowSelectionState,
   type SortingState,
 } from "@tanstack/react-table";
-import { Layers, Loader2 } from "lucide-react";
+import { AlertTriangle, Layers, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -49,6 +49,8 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
+import { useFormatoMargenParametros } from "@/hooks/use-formato-margen-parametros";
+import { checkFormatoCabe, formatoCabeAvisoMsg } from "@/lib/formato-cabe";
 import {
   fetchProdOtGeneralIdByNumPedido,
   fetchProdOtPasosVista,
@@ -458,6 +460,7 @@ export function OtsDespachadasPage({
 }: OtsDespachadasPageProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const { umbrales: umbralesOtsCompras } = useSysParametrosOtsCompras();
+  const { margenes: margenesImpr } = useFormatoMargenParametros();
   const [rows, setRows] = useState<OtsDespachadasTableRow[]>([]);
   const [troquelExcelByCodigo, setTroquelExcelByCodigo] = useState<
     Map<string, TroquelExcelTooltip>
@@ -512,6 +515,19 @@ export function OtsDespachadasPage({
     emptyDespachoEditForm
   );
   const [editSaving, setEditSaving] = useState(false);
+
+  // ── Bloque 9.8.2 — Aviso formato troquel vs papel ────────────────────────
+  const formatoAvisoMsg = useMemo(() => {
+    const troquelCode = editForm.troquel.trim();
+    const papel = editForm.tamano_hoja.trim();
+    if (!troquelCode || !papel) return null;
+    const key = troquelCode.toLowerCase();
+    const troquelData = troquelExcelByCodigo.get(key);
+    const mides = troquelData?.mides;
+    if (!mides) return null;
+    const result = checkFormatoCabe(papel, mides, margenesImpr);
+    return formatoCabeAvisoMsg(result, papel, troquelCode, margenesImpr);
+  }, [editForm.troquel, editForm.tamano_hoja, troquelExcelByCodigo, margenesImpr]);
   const [editOtGeneralId, setEditOtGeneralId] = useState<string | null>(null);
   const [editPasosVista, setEditPasosVista] = useState<ProdOtPasoVista[]>([]);
   const [editCanReplaceItinerario, setEditCanReplaceItinerario] =
@@ -1869,6 +1885,13 @@ export function OtsDespachadasPage({
                   }))
                 }
               />
+              {/* Aviso 9.8.2 — formato papel vs troquel */}
+              {formatoAvisoMsg && (
+                <div className="mt-1.5 flex items-start gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-900">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
+                  <span>{formatoAvisoMsg}</span>
+                </div>
+              )}
             </div>
             <div className="grid gap-1">
               <Label htmlFor="edit-despacho-poses" className="text-xs">
