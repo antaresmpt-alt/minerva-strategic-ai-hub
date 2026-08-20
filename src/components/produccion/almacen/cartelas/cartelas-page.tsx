@@ -535,7 +535,7 @@ export function CartelasPage() {
       setMostrarPruebas(true);
       setTab("cartelas");
       const first = created[0];
-      if (first) setSearch(String(first.id_stock));
+      if (first) setSearchCartelas(String(first.id_stock));
     } else if (tab !== "cartelas") {
       setTab("cartelas");
     }
