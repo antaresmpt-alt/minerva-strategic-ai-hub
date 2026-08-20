@@ -47,6 +47,32 @@ import type { ProfileConPermisos } from "@/lib/prod-ot-cierre-permisos";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { devolverHuecoMesaAlPool } from "@/lib/derivar-impresion-externa";
 
+function formatFechaHuecoMesa(isoDate: string | null): string | null {
+  const raw = String(isoDate ?? "").trim();
+  if (!raw) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+  if (!m) return raw;
+  return `${m[3]}/${m[2]}/${m[1].slice(2)}`;
+}
+
+function formatTurnoHuecoMesa(turno: string | null): string | null {
+  const t = String(turno ?? "").trim().toLowerCase();
+  if (t === "manana" || t === "mañana") return "Mañana";
+  if (t === "tarde") return "Tarde";
+  if (t === "noche") return "Noche";
+  return t || null;
+}
+
+/** Literal humano: "SpeedMaster CD 102 · 19/08/26 · Mañana" */
+function formatUbicacionHuecoMesa(h: HuecoMesaPosterior): string {
+  const parts = [
+    h.maquinaNombre?.trim() || null,
+    formatFechaHuecoMesa(h.fechaPlanificada),
+    formatTurnoHuecoMesa(h.turno),
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : "Ubicación de mesa desconocida";
+}
+
 export type PasoAdminContext = {
   pasoId: string;
   otNumero: string;
@@ -636,7 +662,7 @@ export function PasoAdminActions({
                     <div className="font-medium text-slate-700">
                       {h.procesoNombre ?? "Proceso desconocido"}
                     </div>
-                    <div className="text-slate-500">Mesa ID: {h.mesaId.slice(0, 8)}…</div>
+                    <div className="text-slate-500">{formatUbicacionHuecoMesa(h)}</div>
                   </div>
                 ))}
               </div>

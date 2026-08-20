@@ -367,6 +367,12 @@ export type HuecoMesaPosterior = {
   pasoId: string;
   procesoNombre: string | null;
   orden: number;
+  /** Nombre máquina (p.ej. SpeedMaster CD 102). */
+  maquinaNombre: string | null;
+  /** Fecha planificada YYYY-MM-DD. */
+  fechaPlanificada: string | null;
+  /** Turno: manana | tarde | otro. */
+  turno: string | null;
 };
 
 const MESA_ESTADOS_ACTIVOS = ["borrador", "confirmado", "en_ejecucion"] as const;
@@ -513,21 +519,60 @@ export async function fetchHuecosMesaPosteriores(
 
   if (byMesa.size === 0) return [];
 
-  // Verificar que la mesa sigue activa (no finalizada)
+  // Verificar mesa activa + dónde está (máquina / día / turno)
   const mesaIds = [...byMesa.keys()];
   const { data: mesaActivaData, error: mesaActivaErr } = await supabase
     .from("prod_mesa_planificacion_trabajos")
-    .select("id")
+    .select("id, maquina_id, fecha_planificada, turno")
     .in("id", mesaIds)
     .in("estado_mesa", [...MESA_ESTADOS_ACTIVOS]);
   if (mesaActivaErr) {
     throw new Error(mesaActivaErr.message || "No se pudo verificar estado de mesa.");
   }
-  const mesaActivaIds = new Set(
-    ((mesaActivaData ?? []) as Array<{ id?: string }>)
-      .map((m) => String(m.id ?? "").trim())
-      .filter(Boolean),
-  );
+
+  type MesaMeta = {
+    maquinaId: string | null;
+    fechaPlanificada: string | null;
+    turno: string | null;
+  };
+  const mesaMetaById = new Map<string, MesaMeta>();
+  for (const m of (mesaActivaData ?? []) as Array<{
+    id?: string;
+    maquina_id?: string | null;
+    fecha_planificada?: string | null;
+    turno?: string | null;
+  }>) {
+    const mid = String(m.id ?? "").trim();
+    if (!mid) continue;
+    mesaMetaById.set(mid, {
+      maquinaId: String(m.maquina_id ?? "").trim() || null,
+      fechaPlanificada: String(m.fecha_planificada ?? "").trim() || null,
+      turno: String(m.turno ?? "").trim() || null,
+    });
+  }
+
+  const maquinaIds = [
+    ...new Set(
+      [...mesaMetaById.values()]
+        .map((m) => m.maquinaId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const nombreByMaquinaId = new Map<string, string>();
+  if (maquinaIds.length > 0) {
+    const { data: maqData } = await supabase
+      .from("prod_maquinas")
+      .select("id, nombre")
+      .in("id", maquinaIds);
+    for (const q of (maqData ?? []) as Array<{
+      id?: string;
+      nombre?: string | null;
+    }>) {
+      const qid = String(q.id ?? "").trim();
+      const nom = String(q.nombre ?? "").trim();
+      if (qid && nom) nombreByMaquinaId.set(qid, nom);
+    }
+  }
 
   // Nombres de proceso
   const procesoIds = [
@@ -553,7 +598,8 @@ export async function fetchHuecosMesaPosteriores(
 
   const result: HuecoMesaPosterior[] = [];
   for (const hueco of byMesa.values()) {
-    if (!mesaActivaIds.has(hueco.mesaId)) continue;
+    const meta = mesaMetaById.get(hueco.mesaId);
+    if (!meta) continue;
     const procId = procesoIdByPasoId.get(hueco.pasoId);
     result.push({
       mesaId: hueco.mesaId,
@@ -562,6 +608,11 @@ export async function fetchHuecosMesaPosteriores(
       procesoNombre:
         typeof procId === "number" ? nombresByProcId.get(procId) ?? null : null,
       orden: ordenByPasoId.get(hueco.pasoId) ?? 0,
+      maquinaNombre: meta.maquinaId
+        ? nombreByMaquinaId.get(meta.maquinaId) ?? null
+        : null,
+      fechaPlanificada: meta.fechaPlanificada,
+      turno: meta.turno,
     });
   }
 
