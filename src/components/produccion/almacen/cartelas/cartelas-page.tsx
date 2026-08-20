@@ -78,16 +78,22 @@ const supabase = createSupabaseBrowserClient();
 /**
  * Filtro PostgREST para id_stock por prefijo numérico (sin cast text).
  * "106" → eq 106 + rangos 1060–1069, 10600–10699, … → incluye #10673.
+ * Capado a int4 Postgres (2^31-1) — si no, "1067" → 10670000000 revienta (22003).
  */
 function idStockPrefixOrFilter(digits: string): string | null {
   if (!/^\d+$/.test(digits)) return null;
   const base = Number(digits);
   if (!Number.isInteger(base) || base < 0) return null;
+  const PG_INT4_MAX = 2_147_483_647;
   const parts: string[] = [`id_stock.eq.${base}`];
   for (let extra = 1; extra <= 7; extra++) {
     const gte = base * 10 ** extra;
+    if (gte > PG_INT4_MAX) break;
     const lt = (base + 1) * 10 ** extra;
-    if (!Number.isSafeInteger(gte) || !Number.isSafeInteger(lt)) break;
+    if (lt > PG_INT4_MAX) {
+      parts.push(`and(id_stock.gte.${gte},id_stock.lte.${PG_INT4_MAX})`);
+      break;
+    }
     parts.push(`and(id_stock.gte.${gte},id_stock.lt.${lt})`);
   }
   return parts.join(",");
