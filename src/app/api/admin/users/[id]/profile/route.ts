@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireSettingsAdmin } from "@/lib/api/require-settings-admin";
 import { PROFILE_ROLES } from "@/lib/permissions";
 import { recordSecurityAudit } from "@/lib/security-audit";
+import type { UserRole } from "@/lib/role-permissions-fetch";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -40,7 +41,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
 
     const { error } = await admin
       .from("profiles")
-      .update({ role })
+      .update({ role: role as UserRole })
       .eq("id", id);
 
     if (error) {

@@ -122,7 +122,7 @@ export function EtiquetasTroquelesTab() {
       
       if (fetchError) throw fetchError;
       
-      setRows(data ?? []);
+      setRows((data ?? []) as ProdEtiquetasTroquelRow[]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error cargando troqueles");
     } finally {

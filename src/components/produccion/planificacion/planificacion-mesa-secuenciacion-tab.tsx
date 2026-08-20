@@ -2446,7 +2446,7 @@ export function PlanificacionMesaSecuenciacionTab() {
       if (inserts.length > 0) {
         const { error: insErrFull } = await supabase
           .from(TABLE_MESA)
-          .insert(inserts);
+          .insert(inserts as never);
         if (insErrFull) {
           if (!isMissingColumnError(insErrFull)) throw insErrFull;
           const legacyInserts = inserts.map((row) => ({
@@ -2467,7 +2467,7 @@ export function PlanificacionMesaSecuenciacionTab() {
           }));
           const { error: insErrLegacy } = await supabase
             .from(TABLE_MESA)
-            .insert(legacyInserts);
+            .insert(legacyInserts as never);
           if (insErrLegacy) throw insErrLegacy;
         }
       }

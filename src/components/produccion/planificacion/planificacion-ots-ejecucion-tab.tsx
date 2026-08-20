@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import type { Json } from "@/types/database";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -1961,7 +1962,7 @@ export function PlanificacionOtsEjecucionTab({
         if (datosProcesoUpdate && row.otPasoId) {
           const { error: dpErr } = await supabase
             .from(TABLE_OT_PASOS)
-            .update({ datos_proceso: datosProcesoUpdate })
+            .update({ datos_proceso: datosProcesoUpdate as Json })
             .eq("id", row.otPasoId);
           if (dpErr) throw new Error(dpErr.message || "No se pudieron guardar los datos del proceso.");
         }
@@ -2005,7 +2006,7 @@ export function PlanificacionOtsEjecucionTab({
         if (datosProcesoUpdate && row.otPasoId) {
           const { error: dpErr } = await supabase
             .from(TABLE_OT_PASOS)
-            .update({ datos_proceso: datosProcesoUpdate })
+            .update({ datos_proceso: datosProcesoUpdate as Json })
             .eq("id", row.otPasoId);
           if (dpErr) throw dpErr;
         }
@@ -2109,7 +2110,7 @@ export function PlanificacionOtsEjecucionTab({
         if (datosProcesoUpdate && row.otPasoId) {
           const { error: dpErr } = await supabase
             .from(TABLE_OT_PASOS)
-            .update({ datos_proceso: datosProcesoUpdate })
+            .update({ datos_proceso: datosProcesoUpdate as Json })
             .eq("id", row.otPasoId);
           if (dpErr) throw dpErr;
         }
@@ -2167,7 +2168,7 @@ export function PlanificacionOtsEjecucionTab({
         if (datosProcesoUpdate && row.otPasoId) {
           const { error: dpErr } = await supabase
             .from(TABLE_OT_PASOS)
-            .update({ datos_proceso: datosProcesoUpdate })
+            .update({ datos_proceso: datosProcesoUpdate as Json })
             .eq("id", row.otPasoId);
           if (dpErr) throw dpErr;
         }

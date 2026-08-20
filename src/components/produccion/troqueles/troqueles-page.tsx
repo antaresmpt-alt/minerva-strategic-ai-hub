@@ -336,7 +336,7 @@ export function TroquelesPage() {
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
 
   const [configRow, setConfigRow] = useState<{
-    id: string;
+    id: number;
     pdf_path: string | null;
     caucho_path: string | null;
   } | null>(null);
@@ -397,7 +397,7 @@ export function TroquelesPage() {
     }
     if (data) {
       setConfigRow({
-        id: data.id as string,
+        id: data.id,
         pdf_path: data.pdf_path as string | null,
         caucho_path: (data as { caucho_path?: string | null }).caucho_path ?? null,
       });
@@ -614,7 +614,7 @@ export function TroquelesPage() {
       }
       toast.success("Troquel actualizado.");
     } else {
-      const { error } = await supabase.from("prod_troqueles").insert(parsed.payload);
+      const { error } = await supabase.from("prod_troqueles").insert(parsed.payload as never);
       setSaving(false);
       if (error) {
         toast.error(error.message);
@@ -670,7 +670,7 @@ export function TroquelesPage() {
       }
       if (data) {
         setConfigRow({
-          id: data.id as string,
+          id: data.id,
           pdf_path: data.pdf_path as string | null,
           caucho_path: (data as { caucho_path?: string | null }).caucho_path ?? null,
         });
@@ -936,7 +936,7 @@ export function TroquelesPage() {
           return;
         }
         const batch = nuevos.map(importPayloadToInsertRow);
-        const { error } = await supabase.from("prod_troqueles").insert(batch);
+        const { error } = await supabase.from("prod_troqueles").insert(batch as never);
         if (error) {
           toast.error(error.message);
           return;

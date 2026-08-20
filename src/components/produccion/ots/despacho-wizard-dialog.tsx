@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import type { Json } from "@/types/database";
 
 import {
   DespachoItinerarioPicker,
@@ -1794,7 +1795,7 @@ export function DespachoWizardDialog({
           });
           const { error: errInsHija } = await supabase
             .from(TABLE_OT_PASOS)
-            .insert(pasosHija);
+            .insert(pasosHija as never);
           if (errInsHija) throw errInsHija;
 
           // Marcar hija como despachada
@@ -1881,7 +1882,7 @@ export function DespachoWizardDialog({
               );
               const { error: errUpd } = await supabase
                 .from(TABLE_OT_PASOS)
-                .update({ datos_proceso: merged })
+                .update({ datos_proceso: merged as Json })
                 .eq("id", paso.id);
               if (errUpd) throw errUpd;
             }
@@ -1923,7 +1924,7 @@ export function DespachoWizardDialog({
                 .update({
                   orden: i + 1,
                   ...(merged
-                    ? { datos_proceso: merged }
+                    ? { datos_proceso: merged as Json }
                     : { datos_proceso: null }),
                 })
                 .eq("id", paso.id);
@@ -1952,7 +1953,7 @@ export function DespachoWizardDialog({
             });
             const { error: errInsPasos } = await supabase
               .from(TABLE_OT_PASOS)
-              .insert(pasoRows);
+              .insert(pasoRows as never);
             if (errInsPasos) throw errInsPasos;
           }
         }

@@ -616,7 +616,7 @@ export function HojaRutaOtDialog({
 
         const { error: insertError } = await supabase
           .from("prod_ot_producidas")
-          .insert(payload);
+          .insert(payload as never);
 
         if (insertError) throw insertError;
 

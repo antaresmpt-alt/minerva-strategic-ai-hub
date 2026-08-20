@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireSettingsAdmin } from "@/lib/api/require-settings-admin";
 import { HUB_MODULE_IDS } from "@/lib/permissions";
-import type { RolePermissionRow } from "@/lib/role-permissions-fetch";
+import type { RolePermissionRow, UserRole } from "@/lib/role-permissions-fetch";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export async function GET() {
@@ -59,7 +59,7 @@ export async function PUT(request: Request) {
       if (!mods || typeof mods !== "object") continue;
       for (const [moduleName, enabled] of Object.entries(mods)) {
         upserts.push({
-          role,
+          role: role as UserRole,
           module_name: moduleName,
           is_enabled: Boolean(enabled),
         });

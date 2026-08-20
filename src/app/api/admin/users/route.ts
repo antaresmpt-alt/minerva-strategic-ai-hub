@@ -5,6 +5,7 @@ import { assertPasswordOrMessage } from "@/lib/password-policy";
 import { PROFILE_ROLES } from "@/lib/permissions";
 import { getPublicSiteUrl } from "@/lib/public-site-url";
 import { recordSecurityAudit } from "@/lib/security-audit";
+import type { UserRole } from "@/lib/role-permissions-fetch";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 function getCorporateDomains(): string[] {
@@ -142,7 +143,10 @@ export async function POST(request: Request) {
 
       const { error: upErr } = await admin
         .from("profiles")
-        .upsert({ id: data.user.id, role }, { onConflict: "id" });
+        .upsert(
+          { id: data.user.id, role: role as UserRole },
+          { onConflict: "id" }
+        );
 
       if (upErr) {
         await admin.auth.admin.deleteUser(data.user.id);
@@ -184,7 +188,10 @@ export async function POST(request: Request) {
 
     const { error: upErr } = await admin
       .from("profiles")
-      .upsert({ id: data.user.id, role }, { onConflict: "id" });
+      .upsert(
+        { id: data.user.id, role: role as UserRole },
+        { onConflict: "id" }
+      );
 
     if (upErr) {
       await admin.auth.admin.deleteUser(data.user.id);

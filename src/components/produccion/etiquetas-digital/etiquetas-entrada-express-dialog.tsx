@@ -361,7 +361,7 @@ export function EtiquetasEntradaExpressDialog({
         finalizado: form.finalizado,
       };
 
-      const { error } = await supabase.from(TABLE_HR).insert(row);
+      const { error } = await supabase.from(TABLE_HR).insert(row as never);
       if (error) {
         throw error;
       }

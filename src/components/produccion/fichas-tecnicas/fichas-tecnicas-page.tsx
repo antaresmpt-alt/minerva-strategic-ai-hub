@@ -482,7 +482,7 @@ export function FichasTecnicasPage() {
     setSaving(true);
     const { error } = await supabase
       .from("prod_fichas_tecnicas")
-      .upsert(payload, { onConflict: "ot" });
+      .upsert(payload as never, { onConflict: "ot" });
     setSaving(false);
     if (error) {
       toast.error(error.message);
@@ -575,7 +575,7 @@ export function FichasTecnicasPage() {
         const batch = nuevos.map(importPayloadToInsertRow);
         const { error } = await supabase
           .from("prod_fichas_tecnicas")
-          .insert(batch);
+          .insert(batch as never);
         if (error) {
           toast.error(error.message);
           return;

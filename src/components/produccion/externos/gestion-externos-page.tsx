@@ -2263,7 +2263,7 @@ export function GestionExternosPage() {
     }
     const { error } = await supabase
       .from("prod_seguimiento_externos")
-      .insert(payload);
+      .insert(payload as never);
     setSaving(false);
     if (error) {
       toast.error(error.message);

@@ -870,7 +870,7 @@ export function MuelleRecepcionPage() {
     };
     const { data: recepIns, error: rErr } = await supabase
       .from(TABLE_RECEPCION)
-      .insert(insertRow)
+      .insert(insertRow as never)
       .select("id")
       .single();
     if (rErr) throw rErr;

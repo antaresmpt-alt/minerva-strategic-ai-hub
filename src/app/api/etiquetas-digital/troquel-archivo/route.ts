@@ -213,7 +213,7 @@ export async function GET(req: NextRequest) {
   const { data: troquel, error: troquelErr } = await supabase
     .from("prod_etiquetas_troqueles")
     .select("codigo, carpeta_original")
-    .eq("id", troquelId)
+    .eq("id", Number(troquelId))
     .maybeSingle();
 
   if (troquelErr) {

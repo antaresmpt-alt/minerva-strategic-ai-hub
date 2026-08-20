@@ -1,8 +1,11 @@
+import type { Database } from "@/types/database";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+
+export type UserRole = Database["public"]["Enums"]["user_role"];
 
 /** Fila de `public.role_permissions` (lectura API / Supabase). */
 export type RolePermissionRow = {
-  role: string;
+  role: UserRole;
   module_name: string;
   is_enabled: boolean;
 };
@@ -19,13 +22,13 @@ export async function fetchRolePermissionMap(
     const { data, error } = await supabase
       .from("role_permissions")
       .select("module_name, is_enabled")
-      .eq("role", role);
+      .eq("role", role as UserRole);
     if (error || !data?.length) {
       return null;
     }
     const m = new Map<string, boolean>();
     for (const row of data) {
-      m.set(row.module_name, row.is_enabled);
+      m.set(row.module_name, row.is_enabled ?? false);
     }
     return m;
   } catch {
