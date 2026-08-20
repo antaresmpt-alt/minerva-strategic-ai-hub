@@ -3,9 +3,9 @@
 > **Fuente de verdad de este módulo.** No es un parche de sesión: es maquinaria permanente de inventario.
 > Complementa `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` (ATP, cartelas, consumo). Si hay contradicción sobre *liberar / recomprar / aviso formato*, **manda este documento**.
 >
-> **Estado:** ✅ **9.8.1–9.8.2 + 9.8.4 + 9.8.5 + compra sin OT en `main` (19 ago 2026).** Lab **98020** A+B+C validado en planta. Pendiente: **9.8.3**, **9.8.6**, **cascade planificación STOP** (§18).
+> **Estado:** ✅ **9.8.1–9.8.2 + 9.8.4 + 9.8.5 + compra sin OT en `main` (19 ago 2026).** Lab **98020** A+B+C validado en planta. ✅ **Backlog P0 (7.1, 7.2, 7.3) en `main` (20 ago 2026)**. Pendiente: **9.8.3**, **9.8.6**.
 > **OT laboratorio:** **98019** (caso A, 18 ago) · **98020** (A+B+C encadenados, 19 ago). Clonar **98021** para repetir lab limpio.
-> **Sesión de acuerdo:** `SESION_18AGO2026_STOP_MATERIAL.md`.
+> **Sesión de acuerdo:** `SESION_18AGO2026_STOP_MATERIAL.md` · `SESION_19AGO2026_STOP_MATERIAL_98020.md` · `SESION_20AGO2026_BACKLOG_P0_STOP.md`.
 >
 > **Numeración:** el roadmap B9 tenía «9.8 fotos/adjuntos» *sin empezar* (baja). **9.8 queda para este módulo** (prioridad planta). Fotos/adjuntos pasa a **9.10**. **9.9** (IA Stock) no se toca.
 
@@ -459,9 +459,9 @@ Nada de esto retrasa el PR **9.8.1 + 9.8.1b**.
 
 | # | Tarea | Notas |
 |---|--------|-------|
-| 18.1 | **Reset planificación STOP** | Botón explícito «STOP material: reset planificación» + confirmación (*«Se van a anular N huecos de mesa…»*). Lista huecos pasos > N, luego anular mesa/ejecución + pool `en_transito`. **No** cascade automático dentro de `revertir_consumo`/`reabrirPasoAdmin` (P5: confirmación antes de acción destructiva). Hoy: manual «Anular → Pool». |
-| 18.2 | **Asignar OT en detalle Stock** | Mismo RPC/UI que Cartelas creadas (🔗). |
-| 18.3 | **Cartelas creadas — búsqueda server-side** | Por id/albarán/OT; no depender de límite 200 filas. |
+| 18.1 ✅ | **Reset planificación STOP** | `a553e20` (20 ago). Botón admin/gerencia en hoja de ruta. Identifica huecos > orden actual, lista procesos, confirmación, ejecuta `devolverHuecoMesaAlPool` por cada uno + pool `en_transito`. **No** cascade silencioso (P5). |
+| 18.2 ✅ | **Asignar OT en detalle Stock** | `a019d27` (20 ago). Botón verde Link2 en DetalleDialog, visible solo si `ots.length === 0`. Mismo RPC `prod_stock_asignar_palet_ot` que Cartelas. |
+| 18.3 ✅ | **Cartelas creadas — búsqueda server-side** | `c1cbd01` (20 ago). Input busca `id_stock` (num exacto) o `nota_entrega`/`ot_numero` (texto parcial). Sin límite 200 cuando hay búsqueda. Enter dispara query. Mensaje UX claro. |
 
 ### P1 — Fases 9.8 pendientes
 

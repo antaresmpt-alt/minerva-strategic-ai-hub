@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: **19 ago 2026** (Bloque 9.8 lab **98020** A+B+C validado; código 9.8.2/4/5 + stock libre en `main`; backlog cascade STOP §18 brief).
+> Última actualización: **20 ago 2026** (Bloque 9.8 lab **98020** validado + backlog P0 (7.1, 7.2, 7.3) en `main`; pendiente: 9.8.3 / 9.8.6).
 
 ---
 
@@ -24,7 +24,7 @@
 6. Si el tema es Manipulados / Encajar / entrada a Producción: `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`.
 7. Si el tema es cola de mesa / tableta / ejecución: `SESION_14AGO2026_EJECUCION_LISTA.md`.
 8. Si el tema es prefill Ruta / muelle / cartela admin / envío Ramón: `SESION_17AGO2026_PREFILL_RUTA_MUELLE_B6.md`.
-9. Si el tema es desasignar cartela / STOP formato / recompra / stock libre: `MINERVA_BLOQUE9_REASIGNACION_STOP.md` (+ `SESION_18AGO2026_STOP_MATERIAL.md` · **`SESION_19AGO2026_STOP_MATERIAL_98020.md`** lab 98020).
+9. Si el tema es desasignar cartela / STOP formato / recompra / stock libre: `MINERVA_BLOQUE9_REASIGNACION_STOP.md` (+ `SESION_18AGO2026_STOP_MATERIAL.md` · **`SESION_19AGO2026_STOP_MATERIAL_98020.md`** lab 98020 · **`SESION_20AGO2026_BACKLOG_P0_STOP.md`** backlog P0).
 10. Al cerrar una fase, actualizar este maestro + `FASES_HOJA_RUTA_DIGITAL.md`.
 
 **Jerarquía documental:**
@@ -43,9 +43,10 @@
 | `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md` | Sesión 14 ago (mañana): Encajar en Manipulados, flags wizard, Pool sin lápiz, `/produccion` → OTs. |
 | `SESION_14AGO2026_EJECUCION_LISTA.md` | Sesión 14 ago (tarde): lista gorda ejecución, semáforo, perf, tableta por máquina (Ramón). |
 | `SESION_17AGO2026_PREFILL_RUTA_MUELLE_B6.md` | Sesión 17 ago: prefill Ruta, cartela admin, Ramón brutas/netas, muelle, OT 98016 E2E. |
-| `MINERVA_BLOQUE9_REASIGNACION_STOP.md` | Bloque 9.8: liberar/reasignar cartela, compra corrección, aviso formato, ledger. OT **98019** + **98020** validadas. |
+| `MINERVA_BLOQUE9_REASIGNACION_STOP.md` | Bloque 9.8: liberar/reasignar cartela, compra corrección, aviso formato, ledger. OT **98019** + **98020** validadas. Backlog P0 (reset planif, asignar stock, búsqueda) completado. |
 | `SESION_18AGO2026_STOP_MATERIAL.md` | Sesión 18 ago: acuerdo spec 9.8 + alta 98019. |
 | `SESION_19AGO2026_STOP_MATERIAL_98020.md` | Sesión 19 ago: lab 98020 A+B+C + commits 9.8.2/4/5 + backlog mañana. |
+| `SESION_20AGO2026_BACKLOG_P0_STOP.md` | Sesión 20 ago: implementación tareas P0 (7.1, 7.2, 7.3) — reset planif, asignar desde stock, búsqueda cartelas. |
 | `MINERVA_BRIEFING.md` | Onboarding narrativo largo; útil, pero secundario frente a este maestro. |
 
 ---
