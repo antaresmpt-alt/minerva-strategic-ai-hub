@@ -312,59 +312,102 @@ export function CartelasPage() {
     setLoadingCartelas(true);
     try {
       const searchTerm = searchCartelas.trim();
-      let query = supabase
-        .from("prod_stock_palets")
-        .select(
-          `*,
+      const selectCols = `*,
            prod_recepciones_material(
              prod_proveedores(nombre),
              prod_compra_material(prod_proveedores(nombre))
-           )`
-        )
-        .order("id_stock", { ascending: false });
+           )`;
 
-      // Si hay búsqueda, filtramos y no limitamos
-      if (searchTerm) {
-        // Intenta parsear como id_stock numérico
-        const asNum = Number(searchTerm);
-        if (Number.isInteger(asNum) && asNum > 0) {
-          query = query.eq("id_stock", asNum);
-        } else {
-          // Busca en nota_entrega (albarán)
-          query = query.ilike("nota_entrega", `%${searchTerm}%`);
-        }
+      let palets: Record<string, unknown>[] = [];
+
+      if (!searchTerm) {
+        const { data, error } = await supabase
+          .from("prod_stock_palets")
+          .select(selectCols)
+          .order("id_stock", { ascending: false })
+          .limit(200);
+        if (error) throw error;
+        palets = (data as Record<string, unknown>[]) ?? [];
       } else {
-        // Sin búsqueda, limitamos a 200
-        query = query.limit(200);
+        // Palets ligados a OT (numérica o texto: 98020, 36204-01, …)
+        const { data: otsMatch, error: otsMatchErr } = await supabase
+          .from("prod_stock_palet_ots")
+          .select("palet_id")
+          .ilike("ot_numero", `%${searchTerm}%`);
+        if (otsMatchErr) throw otsMatchErr;
+        const otPaletIds = [
+          ...new Set(
+            (otsMatch ?? [])
+              .map((r) => String(r.palet_id ?? "").trim())
+              .filter(Boolean),
+          ),
+        ];
+
+        const asNum = Number(searchTerm);
+        const isNumericId =
+          /^\d+$/.test(searchTerm) && Number.isInteger(asNum) && asNum > 0;
+
+        const byId = new Map<string, Record<string, unknown>>();
+
+        if (isNumericId) {
+          // id_stock exacto (p. ej. 10985)
+          const { data: byStock, error: stockErr } = await supabase
+            .from("prod_stock_palets")
+            .select(selectCols)
+            .eq("id_stock", asNum);
+          if (stockErr) throw stockErr;
+          for (const row of (byStock as Record<string, unknown>[]) ?? []) {
+            const id = String((row as { id?: string }).id ?? "");
+            if (id) byId.set(id, row);
+          }
+        } else {
+          // Albarán / nota_entrega (p. ej. g23)
+          const { data: byAlb, error: albErr } = await supabase
+            .from("prod_stock_palets")
+            .select(selectCols)
+            .ilike("nota_entrega", `%${searchTerm}%`);
+          if (albErr) throw albErr;
+          for (const row of (byAlb as Record<string, unknown>[]) ?? []) {
+            const id = String((row as { id?: string }).id ?? "");
+            if (id) byId.set(id, row);
+          }
+        }
+
+        // Unión con match por OT
+        if (otPaletIds.length > 0) {
+          const missing = otPaletIds.filter((id) => !byId.has(id));
+          if (missing.length > 0) {
+            const { data: byOt, error: otErr } = await supabase
+              .from("prod_stock_palets")
+              .select(selectCols)
+              .in("id", missing);
+            if (otErr) throw otErr;
+            for (const row of (byOt as Record<string, unknown>[]) ?? []) {
+              const id = String((row as { id?: string }).id ?? "");
+              if (id) byId.set(id, row);
+            }
+          }
+        }
+
+        palets = Array.from(byId.values()).sort((a, b) => {
+          const ia = Number((a as { id_stock?: number }).id_stock ?? 0);
+          const ib = Number((b as { id_stock?: number }).id_stock ?? 0);
+          return ib - ia;
+        });
       }
 
-      const { data: palets, error: paletsErr } = await query;
-
-      if (paletsErr) throw paletsErr;
-
-      if (!palets || palets.length === 0) {
+      if (palets.length === 0) {
         setCartelas([]);
         return;
       }
 
-      const ids = palets.map((p: ProdStockPaletRow) => p.id);
+      const ids = palets
+        .map((p) => String((p as { id?: string }).id ?? ""))
+        .filter(Boolean);
       const { data: otsRows } = await supabase
         .from("prod_stock_palet_ots")
         .select("palet_id, ot_numero, cantidad_reservada")
         .in("palet_id", ids);
-
-      // Si buscamos por OT y no hubo match directo, filtramos por join
-      let filteredIds = ids;
-      if (searchTerm && !/^\d+$/.test(searchTerm)) {
-        const matchingPalets = (otsRows ?? [])
-          .filter((r) =>
-            r.ot_numero?.toLowerCase().includes(searchTerm.toLowerCase())
-          )
-          .map((r) => r.palet_id);
-        if (matchingPalets.length > 0) {
-          filteredIds = matchingPalets;
-        }
-      }
 
       const otsByPalet: Record<string, string[]> = {};
       const reservasByPalet: Record<
@@ -381,31 +424,24 @@ export function CartelasPage() {
         });
       }
 
-      let enriched: ProdStockPaletConOts[] = palets.map(
-        (raw: Record<string, unknown>) => {
-          const p = raw as ProdStockPaletRow;
-          const recep = unwrapJoinRow(raw.prod_recepciones_material);
-          const compra = recep
-            ? unwrapJoinRow(recep.prod_compra_material)
-            : null;
-          const provRecep = recep ? unwrapJoinRow(recep.prod_proveedores) : null;
-          const prov = compra ? unwrapJoinRow(compra.prod_proveedores) : null;
-          const proveedorNombre =
-            (typeof provRecep?.nombre === "string" ? provRecep.nombre : null) ??
-            (typeof prov?.nombre === "string" ? prov.nombre : null);
-          return {
-            ...p,
-            ots: otsByPalet[p.id] ?? [],
-            otsReservas: reservasByPalet[p.id] ?? [],
-            proveedor_nombre: proveedorNombre,
-          };
-        }
-      );
-
-      // Filtrar por OT si aplica
-      if (searchTerm && !/^\d+$/.test(searchTerm) && filteredIds.length > 0) {
-        enriched = enriched.filter((p) => filteredIds.includes(p.id));
-      }
+      const enriched: ProdStockPaletConOts[] = palets.map((raw) => {
+        const p = raw as unknown as ProdStockPaletRow;
+        const recep = unwrapJoinRow(raw.prod_recepciones_material);
+        const compra = recep
+          ? unwrapJoinRow(recep.prod_compra_material)
+          : null;
+        const provRecep = recep ? unwrapJoinRow(recep.prod_proveedores) : null;
+        const prov = compra ? unwrapJoinRow(compra.prod_proveedores) : null;
+        const proveedorNombre =
+          (typeof provRecep?.nombre === "string" ? provRecep.nombre : null) ??
+          (typeof prov?.nombre === "string" ? prov.nombre : null);
+        return {
+          ...p,
+          ots: otsByPalet[p.id] ?? [],
+          otsReservas: reservasByPalet[p.id] ?? [],
+          proveedor_nombre: proveedorNombre,
+        };
+      });
 
       setCartelas(enriched);
     } catch (e) {
@@ -822,7 +858,7 @@ export function CartelasPage() {
             <div className="relative flex-1 min-w-[240px] max-w-md">
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-slate-400" />
               <Input
-                placeholder="ID Stock, albarán o OT (Enter busca)"
+                placeholder="ID Stock, OT o albarán (Enter busca)"
                 value={searchCartelas}
                 onChange={(e) => setSearchCartelas(e.target.value)}
                 onKeyDown={(e) => {
