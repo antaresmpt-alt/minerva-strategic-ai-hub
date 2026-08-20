@@ -481,8 +481,9 @@ Nada de esto retrasa el PR **9.8.1 + 9.8.1b**.
 | 18.8 | Stock KPI reservas blandas. |
 | 18.9 | Pool semáforo material con stock libre + histórico compras. |
 | 18.10 | Fix observaciones CTP (§12.1). |
-| 18.11 | Sync `estado_material` tras asignar/consumir. |
+| 18.11 | Sync `estado_material` tras asignar stock libre. El RPC 9.8.4 solo actualiza si `estado_material` venía de STOP (`liberado`/`Pendiente corrección`). Si la OT tiene `"Sin orden de compra"` (nunca pasó por STOP), no lo toca → Pool sigue en rojo. Ampliar WHERE del RPC. |
 | 18.12 | Consumo 9.4: limpiar bridge/`estado` legacy. |
+| 18.15 | OT destino en modal Asignar: autocompletar/búsqueda de OT (hoy es campo libre sin validación). |
 
 ### P3 — Lab opcional
 
