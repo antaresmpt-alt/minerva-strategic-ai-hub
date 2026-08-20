@@ -329,71 +329,79 @@ export function CartelasPage() {
         if (error) throw error;
         palets = (data as Record<string, unknown>[]) ?? [];
       } else {
-        // Palets ligados a OT (numérica o texto: 98020, 36204-01, …)
-        const { data: otsMatch, error: otsMatchErr } = await supabase
-          .from("prod_stock_palet_ots")
-          .select("palet_id")
-          .ilike("ot_numero", `%${searchTerm}%`);
-        if (otsMatchErr) throw otsMatchErr;
+        // Un solo campo: unión de ID (parcial) + OT (parcial) + albarán (parcial).
+        // Antes id_stock era EQ exacto → "106" encontraba OT 36106 pero no #10673.
+        const escaped = searchTerm
+          .replace(/\\/g, "\\\\")
+          .replace(/%/g, "\\%")
+          .replace(/_/g, "\\_");
+        const pattern = `%${escaped}%`;
+        const isDigits = /^\d+$/.test(searchTerm);
+
+        const byId = new Map<string, Record<string, unknown>>();
+        const addRows = (rows: Record<string, unknown>[] | null | undefined) => {
+          for (const row of rows ?? []) {
+            const id = String((row as { id?: string }).id ?? "").trim();
+            if (id) byId.set(id, row);
+          }
+        };
+
+        const [otsMatchRes, albRes, stockRes] = await Promise.all([
+          supabase
+            .from("prod_stock_palet_ots")
+            .select("palet_id")
+            .ilike("ot_numero", pattern)
+            .limit(500),
+          supabase
+            .from("prod_stock_palets")
+            .select(selectCols)
+            .ilike("nota_entrega", pattern)
+            .limit(200),
+          isDigits
+            ? supabase
+                .from("prod_stock_palets")
+                .select(selectCols)
+                // id_stock es int: cast a text para parcial (106 → 10673)
+                .filter("id_stock::text", "ilike", pattern)
+                .limit(200)
+            : Promise.resolve({ data: [] as Record<string, unknown>[], error: null }),
+        ]);
+
+        if (otsMatchRes.error) throw otsMatchRes.error;
+        if (albRes.error) throw albRes.error;
+        if (stockRes.error) throw stockRes.error;
+
+        addRows(albRes.data as Record<string, unknown>[] | null);
+        addRows(stockRes.data as Record<string, unknown>[] | null);
+
         const otPaletIds = [
           ...new Set(
-            (otsMatch ?? [])
+            (otsMatchRes.data ?? [])
               .map((r) => String(r.palet_id ?? "").trim())
               .filter(Boolean),
           ),
         ];
-
-        const asNum = Number(searchTerm);
-        const isNumericId =
-          /^\d+$/.test(searchTerm) && Number.isInteger(asNum) && asNum > 0;
-
-        const byId = new Map<string, Record<string, unknown>>();
-
-        if (isNumericId) {
-          // id_stock exacto (p. ej. 10985)
-          const { data: byStock, error: stockErr } = await supabase
-            .from("prod_stock_palets")
-            .select(selectCols)
-            .eq("id_stock", asNum);
-          if (stockErr) throw stockErr;
-          for (const row of (byStock as Record<string, unknown>[]) ?? []) {
-            const id = String((row as { id?: string }).id ?? "");
-            if (id) byId.set(id, row);
-          }
-        } else {
-          // Albarán / nota_entrega (p. ej. g23)
-          const { data: byAlb, error: albErr } = await supabase
-            .from("prod_stock_palets")
-            .select(selectCols)
-            .ilike("nota_entrega", `%${searchTerm}%`);
-          if (albErr) throw albErr;
-          for (const row of (byAlb as Record<string, unknown>[]) ?? []) {
-            const id = String((row as { id?: string }).id ?? "");
-            if (id) byId.set(id, row);
-          }
-        }
-
-        // Unión con match por OT
-        if (otPaletIds.length > 0) {
-          const missing = otPaletIds.filter((id) => !byId.has(id));
-          if (missing.length > 0) {
+        const missingOt = otPaletIds.filter((id) => !byId.has(id));
+        if (missingOt.length > 0) {
+          // Chunk por si hay muchos matches OT
+          for (let i = 0; i < missingOt.length; i += 200) {
+            const chunk = missingOt.slice(i, i + 200);
             const { data: byOt, error: otErr } = await supabase
               .from("prod_stock_palets")
               .select(selectCols)
-              .in("id", missing);
+              .in("id", chunk);
             if (otErr) throw otErr;
-            for (const row of (byOt as Record<string, unknown>[]) ?? []) {
-              const id = String((row as { id?: string }).id ?? "");
-              if (id) byId.set(id, row);
-            }
+            addRows(byOt as Record<string, unknown>[] | null);
           }
         }
 
-        palets = Array.from(byId.values()).sort((a, b) => {
-          const ia = Number((a as { id_stock?: number }).id_stock ?? 0);
-          const ib = Number((b as { id_stock?: number }).id_stock ?? 0);
-          return ib - ia;
-        });
+        palets = Array.from(byId.values())
+          .sort((a, b) => {
+            const ia = Number((a as { id_stock?: number }).id_stock ?? 0);
+            const ib = Number((b as { id_stock?: number }).id_stock ?? 0);
+            return ib - ia;
+          })
+          .slice(0, 200);
       }
 
       if (palets.length === 0) {
@@ -891,8 +899,8 @@ export function CartelasPage() {
 
           {searchCartelas.trim() && (
             <p className="text-xs text-slate-500">
-              Búsqueda server-side activa: <strong>«{searchCartelas.trim()}»</strong> · Sin límite
-              de 200 filas.
+              Búsqueda server-side: <strong>«{searchCartelas.trim()}»</strong> en
+              ID / OT / albarán (parcial) · máx. 200 resultados.
             </p>
           )}
 
