@@ -75,6 +75,24 @@ const ROLES_LIBERAR = new Set(["admin", "oficina_tecnica", "gerencia"]);
 
 const supabase = createSupabaseBrowserClient();
 
+/**
+ * Filtro PostgREST para id_stock por prefijo numérico (sin cast text).
+ * "106" → eq 106 + rangos 1060–1069, 10600–10699, … → incluye #10673.
+ */
+function idStockPrefixOrFilter(digits: string): string | null {
+  if (!/^\d+$/.test(digits)) return null;
+  const base = Number(digits);
+  if (!Number.isInteger(base) || base < 0) return null;
+  const parts: string[] = [`id_stock.eq.${base}`];
+  for (let extra = 1; extra <= 7; extra++) {
+    const gte = base * 10 ** extra;
+    const lt = (base + 1) * 10 ** extra;
+    if (!Number.isSafeInteger(gte) || !Number.isSafeInteger(lt)) break;
+    parts.push(`and(id_stock.gte.${gte},id_stock.lt.${lt})`);
+  }
+  return parts.join(",");
+}
+
 const ESTADO_COLORS: Record<string, string> = {
   disponible: "bg-emerald-100 text-emerald-800 border-emerald-200",
   reservado: "bg-blue-100 text-blue-800 border-blue-200",
@@ -329,14 +347,14 @@ export function CartelasPage() {
         if (error) throw error;
         palets = (data as Record<string, unknown>[]) ?? [];
       } else {
-        // Un solo campo: unión de ID (parcial) + OT (parcial) + albarán (parcial).
-        // Antes id_stock era EQ exacto → "106" encontraba OT 36106 pero no #10673.
+        // Un solo campo: ID (prefijo) + OT (parcial) + albarán (parcial).
+        // Prefijo numérico vía rangos PostgREST (sin cast text — falla en API).
         const escaped = searchTerm
           .replace(/\\/g, "\\\\")
           .replace(/%/g, "\\%")
           .replace(/_/g, "\\_");
         const pattern = `%${escaped}%`;
-        const isDigits = /^\d+$/.test(searchTerm);
+        const idOr = idStockPrefixOrFilter(searchTerm);
 
         const byId = new Map<string, Record<string, unknown>>();
         const addRows = (rows: Record<string, unknown>[] | null | undefined) => {
@@ -357,12 +375,11 @@ export function CartelasPage() {
             .select(selectCols)
             .ilike("nota_entrega", pattern)
             .limit(200),
-          isDigits
+          idOr
             ? supabase
                 .from("prod_stock_palets")
                 .select(selectCols)
-                // id_stock es int: cast a text para parcial (106 → 10673)
-                .filter("id_stock::text", "ilike", pattern)
+                .or(idOr)
                 .limit(200)
             : Promise.resolve({ data: [] as Record<string, unknown>[], error: null }),
         ]);
@@ -383,7 +400,6 @@ export function CartelasPage() {
         ];
         const missingOt = otPaletIds.filter((id) => !byId.has(id));
         if (missingOt.length > 0) {
-          // Chunk por si hay muchos matches OT
           for (let i = 0; i < missingOt.length; i += 200) {
             const chunk = missingOt.slice(i, i + 200);
             const { data: byOt, error: otErr } = await supabase
@@ -453,7 +469,7 @@ export function CartelasPage() {
 
       setCartelas(enriched);
     } catch (e) {
-      toast.error(`Error al cargar cartelas: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`Error al cargar cartelas: ${errorMessageFromUnknown(e)}`);
     } finally {
       setLoadingCartelas(false);
     }
@@ -900,7 +916,7 @@ export function CartelasPage() {
           {searchCartelas.trim() && (
             <p className="text-xs text-slate-500">
               Búsqueda server-side: <strong>«{searchCartelas.trim()}»</strong> en
-              ID / OT / albarán (parcial) · máx. 200 resultados.
+              ID (prefijo) / OT / albarán · máx. 200 resultados.
             </p>
           )}
 
