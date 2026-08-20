@@ -32,3 +32,9 @@ export function puedeRevertirConsumoPasoAdmin(profile: ProfileConPermisos | null
   if (!profile?.role) return false;
   return ROLES_REVERTIR_CONSUMO.has(profile.role);
 }
+
+/** Reset planificación STOP — anular huecos de mesa posteriores (9.8 §19). */
+export function puedeResetPlanificacionStop(profile: ProfileConPermisos | null): boolean {
+  if (!profile?.role) return false;
+  return ROLES_REABRIR_PASO.has(profile.role);
+}

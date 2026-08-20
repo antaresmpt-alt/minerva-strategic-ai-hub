@@ -359,3 +359,131 @@ export async function reabrirPasoAdmin(
     .eq("id", params.pasoId);
   if (auditErr) throw new Error(auditErr.message || "No se pudo registrar la reapertura.");
 }
+
+/** Bloque 9.8 §19 — Reset planificación STOP: identifica huecos mesa posteriores. */
+export type HuecoMesaPosterior = {
+  mesaId: string;
+  ejecucionId: string | null;
+  pasoId: string;
+  procesoNombre: string | null;
+  orden: number;
+};
+
+export async function fetchHuecosMesaPosteriores(
+  supabase: SupabaseClient,
+  otId: string,
+  pasoOrden: number,
+): Promise<HuecoMesaPosterior[]> {
+  // Pasos posteriores del itinerario
+  const { data: pasosData, error: pasosErr } = await supabase
+    .from("prod_ot_pasos")
+    .select("id, orden, proceso_id")
+    .eq("ot_id", otId)
+    .gt("orden", pasoOrden)
+    .order("orden", { ascending: true });
+  if (pasosErr) throw new Error(pasosErr.message || "No se pudo cargar el itinerario.");
+
+  const pasos = (pasosData ?? []) as Array<{
+    id?: string;
+    orden?: number | null;
+    proceso_id?: number | null;
+  }>;
+  if (pasos.length === 0) return [];
+
+  const pasoIds = pasos
+    .map((p) => String(p.id ?? "").trim())
+    .filter(Boolean);
+  if (pasoIds.length === 0) return [];
+
+  // Huecos activos en mesa
+  const { data: mesaData, error: mesaErr } = await supabase
+    .from("prod_mesa_planificacion_trabajos")
+    .select("id, ot_paso_id")
+    .in("ot_paso_id", pasoIds)
+    .in("estado_mesa", ["borrador", "confirmado", "en_ejecucion"]);
+  if (mesaErr) throw new Error(mesaErr.message || "No se pudo cargar la mesa.");
+
+  const mesaRows = (mesaData ?? []) as Array<{
+    id?: string;
+    ot_paso_id?: string | null;
+  }>;
+  if (mesaRows.length === 0) return [];
+
+  const mesaIds = mesaRows
+    .map((m) => String(m.id ?? "").trim())
+    .filter(Boolean);
+
+  // Ejecuciones pendientes/en curso
+  const { data: execData } = await supabase
+    .from("prod_mesa_ejecuciones")
+    .select("id, mesa_trabajo_id")
+    .in("mesa_trabajo_id", mesaIds)
+    .in("estado_ejecucion", ["pendiente_inicio", "en_curso", "pausada"]);
+
+  const ejecucionesByMesa = new Map<string, string>();
+  for (const e of (execData ?? []) as Array<{
+    id?: string;
+    mesa_trabajo_id?: string | null;
+  }>) {
+    const mid = String(e.mesa_trabajo_id ?? "").trim();
+    const eid = String(e.id ?? "").trim();
+    if (mid && eid) ejecucionesByMesa.set(mid, eid);
+  }
+
+  // Nombres de procesos
+  const procesoIds = [
+    ...new Set(
+      pasos
+        .map((p) => p.proceso_id)
+        .filter((pid): pid is number => typeof pid === "number" && pid > 0),
+    ),
+  ];
+  const { data: procData } = await supabase
+    .from("prod_procesos_cat")
+    .select("id, nombre")
+    .in("id", procesoIds);
+
+  const nombresByProcId = new Map<number, string>();
+  for (const p of (procData ?? []) as Array<{
+    id?: number;
+    nombre?: string | null;
+  }>) {
+    if (typeof p.id === "number" && p.nombre) {
+      nombresByProcId.set(p.id, p.nombre);
+    }
+  }
+
+  // Mapear pasos → orden
+  const ordenByPasoId = new Map<string, number>();
+  for (const p of pasos) {
+    const pid = String(p.id ?? "").trim();
+    if (pid && typeof p.orden === "number") {
+      ordenByPasoId.set(pid, p.orden);
+    }
+  }
+
+  // Resultado
+  const result: HuecoMesaPosterior[] = [];
+  for (const m of mesaRows) {
+    const mesaId = String(m.id ?? "").trim();
+    const pasoId = String(m.ot_paso_id ?? "").trim();
+    if (!mesaId || !pasoId) continue;
+
+    const paso = pasos.find((p) => String(p.id) === pasoId);
+    const procesoNombre =
+      typeof paso?.proceso_id === "number"
+        ? nombresByProcId.get(paso.proceso_id) ?? null
+        : null;
+    const orden = ordenByPasoId.get(pasoId) ?? 0;
+
+    result.push({
+      mesaId,
+      ejecucionId: ejecucionesByMesa.get(mesaId) ?? null,
+      pasoId,
+      procesoNombre,
+      orden,
+    });
+  }
+
+  return result.sort((a, b) => a.orden - b.orden);
+}

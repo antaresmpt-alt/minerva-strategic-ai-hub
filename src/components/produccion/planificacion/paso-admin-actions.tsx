@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Loader2, Package, Pencil, RotateCcw, Undo2 } from "lucide-react";
+import { AlertTriangle, Ban, Loader2, Package, Pencil, RotateCcw, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -28,20 +28,24 @@ import {
   corregirCartelaPasoAdmin,
   editarDatosPasoAdmin,
   fetchConsumoRevertibleDelPaso,
+  fetchHuecosMesaPosteriores,
   fetchPasosItinerarioAdmin,
   reabrirPasoAdmin,
   revertirConsumoPasoAdmin,
   siguientePasoIniciado,
+  type HuecoMesaPosterior,
   type MovimientoConsumo,
 } from "@/lib/prod-paso-admin-client";
 import {
   puedeCorregirCartelaPaso,
   puedeEditarPasoAdmin,
   puedeReabrirPasoAdmin,
+  puedeResetPlanificacionStop,
   puedeRevertirConsumoPasoAdmin,
 } from "@/lib/prod-paso-admin-permisos";
 import type { ProfileConPermisos } from "@/lib/prod-ot-cierre-permisos";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { devolverHuecoMesaAlPool } from "@/lib/derivar-impresion-externa";
 
 export type PasoAdminContext = {
   pasoId: string;
@@ -77,6 +81,7 @@ export function PasoAdminActions({
   const [cartelaOpen, setCartelaOpen] = useState(false);
   const [reabrirOpen, setReabrirOpen] = useState(false);
   const [revertirOpen, setRevertirOpen] = useState(false);
+  const [resetStopOpen, setResetStopOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [datosEdit, setDatosEdit] = useState<DatosProcesoGenerico>(paso.datosProceso);
   const [datosCartela, setDatosCartela] = useState<DatosProcesoGenerico>(paso.datosProceso);
@@ -86,6 +91,8 @@ export function PasoAdminActions({
   const [notasRevertir, setNotasRevertir] = useState("");
   const [nuevoFormato, setNuevoFormato] = useState("");
   const [hojasResultantes, setHojasResultantes] = useState("");
+  const [huecosMesa, setHuecosMesa] = useState<HuecoMesaPosterior[]>([]);
+  const [loadingHuecos, setLoadingHuecos] = useState(false);
 
   const esFinalizado = paso.estado === "finalizado";
   const showEditar = esFinalizado && puedeEditarPasoAdmin(profile);
@@ -99,6 +106,7 @@ export function PasoAdminActions({
     puedeRevertirConsumoPasoAdmin(profile) &&
     procesoUsaCartela(paso.procesoId, pasosItinerario) &&
     ultimoConsumo != null; // null = checked, no hay; undefined = aún cargando
+  const showResetStopBtn = esFinalizado && puedeResetPlanificacionStop(profile);
 
   // Carga el último consumo del paso para saber si mostrar el botón de revertir
   useEffect(() => {
@@ -123,7 +131,26 @@ export function PasoAdminActions({
     }
   }, [showReabrirBtn, supabase, paso.otId, paso.pasoId]);
 
-  if (!showEditar && !showCartela && !showReabrirBtn && !showRevertirBtn) return null;
+  const loadHuecosMesa = useCallback(async () => {
+    if (!showResetStopBtn) return;
+    setLoadingHuecos(true);
+    try {
+      const pasos = await fetchPasosItinerarioAdmin(supabase, paso.otId);
+      const actual = pasos.find((p) => p.id === paso.pasoId);
+      if (!actual) {
+        setHuecosMesa([]);
+        return;
+      }
+      const huecos = await fetchHuecosMesaPosteriores(supabase, paso.otId, actual.orden);
+      setHuecosMesa(huecos);
+    } catch {
+      setHuecosMesa([]);
+    } finally {
+      setLoadingHuecos(false);
+    }
+  }, [showResetStopBtn, supabase, paso.otId, paso.pasoId]);
+
+  if (!showEditar && !showCartela && !showReabrirBtn && !showRevertirBtn && !showResetStopBtn) return null;
 
   const btnClass = compact ? "h-7 gap-1 px-2 text-[11px]" : "h-8 gap-1.5 text-xs";
 
@@ -256,6 +283,34 @@ export function PasoAdminActions({
     }
   };
 
+  const handleResetStop = async () => {
+    if (huecosMesa.length === 0) {
+      toast.info("No hay huecos de mesa posteriores que anular.");
+      setResetStopOpen(false);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      for (const hueco of huecosMesa) {
+        await devolverHuecoMesaAlPool(supabase, {
+          otNumero: paso.otNumero,
+          mesaTrabajoId: hueco.mesaId,
+          ejecucionId: hueco.ejecucionId,
+        });
+      }
+      toast.success(
+        `Reset planificación STOP: ${huecosMesa.length} hueco(s) anulado(s). OT devuelta al Pool.`,
+      );
+      setResetStopOpen(false);
+      onSuccess?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo resetear la planificación.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <>
       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -320,6 +375,21 @@ export function PasoAdminActions({
           >
             <Undo2 className="size-3.5" />
             Revertir consumo
+          </Button>
+        ) : null}
+        {showResetStopBtn ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={`${btnClass} border-red-300 bg-red-50 text-red-900 hover:bg-red-100`}
+            onClick={() => {
+              void loadHuecosMesa();
+              setResetStopOpen(true);
+            }}
+          >
+            <Ban className="size-3.5" />
+            Reset planificación STOP
           </Button>
         ) : null}
       </div>
@@ -522,6 +592,68 @@ export function PasoAdminActions({
             >
               {saving ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
               Reabrir paso
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={resetStopOpen} onOpenChange={setResetStopOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reset planificación STOP</DialogTitle>
+            <DialogDescription>
+              OT {paso.otNumero}
+              {paso.procesoNombre ? ` · ${paso.procesoNombre}` : ""}. Se anularán los huecos de
+              mesa planificados para pasos posteriores y la OT volverá al Pool.
+            </DialogDescription>
+          </DialogHeader>
+          {loadingHuecos ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="size-5 animate-spin text-slate-400" />
+            </div>
+          ) : huecosMesa.length === 0 ? (
+            <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              No hay huecos de mesa posteriores planificados. La OT puede estar ya en el Pool o
+              sin pasos futuros en mesa.
+            </p>
+          ) : (
+            <>
+              <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
+                Se van a anular <strong>{huecosMesa.length} hueco(s)</strong> de mesa planificados.
+                ¿Continuar?
+              </p>
+              <div className="max-h-48 space-y-1.5 overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-2">
+                {huecosMesa.map((h) => (
+                  <div
+                    key={h.mesaId}
+                    className="rounded border border-slate-200 bg-white px-2 py-1.5 text-xs"
+                  >
+                    <div className="font-medium text-slate-700">
+                      {h.procesoNombre ?? "Proceso desconocido"}
+                    </div>
+                    <div className="text-slate-500">Mesa ID: {h.mesaId.slice(0, 8)}…</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={saving}
+              onClick={() => setResetStopOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={saving || loadingHuecos || huecosMesa.length === 0}
+              onClick={() => void handleResetStop()}
+            >
+              {saving ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
+              Anular huecos y devolver al Pool
             </Button>
           </DialogFooter>
         </DialogContent>
