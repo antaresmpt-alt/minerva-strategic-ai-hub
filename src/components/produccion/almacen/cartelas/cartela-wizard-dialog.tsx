@@ -51,6 +51,7 @@ import type {
   AlbaranPendienteGroup,
   AlbaranRecepcionLine,
   ProdStockPaletConOts,
+  StockTipo,
   WizardPaletInput,
 } from "@/types/prod-stock";
 import { UBICACIONES_FILA } from "@/types/prod-stock";
@@ -484,7 +485,7 @@ export function CartelaWizardDialog({
               ot_numero: ot,
               cantidad_reservada: parseReservaDura(p.reservas[ot]),
             }));
-        created.push({ ...paletRow, ots: p.ots_referencia, otsReservas });
+        created.push({ ...paletRow, tipo_stock: paletRow.tipo_stock as StockTipo, ots: p.ots_referencia, otsReservas } as ProdStockPaletConOts);
       }
 
       setSavedPalets(created);

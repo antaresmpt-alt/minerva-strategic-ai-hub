@@ -130,10 +130,38 @@ No hay P0 claros. El triage confirma que los bugs R1/§18.15 estaban ya arreglad
 
 ---
 
-## Estado post-sesión
+## Investigación P2-J y P2-K (20 ago — antes de 9.8.3)
+
+### P2-J — `ots-despachadas-page.tsx:286` + `master-ots-page.tsx:385`
+
+**Veredicto: ruido de tipos, no bug de dato.**
+
+Ambos archivos construyen arrays `(string|number)[]` para matching en `.in()`:
+- `ots-despachadas-page.tsx`: `inVals` contiene tanto el string `c` como su forma numérica `Number(c)` para buscar `num_troquel` (que puede ser integer en BD). La columna es correcta.
+- `master-ots-page.tsx`: `inValues` hace lo mismo con `ot_numero`. Columna correcta.
+
+El error TS es solo de tipos: el `.in()` generado espera `readonly string[]` pero los arrays son `(string|number)[]`. **Fijado** con `.map(String)` en los dos `.in()` calls (20 ago). No hay bug de datos.
+
+`ots-despachadas-page.tsx` está en el radio de 9.8.3 (botón Compra corrección). El error estaba en una función `fetchTroquelInfo` completamente separada. **El botón de compra corrección no se ve afectado.**
+
+### P2-K — `planificacion-mesa-secuenciacion-tab.tsx:2449,2470`
+
+**Veredicto: ruido de tipos, no bug de dato.**
+
+Ambas líneas son `.insert(inserts)` y `.insert(legacyInserts)` en el patrón "try new schema / fallback legacy" protegido por `isMissingColumnError`. El overload TS2769 es porque el objeto insert tiene campos con `null` donde el tipo generado puede esperar `never` o tipo incompatible en algún overload. No hay columna incorrecta ni tabla equivocada — la tabla (`prod_mesa_planificacion_trabajos`) y todas las columnas son correctas. El fallback `isMissingColumnError` maneja gracefully cualquier discrepancia de esquema. **No se toca en esta sesión.**
+
+---
+
+## Estado post-sesión (actualizado 20 ago)
 
 - [x] `database.ts` generado y comprometido
 - [x] Clientes cableados (`browser` / `server` / `admin`)
 - [x] Script `db:types` en `package.json`
-- [ ] Fix P1 triviales (Fix-1/2/3) — **hacer antes de 9.8.3**
-- [ ] Fix P2 — siguiente sesión dedicada tipado
+- [x] Fix-1: `server.ts:100` `r.is_enabled ?? false` — ya aplicado en sesión anterior
+- [x] Fix-2: `stock-page.tsx` cast `viewRaw as StockPaletAtpRow[]` — elimina 3 errores ATP shape
+- [x] Fix-3: `null` → `undefined` en 8 params RPC de `stock-page.tsx` y `cartelas-page.tsx`
+- [x] Fix #12: `tipo_stock as StockTipo` en `cartela-wizard-dialog.tsx:487`
+- [x] P2-J fijado: `.map(String)` en `ots-despachadas-page.tsx:286` y `master-ots-page.tsx:385`
+- [x] P2-J investigado y confirmado ruido
+- [x] P2-K investigado y confirmado ruido (no tocar)
+- [ ] Fix P2 resto (32 errores) — siguiente sesión dedicada tipado post-9.8

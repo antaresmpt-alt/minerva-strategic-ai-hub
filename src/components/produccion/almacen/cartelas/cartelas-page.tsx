@@ -1422,8 +1422,8 @@ function LiberarReservaDialog({
         p_palet_id: palet.id,
         p_ot_numero: otNumero,
         p_autorizado_por: quien,
-        p_notas: motivo.trim() || null,
-        p_nuevo_formato: nuevoFormato.trim() || null,
+        p_notas: motivo.trim() || undefined,
+        p_nuevo_formato: nuevoFormato.trim() || undefined,
       });
       if (error) throw error;
       toast.success(
@@ -1581,8 +1581,8 @@ function AsignarOtDialog({
       const { error } = await supabase.rpc("prod_stock_asignar_palet_ot", {
         p_palet_id: palet.id,
         p_ot_numero: ot,
-        p_cantidad_reservada: null,
-        p_notas: notas.trim() || null,
+        p_cantidad_reservada: undefined,
+        p_notas: notas.trim() || undefined,
       });
       if (error) throw error;
       toast.success(`Cartela #${palet.id_stock} asignada a OT ${ot}. Material en stock asignado.`);

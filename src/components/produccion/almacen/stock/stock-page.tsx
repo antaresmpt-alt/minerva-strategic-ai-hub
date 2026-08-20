@@ -188,17 +188,19 @@ export function StockPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: view, error } = await supabase
+      const { data: viewRaw, error } = await supabase
         .from("stock_palets_atp")
         .select("*")
         .order("id_stock", { ascending: false })
         .limit(600);
 
       if (error) throw error;
-      if (!view || view.length === 0) {
+      if (!viewRaw || viewRaw.length === 0) {
         setRows([]);
         return;
       }
+      // Cast: generated type widens id to string|null (view PK never null at runtime)
+      const view = viewRaw as StockPaletAtpRow[];
 
       const paletIds = view.map((v: StockPaletAtpRow) => v.id);
 
@@ -995,7 +997,7 @@ function StockDetalleDialog({
       const { error } = await supabase.rpc("prod_stock_ajustar_cantidad", {
         p_palet_id: current.id,
         p_nueva_cantidad: nueva,
-        p_notas: ajusteNotas.trim() || null,
+        p_notas: ajusteNotas.trim() || undefined,
       });
       if (error) throw error;
       toast.success(
@@ -1038,7 +1040,7 @@ function StockDetalleDialog({
       const { data, error } = await supabase.rpc("prod_stock_split_palet", {
         p_palet_id: current.id,
         p_cantidad_split: cant,
-        p_notas: splitNotas.trim() || null,
+        p_notas: splitNotas.trim() || undefined,
       });
       if (error) throw error;
       const first = Array.isArray(data) ? data[0] : null;
@@ -1075,8 +1077,8 @@ function StockDetalleDialog({
       const { error } = await supabase.rpc("prod_stock_asignar_palet_ot", {
         p_palet_id: row.id,
         p_ot_numero: ot,
-        p_cantidad_reservada: null,
-        p_notas: asignarOtNotas.trim() || null,
+        p_cantidad_reservada: undefined,
+        p_notas: asignarOtNotas.trim() || undefined,
       });
       if (error) throw error;
       toast.success(

@@ -382,7 +382,7 @@ export function MasterOtsPage() {
         const { data, error } = await supabase
           .from(TABLE_OT_DESPACHADAS)
           .select("ot_numero")
-          .in("ot_numero", inValues);
+          .in("ot_numero", inValues.map(String));
         if (error) throw error;
         const next = new Set<string>();
         for (const x of data ?? []) {

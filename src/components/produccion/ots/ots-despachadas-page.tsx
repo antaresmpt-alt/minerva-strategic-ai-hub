@@ -283,7 +283,7 @@ async function fetchTroquelExcelMap(
     const { data, error } = await supabase
       .from("prod_troqueles")
       .select("num_troquel,mides,num_figuras,descripcion")
-      .in("num_troquel", part);
+      .in("num_troquel", part.map(String));
     if (error) {
       console.error(error);
       continue;

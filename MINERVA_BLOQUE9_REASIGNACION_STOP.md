@@ -413,6 +413,8 @@ Si 98019 ya está “sucia” de A, clonar **98020** para B/C. No mezclar estado
 | Fases 9.8.1–6, un PR, prueba 98019 | Los tres |
 | Sonnet en ledger/SQL; Composer en UI | Cursor + Claude |
 | OT laboratorio **98019** (98017/18 ocupadas) | Cursor al crear maestro |
+| **§16.1 — Tipo movimiento al liberar: `ajuste`** (no `traspaso`; CHECK exige destino en traspaso, liberar no tiene destino). Migración `20260818190000` línea 111. | Confirmado en código 20 ago |
+| **§16.3 — Roles revertir consumo: `admin`+`gerencia`+`oficina_tecnica`** (no endurecer). `ROLES_REVERTIR_CONSUMO` en `prod-paso-admin-permisos.ts:11`. Coherente con liberar y Reset STOP. | Confirmado en código 20 ago |
 
 ---
 
@@ -433,15 +435,13 @@ Si 98019 ya está “sucia” de A, clonar **98020** para B/C. No mezclar estado
 
 ---
 
-## 16. Preguntas abiertas (no bloquean 9.8.1)
+## 16. Preguntas abiertas — CERRADAS 20 ago
 
-1. ¿Tipo movimiento al liberar: `traspaso` (sin `ot_destino`) o `ajuste`? Preferencia: **`traspaso`** con origen y destino null + `autorizado_por` (ya obligatorio en traspaso). Si el CHECK SQL exige destino, usar `ajuste` y documentar en la migración.
-2. ¿Merma física Caso B (hojas ya cortadas inservibles) = movimiento `ajuste` negativo aparte del revertir? Sí, cuando 9.8.5: no fingir que el pliego virgen “volvió”.
-3. ¿Endurecer revertir consumo a solo `admin`/`gerencia`? Decidir en 9.8.5; oficina técnica puede bastar como en lápiz.
+~~1. ¿Tipo movimiento al liberar: `traspaso` o `ajuste`?~~ → **`ajuste`**. El CHECK SQL exige `ot_destino_numero` en `traspaso`; liberar no tiene destino. Migración `20260818190000` línea 111. Decisión añadida a §14.
 
-Nada de esto retrasa el PR **9.8.1 + 9.8.1b**.
+2. ¿Merma física Caso B = `ajuste` negativo aparte del revertir? Sí — pendiente hasta que planta lo solicite; no bloquea 9.8.3.
 
----
+~~3. ¿Endurecer revertir consumo a solo `admin`/`gerencia`?~~ → **No endurecer.** Código: `ROLES_REVERTIR_CONSUMO = Set(["admin","gerencia","oficina_tecnica"])` en `prod-paso-admin-permisos.ts:11`. Coherente con liberar reserva y Reset STOP. Decisión añadida a §14.
 
 ## 17. Retomar (siguiente chat)
 
@@ -469,7 +469,7 @@ Nada de esto retrasa el PR **9.8.1 + 9.8.1b**.
 
 #### §18.0 — PRERREQ antes de 9.8.3: Tipos Supabase `Database`
 
-> **Estado:** ⏳ Paso A–C completado (20 ago 2026 — `database.ts` generado + clientes cableados). Triage tsc pendiente o completado en misma sesión.
+> **Estado:** ✅ Completado 20 ago. `database.ts` generado (3774 líneas). Clientes cableados. Triage 44 errores: 0 P0, ~12 P1, ~32 P2. Ver `SESION_20AGO2026_SUPABASE_TYPES_TRIAGE.md`.
 
 **Qué:** Generar `src/types/database.ts` con `supabase gen types typescript --project-id jrwwuqplilbydxptsbqz`, cablear `SupabaseClient<Database>` en browser/server/admin, tipar módulos calientes (stock / mesa / compras).
 
