@@ -476,9 +476,11 @@ export function poolMaterialBarcoPadreFromRow(row: {
 export function isPoolRowSelectableForMesa(row: {
   otTipo: ProdOtTipo;
   hasCompraGenerada: boolean;
+  hojasStockCartelado?: number;
 }): boolean {
   if (row.otTipo === "contenedor") return false;
-  return row.hasCompraGenerada;
+  // §18.9 — permitir si hay compra O si hay stock cartelado asignado (reserva blanda/dura)
+  return row.hasCompraGenerada || (row.hojasStockCartelado ?? 0) > 0;
 }
 
 /** Tipos de próximo paso de las hijas, indexados por OT padre (barco). */

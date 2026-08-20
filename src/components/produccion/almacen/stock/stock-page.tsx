@@ -48,6 +48,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import { StockAiDialog } from "@/components/produccion/almacen/stock/stock-ai-dialog";
+import { OtDestinoSearchInput } from "@/components/produccion/almacen/ot-destino-search-input";
 import {
   openCartelaPrintWindow,
   printCartelasWindow,
@@ -1444,11 +1445,10 @@ function StockDetalleDialog({
               <Label htmlFor="asig-ot-stock" className="text-sm font-medium">
                 OT destino <span className="text-red-500">*</span>
               </Label>
-              <Input
+              <OtDestinoSearchInput
                 id="asig-ot-stock"
-                placeholder="Ej. 98020"
                 value={asignarOtNumero}
-                onChange={(e) => setAsignarOtNumero(e.target.value)}
+                onChange={setAsignarOtNumero}
                 disabled={submitting}
               />
             </div>

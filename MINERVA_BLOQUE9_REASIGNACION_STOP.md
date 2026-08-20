@@ -479,11 +479,11 @@ Nada de esto retrasa el PR **9.8.1 + 9.8.1b**.
 | 18.6 | Toast reabrir: avisar que OT sigue en mesa (no vuelve al Pool). |
 | 18.7 | Split palet prueba → id_stock coherente o aviso. |
 | 18.8 | Stock KPI reservas blandas. |
-| 18.9 | Pool semáforo material con stock libre + histórico compras. |
+| ~~18.9~~ | ~~Pool semáforo material con stock libre + histórico compras.~~ ✅ 20 ago: `isPoolRowSelectableForMesa` acepta `hojasStockCartelado`; gate y mensaje ámbar. |
 | 18.10 | Fix observaciones CTP (§12.1). |
-| 18.11 | Sync `estado_material` tras asignar stock libre. El RPC 9.8.4 solo actualiza si `estado_material` venía de STOP (`liberado`/`Pendiente corrección`). Si la OT tiene `"Sin orden de compra"` (nunca pasó por STOP), no lo toca → Pool sigue en rojo. Ampliar WHERE del RPC. |
+| ~~18.11~~ | ~~Sync `estado_material` tras asignar stock libre.~~ ✅ 20 ago: migración `20260820090000` amplía WHERE para cubrir null/vacío/`Sin orden compra`/`Sin orden de compra`/`Compra cancelada`/`Pendiente de pedir`. |
 | 18.12 | Consumo 9.4: limpiar bridge/`estado` legacy. |
-| 18.15 | OT destino en modal Asignar: autocompletar/búsqueda de OT (hoy es campo libre sin validación). |
+| ~~18.15~~ | ~~OT destino en modal Asignar: autocompletar/búsqueda de OT.~~ ✅ 20 ago: componente `OtDestinoSearchInput` con debounce 250ms + ilike; usado en cartelas y stock. |
 
 ### P3 — Lab opcional
 

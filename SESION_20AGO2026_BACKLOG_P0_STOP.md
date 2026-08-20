@@ -206,7 +206,7 @@ Permitir buscar cartelas sin estar limitado a las 200 filas más recientes.
 
 ## Validación 7.1 (Reset planificación STOP)
 
-**Estado final**: 🔲 PENDIENTE — Lab 20/08
+**Estado final**: ✅ VALIDADO (20 ago 2026)
 
 ### Escenario rápido propuesto: OT 98020 simulada
 
@@ -255,10 +255,20 @@ Permitir buscar cartelas sin estar limitado a las 200 filas más recientes.
 
 ---
 
+## Fixes P2 — 20 ago 2026 (sesión continuación)
+
+Los 3 gaps P2 de la validación 7.2 se implementaron en la misma sesión:
+
+| # | Gap | Fix | Archivo(s) |
+|---|-----|-----|------------|
+| §18.11 | `estado_material` no se actualizaba para OTs sin STOP previo | Ampliado WHERE en `prod_stock_asignar_palet_ot` para cubrir null/vacío/`Sin orden compra`/`Compra cancelada`/`Pendiente de pedir` | `20260820090000_bloque9_8_4_asignar_estado_material_ampliado.sql` |
+| §18.15 | Input OT destino sin autocompletar | Nuevo componente `OtDestinoSearchInput` con debounce 250ms e ilike contra `produccion_ot_despachadas`. Usado en `AsignarOtDialog` (cartelas) y `StockDetalleDialog` (stock) | `ot-destino-search-input.tsx`, `cartelas-page.tsx`, `stock-page.tsx` |
+| §18.9 | Pool semáforo rojo bloqueante aunque hay stock cartelado | `isPoolRowSelectableForMesa` acepta `hojasStockCartelado`; gate `sinCompra` permite si stock > 0; mensaje cambia a ámbar | `planificacion-contenedor-query.ts`, `planificacion-pool-ots-tab-v2.tsx` |
+
+---
+
 ## Notas siguiente sesión
 
-- Validar **7.1** con escenario de mesa arriba
-- Si lab OK → continuar con **P1**:
+- Continuar con **P1**:
   - 9.8.3 Compra corrección (type `correccion`, allowlist batch)
   - 9.8.6 Popup redespacho asistido
-- Luego **P2** prioritarios: §18.11 (estado_material OT no-STOP) + §18.9 (semáforo Pool stock)

@@ -70,6 +70,7 @@ import type {
 import { CartelaWizardDialog, type CartelaWizardCreatedInfo } from "./cartela-wizard-dialog";
 import { RecepcionStockDialog } from "./recepcion-stock-dialog";
 import { RecepcionFotosPanel } from "@/components/produccion/recepcion/recepcion-fotos-panel";
+import { OtDestinoSearchInput } from "@/components/produccion/almacen/ot-destino-search-input";
 
 const ROLES_LIBERAR = new Set(["admin", "oficina_tecnica", "gerencia"]);
 
@@ -1629,13 +1630,12 @@ function AsignarOtDialog({
             <Label htmlFor="asig-ot" className="text-sm font-medium">
               OT destino <span className="text-red-500">*</span>
             </Label>
-            <Input
+            <OtDestinoSearchInput
               id="asig-ot"
-              ref={otRef}
-              placeholder="Ej. 98020"
               value={otNumero}
-              onChange={(e) => setOtNumero(e.target.value)}
+              onChange={setOtNumero}
               disabled={saving}
+              inputRef={otRef}
             />
           </div>
           <div className="space-y-1.5">

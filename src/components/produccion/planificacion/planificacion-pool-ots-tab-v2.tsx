@@ -391,7 +391,11 @@ function enrichHijaRowWithBarcoMaterial(hija: PoolRow, padre: PoolRow | undefine
 
 function poolRowSelectableForMesa(r: PoolRow): boolean {
   if (r.poolCerrada) return false;
-  return isPoolRowSelectableForMesa({ otTipo: r.otTipo, hasCompraGenerada: r.hasCompraGenerada });
+  return isPoolRowSelectableForMesa({
+    otTipo: r.otTipo,
+    hasCompraGenerada: r.hasCompraGenerada,
+    hojasStockCartelado: r.hojasStockCartelado,
+  });
 }
 
 function isPoolHijaCerrada(estadoPool: string | null | undefined): boolean {
@@ -1769,10 +1773,13 @@ export function PlanificacionPoolOtsTab() {
         );
         return;
       }
-      const sinCompra = selectedRows.filter((r) => !r.hasCompraGenerada).map((r) => r.ot);
+      // §18.9 — permitir envío a mesa si hay stock cartelado asignado (aunque no haya compra)
+      const sinCompra = selectedRows.filter(
+        (r) => !r.hasCompraGenerada && (r.hojasStockCartelado ?? 0) === 0
+      ).map((r) => r.ot);
       if (sinCompra.length > 0) {
         toast.error(
-          `No se puede enviar a mesa sin compra generada: ${sinCompra.join(", ")}.`,
+          `No se puede enviar a mesa sin compra ni stock cartelado: ${sinCompra.join(", ")}.`,
         );
         return;
       }
@@ -2366,9 +2373,15 @@ export function PlanificacionPoolOtsTab() {
                               : ""}
                           </p>
                         ) : !r.materialViaBarcoLabel ? (
-                          <p className="text-[11px] font-medium text-red-600">
-                            Sin compra generada (no se puede enviar a mesa)
-                          </p>
+                          r.hojasStockCartelado > 0 ? (
+                            <p className="text-[11px] font-medium text-amber-700">
+                              Sin compra — cubierto por stock cartelado
+                            </p>
+                          ) : (
+                            <p className="text-[11px] font-medium text-red-600">
+                              Sin compra generada (no se puede enviar a mesa)
+                            </p>
+                          )
                         ) : null}
                         <p className="text-[11px] text-slate-500">
                           Estado compra: {r.compraEstado}
