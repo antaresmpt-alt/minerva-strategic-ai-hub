@@ -4,6 +4,7 @@ import {
   Boxes,
   Coins,
   Layers,
+  Link2,
   Loader2,
   Package,
   Printer,
@@ -22,10 +23,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -41,6 +45,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import { StockAiDialog } from "@/components/produccion/almacen/stock/stock-ai-dialog";
 import {
@@ -924,11 +929,14 @@ function StockDetalleDialog({
   const [loadingMovs, setLoadingMovs] = useState(false);
   const [ajusteOpen, setAjusteOpen] = useState(false);
   const [splitOpen, setSplitOpen] = useState(false);
+  const [asignarOtOpen, setAsignarOtOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [ajusteCantidad, setAjusteCantidad] = useState("");
   const [ajusteNotas, setAjusteNotas] = useState("");
   const [splitCantidad, setSplitCantidad] = useState("");
   const [splitNotas, setSplitNotas] = useState("");
+  const [asignarOtNumero, setAsignarOtNumero] = useState("");
+  const [asignarOtNotas, setAsignarOtNotas] = useState("");
 
   useEffect(() => {
     if (!row) {
@@ -960,11 +968,14 @@ function StockDetalleDialog({
     setAjusteNotas("");
     setSplitCantidad("");
     setSplitNotas("");
+    setAsignarOtNumero("");
+    setAsignarOtNotas("");
   }, [row]);
 
   if (!row) return null;
 
   const splitBloqueadoPorReservaDura = row.cantidad_reservada_total > 0;
+  const esStockLibre = row.ots.length === 0;
 
   async function submitAjuste() {
     if (!row) return;
@@ -1045,6 +1056,37 @@ function StockDetalleDialog({
     } catch (e) {
       toast.error(
         `No se pudo partir el palet: ${e instanceof Error ? e.message : String(e)}`
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submitAsignarOt() {
+    if (!row) return;
+    const ot = asignarOtNumero.trim();
+    if (!ot) {
+      toast.error("Indica el número de OT a asignar.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.rpc("prod_stock_asignar_palet_ot", {
+        p_palet_id: row.id,
+        p_ot_numero: ot,
+        p_cantidad_reservada: null,
+        p_notas: asignarOtNotas.trim() || null,
+      });
+      if (error) throw error;
+      toast.success(
+        `Cartela #${row.id_stock} asignada a OT ${ot}. Material en stock asignado.`
+      );
+      setAsignarOtOpen(false);
+      onClose();
+      await onChanged();
+    } catch (e) {
+      toast.error(
+        `Error al asignar: ${e instanceof Error ? e.message : String(e)}`
       );
     } finally {
       setSubmitting(false);
@@ -1232,6 +1274,17 @@ function StockDetalleDialog({
               >
                 Partir palet
               </Button>
+              {esStockLibre && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100"
+                  onClick={() => setAsignarOtOpen(true)}
+                >
+                  <Link2 className="size-4 mr-1.5" />
+                  Asignar a OT
+                </Button>
+              )}
             </div>
             {splitBloqueadoPorReservaDura ? (
               <p className="text-[11px] text-amber-700 mt-1.5">
@@ -1359,6 +1412,81 @@ function StockDetalleDialog({
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={asignarOtOpen} onOpenChange={setAsignarOtOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Link2 className="size-4 text-emerald-600" />
+              Asignar stock libre a OT
+            </DialogTitle>
+            <DialogDescription>
+              Cartela{" "}
+              <span className="font-semibold text-slate-800">
+                #{row.id_stock}
+              </span>
+              {" "}—{" "}
+              {row.material_nombre ?? row.descripcion_material ?? "Material"}
+              {row.gramaje ? ` · ${row.gramaje} gr` : ""}
+              {row.formato ? ` · ${row.formato}` : ""}
+              {" · "}
+              {row.cantidad_fisica.toLocaleString("es-ES")} h
+              <br />
+              Asigna esta cartela a una OT en estado STOP. Juan puede hacer esta
+              acción sin rol especial. Queda registrado en el ledger.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="asig-ot-stock" className="text-sm font-medium">
+                OT destino <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="asig-ot-stock"
+                placeholder="Ej. 98020"
+                value={asignarOtNumero}
+                onChange={(e) => setAsignarOtNumero(e.target.value)}
+                disabled={submitting}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="asig-notas-stock" className="text-sm font-medium">
+                Notas{" "}
+                <span className="text-slate-400 font-normal text-xs">
+                  (opcional)
+                </span>
+              </Label>
+              <Textarea
+                id="asig-notas-stock"
+                placeholder="Motivo de la asignación, instrucción de oficina…"
+                rows={2}
+                value={asignarOtNotas}
+                onChange={(e) => setAsignarOtNotas(e.target.value)}
+                disabled={submitting}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setAsignarOtOpen(false)}
+              disabled={submitting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => void submitAsignarOt()}
+              disabled={submitting || !asignarOtNumero.trim()}
+              className="bg-emerald-600 text-white hover:bg-emerald-700"
+            >
+              {submitting && <Loader2 className="size-4 mr-2 animate-spin" />}
+              Asignar a OT
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </Dialog>
