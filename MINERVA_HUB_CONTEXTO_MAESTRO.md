@@ -47,6 +47,7 @@
 | `SESION_18AGO2026_STOP_MATERIAL.md` | Sesión 18 ago: acuerdo spec 9.8 + alta 98019. |
 | `SESION_19AGO2026_STOP_MATERIAL_98020.md` | Sesión 19 ago: lab 98020 A+B+C + commits 9.8.2/4/5 + backlog mañana. |
 | `SESION_20AGO2026_BACKLOG_P0_STOP.md` | Sesión 20 ago: P0 7.1–7.3 + smoke test + bugs/fixes + P2 §18.9/11/15. **Handoff smoke para Claude.** |
+| `SESION_20AGO2026_SUPABASE_TYPES_TRIAGE.md` | Sesión 20 ago (tarde): prerreq tipos Supabase `Database` — generado `database.ts` + triage 44 errores tsc (0 P0, ~12 P1 null/ATP, ~32 P2 ruido). |
 | `MINERVA_BRIEFING.md` | Onboarding narrativo largo; útil, pero secundario frente a este maestro. |
 
 ---
@@ -305,9 +306,10 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 
 ### Prioridad inmediata (post 20 ago)
 
-1. **9.8.3** compra corrección · **9.8.6** redespacho popup
-2. Polish: observaciones CTP, KPI reservas blandas (§18.8)
-3. **Bloque 11** (con cuidado) · **Bloque 12** (sept)
+1. **§18.0 / Prerreq** — Tipos Supabase `Database`: `database.ts` generado (20 ago) + clientes cableados ✅. **Pendiente: triagear errores `tsc --noEmit`** antes de tocar código de negocio. Ver `SESION_20AGO2026_SUPABASE_TYPES_TRIAGE.md`.
+2. **9.8.3** compra corrección · **9.8.6** redespacho popup
+3. Polish: observaciones CTP, KPI reservas blandas (§18.8)
+4. **Bloque 11** (con cuidado) · **Bloque 12** (sept)
 
 ### Hecho reciente (jul–ago)
 - [x] **20 ago:** P0 7.1–7.3 + P2 §18.9/11/15 smoke-validados — `SESION_20AGO2026_BACKLOG_P0_STOP.md`
@@ -331,7 +333,8 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [ ] Preguntas §12 planta (CTP hija) si hace falta antes de 8.4 fino
 
 ### Siguiente foco (orden sugerido post 20 ago)
-1. **9.8.3** compra corrección · **9.8.6** redespacho popup
+1. **§18.0 prerreq:** triagear `tsc --noEmit` con tipos `Database` activos (ver `SESION_20AGO2026_SUPABASE_TYPES_TRIAGE.md`)
+2. **9.8.3** compra corrección · **9.8.6** redespacho popup
 2. Polish 9.8 (§18.8 KPI reservas · observaciones CTP)
 3. **Bloque 11** (con cuidado) · **Bloque 12** (sept) · **B5** Rita→Hugo
 4. Digital/Guillotina/PDF — feedback planta en TEST

@@ -467,6 +467,20 @@ Nada de esto retrasa el PR **9.8.1 + 9.8.1b**.
 
 > Roles: liberar / revertir / compra corrección = **`admin` \| `oficina_tecnica` \| `gerencia`**. Juan = solo 9.8.4. Workaround P1→P2 no lo ejecuta planta sin contexto → **P1 bien ubicado**, no urgente como P0.
 
+#### §18.0 — PRERREQ antes de 9.8.3: Tipos Supabase `Database`
+
+> **Estado:** ⏳ Paso A–C completado (20 ago 2026 — `database.ts` generado + clientes cableados). Triage tsc pendiente o completado en misma sesión.
+
+**Qué:** Generar `src/types/database.ts` con `supabase gen types typescript --project-id jrwwuqplilbydxptsbqz`, cablear `SupabaseClient<Database>` en browser/server/admin, tipar módulos calientes (stock / mesa / compras).
+
+**Por qué es prerreq de 9.8.3:**
+- **R1** (§7.1 bug): `fetchHuecosMesaPosteriores` filtraba `prod_mesa_planificacion_trabajos.ot_paso_id` — columna inexistente ahí, vive en `prod_mesa_ejecuciones`. TypeScript sin genérico no pudo cazarlo.
+- **§18.15 (silencioso)**: select de `cliente`/`titulo` en `produccion_ot_despachadas` (viven en `prod_ots_general`) → error silencioso, sin tipos no hay aviso en build.
+- **Familia:** ambos son "columna en tabla equivocada". Sin `Database` genérico, las queries `.from('x').select('col_inexistente')` compilan y fallan en runtime.
+- **9.8.3 toca stock/compras/despachadas (todas calientes)**; mejor llegar con tipado activo para que el editor avise en tiempo real.
+
+**Activar tipos puede sacar discrepancias silenciosas** — correr `npx tsc --noEmit` tras cablear y triagear errores antes de implementar 9.8.3.
+
 | # | Fase | Tarea |
 |---|------|--------|
 | 18.4 | 9.8.3 | Compra corrección P2 desde Despachadas (`tipo=correccion`, `compra_origen_id`). |

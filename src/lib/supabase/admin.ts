@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database";
 
 /**
  * Cliente con service role: solo en rutas API / servidor nunca expuesto al cliente.
@@ -9,7 +10,7 @@ export function createSupabaseAdminClient() {
   if (!key) {
     throw new Error("SUPABASE_SERVICE_ROLE_KEY no está definida en el entorno.");
   }
-  return createClient(url, key, {
+  return createClient<Database>(url, key, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,

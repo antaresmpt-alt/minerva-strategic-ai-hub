@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "db:types": "supabase gen types typescript --project-id jrwwuqplilbydxptsbqz -o src/types/database.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.53",

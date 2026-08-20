@@ -1,11 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { cache } from "react";
+import type { Database } from "@/types/database";
 
 export async function createServerSupabaseClient() {
   const cookieStore = await cookies();
 
-  return createServerClient(
+  return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -96,7 +97,7 @@ export const getModuleAccessForCurrentUser = cache(async (): Promise<Record<
 
   const o: Record<string, boolean> = {};
   for (const r of rows) {
-    o[r.module_name] = r.is_enabled;
+    o[r.module_name] = r.is_enabled ?? false;
   }
   return o;
 });

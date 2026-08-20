@@ -158,3 +158,22 @@ Reserva **blanda**: físicas = libres, reservadas = 0; palet puede aparecer en f
 1. **P1** 9.8.3 Compra corrección (`correccion`, allowlist batch)
 2. **P1** 9.8.6 Popup redespacho asistido
 3. Opcional: §18.8 KPI reservas blandas · split prueba → aviso id coherente · linter `set-state-in-effect`
+
+---
+
+## Prerreq antes de 9.8.3 — Tipos Supabase `Database`
+
+> **20 ago 2026** — Activación tipos generados Supabase (`Database`) + triage errores TS.
+
+**Qué se hizo:**
+- Generado `src/types/database.ts` (3771 líneas) vía MCP `generate_typescript_types` (proyecto `jrwwuqplilbydxptsbqz`).
+- Añadidos helpers estándar `Tables<>`, `TablesInsert<>`, `TablesUpdate<>`, `Enums<>`.
+- Cableado `SupabaseClient<Database>` en `src/utils/supabase/client.ts`, `src/utils/supabase/server.ts`, `src/lib/supabase/admin.ts`.
+- Script `"db:types"` en `package.json` para regenerar.
+
+**Por qué antes de 9.8.3:**
+- **R1** (bug §7.1): columna `ot_paso_id` en tabla equivocada — sin tipos, TypeScript no avisa.
+- **§18.15 (silencioso)**: select `cliente`/`titulo` en `produccion_ot_despachadas` compilaba sin error aunque las columnas viven en `prod_ots_general`.
+- Familia idéntica: "columna en tabla equivocada". Con `Database` genérico el editor avisa en tiempo real. 9.8.3 toca stock/compras/despachadas — mejor llegar con tipos activos.
+
+**⚠️ Aviso:** Activar tipos puede sacar discrepancias silenciosas. Correr `npx tsc --noEmit` y triagear antes de implementar 9.8.3. Ver informe triage en `SESION_20AGO2026_SUPABASE_TYPES_TRIAGE.md`.
