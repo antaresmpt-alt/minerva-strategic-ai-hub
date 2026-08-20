@@ -25,9 +25,8 @@ const supabase = createSupabaseBrowserClient();
 
 /**
  * §18.15 — Input de OT destino con autocompletar liviano.
- * Busca en produccion_ot_despachadas con ilike al escribir ≥2 caracteres.
- * Dropdown clicable debajo del input; al elegir rellena con ot_numero.
- * Se puede teclear OT exacta aunque no salga en sugerencias.
+ * Busca en `produccion_ot_despachadas` (solo columnas reales) y enriquece
+ * cliente/titulo desde `prod_ots_general.num_pedido`.
  */
 export function OtDestinoSearchInput({
   id,
@@ -46,19 +45,72 @@ export function OtDestinoSearchInput({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const buscar = useCallback(async (term: string) => {
-    if (term.trim().length < 2) {
+    const q = term.trim();
+    if (q.length < 2) {
       setSugerencias([]);
       setOpen(false);
       return;
     }
     setLoading(true);
     try {
-      const { data } = await supabase
+      // cliente/titulo NO existen en produccion_ot_despachadas (viven en maestro).
+      const { data: despData, error: despErr } = await supabase
         .from("produccion_ot_despachadas")
-        .select("ot_numero, cliente, titulo, estado_material")
-        .ilike("ot_numero", `%${term.trim()}%`)
+        .select("ot_numero, estado_material")
+        .ilike("ot_numero", `%${q}%`)
+        .order("ot_numero", { ascending: false })
         .limit(8);
-      const rows = (data ?? []) as OtSugerencia[];
+      if (despErr) throw despErr;
+
+      const despRows = (despData ?? []) as Array<{
+        ot_numero?: string | null;
+        estado_material?: string | null;
+      }>;
+      const ots = despRows
+        .map((r) => String(r.ot_numero ?? "").trim())
+        .filter(Boolean);
+      if (ots.length === 0) {
+        setSugerencias([]);
+        setOpen(false);
+        return;
+      }
+
+      const { data: masterData } = await supabase
+        .from("prod_ots_general")
+        .select("num_pedido, cliente, titulo")
+        .in("num_pedido", ots);
+
+      const masterByOt = new Map<
+        string,
+        { cliente: string | null; titulo: string | null }
+      >();
+      for (const m of (masterData ?? []) as Array<{
+        num_pedido?: string | null;
+        cliente?: string | null;
+        titulo?: string | null;
+      }>) {
+        const ot = String(m.num_pedido ?? "").trim();
+        if (!ot) continue;
+        masterByOt.set(ot, {
+          cliente: m.cliente ?? null,
+          titulo: m.titulo ?? null,
+        });
+      }
+
+      const rows: OtSugerencia[] = despRows
+        .map((r) => {
+          const ot = String(r.ot_numero ?? "").trim();
+          if (!ot) return null;
+          const master = masterByOt.get(ot);
+          return {
+            ot_numero: ot,
+            estado_material: r.estado_material ?? null,
+            cliente: master?.cliente ?? null,
+            titulo: master?.titulo ?? null,
+          };
+        })
+        .filter((r): r is OtSugerencia => r != null);
+
       setSugerencias(rows);
       setOpen(rows.length > 0);
     } catch {
@@ -103,34 +155,37 @@ export function OtDestinoSearchInput({
         onChange={handleChange}
         disabled={disabled}
         autoComplete="off"
+        onFocus={() => {
+          if (sugerencias.length > 0) setOpen(true);
+        }}
       />
       {loading && (
-        <div className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">
+        <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">
           …
         </div>
       )}
       {open && sugerencias.length > 0 && (
-        <ul className="absolute z-50 left-0 right-0 top-full mt-1 rounded-md border bg-white shadow-lg py-1 max-h-52 overflow-y-auto">
+        <ul className="absolute left-0 right-0 top-full z-[80] mt-1 max-h-52 overflow-y-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg">
           {sugerencias.map((s) => (
             <li key={s.ot_numero}>
               <button
                 type="button"
-                className="w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50 flex items-baseline gap-2"
+                className="flex w-full items-baseline gap-2 px-3 py-1.5 text-left text-sm hover:bg-slate-50"
                 onMouseDown={(e) => {
                   e.preventDefault();
                   handleSelect(s.ot_numero);
                 }}
               >
-                <span className="font-mono font-semibold text-[#002147] shrink-0">
+                <span className="shrink-0 font-mono font-semibold text-[#002147]">
                   {s.ot_numero}
                 </span>
                 {s.cliente && (
-                  <span className="text-xs text-slate-500 truncate">
+                  <span className="truncate text-xs text-slate-500">
                     {s.cliente}
                   </span>
                 )}
                 {s.estado_material && (
-                  <span className="text-[11px] text-slate-400 ml-auto shrink-0 truncate max-w-[120px]">
+                  <span className="ml-auto max-w-[120px] shrink-0 truncate text-[11px] text-slate-400">
                     {s.estado_material}
                   </span>
                 )}
