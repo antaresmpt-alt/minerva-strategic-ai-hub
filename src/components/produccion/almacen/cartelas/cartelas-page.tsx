@@ -530,15 +530,23 @@ export function CartelasPage() {
 
   function handleWizardCreated(created: CartelaWizardCreatedInfo[]) {
     loadPendientes();
-    loadCartelas();
     if (created.some((c) => c.es_prueba)) {
       setMostrarPruebas(true);
       setTab("cartelas");
+      // No auto-rellenar búsqueda: con server-side colapsaría la lista a 1 fila
+      // (parece que "desaparecen" al refrescar). Las 99xxx ya salen arriba (id DESC).
+      setSearchCartelas("");
       const first = created[0];
-      if (first) setSearchCartelas(String(first.id_stock));
+      if (first) {
+        toast.success(
+          `Cartela de prueba #${first.id_stock} creada. Activa «Mostrar pruebas» si no la ves.`
+        );
+      }
     } else if (tab !== "cartelas") {
       setTab("cartelas");
     }
+    // Tras limpiar búsqueda / cambiar tab, loadCartelas corre vía useEffect
+    void loadCartelas();
   }
 
   function handleAbrirLiberarDialog(palet: ProdStockPaletConOts, otNumero: string) {
