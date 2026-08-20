@@ -18,7 +18,8 @@
 | **§18.15** Autocompletar OT | ✅ VALIDADO | Tras fix columnas fantasma (`014e4cd`); teclear `35` → dropdown |
 | **§18.9** Pool sin compra + stock | ✅ VALIDADO | OT 35643: Material OK + ámbar + checkbox → Pasar a Mesa |
 
-**Pendiente producto (no bloquea smoke P0):** P1 9.8.3 compra corrección · P1 9.8.6 redespacho asistido · linter legacy · KPI reservas blandas (§18.8).
+**Pendiente producto (actualizado noche 20 ago):** ~~P1 9.8.3~~ ✅ validado 98022 · P1 **9.8.6** redespacho · **P2↑ perf Compras** · KPI §18.8 · linter legacy.  
+**Handoff noche Claude:** `SESION_20AGO2026_HANDOFF_NOCHE_CLAUDE.md`.
 
 **Trampa de lab a recordar:** cartelas `es_prueba=true` (p.ej. `#10986` en OT 35760) **no cuentan** en semáforo Pool. Validar §18.9 con stock real (`es_prueba=false`), p.ej. `#9718` en 35643.
 

@@ -3,9 +3,9 @@
 > **Fuente de verdad de este módulo.** No es un parche de sesión: es maquinaria permanente de inventario.
 > Complementa `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` (ATP, cartelas, consumo). Si hay contradicción sobre *liberar / recomprar / aviso formato*, **manda este documento**.
 >
-> **Estado:** ✅ **9.8.1–9.8.2 + 9.8.4 + 9.8.5 + compra sin OT en `main` (19 ago).** Lab **98020** A+B+C validado. ✅ **P0 7.1–7.3 + P2 §18.9/18.11/18.15 smoke-validados (20 ago)** — ver `SESION_20AGO2026_BACKLOG_P0_STOP.md`. Pendiente: **9.8.3**, **9.8.6**.
-> **OT laboratorio:** **98019** (A) · **98020** (A+B+C) · **98021** (lab corrección) · **98022** (Camino B limpio, seed 20 ago) · **35643** (smoke stock libre / Pool).
-> **Sesiones:** `SESION_18AGO2026_STOP_MATERIAL.md` · `SESION_19AGO2026_STOP_MATERIAL_98020.md` · **`SESION_20AGO2026_BACKLOG_P0_STOP.md`** · **`SESION_20AGO2026_BLOQUE9_8_3_VALIDACION_HOOK.md`**.
+> **Estado:** ✅ **9.8.1–9.8.5 + compra sin OT** en `main` y planta (98019/98020 + smoke P0/P2 + **9.8.3 Camino B 98022**). Pendiente: **9.8.6** (+ P2↑ perf Compras).
+> **OT laboratorio:** **98019** · **98020** · **98021** (parcial) · **98022** (Camino B limpio) · **35643** (stock libre/Pool).
+> **Sesiones:** 18–19 ago · `SESION_20AGO2026_BACKLOG_P0_STOP.md` · `SESION_20AGO2026_BLOQUE9_8_3_VALIDACION_HOOK.md` · **`SESION_20AGO2026_HANDOFF_NOCHE_CLAUDE.md`**.
 >
 > **Numeración:** el roadmap B9 tenía «9.8 fotos/adjuntos» *sin empezar* (baja). **9.8 queda para este módulo** (prioridad planta). Fotos/adjuntos pasa a **9.10**. **9.9** (IA Stock) no se toca.
 
@@ -207,7 +207,7 @@ Disciplina: **probar en 98019 antes de abrir la siguiente.**
 | **9.8.1 + 9.8.1b** | Liberar reserva + movimiento ledger + notas palet + **arreglar gate de compra** | **Sonnet** (ledger) + Composer para el allowlist UI | ✅ **Implementado + 98019-A validada 18 ago.** Pendiente **merge**. |
 | **9.8.1c** | **Auditoría legacy stock** — grep + sync consumo 9.4 + Cartelas ATP | Composer | ✅ **Hecho 18 ago noche** (migración + UI; repair #10984) |
 | **9.8.2** | Aviso CTP + Guillotina (`formato_papel` vs cartela / corte) | **Composer** | Lectura; no corrompe stock |
-| **9.8.3** | Compra corrección P2 + **salida explícita de estado STOP** (`estado_material` al cartelar/consumir) + sync post-consumo 9.4 | **Sonnet** | ✅ **Implementado 20 ago tarde.** Pendiente prueba en planta. Ver `SESION_20AGO2026_BLOQUE9_8_3_VALIDACION_HOOK.md`. |
+| **9.8.3** | Compra corrección P2 + **salida explícita de estado STOP** (`estado_material` al cartelar/consumir) + sync post-consumo 9.4 | **Sonnet** | ✅ **Implementado + validado 20 ago noche** (harden + Camino B **98022**). Ver handoff. |
 | **9.8.4** | Asignar stock libre → OT (Juan); buscar por material/gramaje/`formato` | **Composer** | ✅ **Hecho + validado 20 ago** (P0 7.2, §18.11, §18.15) |
 | **9.8.5** | RPC `prod_stock_revertir_consumo` simétrica | **Sonnet** | ✅ **Hecho + validado 19 ago** (98020-B) |
 | **9.8.6** | Popup redespacho asistido tras reasignar | **Composer** | |
@@ -485,7 +485,7 @@ Si 98019 ya está “sucia” de A, clonar **98020** para B/C. No mezclar estado
 
 | # | Fase | Tarea |
 |---|------|--------|
-| 18.4 | 9.8.3 | Compra corrección P2 desde Despachadas (`tipo=correccion`, `compra_origen_id`). |
+| 18.4 ✅ | 9.8.3 | Compra corrección (`tipo=correccion`) + hooks + harden. Validado **98022** Camino B. |
 | 18.5 | 9.8.6 | Popup redespacho asistido tras liberar/asignar. |
 
 ### P2 — Polish / deuda
@@ -495,6 +495,7 @@ Si 98019 ya está “sucia” de A, clonar **98020** para B/C. No mezclar estado
 | 18.6 | Toast reabrir: avisar que OT sigue en mesa (no vuelve al Pool). |
 | 18.7 | Split palet prueba → id_stock coherente o aviso. |
 | 18.8 | Stock KPI reservas blandas. |
+| 18.8b ↑ | **Rendimiento Compras** — tocar fechas / cambiar estado bloquea UI varios segundos (Manel 20 ago noche). Priorizar antes que polish menor. |
 | ~~18.9~~ | ~~Pool semáforo material con stock libre + histórico compras.~~ ✅ 20 ago: `isPoolRowSelectableForMesa` acepta `hojasStockCartelado`; gate y mensaje ámbar. |
 | 18.10 | Fix observaciones CTP (§12.1). |
 | ~~18.11~~ | ~~Sync `estado_material` tras asignar stock libre.~~ ✅ 20 ago: migración `20260820090000` amplía WHERE para cubrir null/vacío/`Sin orden compra`/`Sin orden de compra`/`Compra cancelada`/`Pendiente de pedir`. |
@@ -505,7 +506,7 @@ Si 98019 ya está “sucia” de A, clonar **98020** para B/C. No mezclar estado
 
 | # | Tarea |
 |---|--------|
-| 18.13 | OT **98021** limpia para repetir A/B/C. |
+| 18.13 | ~~OT **98021** limpia~~ → usar **98022** (Camino B OK). No re-labear Camino A. |
 | 18.14 | E2E cerrar impresión 98020 (no bloqueante 9.8). |
 
 ---

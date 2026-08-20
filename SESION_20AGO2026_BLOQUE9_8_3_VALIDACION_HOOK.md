@@ -1,7 +1,8 @@
 # Bloque 9.8.3 — Compra de corrección: validación hook salida STOP
 
 **Fecha:** 20 ago 2026  
-**Estado:** ✅ Implementado (pendiente prueba en planta)
+**Estado:** ✅ Implementado + **validado planta** (Camino B OT **98022**, ~21:12). Harden STOP en `8173506`.  
+**Handoff completo del día:** `SESION_20AGO2026_HANDOFF_NOCHE_CLAUDE.md` (empezar ahí en chat Claude nuevo).
 
 ---
 
@@ -127,7 +128,7 @@ Aplicados en remoto + código:
 | Compra manual: buscador OT + autofill | ✅ |
 | Toast error real al guardar compra | ✅ |
 | Maquetar modal detalle Stock | ✅ |
-| Rendimiento Despachadas/Compras | ⏳ Pendiente (P2) — se notó lentitud en lab; no tocado en este paquete |
+| Rendimiento Despachadas/Compras | ⏳ **P2 ↑** — 20 ago noche: al tocar **fechas** o **cambiar estado** en Compras, UI se bloquea varios segundos (empeora). Anotar antes de tocar; no es bloqueante del Camino B. |
 
 **Continuar Camino B:** reintentar Guardar en «Compra de corrección» P2 ALLYKING (ahora las columnas existen).
 
@@ -159,6 +160,20 @@ Clon operativo de 98021, preparada **antes** de Liberar:
 3. Confirmar + Recibir la corrección → **badge debe seguir** `Pendiente compra de corrección` (no `Compra confirmada`).
 4. Muelle → cartela con reserva directa a 98022 (sin botón Asignar).
 5. Guillotina → consumir → badge `Material en stock asignado` (hook consumo).
+
+### Veredicto Camino B · OT 98022 (20 ago ~21:12)
+
+| Paso | Resultado |
+|------|-----------|
+| Badge STOP tras crear corrección | ✅ `Pendiente compra de corrección` |
+| Badge STOP tras Confirmar/Recibir (harden) | ✅ **sigue** pendiente corrección (no `Compra confirmada`) |
+| Muelle → cartela #99028 FOLDING ZENITH · reserva 98022 | ✅ |
+| CTP + Guillotina consumo 300 h | ✅ #99028 → `consumido` / 0 h |
+| Hook consumo limpia STOP | ✅ BD: `estado_material = Material en stock asignado` |
+
+**Camino B validado en limpio** (a diferencia de 98021, donde la sync de compra había pisado el STOP antes del consumo).
+
+**Nota operativa:** para que salga en Muelle hay que pasar la línea a Generada/Confirmado; el badge de Despachadas **no** debe seguir ese progreso mientras esté en STOP — correcto.
 
 ---
 
