@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: **20 ago 2026** (Bloque 9.8 lab **98020** validado + backlog P0 (7.1, 7.2, 7.3) en `main`; pendiente: 9.8.3 / 9.8.6).
+> Última actualización: **20 ago 2026** (Bloque 9.8: lab **98020** + **smoke P0 7.1–7.3 + P2 18.9/11/15** validados en `main`; pendiente: 9.8.3 / 9.8.6).
 
 ---
 
@@ -43,10 +43,10 @@
 | `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md` | Sesión 14 ago (mañana): Encajar en Manipulados, flags wizard, Pool sin lápiz, `/produccion` → OTs. |
 | `SESION_14AGO2026_EJECUCION_LISTA.md` | Sesión 14 ago (tarde): lista gorda ejecución, semáforo, perf, tableta por máquina (Ramón). |
 | `SESION_17AGO2026_PREFILL_RUTA_MUELLE_B6.md` | Sesión 17 ago: prefill Ruta, cartela admin, Ramón brutas/netas, muelle, OT 98016 E2E. |
-| `MINERVA_BLOQUE9_REASIGNACION_STOP.md` | Bloque 9.8: liberar/reasignar cartela, compra corrección, aviso formato, ledger. OT **98019** + **98020** validadas. Backlog P0 (reset planif, asignar stock, búsqueda) completado. |
+| `MINERVA_BLOQUE9_REASIGNACION_STOP.md` | Bloque 9.8: liberar/reasignar cartela, compra corrección, aviso formato, ledger. OT **98019** + **98020** + smoke P0/P2 (20 ago) validados. Pendiente 9.8.3 / 9.8.6. |
 | `SESION_18AGO2026_STOP_MATERIAL.md` | Sesión 18 ago: acuerdo spec 9.8 + alta 98019. |
 | `SESION_19AGO2026_STOP_MATERIAL_98020.md` | Sesión 19 ago: lab 98020 A+B+C + commits 9.8.2/4/5 + backlog mañana. |
-| `SESION_20AGO2026_BACKLOG_P0_STOP.md` | Sesión 20 ago: implementación tareas P0 (7.1, 7.2, 7.3) — reset planif, asignar desde stock, búsqueda cartelas. |
+| `SESION_20AGO2026_BACKLOG_P0_STOP.md` | Sesión 20 ago: P0 7.1–7.3 + smoke test + bugs/fixes + P2 §18.9/11/15. **Handoff smoke para Claude.** |
 | `MINERVA_BRIEFING.md` | Onboarding narrativo largo; útil, pero secundario frente a este maestro. |
 
 ---
@@ -297,20 +297,20 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [x] **Fix reabrir paso** mesa (`prod_mesa_planificacion_trabajos`) — `14fc084`
 - [ ] **9.8.3** compra corrección P2 desde Despachadas
 - [ ] **9.8.6** popup redespacho asistido
-- [ ] **Reset planificación STOP** (botón + confirmación; brief §19) — P0 mañana
-- [ ] **Asignar OT en Stock** + **Cartelas búsqueda server-side** — P0 mañana
+- [x] **Reset planificación STOP** (botón + confirmación; brief §19) — ✅ 20 ago smoke
+- [x] **Asignar OT en Stock** + **Cartelas búsqueda server-side** — ✅ 20 ago smoke
 - [ ] **Bloque 11** (con cuidado): planificar/mover desde calendario; lanzar ≠ pisar plan de otra máquina — `MINERVA_BLOQUE11_…`
 - [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor; tableta = máquina — `MINERVA_BLOQUE12_…` (no abrir ya; default gestor = maestro OTs)
 - [ ] **Bloque 5 puente**: Rita lanza OTs a Hugo (no bloquea paralelo si Hugo sigue a mano)
 
-### Prioridad inmediata (20 ago 2026)
+### Prioridad inmediata (post 20 ago)
 
-1. **Reset planificación STOP** (botón + confirmación) — brief §19 / sesión 19 ago §7.1
-2. **Asignar OT en Stock** + **Cartelas server-side search**
-3. **9.8.3** compra corrección · **9.8.6** redespacho popup
-4. Polish: observaciones CTP, KPI reservas blandas, `estado_material` sync
+1. **9.8.3** compra corrección · **9.8.6** redespacho popup
+2. Polish: observaciones CTP, KPI reservas blandas (§18.8)
+3. **Bloque 11** (con cuidado) · **Bloque 12** (sept)
 
 ### Hecho reciente (jul–ago)
+- [x] **20 ago:** P0 7.1–7.3 + P2 §18.9/11/15 smoke-validados — `SESION_20AGO2026_BACKLOG_P0_STOP.md`
 - [x] **19 ago:** lab **98020** A+B+C validado; commits 9.8.2/4/5 + stock libre — `SESION_19AGO2026_STOP_MATERIAL_98020.md`
 - [x] **18 ago:** spec Bloque 9.8 + OT **98019** + 98019-A validada — `SESION_18AGO2026_STOP_MATERIAL.md`
 - [x] **17 ago:** OT 98016 E2E (Ruta, cartela, Imprimir fuera, Ramón/Juan, plastificado, troquel) — `SESION_17AGO2026_PREFILL_RUTA_MUELLE_B6.md`
@@ -330,12 +330,11 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [ ] 9.7 OCR albarán (baja); sobrantes al cierre (B6+B9)
 - [ ] Preguntas §12 planta (CTP hija) si hace falta antes de 8.4 fino
 
-### Siguiente foco (orden sugerido 20 ago)
-1. **Reset planificación STOP** + **Asignar OT en Stock** — brief §19
-2. **9.8.3** compra corrección · **9.8.6** redespacho popup
-3. Polish 9.8 (observaciones CTP, KPI reservas, `estado_material`)
-4. **Bloque 11** (con cuidado) · **Bloque 12** (sept) · **B5** Rita→Hugo
-5. Digital/Guillotina/PDF — feedback planta en TEST
+### Siguiente foco (orden sugerido post 20 ago)
+1. **9.8.3** compra corrección · **9.8.6** redespacho popup
+2. Polish 9.8 (§18.8 KPI reservas · observaciones CTP)
+3. **Bloque 11** (con cuidado) · **Bloque 12** (sept) · **B5** Rita→Hugo
+4. Digital/Guillotina/PDF — feedback planta en TEST
 
 ---
 
@@ -389,7 +388,7 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 
 24. **Cola de ejecución táctil (14 ago 2026 tarde)**: lista gorda + semáforo; parte completo lazy al expandir; terminadas ocultas (filtro «de hoy» readonly). Query solo activas + catálogos cacheados; pestañas Planificación lazy. Tableta de planta = **máquina**, no persona. Detalle: `SESION_14AGO2026_EJECUCION_LISTA.md`.
 
-25. **Bloque 9.8 — Reasignación / STOP (18–19 ago 2026)**: ledger ATP manda; tres casos A/B/C. **Código en `main`:** 9.8.1–2, 9.8.4–5, compra sin OT. **Lab validado:** 98019-A (18 ago), **98020 A+B+C** (19 ago). Pendiente cascade planificación + 9.8.3/9.8.6. Brief §18 · sesión `SESION_19AGO2026_STOP_MATERIAL_98020.md`.
+25. **Bloque 9.8 — Reasignación / STOP (18–20 ago 2026)**: ledger ATP manda; casos A/B/C. **Código + smoke en `main`:** 9.8.1–2, 9.8.4–5, compra sin OT; P0 reset planif / asignar stock / búsqueda cartelas; P2 estado_material + OT autocomplete + Pool con stock sin compra. **Lab:** 98019-A, **98020** A+B+C + Reset STOP, **35643** stock libre. Pendiente **9.8.3 / 9.8.6**. Handoff: `SESION_20AGO2026_BACKLOG_P0_STOP.md`.
 
 ## 📁 Estructura de carpetas relevante
 

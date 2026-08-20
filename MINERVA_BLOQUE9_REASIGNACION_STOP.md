@@ -3,9 +3,9 @@
 > **Fuente de verdad de este módulo.** No es un parche de sesión: es maquinaria permanente de inventario.
 > Complementa `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` (ATP, cartelas, consumo). Si hay contradicción sobre *liberar / recomprar / aviso formato*, **manda este documento**.
 >
-> **Estado:** ✅ **9.8.1–9.8.2 + 9.8.4 + 9.8.5 + compra sin OT en `main` (19 ago 2026).** Lab **98020** A+B+C validado en planta. ✅ **Backlog P0 (7.1, 7.2, 7.3) en `main` (20 ago 2026)**. Pendiente: **9.8.3**, **9.8.6**.
-> **OT laboratorio:** **98019** (caso A, 18 ago) · **98020** (A+B+C encadenados, 19 ago). Clonar **98021** para repetir lab limpio.
-> **Sesión de acuerdo:** `SESION_18AGO2026_STOP_MATERIAL.md` · `SESION_19AGO2026_STOP_MATERIAL_98020.md` · `SESION_20AGO2026_BACKLOG_P0_STOP.md`.
+> **Estado:** ✅ **9.8.1–9.8.2 + 9.8.4 + 9.8.5 + compra sin OT en `main` (19 ago).** Lab **98020** A+B+C validado. ✅ **P0 7.1–7.3 + P2 §18.9/18.11/18.15 smoke-validados (20 ago)** — ver `SESION_20AGO2026_BACKLOG_P0_STOP.md`. Pendiente: **9.8.3**, **9.8.6**.
+> **OT laboratorio:** **98019** (A) · **98020** (A+B+C + Reset STOP) · **35643** (smoke stock libre / Pool). Clonar **98021** para lab limpio.
+> **Sesiones:** `SESION_18AGO2026_STOP_MATERIAL.md` · `SESION_19AGO2026_STOP_MATERIAL_98020.md` · **`SESION_20AGO2026_BACKLOG_P0_STOP.md`** (handoff smoke).
 >
 > **Numeración:** el roadmap B9 tenía «9.8 fotos/adjuntos» *sin empezar* (baja). **9.8 queda para este módulo** (prioridad planta). Fotos/adjuntos pasa a **9.10**. **9.9** (IA Stock) no se toca.
 
@@ -483,7 +483,7 @@ Nada de esto retrasa el PR **9.8.1 + 9.8.1b**.
 | 18.10 | Fix observaciones CTP (§12.1). |
 | ~~18.11~~ | ~~Sync `estado_material` tras asignar stock libre.~~ ✅ 20 ago: migración `20260820090000` amplía WHERE para cubrir null/vacío/`Sin orden compra`/`Sin orden de compra`/`Compra cancelada`/`Pendiente de pedir`. |
 | 18.12 | Consumo 9.4: limpiar bridge/`estado` legacy. |
-| ~~18.15~~ | ~~OT destino en modal Asignar: autocompletar/búsqueda de OT.~~ ✅ 20 ago: componente `OtDestinoSearchInput` con debounce 250ms + ilike; usado en cartelas y stock. |
+| ~~18.15~~ | ~~OT destino en modal Asignar: autocompletar.~~ ✅ 20 ago: `OtDestinoSearchInput` (`a04fb20`). Fix lab: no seleccionar `cliente`/`titulo` en despachadas — viven en maestro (`014e4cd`). |
 
 ### P3 — Lab opcional
 

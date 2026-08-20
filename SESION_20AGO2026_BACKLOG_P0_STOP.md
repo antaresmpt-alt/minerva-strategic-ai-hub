@@ -1,274 +1,160 @@
-# SESION 20 AGO 2026 — Implementación backlog P0 (7.1, 7.2, 7.3)
+# SESION 20 AGO 2026 — Backlog P0 + smoke test lab
 
 **Fecha**: 20 agosto 2026  
-**Contexto**: Tras validación exhaustiva de 98020 (19 ago), se implementan 3 tareas P0 del backlog §7.  
-**Modelo**: Claude Sonnet 4.5  
-**Branch**: `main`
+**Contexto**: Tras lab 98020 (19 ago), implementación y validación exhaustiva de P0 §7.1–7.3 + fixes P2 §18.9/18.11/18.15.  
+**Modelos**: Composer / Claude Sonnet 4.6 medium (fixes P2)  
+**Branch**: `main` (último fix relevante: `014e4cd`)
 
 ---
 
-## Executive Summary
+## Executive Summary (para smoke / handoff Claude)
 
-Implementadas 3 tareas prioritarias del backlog post-validación 98020:
+| Bloque | Estado | Notas |
+|--------|--------|-------|
+| **7.3** Búsqueda Cartelas | ✅ VALIDADO | 6 bugs lab → fixes en mismo día; UX final = 3 inputs AND |
+| **7.2** Asignar OT desde Stock | ✅ VALIDADO | Mecánica OK; gaps P2 detectados y cerrados (ver abajo) |
+| **7.1** Reset planificación STOP | ✅ VALIDADO | OT 98020 Guillotina→Impresión; 2 bugs lab → fixes |
+| **§18.11** Sync `estado_material` | ✅ VALIDADO | OT 35643 + `#99019` → «Material en stock asignado» |
+| **§18.15** Autocompletar OT | ✅ VALIDADO | Tras fix columnas fantasma (`014e4cd`); teclear `35` → dropdown |
+| **§18.9** Pool sin compra + stock | ✅ VALIDADO | OT 35643: Material OK + ámbar + checkbox → Pasar a Mesa |
 
-1. **7.1 Reset planificación STOP**: Botón admin para anular huecos mesa posteriores tras revertir consumo, con confirmación.
-2. **7.2 Asignar OT desde Stock**: Botón "Asignar a OT" en detalle de Stock (sin necesidad de ir a Cartelas).
-3. **7.3 Búsqueda server-side Cartelas**: Input busca id_stock/albarán/OT sin límite de 200 filas.
+**Pendiente producto (no bloquea smoke P0):** P1 9.8.3 compra corrección · P1 9.8.6 redespacho asistido · linter legacy · KPI reservas blandas (§18.8).
 
-**Estado**: Las 3 tareas están en `main` y listas para validación en lab.
-
----
-
-## 7.1 — Reset planificación STOP (`a553e20`)
-
-### Objetivo
-
-Crear acción explícita para anular planificación posterior tras STOP material, en lugar de cascade silencioso.
-
-### Diseño (coherente con §19 del brief)
-
-- **Botón**: "Reset planificación STOP" (rojo, icono Ban) en paso-admin-actions
-- **Permisos**: admin / oficina_tecnica / gerencia (mismos que liberar/revertir; **no** el set más estrecho de reabrir paso)
-- **Flujo**:
-  1. Identifica pasos con orden > actual que tengan huecos en mesa activos
-  2. Muestra diálogo con lista de N huecos (proceso nombre, mesa ID)
-  3. Confirmación: "Se van a anular N hueco(s). ¿Continuar?"
-  4. Ejecuta `devolverHuecoMesaAlPool` para cada uno
-  5. OT devuelta al pool (`en_transito`)
-
-### Implementación
-
-**Archivos modificados**:
-- `src/lib/prod-paso-admin-permisos.ts`: Nueva función `puedeResetPlanificacionStop`
-- `src/lib/prod-paso-admin-client.ts`: Nueva función `fetchHuecosMesaPosteriores` que busca pasos posteriores con mesa activa
-- `src/components/produccion/planificacion/paso-admin-actions.tsx`: Botón + diálogo con confirmación
-
-**Lógica**:
-```typescript
-// Busca pasos con orden > actual
-const pasos = await fetchPasosItinerarioAdmin(supabase, otId);
-const huecos = await fetchHuecosMesaPosteriores(supabase, otId, pasoOrden);
-
-// Por cada hueco: devolverHuecoMesaAlPool
-for (const hueco of huecos) {
-  await devolverHuecoMesaAlPool(supabase, {
-    otNumero,
-    mesaTrabajoId: hueco.mesaId,
-    ejecucionId: hueco.ejecucionId,
-  });
-}
-```
-
-**UI**:
-- Badge rojo con icono Ban
-- Diálogo carga huecos al abrir
-- Lista scrolleable de huecos (nombre proceso, mesa ID)
-- Botón rojo "Anular huecos y devolver al Pool" (disabled si 0 huecos)
-
-### Principios respetados
-
-✅ **P5** (aviso + confirmación antes de destructiva)  
-✅ **Explícito > implícito**: no cascade silencioso  
-✅ **No muro, aviso**: usuario decide cuándo limpiar mesa  
+**Trampa de lab a recordar:** cartelas `es_prueba=true` (p.ej. `#10986` en OT 35760) **no cuentan** en semáforo Pool. Validar §18.9 con stock real (`es_prueba=false`), p.ej. `#9718` en 35643.
 
 ---
 
-## 7.2 — Asignar OT desde Stock (`a019d27`)
+## Commits clave del día (orden aproximado)
 
-### Objetivo
+| Commit | Qué |
+|--------|-----|
+| `a553e20` / roles | 7.1 Reset planificación STOP |
+| `a019d27` | 7.2 Asignar OT desde Stock |
+| `c1cbd01` + iteraciones | 7.3 búsqueda (+ B1–B6) |
+| `4076de1` | 7.1 fix: huecos por `ot_paso_id` en **ejecuciones**, no en mesa |
+| `9e5f46c` | 7.1 UX: literal `máquina · fecha · turno` |
+| `a04fb20` | P2 §18.11 + §18.15 + §18.9 (migración RPC + Pool + OtDestinoSearchInput) |
+| `014e4cd` | §18.15 fix: query sin columnas fantasma `cliente`/`titulo` en despachadas |
 
-Facilitar asignación de stock libre a OT sin necesidad de ir a Cartelas → Cartelas creadas → buscar ID.
-
-### Implementación
-
-**Archivo modificado**:
-- `src/components/produccion/almacen/stock/stock-page.tsx`
-
-**Cambios**:
-1. **Botón en `DetalleDialog`** (sección Sobrantes):
-   - Verde con icono Link2
-   - Visible solo cuando `esStockLibre = row.ots.length === 0`
-   - Al lado de "Ajustar cantidad" y "Partir palet"
-
-2. **Diálogo de asignación**:
-   - Input OT número (required)
-   - Textarea notas (opcional)
-   - Llama `prod_stock_asignar_palet_ot` (RPC ya existente)
-   - Toast éxito: "Cartela #ID asignada a OT XXX. Material en stock asignado."
-
-**UX mejorada**:
-- Antes: Stock → ver ID → Cartelas → buscar ID (con límite 200) → asignar
-- Ahora: Stock → detalle → Asignar a OT (directo)
+Migración remota aplicada: `20260820090000_bloque9_8_4_asignar_estado_material_ampliado.sql` (proyecto Supabase `minerva-rag`).
 
 ---
 
-## 7.3 — Búsqueda server-side Cartelas (`c1cbd01`)
+## 7.1 — Reset planificación STOP
 
-### Objetivo
+### Diseño
+- Botón rojo «Reset planificación STOP» en paso **finalizado** (admin / oficina_tecnica / gerencia).
+- Preview + confirmación → `devolverHuecoMesaAlPool` por cada hueco posterior → pool `en_transito`.
+- **No** cascade silencioso (P5).
 
-Permitir buscar cartelas sin estar limitado a las 200 filas más recientes.
+### Lab (OT 98020)
+| Paso | Resultado |
+|------|-----------|
+| Impresión en mesa 19/08 SpeedMaster, `PENDIENTE INICIO` | Precondición OK |
+| Reset desde **Guillotina** (no CTP) | Correcto: busca `orden > actual` |
+| 1.ª apertura diálogo: «No hay huecos…» | ❌ Bug detección |
+| Tras `4076de1`: lista 1 hueco Impresión | ✅ |
+| Literal feo `Mesa ID: e91d8df0…` | ❌ → `9e5f46c` |
+| Tras fix: `SpeedMaster CD 102 · 19/08/26 · Mañana` | ✅ |
+| Confirmar → toast, mesa vacía, ejecución `cancelada`, OT en Pool | ✅ |
 
-### Implementación
+### Bugs 7.1
 
-**Archivo modificado**:
-- `src/components/produccion/almacen/cartelas/cartelas-page.tsx`
-
-**Cambios**:
-
-1. **Lógica server-side** (`loadCartelas`):
-   - Si `searchCartelas` vacío: `.limit(200)` como antes
-   - Si hay búsqueda:
-     - Parsea como `id_stock` numérico → `.eq("id_stock", num)`
-     - Si no es número → `.ilike("nota_entrega", "%term%")` (albarán)
-     - Luego filtra por OT en join `prod_stock_palet_ots`
-   - **Sin límite** cuando se busca
-
-2. **UI**:
-   - Input con icono Search
-   - Placeholder: "ID Stock, albarán o OT (Enter busca)"
-   - `onKeyDown Enter` dispara `loadCartelas()`
-   - Mensaje debajo: "Búsqueda server-side activa: «term» · Sin límite de 200 filas."
-
-3. **Filtro client-side eliminado**:
-   - Variable `search` eliminada
-   - `filteredCartelas` ahora solo filtra por `mostrarPruebas`
-   - Toda búsqueda de texto es server-side
-
-### Casos de uso
-
-- `10985` → busca `id_stock = 10985`
-- `ALB-2024-123` → busca `nota_entrega ILIKE '%ALB-2024-123%'`
-- `98020` → busca `ot_numero` en join (si no match en id_stock)
+| # | Bug | Causa | Fix |
+|---|-----|-------|-----|
+| R1 | Diálogo no encontraba Impresión en mesa | `fetchHuecosMesaPosteriores` filtraba `prod_mesa_planificacion_trabajos.ot_paso_id` — esa columna **no existe** ahí; vive en `prod_mesa_ejecuciones` | Buscar ejecuciones activas por `ot_paso_id` + fallback `ot_numero` (`4076de1`) |
+| R2 | Literal UUID ilegible | UI mostraba `mesaId.slice(0,8)` | Enriquecer con máquina/fecha/turno (`9e5f46c`) |
 
 ---
 
-## Validación 7.3 (Cartelas — búsqueda server-side)
+## 7.2 — Asignar OT desde Stock
 
-**Estado final**: ✅ VALIDADO (con 4 fixes iterativos durante el lab)
-
-### Pasos y resultados
-
+### Lab
 | # | Paso | Resultado |
 |---|------|-----------|
-| 7.3.1 | Buscar cartela de prueba por `id_stock` (e.g. `10985`) | ✅ Aparece sola |
-| 7.3.2 | Verificar búsqueda levanta > 200 filas (sin límite) | ✅ |
-| 7.3.3 | Buscar por albarán parcial | ✅ |
-| 7.3.4 | Buscar `98020` (OT número numérico) | ❌ → Fixed |
-| 7.3.5 | Crear cartela de prueba con wizard → no auto-colapsa lista | ✅ (tras fix) |
-| 7.3.6 | Filtro ID Stock independiente no da resultados cruzados falsos | ✅ |
+| 7.2.1 | Botón visible stock libre | ✅ |
+| 7.2.2 | Botón oculto si ya tiene OT | ✅ |
+| 7.2.3–6 | Split `#99020` → `#10986` 900h + assign 35760; `#99020` 100 libre | ✅ mecánica |
 
-### Bugs encontrados y fixes aplicados
+### Gaps P2 detectados en lab → cerrados misma sesión
+
+| Gap | Problema | Fix |
+|-----|----------|-----|
+| §18.11 | RPC solo actualizaba `estado_material` si venía de STOP | WHERE ampliado (null / Sin orden compra / …) |
+| §18.15 | Campo OT sin búsqueda | `OtDestinoSearchInput` |
+| §18.9 | Pool muro rojo sin compra aunque hay cartela | Gate + mensaje ámbar si `hojasStockCartelado > 0` |
+
+---
+
+## 7.3 — Búsqueda server-side Cartelas
+
+**Estado:** ✅ VALIDADO (6 bugs iterativos en lab)
 
 | # | Bug | Fix | Commit |
 |---|-----|-----|--------|
-| B1 | `id_stock` numérico solo hacía exact match → búsqueda OT `98020` no salía | Combinar búsqueda: `id_stock` (prefijo/rango) + `ot_numero` (ilike) + `nota_entrega` (ilike) en `Promise.all` | `153ec42` |
-| B2 | `id_stock::text ILIKE` rechazado por PostgREST (columna integer) | `idStockPrefixOrFilter`: genera rangos numéricos (`gte`/`lt`) para simular búsqueda parcial de entero | `ec4040a` |
-| B3 | Overflow `int4` en rangos para prefijos largos (e.g. `1067`) → error `22003` | Añadir cap `PG_INT4_MAX` en `idStockPrefixOrFilter` | `2b13786` |
-| B4 | Input único → `1067` devolvía cientos de filas (match en `nota_entrega` como `410679668`) | Separar en **3 inputs independientes**: ID Stock / Albarán-OT / Material (AND logic server-side) | `54d7c4b` |
-| B5 | Tras crear cartela con wizard, `handleWizardCreated` seguía rellenando filtro → lista se colapsaba | Eliminar auto-fill; wizard solo limpia filtros | `3b973d3` |
-| B6 | Build Vercel: `setSearch` llamado pero estado renombrado a `searchCartelas` | Renombrar correctamente | `177b656` |
+| B1 | OT numérica no encontraba | Parallel id_stock + ot_numero + nota_entrega | `153ec42` |
+| B2 | `id_stock::text ILIKE` rechazado PostgREST | Rangos numéricos | `ec4040a` |
+| B3 | Overflow int4 | Cap `PG_INT4_MAX` | `2b13786` |
+| B4 | `1067` → cientos de falsos positivos | **3 inputs** ID / Alb-OT / Material (AND) | `54d7c4b` |
+| B5 | Wizard auto-colapsaba lista | Quitar auto-fill | `3b973d3` |
+| B6 | Build Vercel `setSearch` | Rename | `177b656` |
 
-### UX final (3 inputs)
+UX final: `[ ID Stock ] [ Albarán/OT ] [ Material ]` · Enter · sin límite 200 con búsqueda.
+
+---
+
+## Smoke test tarde — P2 §18.9 / 18.11 / 18.15
+
+### §18.11 — VALIDADO
+- Asignar `#99019` → OT **35643**
+- Toast OK
+- Despachadas: **Material en stock asignado** ✅
+
+### §18.15 — VALIDADO (tras 2.º fix)
+- 1.ª prueba (`357` en modal): **sin dropdown**
+- Causa: select de `cliente`/`titulo` en `produccion_ot_despachadas` (columnas inexistentes; viven en `prod_ots_general`) → error silencioso
+- Fix `014e4cd`: despachadas solo `ot_numero`+`estado_material`; enrich maestro
+- Revalidación: teclear `35` → dropdown con OTs + cliente ✅
+
+### §18.9 — VALIDADO (con matices lab)
+| OT | Qué pasó |
+|----|----------|
+| **35643** | Material OK · `2050 h en cartela` · ámbar «Sin compra — cubierto por stock cartelado» · checkbox → **Pasar a Mesa** habilitado ✅ |
+| **35760** | Parecía «no funciona»: `#10986` es `es_prueba=true` → Pool **ignora** prueba → 0 h cartela / crítico. Además asignación fue **antes** del fix §18.11 (`estado_material` se sincronizó a mano en DB). No es fallo del gate. |
+
+**Nota UX:** botón Pasar a Mesa deshabilitado si `selectedRows.length === 0` (hay que marcar checkbox).
+
+### Cantidades «raras» (no bug P0)
+Reserva **blanda**: físicas = libres, reservadas = 0; palet puede aparecer en filtros «libre» con OT referenciada. Ruido amplificado por muchas OTs de lab a medias.
+
+---
+
+## Archivos tocados (día)
+
+**7.1:** `prod-paso-admin-permisos.ts`, `prod-paso-admin-client.ts`, `paso-admin-actions.tsx`  
+**7.2:** `stock-page.tsx`  
+**7.3:** `cartelas-page.tsx`  
+**P2:** `ot-destino-search-input.tsx` (nuevo), `cartelas-page.tsx`, `stock-page.tsx`, `planificacion-contenedor-query.ts`, `planificacion-pool-ots-tab-v2.tsx`, migración SQL §18.11  
+**Docs:** este archivo · `MINERVA_BLOQUE9_REASIGNACION_STOP.md` · `MINERVA_HUB_CONTEXTO_MAESTRO.md`
+
+---
+
+## Checklist smoke (copiar a Claude)
 
 ```
-[ ID Stock: _____ ]  [ Albarán / OT: _____ ]  [ Material: _____ ]
+[ ] 7.3 — 3 filtros Cartelas (ID / Alb-OT / Material) encuentran fuera del top 200
+[ ] 7.2 — Stock libre → Asignar a OT (toast + bridge)
+[ ] 7.1 — Paso finalizado → Reset STOP lista máquina·fecha·turno → anula → Pool
+[ ] 18.11 — Asignar stock a OT «Sin orden compra» → estado_material = Material en stock asignado
+[ ] 18.15 — Modal Asignar: ≥2 chars → dropdown OT + cliente
+[ ] 18.9 — OT con cartela real (no prueba) sin compra → ámbar + seleccionable + Pasar a Mesa
+[ ] Trampa: es_prueba no cuenta en Pool
 ```
-- AND logic: solo muestra cartelas que matcheen todos los filtros activos
-- Cada input dispara búsqueda server-side al presionar Enter
-- Sin límite de 200 cuando hay búsqueda activa
 
 ---
 
-## Validación 7.2 (Asignar OT desde Stock)
+## Siguiente sesión
 
-**Estado final**: ✅ MECANISMO VALIDADO — 2 gaps P2 detectados
-
-### Pasos y resultados
-
-| # | Paso | Resultado |
-|---|------|-----------|
-| 7.2.1 | Botón "Asignar a OT" visible en stock libre (`#99022`) | ✅ |
-| 7.2.2 | Botón oculto en palet con OT ya asignada (`#99023`) | ✅ |
-| 7.2.3 | Split `#99020` 1000h → 900h + 100h → nueva cartela `#10986` | ✅ Toast OK |
-| 7.2.4 | Abrir `#10986`, clicar "Asignar a OT", teclear `35760`, confirmar | ✅ Toast: "Cartela #10986 asignada a OT 35760. Material en stock asignado." |
-| 7.2.5 | `#10986` en lista Stock muestra OT `35760` | ✅ |
-| 7.2.6 | `#99020` queda con 100h libres | ✅ |
-
-### Gaps detectados (backlog)
-
-| # | Gap | Prioridad | Ref backlog |
-|---|-----|-----------|-------------|
-| G1 | `estado_material` en OT 35760 sigue "Sin orden de compra" tras asignar. El RPC 9.8.4 solo actualiza si OT venía de STOP (`liberado`/`Pendiente corrección`) — si la OT nunca pasó por STOP, el `WHERE` no hace match. Ampliar WHERE del RPC. | P2 | §18.11 |
-| G2 | Pool semáforo sigue en rojo ("Sin compra generada - no se puede enviar a mesa") aunque hay cartela asignada | P2 | §18.9 |
-| G3 | Campo OT destino sin inteligencia (campo libre, sin autocompletar ni validar existencia) | P2 | §18.15 |
-
----
-
-## Validación 7.1 (Reset planificación STOP)
-
-**Estado final**: ✅ VALIDADO (20 ago 2026)
-
-### Escenario rápido propuesto: OT 98020 simulada
-
-**Objetivo**: Tener una OT con ≥1 paso finalizado y ≥1 paso siguiente en mesa activo, para validar que el botón "Reset planificación STOP" identifica y anula correctamente los huecos.
-
-**Pasos del lab**:
-
-1. Ir a OT 98020 (o clonar configuración) → Hoja de Ruta
-2. Verificar qué pasos tiene en mesa actualmente (Impresión u otro)
-3. Si no hay pasos en mesa: planificar Impresión Offset en mesa (sin ejecutar)
-4. Ir a un paso anterior (e.g., Guillotina / CTP) → botón admin → "Reset planificación STOP"
-5. Verificar que el diálogo lista el hueco de Impresión
-6. Confirmar → verificar:
-   - Hueco desaparece de mesa (Mesa diaria)
-   - OT vuelve al Pool (`en_transito`)
-   - Toast confirmación
-
-**OTs candidatas conocidas**:
-- `98020`: Lab principal, conocida, múltiples pasos. Verificar si tiene huecos activos en mesa.
-- Nueva OT clon de 98016 ó 98020 si la anterior está "sucia".
-
----
-
-## Deuda técnica / mejoras opcionales
-
-- **7.1**: Añadir preview mejorado (nombre completo paso, mesa, fecha/hora planificada)
-- **7.3**: Indexar `nota_entrega` si búsqueda lenta con volumen alto
-- **7.3**: Búsqueda por `material_nombre` ya disponible en tercer input (material)
-
----
-
-## Decisiones de diseño
-
-### Por qué NO cascade silencioso (7.1)
-
-- **Reversibilidad**: Anular mesa es destructivo; usuario debe confirmarlo
-- **Transparencia**: Lista explícita de lo que se va a anular
-- **Control**: Usuario puede querer resetear solo parte de la planificación
-- **Auditabilidad**: Acción explícita queda más clara en logs
-
-### Por qué búsqueda server-side (7.3)
-
-- **Escalabilidad**: El límite 200 se volvió bloqueante en lab (98020 split generó ID 10985, fuera de top 200)
-- **Performance**: Buscar en DB es más rápido que cargar 200+ filas y filtrar client-side
-- **UX**: Mensaje claro "server-side activo" evita confusión sobre qué se está buscando
-
----
-
-## Fixes P2 — 20 ago 2026 (sesión continuación)
-
-Los 3 gaps P2 de la validación 7.2 se implementaron en la misma sesión:
-
-| # | Gap | Fix | Archivo(s) |
-|---|-----|-----|------------|
-| §18.11 | `estado_material` no se actualizaba para OTs sin STOP previo | Ampliado WHERE en `prod_stock_asignar_palet_ot` para cubrir null/vacío/`Sin orden compra`/`Compra cancelada`/`Pendiente de pedir` | `20260820090000_bloque9_8_4_asignar_estado_material_ampliado.sql` |
-| §18.15 | Input OT destino sin autocompletar | Nuevo componente `OtDestinoSearchInput` con debounce 250ms e ilike contra `produccion_ot_despachadas`. Usado en `AsignarOtDialog` (cartelas) y `StockDetalleDialog` (stock) | `ot-destino-search-input.tsx`, `cartelas-page.tsx`, `stock-page.tsx` |
-| §18.9 | Pool semáforo rojo bloqueante aunque hay stock cartelado | `isPoolRowSelectableForMesa` acepta `hojasStockCartelado`; gate `sinCompra` permite si stock > 0; mensaje cambia a ámbar | `planificacion-contenedor-query.ts`, `planificacion-pool-ots-tab-v2.tsx` |
-
----
-
-## Notas siguiente sesión
-
-- Continuar con **P1**:
-  - 9.8.3 Compra corrección (type `correccion`, allowlist batch)
-  - 9.8.6 Popup redespacho asistido
+1. **P1** 9.8.3 Compra corrección (`correccion`, allowlist batch)
+2. **P1** 9.8.6 Popup redespacho asistido
+3. Opcional: §18.8 KPI reservas blandas · split prueba → aviso id coherente · linter `set-state-in-effect`
