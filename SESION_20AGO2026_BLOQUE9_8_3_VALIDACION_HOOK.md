@@ -30,6 +30,8 @@ Ambos eventos actualizan `produccion_ot_despachadas.estado_material` a `'Materia
   - UI Stock → botón "Asignar a OT" (7.2)
   - UI Cartelas → botón "Asignar" (9.8.4)
 
+**Camino cubierto:** Stock libre → asignación explícita → consumo posterior (estado ya limpio al consumir).
+
 **Código:**
 
 ```sql
@@ -56,6 +58,8 @@ where ot_numero = v_ot_clean
 
 **Función:** `prod_stock_registrar_consumo`  
 **Cuándo:** Operario cierra un paso de producción (CTP, Guillotina, Impresión, etc.) que consume material de una cartela.
+
+**Camino cubierto:** Compra corrección → muelle → cartela con reserva directa (sin asignación explícita) → consumo limpia STOP.
 
 **Código:**
 
@@ -113,11 +117,22 @@ Este hueco queda cerrado con la implementación 9.8.3:
 
 ## Siguiente paso
 
-**Validación:** Probar el ciclo completo en OT lab:
+**Validación:** Los dos hooks cubren **caminos distintos**, no redundantes. Validar ambos:
+
+### Camino A: Asignación explícita (hook 9.8.4)
 
 1. Liberar cartela (9.8.1) → `estado_material = 'Sin material asignado (liberado)'`.
 2. Crear compra de corrección (9.8.3) → `estado_material = 'Pendiente compra de corrección'`.
-3. Recibir + cartelar + asignar (9.8.4) → `estado_material = 'Material en stock asignado'` ✅.
-4. Consumir en Guillotina (9.4 + 9.8.3 hook) → verificar que badge no vuelve a STOP ✅.
+3. Recibir + cartelar + **asignar con botón "Asignar a OT"** (9.8.4) → `estado_material = 'Material en stock asignado'` ✅ (hook asignación).
+4. Consumir en Guillotina → verificar que badge **no vuelve a STOP** (estado ya limpio, hook consumo no se dispara).
 
-**Usuario:** Confirmar en Despachadas que el badge refleja correctamente el estado tras cada paso.
+### Camino B: Reserva directa desde muelle (hook 9.8.3 consumo)
+
+1. Liberar cartela (9.8.1) → `estado_material = 'Sin material asignado (liberado)'`.
+2. Crear compra de corrección (9.8.3) → `estado_material = 'Pendiente compra de corrección'`.
+3. Recibir + **cartelar con reserva directa a OT** (flujo muelle normal, sin pasar por botón "Asignar") → `estado_material` sigue `'Pendiente compra de corrección'`.
+4. Consumir en Guillotina (9.4 + 9.8.3 hook consumo) → `estado_material = 'Material en stock asignado'` ✅ (hook consumo se dispara aquí).
+
+**Crítico:** El camino A ejercita el hook de asignación; el camino B ejercita el hook de consumo. **Ambos son necesarios** para validar completamente el hueco #5.
+
+**Usuario:** Confirmar en Despachadas que el badge refleja correctamente el estado tras cada paso en **ambos** caminos.
