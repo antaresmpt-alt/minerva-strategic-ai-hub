@@ -459,7 +459,7 @@ Nada de esto retrasa el PR **9.8.1 + 9.8.1b**.
 
 | # | Tarea | Notas |
 |---|--------|-------|
-| 18.1 ✅ | **Reset planificación STOP** | `a553e20` (20 ago). Botón admin/gerencia en hoja de ruta. Identifica huecos > orden actual, lista procesos, confirmación, ejecuta `devolverHuecoMesaAlPool` por cada uno + pool `en_transito`. **No** cascade silencioso (P5). |
+| 18.1 ✅ | **Reset planificación STOP** | `a553e20` + fix roles (20 ago). Botón admin/oficina_tecnica/gerencia (mismo set liberar/revertir). Identifica huecos > orden actual, lista procesos, confirmación, ejecuta `devolverHuecoMesaAlPool` por cada uno + pool `en_transito`. **No** cascade silencioso (P5). |
 | 18.2 ✅ | **Asignar OT en detalle Stock** | `a019d27` (20 ago). Botón verde Link2 en DetalleDialog, visible solo si `ots.length === 0`. Mismo RPC `prod_stock_asignar_palet_ot` que Cartelas. |
 | 18.3 ✅ | **Cartelas creadas — búsqueda server-side** | `c1cbd01` (20 ago). Input busca `id_stock` (num exacto) o `nota_entrega`/`ot_numero` (texto parcial). Sin límite 200 cuando hay búsqueda. Enter dispara query. Mensaje UX claro. |
 

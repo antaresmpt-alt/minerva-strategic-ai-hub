@@ -28,7 +28,7 @@ Crear acción explícita para anular planificación posterior tras STOP material
 ### Diseño (coherente con §19 del brief)
 
 - **Botón**: "Reset planificación STOP" (rojo, icono Ban) en paso-admin-actions
-- **Permisos**: admin/gerencia (mismos que reabrir paso)
+- **Permisos**: admin / oficina_tecnica / gerencia (mismos que liberar/revertir; **no** el set más estrecho de reabrir paso)
 - **Flujo**:
   1. Identifica pasos con orden > actual que tengan huecos en mesa activos
   2. Muestra diálogo con lista de N huecos (proceso nombre, mesa ID)
