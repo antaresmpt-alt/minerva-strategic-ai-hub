@@ -101,8 +101,8 @@ export function CartelasPage() {
   const [loadingCartelas, setLoadingCartelas] = useState(false);
   const [pendientes, setPendientes] = useState<AlbaranPendienteGroup[]>([]);
   const [cartelas, setCartelas] = useState<ProdStockPaletConOts[]>([]);
-  const [search, setSearch] = useState("");
   const [mostrarPruebas, setMostrarPruebas] = useState(false);
+  const [searchCartelas, setSearchCartelas] = useState("");
 
   // Filtros bandeja pendientes
   const [searchPendientes, setSearchPendientes] = useState("");
@@ -311,7 +311,8 @@ export function CartelasPage() {
   const loadCartelas = useCallback(async () => {
     setLoadingCartelas(true);
     try {
-      const { data: palets, error: paletsErr } = await supabase
+      const searchTerm = searchCartelas.trim();
+      let query = supabase
         .from("prod_stock_palets")
         .select(
           `*,
@@ -320,8 +321,24 @@ export function CartelasPage() {
              prod_compra_material(prod_proveedores(nombre))
            )`
         )
-        .order("id_stock", { ascending: false })
-        .limit(200);
+        .order("id_stock", { ascending: false });
+
+      // Si hay búsqueda, filtramos y no limitamos
+      if (searchTerm) {
+        // Intenta parsear como id_stock numérico
+        const asNum = Number(searchTerm);
+        if (Number.isInteger(asNum) && asNum > 0) {
+          query = query.eq("id_stock", asNum);
+        } else {
+          // Busca en nota_entrega (albarán)
+          query = query.ilike("nota_entrega", `%${searchTerm}%`);
+        }
+      } else {
+        // Sin búsqueda, limitamos a 200
+        query = query.limit(200);
+      }
+
+      const { data: palets, error: paletsErr } = await query;
 
       if (paletsErr) throw paletsErr;
 
@@ -335,6 +352,19 @@ export function CartelasPage() {
         .from("prod_stock_palet_ots")
         .select("palet_id, ot_numero, cantidad_reservada")
         .in("palet_id", ids);
+
+      // Si buscamos por OT y no hubo match directo, filtramos por join
+      let filteredIds = ids;
+      if (searchTerm && !/^\d+$/.test(searchTerm)) {
+        const matchingPalets = (otsRows ?? [])
+          .filter((r) =>
+            r.ot_numero?.toLowerCase().includes(searchTerm.toLowerCase())
+          )
+          .map((r) => r.palet_id);
+        if (matchingPalets.length > 0) {
+          filteredIds = matchingPalets;
+        }
+      }
 
       const otsByPalet: Record<string, string[]> = {};
       const reservasByPalet: Record<
@@ -351,7 +381,7 @@ export function CartelasPage() {
         });
       }
 
-      const enriched: ProdStockPaletConOts[] = palets.map(
+      let enriched: ProdStockPaletConOts[] = palets.map(
         (raw: Record<string, unknown>) => {
           const p = raw as ProdStockPaletRow;
           const recep = unwrapJoinRow(raw.prod_recepciones_material);
@@ -371,13 +401,19 @@ export function CartelasPage() {
           };
         }
       );
+
+      // Filtrar por OT si aplica
+      if (searchTerm && !/^\d+$/.test(searchTerm) && filteredIds.length > 0) {
+        enriched = enriched.filter((p) => filteredIds.includes(p.id));
+      }
+
       setCartelas(enriched);
     } catch (e) {
       toast.error(`Error al cargar cartelas: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setLoadingCartelas(false);
     }
-  }, []);
+  }, [searchCartelas]);
 
   useEffect(() => {
     loadPendientes();
@@ -422,16 +458,8 @@ export function CartelasPage() {
     if (!mostrarPruebas) {
       list = list.filter((c) => !c.es_prueba);
     }
-    if (!search.trim()) return list;
-    const q = search.toLowerCase();
-    return list.filter(
-      (c) =>
-        c.id_stock.toString().includes(q) ||
-        c.material_nombre?.toLowerCase().includes(q) ||
-        c.nota_entrega?.toLowerCase().includes(q) ||
-        c.ots.some((o) => o.toLowerCase().includes(q))
-    );
-  }, [cartelas, mostrarPruebas, search]);
+    return list;
+  }, [cartelas, mostrarPruebas]);
 
   const cartelasPruebaOcultas = useMemo(() => {
     if (mostrarPruebas) return 0;
@@ -439,17 +467,9 @@ export function CartelasPage() {
   }, [cartelas, mostrarPruebas]);
 
   const busquedaCoincidePruebaOculta = useMemo(() => {
-    if (mostrarPruebas || !search.trim()) return false;
-    const q = search.toLowerCase();
-    return cartelas.some(
-      (c) =>
-        c.es_prueba &&
-        (c.id_stock.toString().includes(q) ||
-          c.material_nombre?.toLowerCase().includes(q) ||
-          c.nota_entrega?.toLowerCase().includes(q) ||
-          c.ots.some((o) => o.toLowerCase().includes(q))),
-    );
-  }, [cartelas, mostrarPruebas, search]);
+    if (mostrarPruebas || !searchCartelas.trim()) return false;
+    return cartelas.some((c) => c.es_prueba);
+  }, [cartelas, mostrarPruebas, searchCartelas]);
 
   // ── Filtro bandeja pendientes ─────────────────────────────────────────
   const thirtyDaysAgo = useMemo(() => {
@@ -791,12 +811,18 @@ export function CartelasPage() {
         {/* ── Tab: Cartelas creadas ────────────────────────── */}
         <TabsContent value="cartelas" className="space-y-3 mt-4">
           <div className="flex flex-wrap items-center gap-2">
-            <Input
-              placeholder="Buscar por ID Stock, material, albarán, OT…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="max-w-sm h-8 text-sm"
-            />
+            <div className="relative flex-1 min-w-[240px] max-w-md">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-slate-400" />
+              <Input
+                placeholder="ID Stock, albarán o OT (Enter busca)"
+                value={searchCartelas}
+                onChange={(e) => setSearchCartelas(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void loadCartelas();
+                }}
+                className="pl-7 h-8 text-sm"
+              />
+            </div>
             <label className="inline-flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
               <Checkbox
                 checked={mostrarPruebas}
@@ -809,6 +835,7 @@ export function CartelasPage() {
               variant="outline"
               onClick={loadCartelas}
               disabled={loadingCartelas}
+              className="h-8"
             >
               {loadingCartelas ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -817,6 +844,13 @@ export function CartelasPage() {
               )}
             </Button>
           </div>
+
+          {searchCartelas.trim() && (
+            <p className="text-xs text-slate-500">
+              Búsqueda server-side activa: <strong>«{searchCartelas.trim()}»</strong> · Sin límite
+              de 200 filas.
+            </p>
+          )}
 
           {loadingCartelas && (
             <div className="flex justify-center py-12">
@@ -828,13 +862,13 @@ export function CartelasPage() {
             <div className="text-center py-12 text-slate-400">
               <Package className="size-8 mx-auto mb-2" />
               <p>
-                {search
+                {searchCartelas.trim()
                   ? busquedaCoincidePruebaOculta
                     ? "Hay cartelas de prueba que coinciden — activa «Mostrar pruebas»"
                     : "Sin resultados para esa búsqueda"
                   : cartelasPruebaOcultas > 0
                     ? `${cartelasPruebaOcultas} cartela${cartelasPruebaOcultas !== 1 ? "s" : ""} de prueba oculta${cartelasPruebaOcultas !== 1 ? "s" : ""} — activa «Mostrar pruebas»`
-                    : "No hay cartelas todavía"}
+                    : "No hay cartelas todavía (mostrando últimas 200)"}
               </p>
             </div>
           )}
