@@ -120,7 +120,9 @@ export function CartelasPage() {
   const [pendientes, setPendientes] = useState<AlbaranPendienteGroup[]>([]);
   const [cartelas, setCartelas] = useState<ProdStockPaletConOts[]>([]);
   const [mostrarPruebas, setMostrarPruebas] = useState(false);
-  const [searchCartelas, setSearchCartelas] = useState("");
+  const [filterIdStock, setFilterIdStock] = useState("");
+  const [filterAlbOt, setFilterAlbOt] = useState("");
+  const [filterMaterial, setFilterMaterial] = useState("");
 
   // Filtros bandeja pendientes
   const [searchPendientes, setSearchPendientes] = useState("");
@@ -329,16 +331,39 @@ export function CartelasPage() {
   const loadCartelas = useCallback(async () => {
     setLoadingCartelas(true);
     try {
-      const searchTerm = searchCartelas.trim();
+      const idQ = filterIdStock.trim();
+      const refQ = filterAlbOt.trim();
+      const matQ = filterMaterial.trim();
+      const hasFilter = Boolean(idQ || refQ || matQ);
+
       const selectCols = `*,
            prod_recepciones_material(
              prod_proveedores(nombre),
              prod_compra_material(prod_proveedores(nombre))
            )`;
 
+      const escapeIlike = (s: string) =>
+        s.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+
+      const byId = new Map<string, Record<string, unknown>>();
+      const addRows = (rows: Record<string, unknown>[] | null | undefined) => {
+        for (const row of rows ?? []) {
+          const id = String((row as { id?: string }).id ?? "").trim();
+          if (id) byId.set(id, row);
+        }
+      };
+      const rowsToMap = (rows: Record<string, unknown>[]) => {
+        const m = new Map<string, Record<string, unknown>>();
+        for (const row of rows) {
+          const id = String((row as { id?: string }).id ?? "").trim();
+          if (id) m.set(id, row);
+        }
+        return m;
+      };
+
       let palets: Record<string, unknown>[] = [];
 
-      if (!searchTerm) {
+      if (!hasFilter) {
         const { data, error } = await supabase
           .from("prod_stock_palets")
           .select(selectCols)
@@ -347,71 +372,109 @@ export function CartelasPage() {
         if (error) throw error;
         palets = (data as Record<string, unknown>[]) ?? [];
       } else {
-        // Un solo campo: ID (prefijo) + OT (parcial) + albarán (parcial).
-        // Prefijo numérico vía rangos PostgREST (sin cast text — falla en API).
-        const escaped = searchTerm
-          .replace(/\\/g, "\\\\")
-          .replace(/%/g, "\\%")
-          .replace(/_/g, "\\_");
-        const pattern = `%${escaped}%`;
-        const idOr = idStockPrefixOrFilter(searchTerm);
+        // Tres filtros independientes; AND entre los que tengan valor.
+        const maps: Map<string, Record<string, unknown>>[] = [];
 
-        const byId = new Map<string, Record<string, unknown>>();
-        const addRows = (rows: Record<string, unknown>[] | null | undefined) => {
-          for (const row of rows ?? []) {
-            const id = String((row as { id?: string }).id ?? "").trim();
-            if (id) byId.set(id, row);
+        if (idQ) {
+          const idOr = idStockPrefixOrFilter(idQ);
+          if (!idOr) {
+            toast.error("ID cartela: usa solo dígitos (ej. 10673 o 106).");
+            setCartelas([]);
+            return;
           }
-        };
-
-        const [otsMatchRes, albRes, stockRes] = await Promise.all([
-          supabase
-            .from("prod_stock_palet_ots")
-            .select("palet_id")
-            .ilike("ot_numero", pattern)
-            .limit(500),
-          supabase
+          const { data, error } = await supabase
             .from("prod_stock_palets")
             .select(selectCols)
-            .ilike("nota_entrega", pattern)
-            .limit(200),
-          idOr
-            ? supabase
-                .from("prod_stock_palets")
-                .select(selectCols)
-                .or(idOr)
-                .limit(200)
-            : Promise.resolve({ data: [] as Record<string, unknown>[], error: null }),
-        ]);
+            .or(idOr)
+            .limit(200);
+          if (error) throw error;
+          maps.push(rowsToMap((data as Record<string, unknown>[]) ?? []));
+        }
 
-        if (otsMatchRes.error) throw otsMatchRes.error;
-        if (albRes.error) throw albRes.error;
-        if (stockRes.error) throw stockRes.error;
-
-        addRows(albRes.data as Record<string, unknown>[] | null);
-        addRows(stockRes.data as Record<string, unknown>[] | null);
-
-        const otPaletIds = [
-          ...new Set(
-            (otsMatchRes.data ?? [])
-              .map((r) => String(r.palet_id ?? "").trim())
-              .filter(Boolean),
-          ),
-        ];
-        const missingOt = otPaletIds.filter((id) => !byId.has(id));
-        if (missingOt.length > 0) {
-          for (let i = 0; i < missingOt.length; i += 200) {
-            const chunk = missingOt.slice(i, i + 200);
+        if (refQ) {
+          const pattern = `%${escapeIlike(refQ)}%`;
+          const refMap = new Map<string, Record<string, unknown>>();
+          const [otsMatchRes, albRes] = await Promise.all([
+            supabase
+              .from("prod_stock_palet_ots")
+              .select("palet_id")
+              .ilike("ot_numero", pattern)
+              .limit(500),
+            supabase
+              .from("prod_stock_palets")
+              .select(selectCols)
+              .ilike("nota_entrega", pattern)
+              .limit(200),
+          ]);
+          if (otsMatchRes.error) throw otsMatchRes.error;
+          if (albRes.error) throw albRes.error;
+          for (const row of (albRes.data as Record<string, unknown>[]) ?? []) {
+            const id = String((row as { id?: string }).id ?? "").trim();
+            if (id) refMap.set(id, row);
+          }
+          const missing = [
+            ...new Set(
+              (otsMatchRes.data ?? [])
+                .map((r) => String(r.palet_id ?? "").trim())
+                .filter(Boolean),
+            ),
+          ].filter((id) => !refMap.has(id));
+          for (let i = 0; i < missing.length; i += 200) {
+            const chunk = missing.slice(i, i + 200);
             const { data: byOt, error: otErr } = await supabase
               .from("prod_stock_palets")
               .select(selectCols)
               .in("id", chunk);
             if (otErr) throw otErr;
-            addRows(byOt as Record<string, unknown>[] | null);
+            for (const row of (byOt as Record<string, unknown>[]) ?? []) {
+              const id = String((row as { id?: string }).id ?? "").trim();
+              if (id) refMap.set(id, row);
+            }
           }
+          maps.push(refMap);
         }
 
-        palets = Array.from(byId.values())
+        if (matQ) {
+          const pattern = `%${escapeIlike(matQ)}%`;
+          const [byNombre, byDesc] = await Promise.all([
+            supabase
+              .from("prod_stock_palets")
+              .select(selectCols)
+              .ilike("material_nombre", pattern)
+              .limit(200),
+            supabase
+              .from("prod_stock_palets")
+              .select(selectCols)
+              .ilike("descripcion_material", pattern)
+              .limit(200),
+          ]);
+          if (byNombre.error) throw byNombre.error;
+          if (byDesc.error) throw byDesc.error;
+          const matMap = rowsToMap([
+            ...((byNombre.data as Record<string, unknown>[]) ?? []),
+            ...((byDesc.data as Record<string, unknown>[]) ?? []),
+          ]);
+          maps.push(matMap);
+        }
+
+        if (maps.length === 0) {
+          palets = [];
+        } else {
+          let intersect = maps[0]!;
+          for (let i = 1; i < maps.length; i++) {
+            const next = maps[i]!;
+            const kept = new Map<string, Record<string, unknown>>();
+            for (const [id, row] of intersect) {
+              if (next.has(id)) kept.set(id, row);
+            }
+            intersect = kept;
+          }
+          byId.clear();
+          for (const [id, row] of intersect) byId.set(id, row);
+          palets = Array.from(byId.values());
+        }
+
+        palets = palets
           .sort((a, b) => {
             const ia = Number((a as { id_stock?: number }).id_stock ?? 0);
             const ib = Number((b as { id_stock?: number }).id_stock ?? 0);
@@ -473,7 +536,7 @@ export function CartelasPage() {
     } finally {
       setLoadingCartelas(false);
     }
-  }, [searchCartelas]);
+  }, [filterIdStock, filterAlbOt, filterMaterial]);
 
   useEffect(() => {
     loadPendientes();
@@ -526,10 +589,14 @@ export function CartelasPage() {
     return cartelas.filter((c) => c.es_prueba).length;
   }, [cartelas, mostrarPruebas]);
 
+  const hasCartelasFilter = Boolean(
+    filterIdStock.trim() || filterAlbOt.trim() || filterMaterial.trim(),
+  );
+
   const busquedaCoincidePruebaOculta = useMemo(() => {
-    if (mostrarPruebas || !searchCartelas.trim()) return false;
+    if (mostrarPruebas || !hasCartelasFilter) return false;
     return cartelas.some((c) => c.es_prueba);
-  }, [cartelas, mostrarPruebas, searchCartelas]);
+  }, [cartelas, mostrarPruebas, hasCartelasFilter]);
 
   // ── Filtro bandeja pendientes ─────────────────────────────────────────
   const thirtyDaysAgo = useMemo(() => {
@@ -593,9 +660,10 @@ export function CartelasPage() {
     if (created.some((c) => c.es_prueba)) {
       setMostrarPruebas(true);
       setTab("cartelas");
-      // No auto-rellenar búsqueda: con server-side colapsaría la lista a 1 fila
-      // (parece que "desaparecen" al refrescar). Las 99xxx ya salen arriba (id DESC).
-      setSearchCartelas("");
+      // No auto-rellenar filtros: las 99xxx ya salen arriba (id DESC).
+      setFilterIdStock("");
+      setFilterAlbOt("");
+      setFilterMaterial("");
       const first = created[0];
       if (first) {
         toast.success(
@@ -879,18 +947,37 @@ export function CartelasPage() {
         {/* ── Tab: Cartelas creadas ────────────────────────── */}
         <TabsContent value="cartelas" className="space-y-3 mt-4">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative flex-1 min-w-[240px] max-w-md">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-slate-400" />
-              <Input
-                placeholder="ID Stock, OT o albarán (Enter busca)"
-                value={searchCartelas}
-                onChange={(e) => setSearchCartelas(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") void loadCartelas();
-                }}
-                className="pl-7 h-8 text-sm"
-              />
-            </div>
+            <Input
+              placeholder="ID"
+              value={filterIdStock}
+              onChange={(e) => setFilterIdStock(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void loadCartelas();
+              }}
+              className="h-8 w-[5.5rem] text-sm tabular-nums"
+              inputMode="numeric"
+              title="ID cartela (prefijo, ej. 10673 o 106)"
+            />
+            <Input
+              placeholder="Albarán / OT"
+              value={filterAlbOt}
+              onChange={(e) => setFilterAlbOt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void loadCartelas();
+              }}
+              className="h-8 w-[8.5rem] text-sm"
+              title="Albarán o número de OT"
+            />
+            <Input
+              placeholder="Material…"
+              value={filterMaterial}
+              onChange={(e) => setFilterMaterial(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void loadCartelas();
+              }}
+              className="h-8 min-w-[8rem] flex-1 max-w-[14rem] text-sm"
+              title="Nombre o descripción de material"
+            />
             <label className="inline-flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
               <Checkbox
                 checked={mostrarPruebas}
@@ -913,10 +1000,29 @@ export function CartelasPage() {
             </Button>
           </div>
 
-          {searchCartelas.trim() && (
+          {hasCartelasFilter && (
             <p className="text-xs text-slate-500">
-              Búsqueda server-side: <strong>«{searchCartelas.trim()}»</strong> en
-              ID (prefijo) / OT / albarán · máx. 200 resultados.
+              Filtros server-side (AND)
+              {filterIdStock.trim() ? (
+                <>
+                  {" "}
+                  · ID <strong>«{filterIdStock.trim()}»</strong>
+                </>
+              ) : null}
+              {filterAlbOt.trim() ? (
+                <>
+                  {" "}
+                  · Alb/OT <strong>«{filterAlbOt.trim()}»</strong>
+                </>
+              ) : null}
+              {filterMaterial.trim() ? (
+                <>
+                  {" "}
+                  · Material <strong>«{filterMaterial.trim()}»</strong>
+                </>
+              ) : null}
+              {" "}
+              · máx. 200
             </p>
           )}
 
@@ -930,7 +1036,7 @@ export function CartelasPage() {
             <div className="text-center py-12 text-slate-400">
               <Package className="size-8 mx-auto mb-2" />
               <p>
-                {searchCartelas.trim()
+                {hasCartelasFilter
                   ? busquedaCoincidePruebaOculta
                     ? "Hay cartelas de prueba que coinciden — activa «Mostrar pruebas»"
                     : "Sin resultados para esa búsqueda"
