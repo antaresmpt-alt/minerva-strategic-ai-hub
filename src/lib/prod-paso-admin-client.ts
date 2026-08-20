@@ -369,12 +369,20 @@ export type HuecoMesaPosterior = {
   orden: number;
 };
 
+const MESA_ESTADOS_ACTIVOS = ["borrador", "confirmado", "en_ejecucion"] as const;
+const EJEC_ESTADOS_ACTIVOS = ["pendiente_inicio", "en_curso", "pausada"] as const;
+
+/**
+ * Identifica huecos de mesa de pasos posteriores.
+ * `ot_paso_id` vive en `prod_mesa_ejecuciones` (no en mesa).
+ * Fallback: mesa activa por `ot_numero` si aún no hay ejecución (borrador/confirmado).
+ */
 export async function fetchHuecosMesaPosteriores(
   supabase: SupabaseClient,
   otId: string,
   pasoOrden: number,
+  otNumero?: string | null,
 ): Promise<HuecoMesaPosterior[]> {
-  // Pasos posteriores del itinerario
   const { data: pasosData, error: pasosErr } = await supabase
     .from("prod_ot_pasos")
     .select("id, orden, proceso_id")
@@ -395,93 +403,165 @@ export async function fetchHuecosMesaPosteriores(
     .filter(Boolean);
   if (pasoIds.length === 0) return [];
 
-  // Huecos activos en mesa
-  const { data: mesaData, error: mesaErr } = await supabase
-    .from("prod_mesa_planificacion_trabajos")
-    .select("id, ot_paso_id")
-    .in("ot_paso_id", pasoIds)
-    .in("estado_mesa", ["borrador", "confirmado", "en_ejecucion"]);
-  if (mesaErr) throw new Error(mesaErr.message || "No se pudo cargar la mesa.");
-
-  const mesaRows = (mesaData ?? []) as Array<{
-    id?: string;
-    ot_paso_id?: string | null;
-  }>;
-  if (mesaRows.length === 0) return [];
-
-  const mesaIds = mesaRows
-    .map((m) => String(m.id ?? "").trim())
-    .filter(Boolean);
-
-  // Ejecuciones pendientes/en curso
-  const { data: execData } = await supabase
-    .from("prod_mesa_ejecuciones")
-    .select("id, mesa_trabajo_id")
-    .in("mesa_trabajo_id", mesaIds)
-    .in("estado_ejecucion", ["pendiente_inicio", "en_curso", "pausada"]);
-
-  const ejecucionesByMesa = new Map<string, string>();
-  for (const e of (execData ?? []) as Array<{
-    id?: string;
-    mesa_trabajo_id?: string | null;
-  }>) {
-    const mid = String(e.mesa_trabajo_id ?? "").trim();
-    const eid = String(e.id ?? "").trim();
-    if (mid && eid) ejecucionesByMesa.set(mid, eid);
-  }
-
-  // Nombres de procesos
-  const procesoIds = [
-    ...new Set(
-      pasos
-        .map((p) => p.proceso_id)
-        .filter((pid): pid is number => typeof pid === "number" && pid > 0),
-    ),
-  ];
-  const { data: procData } = await supabase
-    .from("prod_procesos_cat")
-    .select("id, nombre")
-    .in("id", procesoIds);
-
-  const nombresByProcId = new Map<number, string>();
-  for (const p of (procData ?? []) as Array<{
-    id?: number;
-    nombre?: string | null;
-  }>) {
-    if (typeof p.id === "number" && p.nombre) {
-      nombresByProcId.set(p.id, p.nombre);
-    }
-  }
-
-  // Mapear pasos → orden
   const ordenByPasoId = new Map<string, number>();
+  const procesoIdByPasoId = new Map<string, number>();
   for (const p of pasos) {
     const pid = String(p.id ?? "").trim();
-    if (pid && typeof p.orden === "number") {
-      ordenByPasoId.set(pid, p.orden);
+    if (!pid) continue;
+    if (typeof p.orden === "number") ordenByPasoId.set(pid, p.orden);
+    if (typeof p.proceso_id === "number") procesoIdByPasoId.set(pid, p.proceso_id);
+  }
+
+  // 1) Camino principal: ejecuciones con ot_paso_id de pasos posteriores
+  const { data: execByPasoData, error: execByPasoErr } = await supabase
+    .from("prod_mesa_ejecuciones")
+    .select("id, mesa_trabajo_id, ot_paso_id")
+    .in("ot_paso_id", pasoIds)
+    .in("estado_ejecucion", [...EJEC_ESTADOS_ACTIVOS]);
+  if (execByPasoErr) {
+    throw new Error(execByPasoErr.message || "No se pudo cargar ejecuciones de mesa.");
+  }
+
+  const execRows = (execByPasoData ?? []) as Array<{
+    id?: string;
+    mesa_trabajo_id?: string | null;
+    ot_paso_id?: string | null;
+  }>;
+
+  type PendingHueco = {
+    mesaId: string;
+    ejecucionId: string | null;
+    pasoId: string;
+  };
+  const byMesa = new Map<string, PendingHueco>();
+
+  for (const e of execRows) {
+    const mesaId = String(e.mesa_trabajo_id ?? "").trim();
+    const ejecucionId = String(e.id ?? "").trim();
+    const pasoId = String(e.ot_paso_id ?? "").trim();
+    if (!mesaId || !pasoId || !ejecucionId) continue;
+    byMesa.set(mesaId, { mesaId, ejecucionId, pasoId });
+  }
+
+  // 2) Fallback: mesa activa por ot_numero (planificada, aún sin ot_paso_id en ejecución)
+  const ot = String(otNumero ?? "").trim();
+  if (ot) {
+    const { data: mesaByOtData, error: mesaByOtErr } = await supabase
+      .from("prod_mesa_planificacion_trabajos")
+      .select("id, estado_mesa")
+      .eq("ot_numero", ot)
+      .in("estado_mesa", [...MESA_ESTADOS_ACTIVOS]);
+    if (mesaByOtErr) {
+      throw new Error(mesaByOtErr.message || "No se pudo cargar la mesa por OT.");
+    }
+
+    const mesaByOt = (mesaByOtData ?? []) as Array<{
+      id?: string;
+      estado_mesa?: string | null;
+    }>;
+    const missingMesaIds = mesaByOt
+      .map((m) => String(m.id ?? "").trim())
+      .filter((id) => id && !byMesa.has(id));
+
+    if (missingMesaIds.length > 0) {
+      const { data: execFallbackData } = await supabase
+        .from("prod_mesa_ejecuciones")
+        .select("id, mesa_trabajo_id, ot_paso_id, estado_ejecucion")
+        .in("mesa_trabajo_id", missingMesaIds)
+        .in("estado_ejecucion", [...EJEC_ESTADOS_ACTIVOS]);
+
+      const execFallbackByMesa = new Map<
+        string,
+        { id: string; otPasoId: string | null }
+      >();
+      for (const e of (execFallbackData ?? []) as Array<{
+        id?: string;
+        mesa_trabajo_id?: string | null;
+        ot_paso_id?: string | null;
+      }>) {
+        const mid = String(e.mesa_trabajo_id ?? "").trim();
+        const eid = String(e.id ?? "").trim();
+        if (!mid || !eid) continue;
+        execFallbackByMesa.set(mid, {
+          id: eid,
+          otPasoId: String(e.ot_paso_id ?? "").trim() || null,
+        });
+      }
+
+      // Primer paso posterior = atribución por defecto si no hay ot_paso_id
+      const defaultPasoId = pasoIds[0] ?? "";
+
+      for (const mesaId of missingMesaIds) {
+        const exec = execFallbackByMesa.get(mesaId);
+        // Si la ejecución apunta a un paso NO posterior (p.ej. el actual), no anular
+        if (exec?.otPasoId && !ordenByPasoId.has(exec.otPasoId)) continue;
+
+        const pasoId =
+          (exec?.otPasoId && ordenByPasoId.has(exec.otPasoId)
+            ? exec.otPasoId
+            : defaultPasoId) || defaultPasoId;
+        if (!pasoId) continue;
+
+        byMesa.set(mesaId, {
+          mesaId,
+          ejecucionId: exec?.id ?? null,
+          pasoId,
+        });
+      }
     }
   }
 
-  // Resultado
+  if (byMesa.size === 0) return [];
+
+  // Verificar que la mesa sigue activa (no finalizada)
+  const mesaIds = [...byMesa.keys()];
+  const { data: mesaActivaData, error: mesaActivaErr } = await supabase
+    .from("prod_mesa_planificacion_trabajos")
+    .select("id")
+    .in("id", mesaIds)
+    .in("estado_mesa", [...MESA_ESTADOS_ACTIVOS]);
+  if (mesaActivaErr) {
+    throw new Error(mesaActivaErr.message || "No se pudo verificar estado de mesa.");
+  }
+  const mesaActivaIds = new Set(
+    ((mesaActivaData ?? []) as Array<{ id?: string }>)
+      .map((m) => String(m.id ?? "").trim())
+      .filter(Boolean),
+  );
+
+  // Nombres de proceso
+  const procesoIds = [
+    ...new Set(
+      [...procesoIdByPasoId.values()].filter((pid) => pid > 0),
+    ),
+  ];
+  const nombresByProcId = new Map<number, string>();
+  if (procesoIds.length > 0) {
+    const { data: procData } = await supabase
+      .from("prod_procesos_cat")
+      .select("id, nombre")
+      .in("id", procesoIds);
+    for (const p of (procData ?? []) as Array<{
+      id?: number;
+      nombre?: string | null;
+    }>) {
+      if (typeof p.id === "number" && p.nombre) {
+        nombresByProcId.set(p.id, p.nombre);
+      }
+    }
+  }
+
   const result: HuecoMesaPosterior[] = [];
-  for (const m of mesaRows) {
-    const mesaId = String(m.id ?? "").trim();
-    const pasoId = String(m.ot_paso_id ?? "").trim();
-    if (!mesaId || !pasoId) continue;
-
-    const paso = pasos.find((p) => String(p.id) === pasoId);
-    const procesoNombre =
-      typeof paso?.proceso_id === "number"
-        ? nombresByProcId.get(paso.proceso_id) ?? null
-        : null;
-    const orden = ordenByPasoId.get(pasoId) ?? 0;
-
+  for (const hueco of byMesa.values()) {
+    if (!mesaActivaIds.has(hueco.mesaId)) continue;
+    const procId = procesoIdByPasoId.get(hueco.pasoId);
     result.push({
-      mesaId,
-      ejecucionId: ejecucionesByMesa.get(mesaId) ?? null,
-      pasoId,
-      procesoNombre,
-      orden,
+      mesaId: hueco.mesaId,
+      ejecucionId: hueco.ejecucionId,
+      pasoId: hueco.pasoId,
+      procesoNombre:
+        typeof procId === "number" ? nombresByProcId.get(procId) ?? null : null,
+      orden: ordenByPasoId.get(hueco.pasoId) ?? 0,
     });
   }
 

@@ -141,14 +141,19 @@ export function PasoAdminActions({
         setHuecosMesa([]);
         return;
       }
-      const huecos = await fetchHuecosMesaPosteriores(supabase, paso.otId, actual.orden);
+      const huecos = await fetchHuecosMesaPosteriores(
+        supabase,
+        paso.otId,
+        actual.orden,
+        paso.otNumero,
+      );
       setHuecosMesa(huecos);
     } catch {
       setHuecosMesa([]);
     } finally {
       setLoadingHuecos(false);
     }
-  }, [showResetStopBtn, supabase, paso.otId, paso.pasoId]);
+  }, [showResetStopBtn, supabase, paso.otId, paso.pasoId, paso.otNumero]);
 
   if (!showEditar && !showCartela && !showReabrirBtn && !showRevertirBtn && !showResetStopBtn) return null;
 
