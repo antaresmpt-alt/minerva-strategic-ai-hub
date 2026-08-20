@@ -70,11 +70,8 @@ import {
 import {
   COMPRAS_MATERIAL_ESTADOS,
   estadoMaterialDesdeEstadoCompra,
-  esEstadoMaterialStop,
   esEstadoMaterialStopBloqueado,
   normalizeCompraEstado,
-  STOP_MATERIAL_LIBERADO,
-  STOP_PENDIENTE_CORRECCION,
 } from "@/lib/compras-material-estados";
 import { esPrioridadStockAmarilla } from "@/lib/compras-material-prioridad";
 import {
@@ -1157,20 +1154,15 @@ export function ComprasMaterialPage() {
         const ot = row?.ot_numero;
         const mat = estadoMaterialDesdeEstadoCompra(estado);
         if (ot && mat) {
-          // Guard 9.8.3: bloquear propagación según estado STOP activo.
-          // - STOP_MATERIAL_LIBERADO: bloquea todo (no hay compra de corrección activa).
-          // - STOP_PENDIENTE_CORRECCION: propaga Pendiente/Generada/Confirmado,
-          //   pero NO "Material recibido" — la OT sale del STOP solo vía 9.8.4
-          //   (asignar palet físico), no por la mera recepción en el muelle.
+          // Guard 9.8.3: no pisar estado STOP (liberado ni pendiente corrección).
+          // La OT sale del STOP solo vía 9.8.4 (asignar) o 9.8.3 (consumir).
           const { data: despRow } = await supabase
             .from(TABLE_DESPACHADAS)
             .select("estado_material")
             .eq("ot_numero", ot)
             .maybeSingle();
           const currentEstado = (despRow?.estado_material ?? "").trim();
-          const isStopCorreccion = currentEstado === STOP_PENDIENTE_CORRECCION;
-          const skipRecibido = isStopCorreccion && mat === "Material recibido";
-          if (!esEstadoMaterialStopBloqueado(currentEstado) && !skipRecibido) {
+          if (!esEstadoMaterialStopBloqueado(currentEstado)) {
             const { error: dErr } = await supabase
               .from(TABLE_DESPACHADAS)
               .update({ estado_material: mat })
@@ -1559,7 +1551,7 @@ export function ComprasMaterialPage() {
           .select("estado_material")
           .eq("ot_numero", ot)
           .maybeSingle();
-        // Guard 9.8.3: solo bloquear STOP_MATERIAL_LIBERADO (sin compra activa).
+        // Guard 9.8.3: no pisar ningún estado STOP (liberado ni pendiente corrección).
         if (!esEstadoMaterialStopBloqueado(despRow2?.estado_material)) {
           const { error: u2 } = await supabase
             .from(TABLE_DESPACHADAS)

@@ -44,13 +44,13 @@ export function esEstadoMaterialStop(
 
 /**
  * True si el estado STOP bloquea la propagación de cambios de compra.
- * Solo STOP_MATERIAL_LIBERADO bloquea — no hay compra de corrección activa.
- * STOP_PENDIENTE_CORRECCION permite que la compra P2 propague su progreso.
+ * Ambos STOP bloquean: la OT solo sale del STOP vía asignación (9.8.4)
+ * o consumo (9.8.3), nunca por Confirmado/Recibido de una OC.
  */
 export function esEstadoMaterialStopBloqueado(
   estado: string | null | undefined
 ): boolean {
-  return (estado ?? "").trim() === STOP_MATERIAL_LIBERADO;
+  return esEstadoMaterialStop(estado);
 }
 
 // ── Bloque 9.8.1b — Allowlist nueva compra ───────────────────────────────────

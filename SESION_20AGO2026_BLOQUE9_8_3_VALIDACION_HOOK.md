@@ -133,9 +133,38 @@ Aplicados en remoto + código:
 
 ---
 
+## Endurecer STOP (20 ago noche) + OT lab 98022
+
+**Bug:** al pasar una compra a Confirmado/Recibido, `onEstadoChange` sincronizaba `estado_material` a `Compra confirmada` / `Material recibido` **aunque la OT estuviera en STOP** (`Pendiente compra de corrección`). Eso impedía validar limpio el hook de consumo (Camino B).
+
+**Fix UI:** `esEstadoMaterialStopBloqueado` (= cualquier STOP) en `compras-material-page.tsx` — no propagar progreso de compra a `estado_material` si la OT está en liberado o pendiente corrección. Salida STOP solo por asignación (9.8.4) o consumo (9.8.3).
+
+### OT 98022 — lista para Camino B (seed BD)
+
+Clon operativo de 98021, preparada **antes** de Liberar:
+
+| Campo | Valor |
+|-------|--------|
+| OT | `98022` — ANUR / EU514 (lab 9.8.3) |
+| Despacho | ALLYKING 300 g · 75×105 · 300 h · TAM00537 |
+| `estado_material` | **Material en stock asignado** |
+| Compra | `OCM-98022` P1 normal · Recibido · ALLYKING |
+| Cartela | **#99027** (prueba) · 300 h · `reservado` → OT 98022 |
+| Pasos | 6 (CTP disponible; Guillotina+resto pendiente; sin cartela consumida) |
+
+### Checklist Camino B en 98022
+
+1. Despachadas → **Liberar** cartela #99027 → badge `Sin material asignado (liberado)`.
+2. Compras → **Compra de corrección** ALLYKING → badge `Pendiente compra de corrección`.
+3. Confirmar + Recibir la corrección → **badge debe seguir** `Pendiente compra de corrección` (no `Compra confirmada`).
+4. Muelle → cartela con reserva directa a 98022 (sin botón Asignar).
+5. Guillotina → consumir → badge `Material en stock asignado` (hook consumo).
+
+---
+
 ## Siguiente paso — validación en planta
 
-**Validación:** Los dos hooks cubren **caminos distintos**, no redundantes. Validar ambos:
+**Validación:** Los dos hooks cubren **caminos distintos**, no redundantes. Validar ambos en **98022** (lab limpio) o 98021 si aún útil:
 
 ### Camino A: Asignación explícita (hook 9.8.4)
 

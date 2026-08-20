@@ -4,8 +4,8 @@
 > Complementa `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` (ATP, cartelas, consumo). Si hay contradicción sobre *liberar / recomprar / aviso formato*, **manda este documento**.
 >
 > **Estado:** ✅ **9.8.1–9.8.2 + 9.8.4 + 9.8.5 + compra sin OT en `main` (19 ago).** Lab **98020** A+B+C validado. ✅ **P0 7.1–7.3 + P2 §18.9/18.11/18.15 smoke-validados (20 ago)** — ver `SESION_20AGO2026_BACKLOG_P0_STOP.md`. Pendiente: **9.8.3**, **9.8.6**.
-> **OT laboratorio:** **98019** (A) · **98020** (A+B+C + Reset STOP) · **35643** (smoke stock libre / Pool). Clonar **98021** para lab limpio.
-> **Sesiones:** `SESION_18AGO2026_STOP_MATERIAL.md` · `SESION_19AGO2026_STOP_MATERIAL_98020.md` · **`SESION_20AGO2026_BACKLOG_P0_STOP.md`** (handoff smoke).
+> **OT laboratorio:** **98019** (A) · **98020** (A+B+C) · **98021** (lab corrección) · **98022** (Camino B limpio, seed 20 ago) · **35643** (smoke stock libre / Pool).
+> **Sesiones:** `SESION_18AGO2026_STOP_MATERIAL.md` · `SESION_19AGO2026_STOP_MATERIAL_98020.md` · **`SESION_20AGO2026_BACKLOG_P0_STOP.md`** · **`SESION_20AGO2026_BLOQUE9_8_3_VALIDACION_HOOK.md`**.
 >
 > **Numeración:** el roadmap B9 tenía «9.8 fotos/adjuntos» *sin empezar* (baja). **9.8 queda para este módulo** (prioridad planta). Fotos/adjuntos pasa a **9.10**. **9.9** (IA Stock) no se toca.
 
