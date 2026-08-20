@@ -142,19 +142,99 @@ Permitir buscar cartelas sin estar limitado a las 200 filas más recientes.
 
 ---
 
-## Validación pendiente
+## Validación 7.3 (Cartelas — búsqueda server-side)
 
-- **7.1**: Lab con OT que tenga pasos posteriores en mesa tras revertir consumo
-- **7.2**: Lab asignar stock libre desde Stock → detalle
-- **7.3**: Lab buscar cartelas por ID/albarán/OT, verificar que carga > 200
+**Estado final**: ✅ VALIDADO (con 4 fixes iterativos durante el lab)
+
+### Pasos y resultados
+
+| # | Paso | Resultado |
+|---|------|-----------|
+| 7.3.1 | Buscar cartela de prueba por `id_stock` (e.g. `10985`) | ✅ Aparece sola |
+| 7.3.2 | Verificar búsqueda levanta > 200 filas (sin límite) | ✅ |
+| 7.3.3 | Buscar por albarán parcial | ✅ |
+| 7.3.4 | Buscar `98020` (OT número numérico) | ❌ → Fixed |
+| 7.3.5 | Crear cartela de prueba con wizard → no auto-colapsa lista | ✅ (tras fix) |
+| 7.3.6 | Filtro ID Stock independiente no da resultados cruzados falsos | ✅ |
+
+### Bugs encontrados y fixes aplicados
+
+| # | Bug | Fix | Commit |
+|---|-----|-----|--------|
+| B1 | `id_stock` numérico solo hacía exact match → búsqueda OT `98020` no salía | Combinar búsqueda: `id_stock` (prefijo/rango) + `ot_numero` (ilike) + `nota_entrega` (ilike) en `Promise.all` | `153ec42` |
+| B2 | `id_stock::text ILIKE` rechazado por PostgREST (columna integer) | `idStockPrefixOrFilter`: genera rangos numéricos (`gte`/`lt`) para simular búsqueda parcial de entero | `ec4040a` |
+| B3 | Overflow `int4` en rangos para prefijos largos (e.g. `1067`) → error `22003` | Añadir cap `PG_INT4_MAX` en `idStockPrefixOrFilter` | `2b13786` |
+| B4 | Input único → `1067` devolvía cientos de filas (match en `nota_entrega` como `410679668`) | Separar en **3 inputs independientes**: ID Stock / Albarán-OT / Material (AND logic server-side) | `54d7c4b` |
+| B5 | Tras crear cartela con wizard, `handleWizardCreated` seguía rellenando filtro → lista se colapsaba | Eliminar auto-fill; wizard solo limpia filtros | `3b973d3` |
+| B6 | Build Vercel: `setSearch` llamado pero estado renombrado a `searchCartelas` | Renombrar correctamente | `177b656` |
+
+### UX final (3 inputs)
+
+```
+[ ID Stock: _____ ]  [ Albarán / OT: _____ ]  [ Material: _____ ]
+```
+- AND logic: solo muestra cartelas que matcheen todos los filtros activos
+- Cada input dispara búsqueda server-side al presionar Enter
+- Sin límite de 200 cuando hay búsqueda activa
+
+---
+
+## Validación 7.2 (Asignar OT desde Stock)
+
+**Estado final**: ✅ MECANISMO VALIDADO — 2 gaps P2 detectados
+
+### Pasos y resultados
+
+| # | Paso | Resultado |
+|---|------|-----------|
+| 7.2.1 | Botón "Asignar a OT" visible en stock libre (`#99022`) | ✅ |
+| 7.2.2 | Botón oculto en palet con OT ya asignada (`#99023`) | ✅ |
+| 7.2.3 | Split `#99020` 1000h → 900h + 100h → nueva cartela `#10986` | ✅ Toast OK |
+| 7.2.4 | Abrir `#10986`, clicar "Asignar a OT", teclear `35760`, confirmar | ✅ Toast: "Cartela #10986 asignada a OT 35760. Material en stock asignado." |
+| 7.2.5 | `#10986` en lista Stock muestra OT `35760` | ✅ |
+| 7.2.6 | `#99020` queda con 100h libres | ✅ |
+
+### Gaps detectados (backlog)
+
+| # | Gap | Prioridad | Ref backlog |
+|---|-----|-----------|-------------|
+| G1 | `estado_material` en OT 35760 sigue "Sin orden de compra" tras asignar. El RPC 9.8.4 solo actualiza si OT venía de STOP (`liberado`/`Pendiente corrección`) — si la OT nunca pasó por STOP, el `WHERE` no hace match. Ampliar WHERE del RPC. | P2 | §18.11 |
+| G2 | Pool semáforo sigue en rojo ("Sin compra generada - no se puede enviar a mesa") aunque hay cartela asignada | P2 | §18.9 |
+| G3 | Campo OT destino sin inteligencia (campo libre, sin autocompletar ni validar existencia) | P2 | §18.15 |
+
+---
+
+## Validación 7.1 (Reset planificación STOP)
+
+**Estado final**: 🔲 PENDIENTE — Lab 20/08
+
+### Escenario rápido propuesto: OT 98020 simulada
+
+**Objetivo**: Tener una OT con ≥1 paso finalizado y ≥1 paso siguiente en mesa activo, para validar que el botón "Reset planificación STOP" identifica y anula correctamente los huecos.
+
+**Pasos del lab**:
+
+1. Ir a OT 98020 (o clonar configuración) → Hoja de Ruta
+2. Verificar qué pasos tiene en mesa actualmente (Impresión u otro)
+3. Si no hay pasos en mesa: planificar Impresión Offset en mesa (sin ejecutar)
+4. Ir a un paso anterior (e.g., Guillotina / CTP) → botón admin → "Reset planificación STOP"
+5. Verificar que el diálogo lista el hueco de Impresión
+6. Confirmar → verificar:
+   - Hueco desaparece de mesa (Mesa diaria)
+   - OT vuelve al Pool (`en_transito`)
+   - Toast confirmación
+
+**OTs candidatas conocidas**:
+- `98020`: Lab principal, conocida, múltiples pasos. Verificar si tiene huecos activos en mesa.
+- Nueva OT clon de 98016 ó 98020 si la anterior está "sucia".
 
 ---
 
 ## Deuda técnica / mejoras opcionales
 
-- **7.1**: Añadir preview de pasos a anular (nombre completo, OT, mesa fecha/hora)
-- **7.3**: Indexar `nota_entrega` si búsqueda es lenta (depende de volumen)
-- **7.3**: Añadir búsqueda por material_nombre (actual: solo id/albarán/OT)
+- **7.1**: Añadir preview mejorado (nombre completo paso, mesa, fecha/hora planificada)
+- **7.3**: Indexar `nota_entrega` si búsqueda lenta con volumen alto
+- **7.3**: Búsqueda por `material_nombre` ya disponible en tercer input (material)
 
 ---
 
@@ -175,9 +255,10 @@ Permitir buscar cartelas sin estar limitado a las 200 filas más recientes.
 
 ---
 
-## Notas para siguiente sesión
+## Notas siguiente sesión
 
-- Validar las 3 tareas en lab (recomendado: usar OT nueva para 7.1, probar con 98020 para 7.2/7.3)
-- Si lab OK, continuar con **P1**:
-  - 9.8.3 Compra corrección P2 (type `correccion`, allowlist batch)
+- Validar **7.1** con escenario de mesa arriba
+- Si lab OK → continuar con **P1**:
+  - 9.8.3 Compra corrección (type `correccion`, allowlist batch)
   - 9.8.6 Popup redespacho asistido
+- Luego **P2** prioritarios: §18.11 (estado_material OT no-STOP) + §18.9 (semáforo Pool stock)
