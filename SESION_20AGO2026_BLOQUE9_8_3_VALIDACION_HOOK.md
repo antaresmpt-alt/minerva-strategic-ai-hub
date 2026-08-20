@@ -115,7 +115,25 @@ Este hueco queda cerrado con la implementación 9.8.3:
 
 ---
 
-## Siguiente paso
+## Backlog fixes post-lab 98021 (20 ago noche)
+
+Aplicados en remoto + código:
+
+| Ítem | Estado |
+|------|--------|
+| Migraciones 9.8.3 schema + hook consumo | ✅ Aplicadas en Supabase |
+| Prorrateo coste en split (+ repair #10987/#10988) | ✅ |
+| Búsqueda OT por título/cliente/ref | ✅ `OtDestinoSearchInput` |
+| Compra manual: buscador OT + autofill | ✅ |
+| Toast error real al guardar compra | ✅ |
+| Maquetar modal detalle Stock | ✅ |
+| Rendimiento Despachadas/Compras | ⏳ Pendiente (P2) — se notó lentitud en lab; no tocado en este paquete |
+
+**Continuar Camino B:** reintentar Guardar en «Compra de corrección» P2 ALLYKING (ahora las columnas existen).
+
+---
+
+## Siguiente paso — validación en planta
 
 **Validación:** Los dos hooks cubren **caminos distintos**, no redundantes. Validar ambos:
 

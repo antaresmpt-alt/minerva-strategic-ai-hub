@@ -1098,35 +1098,33 @@ function StockDetalleDialog({
 
   return (
     <Dialog open={!!row} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <span className="font-black text-2xl text-[#002147]">
+      <DialogContent className="flex max-h-[min(92vh,720px)] w-[calc(100%-1.5rem)] max-w-xl flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
+        <DialogHeader className="shrink-0 space-y-1 border-b border-slate-100 px-4 py-3">
+          <DialogTitle className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-xl font-semibold tracking-tight text-[#002147]">
               #{row.id_stock}
             </span>
             <Badge
               variant="outline"
-              className={`text-xs ${ESTADO_BADGE[row.estado_derivado]}`}
+              className={`text-[10px] font-medium ${ESTADO_BADGE[row.estado_derivado]}`}
             >
               {ESTADO_LABEL[row.estado_derivado]}
             </Badge>
           </DialogTitle>
+          <p className="text-left text-sm font-medium leading-snug text-slate-800">
+            {row.material_nombre ?? row.descripcion_material ?? "—"}
+            {row.gramaje ? ` · ${row.gramaje} gr` : ""}
+            {row.formato ? ` · ${row.formato}` : ""}
+          </p>
+          <p className="text-left text-[11px] text-slate-500">
+            {row.codigo_articulo ? `Cód. ${row.codigo_articulo} · ` : ""}
+            {TIPO_STOCK_LABEL[row.tipo_stock]}
+            {row.es_fsc ? " · FSC" : ""}
+            {row.es_pefc ? " · PEFC" : ""}
+          </p>
         </DialogHeader>
 
-        <div className="space-y-4 text-sm">
-          <div>
-            <p className="font-medium">
-              {row.material_nombre ?? row.descripcion_material ?? "—"}
-              {row.gramaje ? ` · ${row.gramaje} gr` : ""}
-              {row.formato ? ` · ${row.formato}` : ""}
-            </p>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {row.codigo_articulo ? `Cód. ${row.codigo_articulo} · ` : ""}
-              {TIPO_STOCK_LABEL[row.tipo_stock]}
-              {row.es_fsc ? " · FSC" : ""}
-              {row.es_pefc ? " · PEFC" : ""}
-            </p>
-          </div>
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3 text-sm">
 
           {row.sobre_reservado && (
             <div className="flex items-start gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
@@ -1139,7 +1137,7 @@ function StockDetalleDialog({
             </div>
           )}
 
-          <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="grid grid-cols-3 gap-2 rounded-md border border-slate-200 bg-slate-50/80 p-2 text-center">
             <DetalleCant
               label="Físicas"
               value={row.cantidad_fisica}
@@ -1157,9 +1155,10 @@ function StockDetalleDialog({
             />
           </div>
 
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs sm:grid-cols-3">
             <Campo label="Ubicación" value={row.ubicacion_fila} />
             <Campo label="Unidad" value={row.unidad} />
+            <Campo label="Inicial" value={`${row.cantidad_inicial.toLocaleString("es-ES")} h`} />
             {(() => {
               const rem = costeRemanentePalet(
                 row.coste,
@@ -1184,7 +1183,6 @@ function StockDetalleDialog({
                 </>
               );
             })()}
-            <Campo label="Inicial" value={`${row.cantidad_inicial.toLocaleString("es-ES")} h`} />
             <Campo label="Albarán" value={row.nota_entrega} />
             <Campo label="Proveedor" value={row.proveedor_nombre ?? null} />
             <Campo label="Ref. lote" value={row.ref_lote} />
@@ -1195,8 +1193,8 @@ function StockDetalleDialog({
             />
           </dl>
 
-          <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase mb-1">
+          <div className="rounded-md border border-slate-100 px-2.5 py-2">
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
               OT(s) referenciadas
             </p>
             {row.ots.length === 0 ? (
@@ -1220,7 +1218,7 @@ function StockDetalleDialog({
           </div>
 
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase mb-1">
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
               Últimos movimientos
             </p>
             {loadingMovs ? (
@@ -1230,17 +1228,17 @@ function StockDetalleDialog({
                 Sin movimientos registrados para este palet.
               </p>
             ) : (
-              <div className="space-y-1">
+              <div className="divide-y divide-slate-100 rounded-md border border-slate-100">
                 {movs.map((m) => (
                   <div
                     key={m.id}
-                    className="flex items-center justify-between text-xs border-b border-slate-100 py-1"
+                    className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-2 px-2 py-1.5 text-xs"
                   >
-                    <span className="capitalize">{m.tipo}</span>
-                    <span className="tabular-nums">
+                    <span className="capitalize text-slate-700">{m.tipo}</span>
+                    <span className="tabular-nums text-slate-800">
                       {m.cantidad.toLocaleString("es-ES")} h
                     </span>
-                    <span className="text-slate-400">
+                    <span className="font-mono text-slate-500">
                       {m.ot_numero ?? "—"}
                     </span>
                     <span className="text-slate-400">
@@ -1301,15 +1299,15 @@ function StockDetalleDialog({
             )}
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={onClose}>
-              Cerrar
-            </Button>
-            <Button onClick={() => onPrint(row)}>
-              <Printer className="size-4 mr-2" />
-              Reimprimir cartela
-            </Button>
-          </div>
+        </div>
+        <div className="flex shrink-0 justify-end gap-2 border-t border-slate-100 px-4 py-3">
+          <Button variant="outline" onClick={onClose}>
+            Cerrar
+          </Button>
+          <Button onClick={() => onPrint(row)}>
+            <Printer className="mr-2 size-4" />
+            Reimprimir cartela
+          </Button>
         </div>
       </DialogContent>
 

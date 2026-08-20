@@ -18,7 +18,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/select-native";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  OtDestinoSearchInput,
+  type OtSugerencia,
+} from "@/components/produccion/almacen/ot-destino-search-input";
 import { STOP_PENDIENTE_CORRECCION } from "@/lib/compras-material-estados";
+import { errorMessageFromUnknown } from "@/lib/error-message";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
 
@@ -251,7 +256,7 @@ export function ComprasMaterialManualDialog({
       }
     } catch (e) {
       console.error(e);
-      toast.error(e instanceof Error ? e.message : "No se pudo guardar la compra.");
+      toast.error(errorMessageFromUnknown(e, "No se pudo guardar la compra."));
     } finally {
       setSaving(false);
     }
@@ -302,13 +307,33 @@ export function ComprasMaterialManualDialog({
               <Label htmlFor="manual-ot" className="text-xs">
                 OT
               </Label>
-              <Input
+              <OtDestinoSearchInput
                 id="manual-ot"
                 value={form.ot}
-                onChange={(e) => patch({ ot: normalizeOtNumeroInput(e.target.value) })}
-                onBlur={(e) => patch({ ot: normalizeOtNumeroInput(e.target.value) })}
-                placeholder="Ej. 38514"
-                inputMode="numeric"
+                onChange={(v) => patch({ ot: v })}
+                onSelectSuggestion={(s: OtSugerencia) => {
+                  setForm((prev) => ({
+                    ...prev,
+                    ot: s.ot_numero,
+                    cliente: s.cliente?.trim() || prev.cliente,
+                    titulo: s.titulo?.trim() || prev.titulo,
+                    material: s.material?.trim() || prev.material,
+                    gramaje:
+                      s.gramaje != null && Number.isFinite(s.gramaje)
+                        ? String(s.gramaje)
+                        : prev.gramaje,
+                    formato: s.tamano_hoja?.trim() || prev.formato,
+                    hojasNetas:
+                      s.num_hojas_netas != null
+                        ? String(s.num_hojas_netas)
+                        : prev.hojasNetas,
+                    hojasBrutas:
+                      s.num_hojas_brutas != null
+                        ? String(s.num_hojas_brutas)
+                        : prev.hojasBrutas,
+                  }));
+                }}
+                placeholder="OT, cliente, título o ref…"
                 className="h-8 text-xs"
               />
             </div>
