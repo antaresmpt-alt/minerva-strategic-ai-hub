@@ -207,9 +207,9 @@ Disciplina: **probar en 98019 antes de abrir la siguiente.**
 | **9.8.1 + 9.8.1b** | Liberar reserva + movimiento ledger + notas palet + **arreglar gate de compra** | **Sonnet** (ledger) + Composer para el allowlist UI | ✅ **Implementado + 98019-A validada 18 ago.** Pendiente **merge**. |
 | **9.8.1c** | **Auditoría legacy stock** — grep + sync consumo 9.4 + Cartelas ATP | Composer | ✅ **Hecho 18 ago noche** (migración + UI; repair #10984) |
 | **9.8.2** | Aviso CTP + Guillotina (`formato_papel` vs cartela / corte) | **Composer** | Lectura; no corrompe stock |
-| **9.8.3** | Compra corrección P2 + **salida explícita de estado STOP** (`estado_material` al cartelar/consumir) + sync post-consumo 9.4 | **Sonnet** | Estados compras + despachadas + palet legacy |
-| **9.8.4** | Asignar stock libre → OT (Juan); buscar por material/gramaje/`formato` | **Composer** | |
-| **9.8.5** | RPC `prod_stock_revertir_consumo` simétrica | **Sonnet** | Inventario real |
+| **9.8.3** | Compra corrección P2 + **salida explícita de estado STOP** (`estado_material` al cartelar/consumir) + sync post-consumo 9.4 | **Sonnet** | ✅ **Implementado 20 ago tarde.** Pendiente prueba en planta. Ver `SESION_20AGO2026_BLOQUE9_8_3_VALIDACION_HOOK.md`. |
+| **9.8.4** | Asignar stock libre → OT (Juan); buscar por material/gramaje/`formato` | **Composer** | ✅ **Hecho + validado 20 ago** (P0 7.2, §18.11, §18.15) |
+| **9.8.5** | RPC `prod_stock_revertir_consumo` simétrica | **Sonnet** | ✅ **Hecho + validado 19 ago** (98020-B) |
 | **9.8.6** | Popup redespacho asistido tras reasignar | **Composer** | |
 
 ### 9.8.1b — trampa `includes("sin")` (bloqueante)
@@ -278,6 +278,8 @@ Regla de sync: al actualizar una OC **histórica** Recibida, **no** pise `estado
 - `prod_compra_material.tipo` (`normal` \| `correccion`) o equivalente.
 - `compra_origen_id` UUID nullable → la OC 1.
 - `motivo` / notas de corrección.
+
+**Estado:** ✅ Implementado 20 ago tarde. Migración `20260820173000_bloque9_8_3_compra_correccion_schema.sql` + hook consumo `20260820173100_bloque9_8_3_consumo_salida_stop.sql`. Ver detalle en `SESION_20AGO2026_BLOQUE9_8_3_VALIDACION_HOOK.md`.
 
 ### 9.8.5
 

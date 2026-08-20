@@ -37,6 +37,8 @@ export type ManualCompraInitialValues = {
   cliente: string;
   titulo: string;
   notasCompra: string;
+  compraOrigenId?: string | null;
+  motivoCorreccion?: string;
 };
 
 type ProveedorOption = { id: string; nombre: string };
@@ -94,6 +96,8 @@ const EMPTY_FORM: ManualCompraInitialValues = {
   cliente: "",
   titulo: "",
   notasCompra: "",
+  compraOrigenId: null,
+  motivoCorreccion: "",
 };
 
 /** Modal aislado: el estado del formulario no re-renderiza la tabla de compras al teclear. */
@@ -175,7 +179,7 @@ export function ComprasMaterialManualDialog({
         ? [notasBase, "[STOCK LIBRE — sin OT]"].filter(Boolean).join(" ")
         : notasBase || null;
 
-      const { error: insertErr } = await supabase.from(TABLE_COMPRA).insert({
+      const insertPayload: Record<string, unknown> = {
         ot_numero: ot,
         num_compra: num,
         posicion: posicionParsed,
@@ -189,7 +193,16 @@ export function ComprasMaterialManualDialog({
         num_hojas_brutas: numHojasBrutas,
         notas: notasCompra,
         estado: "Pendiente",
-      });
+      };
+
+      // 9.8.3: si es flujo de corrección, marcar tipo y origen.
+      if (isCorreccionFlow) {
+        insertPayload.tipo = "correccion";
+        insertPayload.compra_origen_id = form.compraOrigenId ?? undefined;
+        insertPayload.motivo = form.motivoCorreccion?.trim() || undefined;
+      }
+
+      const { error: insertErr } = await supabase.from(TABLE_COMPRA).insert(insertPayload);
       if (insertErr) throw insertErr;
 
       if (!esStockLibre && ot) {
@@ -448,6 +461,21 @@ export function ComprasMaterialManualDialog({
               className="h-8 text-xs"
             />
           </div>
+          {isCorreccionFlow ? (
+            <div className="grid gap-1 sm:col-span-2">
+              <Label htmlFor="manual-motivo-correccion" className="text-xs">
+                Motivo de corrección (STOP)
+              </Label>
+              <Textarea
+                id="manual-motivo-correccion"
+                rows={2}
+                value={form.motivoCorreccion ?? ""}
+                onChange={(e) => patch({ motivoCorreccion: e.target.value })}
+                placeholder="Ej. Formato equivocado 65×92 (real 72×102), material defectuoso, etc."
+                className="resize-y text-xs leading-snug"
+              />
+            </div>
+          ) : null}
           <div className="grid gap-1 sm:col-span-2">
             <Label htmlFor="manual-notas-compra" className="text-xs">
               Notas compra (Jordi)

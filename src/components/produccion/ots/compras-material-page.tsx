@@ -305,6 +305,7 @@ function buildManualInitialFromRow(
   row: ComprasMaterialTableRow,
   posicion: string,
   notasCompra: string,
+  compraOrigenId?: string | null,
 ): ManualCompraInitialValues {
   return {
     ot: normalizeOtNumeroInput(row.ot_numero),
@@ -319,6 +320,8 @@ function buildManualInitialFromRow(
     cliente: row.cliente?.trim() ?? "",
     titulo: row.titulo?.trim() ?? "",
     notasCompra,
+    compraOrigenId: compraOrigenId ?? null,
+    motivoCorreccion: "",
   };
 }
 
@@ -1070,7 +1073,12 @@ export function ComprasMaterialPage() {
     (row: ComprasMaterialTableRow) => {
       const nextPos = sugerirSiguientePosicionOt(row.ot_numero);
       setManualInitialValues(
-        buildManualInitialFromRow(row, String(nextPos), "Compra de corrección (9.8.3)"),
+        buildManualInitialFromRow(
+          row,
+          String(nextPos),
+          "Compra de corrección (9.8.3)",
+          row.id, // Compra origen (UUID de la compra original fallida)
+        ),
       );
       setIsCorreccionFlow(true);
       setManualOpen(true);

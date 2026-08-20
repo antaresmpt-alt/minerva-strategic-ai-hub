@@ -292,11 +292,11 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [x] **Spec 9.8** reasignación/STOP + OT laboratorio **98019** — 18 ago (`MINERVA_BLOQUE9_REASIGNACION_STOP.md`)
 - [x] **9.8.1 + 9.8.1b** — 98019-A (18 ago) + 98020-A (19 ago)
 - [x] **9.8.2** aviso formato CTP/Guillotina/Impresión — `acca03b` · 98020 A/B
+- [x] **9.8.3** compra corrección P2 + hook salida STOP — ✅ 20 ago (migr + UI)
 - [x] **9.8.4** asignar stock libre → OT — 98020-C (#10985)
 - [x] **9.8.5** revertir consumo + anti-doble — 98020-B (#99021)
 - [x] **Compra/cartela sin OT** (entrada stock libre) — `c93205e` · OCM-STOCK + #99022
 - [x] **Fix reabrir paso** mesa (`prod_mesa_planificacion_trabajos`) — `14fc084`
-- [ ] **9.8.3** compra corrección P2 desde Despachadas
 - [ ] **9.8.6** popup redespacho asistido
 - [x] **Reset planificación STOP** (botón + confirmación; brief §19) — ✅ 20 ago smoke
 - [x] **Asignar OT en Stock** + **Cartelas búsqueda server-side** — ✅ 20 ago smoke
@@ -306,12 +306,14 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 
 ### Prioridad inmediata (post 20 ago)
 
-1. **§18.0 / Prerreq** — Tipos Supabase `Database`: `database.ts` generado (20 ago) + clientes cableados ✅. **Pendiente: triagear errores `tsc --noEmit`** antes de tocar código de negocio. Ver `SESION_20AGO2026_SUPABASE_TYPES_TRIAGE.md`.
-2. **9.8.3** compra corrección · **9.8.6** redespacho popup
+1. **Validar 9.8.3** en planta — ciclo completo liberar→corrección→cartelar→consumir; confirmar salida STOP limpia. Ver `SESION_20AGO2026_BLOQUE9_8_3_VALIDACION_HOOK.md`.
+2. **9.8.6** redespacho popup asistido
 3. Polish: observaciones CTP, KPI reservas blandas (§18.8)
 4. **Bloque 11** (con cuidado) · **Bloque 12** (sept)
 
 ### Hecho reciente (jul–ago)
+- [x] **20 ago tarde:** 9.8.3 implementado (compra corrección + hook salida STOP consumo/asignación) — `SESION_20AGO2026_BLOQUE9_8_3_VALIDACION_HOOK.md`
+- [x] **20 ago tarde:** §18.0 tipos Supabase `Database` — triage 44 errores tsc (12 P1 fijos, 32 P2 ruido) — `SESION_20AGO2026_SUPABASE_TYPES_TRIAGE.md`
 - [x] **20 ago:** P0 7.1–7.3 + P2 §18.9/11/15 smoke-validados — `SESION_20AGO2026_BACKLOG_P0_STOP.md`
 - [x] **19 ago:** lab **98020** A+B+C validado; commits 9.8.2/4/5 + stock libre — `SESION_19AGO2026_STOP_MATERIAL_98020.md`
 - [x] **18 ago:** spec Bloque 9.8 + OT **98019** + 98019-A validada — `SESION_18AGO2026_STOP_MATERIAL.md`
@@ -333,11 +335,11 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [ ] Preguntas §12 planta (CTP hija) si hace falta antes de 8.4 fino
 
 ### Siguiente foco (orden sugerido post 20 ago)
-1. **§18.0 prerreq:** triagear `tsc --noEmit` con tipos `Database` activos (ver `SESION_20AGO2026_SUPABASE_TYPES_TRIAGE.md`)
-2. **9.8.3** compra corrección · **9.8.6** redespacho popup
-2. Polish 9.8 (§18.8 KPI reservas · observaciones CTP)
-3. **Bloque 11** (con cuidado) · **Bloque 12** (sept) · **B5** Rita→Hugo
-4. Digital/Guillotina/PDF — feedback planta en TEST
+1. **Validar 9.8.3** en planta (ciclo completo: liberar→corrección→cartelar→consumir)
+2. **9.8.6** redespacho popup asistido
+3. Polish 9.8 (§18.8 KPI reservas · observaciones CTP)
+4. **Bloque 11** (con cuidado) · **Bloque 12** (sept) · **B5** Rita→Hugo
+5. Digital/Guillotina/PDF — feedback planta en TEST
 
 ---
 
