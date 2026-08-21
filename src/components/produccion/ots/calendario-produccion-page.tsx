@@ -99,6 +99,7 @@ import {
   fetchPasarAMesaGateByOt,
   pasarOtsAColaMesa,
 } from "@/lib/planificacion-pasar-a-mesa";
+import { isOtNumeroPrueba } from "@/lib/ot-prueba";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
@@ -121,6 +122,7 @@ const MIGRATION_HINT_NOTAS =
 const STORAGE_SHOW_SATURDAY = "cal-prod-show-saturday";
 const STORAGE_VISTA = "cal-prod-vista";
 const STORAGE_AMBITO_VIS = "cal-prod-ambito-vis";
+const STORAGE_MOSTRAR_PRUEBAS = "cal-prod-mostrar-pruebas";
 
 type VistaCalendario = "mes" | "semana";
 
@@ -426,6 +428,7 @@ export function CalendarioProduccionPage() {
   const [weekMonday, setWeekMonday] = useState(() => mondayOfWeek(now));
   const [vista, setVista] = useState<VistaCalendario>("mes");
   const [showSaturday, setShowSaturday] = useState(false);
+  const [mostrarPruebas, setMostrarPruebas] = useState(false);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [rows, setRows] = useState<ProdCalendarioProduccionOtRow[]>([]);
@@ -476,6 +479,7 @@ export function CalendarioProduccionPage() {
   useEffect(() => {
     try {
       setShowSaturday(localStorage.getItem(STORAGE_SHOW_SATURDAY) === "1");
+      setMostrarPruebas(localStorage.getItem(STORAGE_MOSTRAR_PRUEBAS) === "1");
       const v = localStorage.getItem(STORAGE_VISTA);
       if (v === "semana" || v === "mes") setVista(v);
       const vis = parseCalendarioAmbitoVisibility(
@@ -554,9 +558,19 @@ export function CalendarioProduccionPage() {
   const rowsVisibles = useMemo(() => {
     return rows.filter((r) => {
       const a = isCalendarioAmbito(r.ambito) ? r.ambito : "impresion";
-      return ambitoVisibility[a];
+      if (!ambitoVisibility[a]) return false;
+      if (!mostrarPruebas && isOtNumeroPrueba(r.ot_numero)) return false;
+      return true;
     });
-  }, [rows, ambitoVisibility]);
+  }, [rows, ambitoVisibility, mostrarPruebas]);
+
+  const otsPruebaOcultas = useMemo(() => {
+    if (mostrarPruebas) return 0;
+    return rows.filter((r) => {
+      const a = isCalendarioAmbito(r.ambito) ? r.ambito : "impresion";
+      return ambitoVisibility[a] && isOtNumeroPrueba(r.ot_numero);
+    }).length;
+  }, [rows, ambitoVisibility, mostrarPruebas]);
 
   const visibilidadLabel = useMemo(() => {
     const letras = CALENDARIO_AMBITOS.filter((a) => ambitoVisibility[a]).map(
@@ -914,6 +928,11 @@ export function CalendarioProduccionPage() {
           return next;
         });
         toast.success(`OT ${ot} añadida (${labelCalendarioAmbito(ambitoActivo)}).`);
+        if (isOtNumeroPrueba(ot) && !mostrarPruebas) {
+          toast.message(
+            `OT ${ot} es de prueba (≥98000). Activa «Mostrar OTs prueba» si no la ves.`,
+          );
+        }
         setOtQuery("");
         setOtHits([]);
         await load();
@@ -923,7 +942,7 @@ export function CalendarioProduccionPage() {
         setSaving(false);
       }
     },
-    [ambitoActivo, dayYmd, load, rows, supabase, userRole],
+    [ambitoActivo, dayYmd, load, mostrarPruebas, rows, supabase, userRole],
   );
 
   const addOtToDay = async (hit: OtSearchHit) => {
@@ -1714,6 +1733,31 @@ export function CalendarioProduccionPage() {
             onChange={(e) => setSoloPendientes(e.target.checked)}
           />
           Solo pendientes
+        </label>
+        <label
+          className="flex cursor-pointer items-center gap-2 text-xs text-slate-600"
+          title="OTs de laboratorio Minerva (número ≥ 98000). Por defecto ocultas para no mezclar con el plan de planta."
+        >
+          <input
+            type="checkbox"
+            className="size-3.5 rounded border-slate-300"
+            checked={mostrarPruebas}
+            onChange={(e) => {
+              const v = e.target.checked;
+              setMostrarPruebas(v);
+              try {
+                localStorage.setItem(STORAGE_MOSTRAR_PRUEBAS, v ? "1" : "0");
+              } catch {
+                /* ignore */
+              }
+            }}
+          />
+          Mostrar OTs prueba (≥98.000)
+          {otsPruebaOcultas > 0 ? (
+            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">
+              {otsPruebaOcultas} oculta{otsPruebaOcultas !== 1 ? "s" : ""}
+            </span>
+          ) : null}
         </label>
         <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
           <input
