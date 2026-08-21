@@ -76,6 +76,7 @@ import {
   RedespachoAsistidoHost,
   type RedespachoAsistidoOffer,
 } from "@/components/produccion/almacen/redespacho-asistido-dialog";
+import { esAlbaranPlaceholder } from "@/lib/albaran-placeholders";
 
 const ROLES_LIBERAR = new Set(["admin", "oficina_tecnica", "gerencia"]);
 
@@ -624,12 +625,7 @@ export function CartelasPage() {
     let list = pendientes.filter((g) => g.cartelas_existentes === 0);
 
     if (ocultarSinAlbaran) {
-      list = list.filter(
-        (g) =>
-          g.albaran_proveedor !== "(sin albarán)" &&
-          g.albaran_proveedor !== "-" &&
-          g.albaran_proveedor.trim() !== ""
-      );
+      list = list.filter((g) => !esAlbaranPlaceholder(g.albaran_proveedor));
     }
 
     if (soloUltimos30) {

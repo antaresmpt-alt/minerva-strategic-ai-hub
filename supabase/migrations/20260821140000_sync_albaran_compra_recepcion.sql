@@ -1,8 +1,5 @@
--- Sincroniza compras "Recibido" con recepciones administrativas.
--- Objetivo: evitar compras recibidas sin detalle en prod_recepciones_material
--- y propagar albarán compra → recepción (+ cartela si placeholder).
---
--- KEEP IN SYNC placeholders con src/lib/albaran-placeholders.ts
+-- Sync albarán compra → recepción (+ nota_entrega cartela si placeholder / igual al viejo).
+-- KEEP IN SYNC con src/lib/albaran-placeholders.ts (ALBARAN_PLACEHOLDERS / canónico "-").
 
 create or replace function public.prod_albaran_es_placeholder(p_alb text)
 returns boolean
@@ -50,6 +47,7 @@ begin
     end if;
   end if;
 
+  -- 1) Si no hay recepción, crear (comportamiento histórico).
   if not exists (
     select 1
     from public.prod_recepciones_material r
@@ -80,6 +78,7 @@ begin
       'Dpto. Compras'
     );
   else
+    -- 2) Ya hay recepción: propagar albarán desde la compra (fuente de verdad admin).
     update public.prod_recepciones_material r
     set albaran_proveedor = v_alb
     where r.compra_id = new.id
@@ -87,6 +86,7 @@ begin
         is distinct from v_alb;
   end if;
 
+  -- 3) Cartelas: solo si nota_entrega es placeholder o igual al albarán anterior.
   update public.prod_stock_palets p
   set nota_entrega = v_alb
   from public.prod_recepciones_material r
@@ -107,6 +107,9 @@ begin
 end;
 $$;
 
+comment on function public.prod_sync_recepcion_from_compra() is
+  'Al pasar/editar compra Recibido: crea o actualiza recepción.albarán; sync nota_entrega cartela solo si placeholder o igual al albarán viejo. KEEP IN SYNC placeholders con src/lib/albaran-placeholders.ts';
+
 drop trigger if exists trg_prod_compra_material_sync_recepcion
 on public.prod_compra_material;
 
@@ -116,34 +119,38 @@ on public.prod_compra_material
 for each row
 execute function public.prod_sync_recepcion_from_compra();
 
--- Backfill idempotente para compras que ya estaban en "Recibido".
-insert into public.prod_recepciones_material (
-  compra_id,
-  fecha_recepcion,
-  albaran_proveedor,
-  hojas_recibidas,
-  palets_recibidos,
-  estado_recepcion,
-  notas,
-  recepcionado_por,
-  recepcionado_por_email,
-  recepcionado_por_nombre
-)
-select
-  c.id,
-  coalesce(c.fecha_recepcion, now()),
-  coalesce(nullif(trim(coalesce(c.albaran_proveedor, '')), ''), '-'),
-  coalesce(c.num_hojas_brutas, 0),
-  0,
-  'Total',
-  'Alta automatica desde Compras (sin datos de muelle)',
-  null,
-  'compras@minervaglobal.es',
-  'Dpto. Compras'
+-- Backfill una vez: recepciones todavía en placeholder cuando la compra ya tiene albarán real.
+update public.prod_recepciones_material r
+set albaran_proveedor = btrim(c.albaran_proveedor)
 from public.prod_compra_material c
-where lower(trim(coalesce(c.estado, ''))) = 'recibido'
-  and not exists (
-    select 1
-    from public.prod_recepciones_material r
-    where r.compra_id = c.id
-  );
+where r.compra_id = c.id
+  and lower(trim(coalesce(c.estado, ''))) = 'recibido'
+  and public.prod_albaran_es_placeholder(r.albaran_proveedor)
+  and not public.prod_albaran_es_placeholder(c.albaran_proveedor);
+
+update public.prod_stock_palets p
+set nota_entrega = btrim(c.albaran_proveedor)
+from public.prod_recepciones_material r
+join public.prod_compra_material c on c.id = r.compra_id
+where p.recepcion_id = r.id
+  and lower(trim(coalesce(c.estado, ''))) = 'recibido'
+  and public.prod_albaran_es_placeholder(p.nota_entrega)
+  and not public.prod_albaran_es_placeholder(c.albaran_proveedor);
+
+-- Backfill una vez: recepciones todavía en placeholder cuando la compra ya tiene albarán real.
+update public.prod_recepciones_material r
+set albaran_proveedor = btrim(c.albaran_proveedor)
+from public.prod_compra_material c
+where r.compra_id = c.id
+  and lower(trim(coalesce(c.estado, ''))) = 'recibido'
+  and public.prod_albaran_es_placeholder(r.albaran_proveedor)
+  and not public.prod_albaran_es_placeholder(c.albaran_proveedor);
+
+update public.prod_stock_palets p
+set nota_entrega = btrim(c.albaran_proveedor)
+from public.prod_recepciones_material r
+join public.prod_compra_material c on c.id = r.compra_id
+where p.recepcion_id = r.id
+  and lower(trim(coalesce(c.estado, ''))) = 'recibido'
+  and public.prod_albaran_es_placeholder(p.nota_entrega)
+  and not public.prod_albaran_es_placeholder(c.albaran_proveedor);

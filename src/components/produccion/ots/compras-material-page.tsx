@@ -73,6 +73,10 @@ import {
   esEstadoMaterialStopBloqueado,
   normalizeCompraEstado,
 } from "@/lib/compras-material-estados";
+import {
+  albaranParaRecepcion,
+  esAlbaranPlaceholder,
+} from "@/lib/albaran-placeholders";
 import { esPrioridadStockAmarilla } from "@/lib/compras-material-prioridad";
 import {
   buildComprasMaterialSolicitudEmail,
@@ -1051,6 +1055,22 @@ export function ComprasMaterialPage() {
 
   const onEstadoChange = useCallback(
     async (rowId: string, estado: string) => {
+      const rowPre = rowsRef.current.find((r) => r.id === rowId) ?? null;
+      const esRecibidoPre = normalizeCompraEstado(estado) === "recibido";
+      if (
+        esRecibidoPre &&
+        rowPre &&
+        esAlbaranPlaceholder(rowPre.albaran_proveedor)
+      ) {
+        const ok = window.confirm(
+          "Esta compra no tiene número de albarán.\n\n" +
+            "En Cartelas se agrupará como pendiente sin albarán (hasta que lo edites en el lápiz).\n\n" +
+            "¿Marcar como Recibido igualmente?\n" +
+            "(Cancelar → rellena primero el albarán con el lápiz y vuelve a Recibido.)"
+        );
+        if (!ok) return;
+      }
+
       setSavingById((s) => ({ ...s, [rowId]: true }));
       try {
         const row = rowsRef.current.find((r) => r.id === rowId) ?? null;
@@ -1132,7 +1152,7 @@ export function ComprasMaterialPage() {
             typeof user?.id === "string" && /^[0-9a-f-]{36}$/i.test(user.id.trim())
               ? user.id.trim()
               : null;
-          const albaranCompra = row.albaran_proveedor?.trim() ?? "";
+          const albaranRecepcion = albaranParaRecepcion(row.albaran_proveedor);
           writeTasks.push(
             supabase
               .from(TABLE_RECEPCION)
@@ -1142,7 +1162,7 @@ export function ComprasMaterialPage() {
                   row.fecha_recepcion?.trim() && row.fecha_recepcion.trim().length > 0
                     ? row.fecha_recepcion
                     : ahoraIso,
-                albaran_proveedor: albaranCompra.length > 0 ? albaranCompra : "-",
+                albaran_proveedor: albaranRecepcion,
                 hojas_recibidas: row.num_hojas_brutas ?? 0,
                 palets_recibidos: 0,
                 estado_recepcion: "Total",
@@ -1159,6 +1179,16 @@ export function ComprasMaterialPage() {
 
         if (writeTasks.length > 0) {
           await Promise.all(writeTasks);
+        }
+
+        if (
+          esRecibido &&
+          row &&
+          esAlbaranPlaceholder(row.albaran_proveedor)
+        ) {
+          toast.message(
+            "Recibido sin albarán: en Cartelas desactiva «Ocultar sin albarán», o edita el albarán en el lápiz (se sincroniza solo)."
+          );
         }
 
         setRows((prev) =>
