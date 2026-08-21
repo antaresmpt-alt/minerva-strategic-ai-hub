@@ -429,8 +429,6 @@ export function ComprasMaterialPage() {
     })();
   }, [supabase]);
 
-  }, [supabase]);
-
   const loadRows = useCallback(async () => {
     setLoading(true);
     try {
