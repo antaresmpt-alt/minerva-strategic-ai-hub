@@ -15,8 +15,8 @@
 | ¿Qué se cerró hoy? | P0 7.1–7.3 + P2 §18.9/11/15 + **9.8.3** + harden UI |
 | ¿Verificado en planta? | **Sí.** Camino asignación (mañana) + Camino B consumo limpio (noche, OT **98022**) |
 | ¿Qué NO hay que repetir? | Otro lab «Camino A» de asignación — **ya validado hace horas** (§18.11 / 7.2) |
-| ¿Qué queda de 9.8? | ~~**9.8.6**~~ → **MVP 21 ago** (popup «¿Abrir lápiz?»). Smoke planta + merge auto = opcional |
-| ¿Qué molesta ahora? | ~~Rendimiento Compras~~ → **cerrado usable 21 ago** (`20a06a5`/`217e500`). Histórico/Despachadas = polish |
+| ¿Qué queda de 9.8? | **Cerrado en planta 21 ago** (9.8.6 smoke OT **36112**). Merge auto = opcional |
+| ¿Qué molesta ahora? | Histórico/Despachadas polish; merge auto 9.8.6 solo si se pide |
 | Fuente detallada mañana | `SESION_20AGO2026_BACKLOG_P0_STOP.md` |
 | Fuente detallada 9.8.3 | `SESION_20AGO2026_BLOQUE9_8_3_VALIDACION_HOOK.md` |
 | Brief módulo | `MINERVA_BLOQUE9_REASIGNACION_STOP.md` |
@@ -267,7 +267,7 @@ Si alguien pide «validar Camino A otra vez» en contexto 9.8.3: **rechazar** sa
 | **98020** | Lab A+B+C + Reset STOP | ✅ 19–20 ago |
 | **98021** | Lab corrección / split | Útil; STOP Camino B **no limpio** (pre-harden) |
 | **98022** | Camino B 9.8.3 limpio | ✅ badge limpio post-consumo |
-| **35643** | Smoke stock libre / Pool §18.9 | ✅ |
+| **36112** | Smoke 9.8.6 + prorrateo split | ✅ 21 ago (#10989) |
 | **35760** | Trampa `es_prueba` | No usar como evidencia Pool |
 
 ---
@@ -295,7 +295,9 @@ Perf Compras cerrado usable 21 ago. Supabase ref: jrwwuqplilbydxptsbqz. Branch m
 |------|--------|
 | Perf Compras (`20a06a5` + fix `217e500`) | ✅ Usable ~1–2 s; modal editar fluido |
 | **9.8.6 MVP** | ✅ Popup «¿Abrir lápiz despacho?» tras asignar en **Stock** y **Cartelas** (roles oficina). Merge auto = fase 2 |
-| Smoke planta 9.8.6 | ⏳ Pendiente Manel |
+| Smoke planta 9.8.6 | ✅ **21 ago** OT **36112** · cartela **#10989** (split #99029 2000→1350+650, prorrateo OK) · popup → lápiz · campos a mano → guardar · hoja ruta OK |
+| Sync albarán | ✅ `ab9bb4f` — compra lápiz → recepción; placeholders KEEP IN SYNC |
+| Inventario botones | `INVENTARIO_BOTONES_CARTELAS_STOCK.md` (para manual Claude) |
 ---
 
 ## 13. Checklist «día cerrado» (para Manel)

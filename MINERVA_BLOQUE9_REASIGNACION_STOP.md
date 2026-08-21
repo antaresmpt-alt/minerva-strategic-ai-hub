@@ -3,9 +3,9 @@
 > **Fuente de verdad de este módulo.** No es un parche de sesión: es maquinaria permanente de inventario.
 > Complementa `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` (ATP, cartelas, consumo). Si hay contradicción sobre *liberar / recomprar / aviso formato*, **manda este documento**.
 >
-> **Estado:** ✅ **9.8.1–9.8.6 MVP + compra sin OT** en `main`. Perf Compras usable (21 ago). Histórico/Despachadas = polish.
-> **OT laboratorio:** **98019** · **98020** · **98021** · **98022** · **35643**.
-> **Sesiones:** `SESION_20AGO2026_HANDOFF_NOCHE_CLAUDE.md` · perf `20a06a5`/`217e500` · 9.8.6 MVP (popup lápiz tras asignar).
+> **Estado:** ✅ **9.8.1–9.8.6 cerrados en planta** (smoke 21 ago OT **36112** / #10989). Sync albarán + perf Compras OK. Merge auto 9.8.6 = opcional.
+> **OT laboratorio:** **98019** · **98020** · **98021** · **98022** · **35643** · smoke **36112**.
+> **Sesiones:** handoff 20 ago · smoke 21 ago (popup + prorrateo #99029→#10989 · sync albarán `ab9bb4f`).
 >
 > **Numeración:** el roadmap B9 tenía «9.8 fotos/adjuntos» *sin empezar* (baja). **9.8 queda para este módulo** (prioridad planta). Fotos/adjuntos pasa a **9.10**. **9.9** (IA Stock) no se toca.
 
@@ -210,7 +210,7 @@ Disciplina: **probar en 98019 antes de abrir la siguiente.**
 | **9.8.3** | Compra corrección P2 + **salida explícita de estado STOP** (`estado_material` al cartelar/consumir) + sync post-consumo 9.4 | **Sonnet** | ✅ **Implementado + validado 20 ago noche** (harden + Camino B **98022**). Ver handoff. |
 | **9.8.4** | Asignar stock libre → OT (Juan); buscar por material/gramaje/`formato` | **Composer** | ✅ **Hecho + validado 20 ago** (P0 7.2, §18.11, §18.15) |
 | **9.8.5** | RPC `prod_stock_revertir_consumo` simétrica | **Sonnet** | ✅ **Hecho + validado 19 ago** (98020-B) |
-| **9.8.6** | Popup redespacho asistido tras reasignar | **Composer** | ✅ **MVP 21 ago** — tras asignar (Stock/Cartelas), roles oficina: «¿Abrir lápiz despacho?». Merge auto `datos_proceso` = fase siguiente. |
+| **9.8.6** | Popup redespacho asistido tras reasignar | **Composer** | ✅ **MVP + smoke 21 ago** OT **36112** / #10989 (Stock). Campos a mano = esperado. Merge auto = fase 2. |
 
 ### 9.8.1b — trampa `includes("sin")` (bloqueante)
 
@@ -486,7 +486,7 @@ Si 98019 ya está “sucia” de A, clonar **98020** para B/C. No mezclar estado
 | # | Fase | Tarea |
 |---|------|--------|
 | 18.4 ✅ | 9.8.3 | Compra corrección (`tipo=correccion`) + hooks + harden. Validado **98022** Camino B. |
-| 18.5 ✅ MVP | 9.8.6 | Popup «¿Abrir lápiz despacho?» tras asignar (Stock + Cartelas). Merge auto pendiente. |
+| 18.5 ✅ smoke | 9.8.6 | Popup «¿Abrir lápiz?» smoke OT **36112** (#10989). Campos a mano = MVP OK. Merge auto = fase 2 opcional. |
 
 ### P2 — Polish / deuda
 

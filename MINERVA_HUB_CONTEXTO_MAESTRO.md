@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: **21 ago 2026** (Perf Compras + **9.8.6 MVP** redespacho; smoke planta pendiente. Handoff: `SESION_20AGO2026_HANDOFF_NOCHE_CLAUDE.md`).
+> Última actualización: **21 ago 2026** (Smoke **9.8.6** OK planta OT **36112**; sync albarán; perf Compras. Merge auto 9.8.6 = opcional).
 
 ---
 
@@ -43,7 +43,8 @@
 | `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md` | Sesión 14 ago (mañana): Encajar en Manipulados, flags wizard, Pool sin lápiz, `/produccion` → OTs. |
 | `SESION_14AGO2026_EJECUCION_LISTA.md` | Sesión 14 ago (tarde): lista gorda ejecución, semáforo, perf, tableta por máquina (Ramón). |
 | `SESION_17AGO2026_PREFILL_RUTA_MUELLE_B6.md` | Sesión 17 ago: prefill Ruta, cartela admin, Ramón brutas/netas, muelle, OT 98016 E2E. |
-| `MINERVA_BLOQUE9_REASIGNACION_STOP.md` | Bloque 9.8: liberar/reasignar/recomprar, ledger. **9.8.1–9.8.6 MVP** + perf Compras. |
+| `MINERVA_BLOQUE9_REASIGNACION_STOP.md` | Bloque 9.8: liberar/reasignar/recomprar, ledger. **9.8.1–9.8.6** smoke OK + sync albarán. |
+| `INVENTARIO_BOTONES_CARTELAS_STOCK.md` | Inventario botones Cartelas/Stock para manual usuario (Claude). |
 | `SESION_18AGO2026_STOP_MATERIAL.md` | Sesión 18 ago: acuerdo spec 9.8 + alta 98019. |
 | `SESION_19AGO2026_STOP_MATERIAL_98020.md` | Sesión 19 ago: lab 98020 A+B+C + commits 9.8.2/4/5. |
 | `SESION_20AGO2026_BACKLOG_P0_STOP.md` | Sesión 20 ago mañana: P0 7.1–7.3 + P2 §18.9/11/15 smoke. |
@@ -261,7 +262,7 @@ src/components/produccion/planificacion/
 | 6 | Producidas / cierre OT | ✅ MVP + promedios + oficiales + clone. ✅ Cierre **contenedor** 8.4 (snapshot barco) |
 | 7 | Expedición / Albarán | ⏸ **Aparcado** hasta decisión Odoo |
 | 8 | Contenedor / formas / hijas | 🔄 FORMATO–8.1 ✅ · **8.2 wizard MVP ✅** · 8.3 parcial · **8.4 cierre barco ✅** · **8.5 convergencia 📋 diseño** · 8.6 futuro · **captura envío externos ✅** |
-| 9 | Material, cartelas, stock, calendario prod. | ✅ 9.0–9.6d + 9.4 + **§15.6.12**. ✅ **9.8.1–9.8.6 MVP** + stock libre + perf Compras (21 ago). Polish: Histórico/Despachadas, merge auto 9.8.6. ⏳ OCR 9.7; fotos 9.10 |
+| 9 | Material, cartelas, stock, calendario prod. | ✅ 9.0–9.6d + 9.4 + **§15.6.12**. ✅ **9.8.1–9.8.6** smoke planta 21 ago + stock libre + perf Compras + sync albarán. Polish: Histórico/Despachadas; merge auto 9.8.6 opcional. ⏳ OCR 9.7; fotos 9.10 |
 | 10 | Presupuestos | ⏸ Futuro (más miga; tras Minerva estable) |
 | 11 | Calendario = master planificar / lanzar | 🔄 **Éxito de uso** (Carlos/Jordi). Ampliar con cuidado: planificar sí; lanzar suave (pool/mesa) + conflictos de máquina. Sin reordenar el menú (convive con Pool/Mesa/Pipeline) |
 | 12 | Roles, permisos, landing por perfil | 📋 **Documentado** — operario→ejecución; gestor→home rico. **14 ago:** 1 tableta/máquina (Ramón). Aparcado de código; crítico antes usuarios masivos |
@@ -299,23 +300,26 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [x] **9.8.5** revertir consumo + anti-doble — 98020-B (#99021)
 - [x] **Compra/cartela sin OT** (entrada stock libre) — `c93205e` · OCM-STOCK + #99022
 - [x] **Fix reabrir paso** mesa (`prod_mesa_planificacion_trabajos`) — `14fc084`
-- [x] **9.8.6** popup redespacho asistido — ✅ **MVP 21 ago** (abrir lápiz tras asignar; merge auto = siguiente)
+- [x] **9.8.6** popup redespacho asistido — ✅ **MVP + smoke planta 21 ago** (OT **36112**, cartela **#10989**; campos a mano = esperado; merge auto = fase 2)
 - [x] **Reset planificación STOP** (botón + confirmación; brief §19) — ✅ 20 ago smoke
 - [x] **Asignar OT en Stock** + **Cartelas búsqueda server-side** — ✅ 20 ago smoke
 - [x] **Perf Compras** — ✅ 21 ago usable (~1–2 s fechas/estado; modal editar fluido). Histórico / Despachadas = polish
+- [x] **Sync albarán** compra → recepción (+ cartela si placeholder) — ✅ `ab9bb4f` + smoke lápiz Compras
+
+### Prioridad inmediata (post smoke 21 ago)
+
+1. Opcional: merge automático formato en pasos pendientes (9.8.6 fase 2) — solo si planta lo pide
+2. Polish: Histórico Compras / Despachadas / §18.8
+3. Manual usuario reservas/stock (inventario botones listo → Claude)
+4. **Bloque 11** (con cuidado) · **Bloque 12** (sept)
+
 - [ ] **Bloque 11** (con cuidado): planificar/mover desde calendario; lanzar ≠ pisar plan de otra máquina — `MINERVA_BLOQUE11_…`
 - [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor; tableta = máquina — `MINERVA_BLOQUE12_…` (no abrir ya; default gestor = maestro OTs)
 - [ ] **Bloque 5 puente**: Rita lanza OTs a Hugo (no bloquea paralelo si Hugo sigue a mano)
 
-### Prioridad inmediata (post 21 ago)
-
-1. Smoke **9.8.6** en planta (asignar cartela con rol oficina → popup → lápiz)
-2. Opcional: merge automático formato en pasos pendientes (9.8.6 fase 2)
-3. Polish: observaciones CTP, KPI/Histórico Compras, Despachadas load
-4. **Bloque 11** (con cuidado) · **Bloque 12** (sept)
-
 ### Hecho reciente (jul–ago)
-- [x] **21 ago:** perf Compras + 9.8.6 MVP redespacho — commits `20a06a5`/`217e500` + redespacho asistido
+- [x] **21 ago tarde:** smoke 9.8.6 OT **36112** (#10989) + prorrateo split (#99029→10989) + sync albarán
+- [x] **21 ago:** perf Compras + 9.8.6 MVP + sync albarán — `20a06a5`/`217e500`/`df84679`/`ab9bb4f`
 - [x] **20 ago noche:** handoff Claude + 9.8.3 validado 98022 — `SESION_20AGO2026_HANDOFF_NOCHE_CLAUDE.md`
 - [x] **20 ago tarde/noche:** 9.8.3 + harden STOP — `SESION_20AGO2026_BLOQUE9_8_3_VALIDACION_HOOK.md`
 - [x] **20 ago tarde:** §18.0 tipos Supabase `Database` — triage 44 errores tsc — `SESION_20AGO2026_SUPABASE_TYPES_TRIAGE.md`
@@ -339,9 +343,9 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [ ] 9.7 OCR albarán (baja); sobrantes al cierre (B6+B9)
 - [ ] Preguntas §12 planta (CTP hija) si hace falta antes de 8.4 fino
 
-### Siguiente foco (orden sugerido post 21 ago)
-1. Smoke **9.8.6** (popup tras asignar → lápiz)
-2. 9.8.6 fase 2: merge auto formato en pasos pendientes (si hace falta)
+### Siguiente foco (orden sugerido post smoke 21 ago)
+1. Manual reservas/stock (Claude + `INVENTARIO_BOTONES_CARTELAS_STOCK.md`)
+2. 9.8.6 fase 2 merge auto — solo si planta lo pide
 3. Polish Histórico Compras / Despachadas / §18.8
 4. **Bloque 11** · **Bloque 12** · **B5** Rita→Hugo
 5. Digital/Guillotina/PDF — feedback planta en TEST
@@ -398,7 +402,7 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 
 24. **Cola de ejecución táctil (14 ago 2026 tarde)**: lista gorda + semáforo; parte completo lazy al expandir; terminadas ocultas (filtro «de hoy» readonly). Query solo activas + catálogos cacheados; pestañas Planificación lazy. Tableta de planta = **máquina**, no persona. Detalle: `SESION_14AGO2026_EJECUCION_LISTA.md`.
 
-25. **Bloque 9.8 — Reasignación / STOP (18–21 ago 2026)**: ledger ATP manda. **En `main`:** 9.8.1–5 + **9.8.3** (98022) + **9.8.6 MVP** (popup lápiz tras asignar) + perf Compras. **Handoff:** `SESION_20AGO2026_HANDOFF_NOCHE_CLAUDE.md`.
+25. **Bloque 9.8 — Reasignación / STOP (18–21 ago 2026)**: ledger ATP manda. **Cerrado en planta:** 9.8.1–6 (smoke **36112**/#10989) + sync albarán + perf Compras. Merge auto = opcional. **Handoff:** `SESION_20AGO2026_HANDOFF_NOCHE_CLAUDE.md`.
 
 ## 📁 Estructura de carpetas relevante
 
