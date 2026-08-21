@@ -4,7 +4,7 @@
 > Origen: feedback Albert + sesión Manel (28 jul 2026). Actualizado **11 ago 2026** tras uso real (Carlos/Jordi) y matiz de lanzamiento prudente.
 >
 > Complementa: Calendario Producción actual (`MINERVA_BLOQUE9` §15.11–15.13), Mesa / Pool / Ejecución, **Bloque 12** (gestores aterrizan aquí).
-> Estado: **en uso como planificador**; visión “master + lanzar” aún por diseñar con cuidado (no a saco).
+> Estado: **en uso como planificador**; visión “master + lanzar” → **diseño PR1 cerrado 21 ago noche** en `.MANUALES/MINERVA_BLOQUE11_DECISION_CALENDARIO_CONTENEDOR.md` (este archivo = brainstorming §0–§8; la decisión manda sobre PR1).
 
 ---
 

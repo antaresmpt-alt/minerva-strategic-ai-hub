@@ -86,6 +86,9 @@ import {
   type OtContenedorMeta,
   type PlanificacionOtTipoFiltroUi,
 } from "@/lib/planificacion-contenedor-query";
+import {
+  pasarOtsAColaMesa,
+} from "@/lib/planificacion-pasar-a-mesa";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { getSupabaseErrorMessage } from "@/lib/supabase-error-message";
 import { fetchAllInChunks } from "@/lib/supabase-query-chunks";
@@ -106,8 +109,6 @@ const TABLE_TROQUELES = "prod_troqueles";
 const TABLE_POOL = "prod_planificacion_pool";
 /** Estados de pool que pueden leerse desde despacho; `cerrada` = itinerario completo (se excluye del listado). */
 const POOL_ESTADOS_INCLUIDOS = ["pendiente", "enviada_mesa", "en_transito", "cerrada"] as const;
-/** Filas de pool que pueden reenviarse a mesa o actualizarse (nunca `cerrada` = itinerario completo). */
-const POOL_ESTADOS_PARA_MESA = ["pendiente", "enviada_mesa", "en_transito"] as const;
 const TABLE_MESA = "prod_mesa_planificacion_trabajos";
 const TABLE_MAQUINAS = "prod_maquinas";
 const POOL_UI_STATE_KEY = "produccion.poolOts.uiState.v1";
@@ -1766,101 +1767,70 @@ export function PlanificacionPoolOtsTab() {
     }
     setSaving(true);
     try {
-      const contenedores = selectedRows.filter((r) => r.otTipo === "contenedor").map((r) => r.ot);
-      if (contenedores.length > 0) {
-        toast.error(
-          `El contenedor no se envía a mesa (sin itinerario ejecutable): ${contenedores.join(", ")}.`,
-        );
-        return;
-      }
-      // §18.9 — permitir envío a mesa si hay stock cartelado asignado (aunque no haya compra)
-      const sinCompra = selectedRows.filter(
-        (r) => !r.hasCompraGenerada && (r.hojasStockCartelado ?? 0) === 0
-      ).map((r) => r.ot);
-      if (sinCompra.length > 0) {
-        toast.error(
-          `No se puede enviar a mesa sin compra ni stock cartelado: ${sinCompra.join(", ")}.`,
-        );
-        return;
-      }
-      const ots = selectedRows.map((r) => r.ot);
-      const { data: mesaExist, error: meErr } = await supabase
-        .from(TABLE_MESA)
-        .select("ot_numero")
-        .in("ot_numero", ots)
-        .in("estado_mesa", ["borrador", "confirmado", "en_ejecucion"]);
-      if (meErr) throw meErr;
-      const enMesa = new Set(
-        ((mesaExist ?? []) as Array<{ ot_numero: string | null }>)
-          .map((x) => String(x.ot_numero ?? "").trim())
-          .filter(Boolean)
+      const result = await pasarOtsAColaMesa(
+        supabase,
+        selectedRows.map((r) => ({
+          ot: r.ot,
+          otTipo: r.otTipo,
+          hasCompraGenerada: r.hasCompraGenerada,
+          hojasStockCartelado: r.hojasStockCartelado,
+          fechaEntrega: r.fechaEntrega,
+          materialStatus: r.materialStatus,
+          troquelStatus: r.troquelStatus,
+          requiereTroquel: r.troquelModo === "informado",
+          acabadoPral: r.acabadoPral || null,
+        })),
+        { notas: "Enviada desde Pool a Mesa" },
       );
-      const nuevos = selectedRows.filter((r) => !enMesa.has(r.ot));
-      if (nuevos.length === 0) {
+
+      if (result.rechazadas.length > 0) {
+        const contenedores = result.rechazadas.filter((r) =>
+          r.motivo.includes("contenedor"),
+        );
+        const sinMaterial = result.rechazadas.filter((r) =>
+          r.motivo.toLowerCase().includes("compra"),
+        );
+        if (contenedores.length > 0) {
+          toast.error(
+            `El contenedor no se envía a mesa (sin itinerario ejecutable): ${contenedores
+              .map((r) => r.ot)
+              .join(", ")}.`,
+          );
+        }
+        if (sinMaterial.length > 0) {
+          toast.error(
+            `No se puede enviar a mesa sin compra ni stock cartelado: ${sinMaterial
+              .map((r) => r.ot)
+              .join(", ")}.`,
+          );
+        }
+        const otros = result.rechazadas.filter(
+          (r) =>
+            !r.motivo.includes("contenedor") &&
+            !r.motivo.toLowerCase().includes("compra"),
+        );
+        if (otros.length > 0) {
+          toast.error(
+            otros.map((r) => `${r.ot}: ${r.motivo}`).join(" · "),
+          );
+        }
+      }
+
+      if (
+        result.enviadas.length === 0 &&
+        result.yaEnMesa.length > 0 &&
+        result.rechazadas.length === 0
+      ) {
         toast.message("Todas las OT seleccionadas ya estaban en mesa activa.");
         return;
       }
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      const actorId =
-        typeof user?.id === "string" && user.id.trim().length > 0 ? user.id.trim() : null;
-      const actorEmail =
-        typeof user?.email === "string" && user.email.trim().length > 0
-          ? user.email.trim()
-          : null;
-
-      const { data: poolExist, error: poolErr } = await supabase
-        .from(TABLE_POOL)
-        .select("id, ot_numero")
-        .in("ot_numero", nuevos.map((r) => r.ot))
-        .in("estado_pool", [...POOL_ESTADOS_PARA_MESA]);
-      if (poolErr) throw poolErr;
-      const poolByOt = new Map<string, string>();
-      for (const p of (poolExist ?? []) as Array<{ id: string; ot_numero: string }>) {
-        const ot = String(p.ot_numero ?? "").trim();
-        if (ot) poolByOt.set(ot, p.id);
+      if (result.enviadas.length > 0) {
+        toast.success(
+          `Mesa actualizada: ${result.enviadas.length} OT(s) enviadas.`,
+        );
+        await loadRows();
       }
-      const toUpdate = nuevos
-        .map((r) => ({ id: poolByOt.get(r.ot), row: r }))
-        .filter((x): x is { id: string; row: PoolRow } => !!x.id);
-      for (const item of toUpdate) {
-        const { error: updErr } = await supabase
-          .from(TABLE_POOL)
-          .update({
-            estado_pool: "enviada_mesa",
-            troquel_status: item.row.troquelStatus,
-            acabado_pral_snapshot: item.row.acabadoPral || null,
-            closed_at: null,
-            closed_by: null,
-            closed_by_email: null,
-            notas: "Enviada desde Pool a Mesa",
-          })
-          .eq("id", item.id);
-        if (updErr) throw updErr;
-      }
-
-      const insPool = nuevos.filter((r) => !poolByOt.has(r.ot)).map((r) => ({
-        ot_numero: r.ot,
-        estado_pool: "enviada_mesa",
-        prioridad_snapshot: null,
-        fecha_entrega_snapshot: r.fechaEntrega,
-        material_status: r.materialStatus,
-        troquel_status: r.troquelStatus,
-        requiere_troquel: r.troquelModo === "informado",
-        acabado_pral_snapshot: r.acabadoPral || null,
-        notas: "Enviada desde Pool a Mesa",
-        created_by: actorId,
-        created_by_email: actorEmail,
-      }));
-      if (insPool.length > 0) {
-        const { error: insPoolErr } = await supabase.from(TABLE_POOL).insert(insPool);
-        if (insPoolErr) throw insPoolErr;
-      }
-
-      toast.success(`Mesa actualizada: ${nuevos.length} OT(s) enviadas.`);
-      await loadRows();
     } catch (e) {
       console.error(e);
       toast.error(getErrorMessage(e, "No se pudo pasar la selección a mesa."));

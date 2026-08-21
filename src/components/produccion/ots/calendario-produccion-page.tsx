@@ -14,6 +14,7 @@ import {
   Route,
   Scissors,
   Search,
+  Send,
   Trash2,
   Upload,
   X,
@@ -79,6 +80,13 @@ import {
 } from "@/lib/calendario-produccion-export";
 import { parseProgramacioPlanificadorExcel } from "@/lib/calendario-produccion-import";
 import {
+  derivePastillaEspejo,
+  ESPEJO_FASE_STYLES,
+  fetchCalendarioEspejoByOtNumeros,
+  labelPasoDisponible,
+  type CalendarioEspejoOt,
+} from "@/lib/calendario-mesa-espejo";
+import {
   fetchItinerarioCalendarioByOtNumeros,
   fetchPasosResumenOt,
   SEMAFORO_PILL_STYLES,
@@ -87,6 +95,10 @@ import {
 } from "@/lib/calendario-produccion-progreso";
 import { errorMessageFromUnknown } from "@/lib/error-message";
 import { resolveEstadoOtLabel } from "@/lib/hoja-ruta/hoja-ruta-query";
+import {
+  fetchPasarAMesaGateByOt,
+  pasarOtsAColaMesa,
+} from "@/lib/planificacion-pasar-a-mesa";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
@@ -138,25 +150,33 @@ type OtSearchHit = {
 };
 
 function DiaCelda({
+  dayYmd,
   dayNum,
   lineas,
   notas,
   onEditDay,
   onOpenOt,
   onToggleMarcadoHecho,
+  onEnviarCola,
   itinerarioByOt,
+  espejoByOt,
+  enviandoOt,
   duplicatedOtSet,
   ambitoActivo,
   canEditActivo,
   variant = "mes",
 }: {
+  dayYmd: string;
   dayNum: number;
   lineas: CalendarioProduccionLinea[];
   notas: ProdCalendarioProduccionNotaRow[];
   onEditDay: () => void;
   onOpenOt: (otNumero: string) => void;
   onToggleMarcadoHecho: (linea: CalendarioProduccionLinea) => void;
+  onEnviarCola: (linea: CalendarioProduccionLinea, fechaYmd: string) => void;
   itinerarioByOt: Map<string, CalendarioItinerarioOt>;
+  espejoByOt: Map<string, CalendarioEspejoOt>;
+  enviandoOt: string | null;
   duplicatedOtSet: Set<string>;
   ambitoActivo: CalendarioAmbito;
   canEditActivo: boolean;
@@ -224,12 +244,28 @@ function DiaCelda({
             const isForeign = l.ambito !== ambitoActivo;
             const ambitoPill = CALENDARIO_AMBITO_PILL[l.ambito];
             const canToggle = canEditActivo && !isForeign;
+            const pasoLabel = labelPasoDisponible(info?.pasos ?? []);
+            const espejo = derivePastillaEspejo({
+              ambito: l.ambito,
+              fechaCalendario: dayYmd,
+              itinerario: info,
+              espejo: espejoByOt.get(l.otNumero),
+            });
+            const canEnviar =
+              canEditActivo &&
+              !isForeign &&
+              espejo.fase !== "hecha" &&
+              espejo.fase !== "en_curso" &&
+              espejo.fase !== "en_mesa";
+            const enviando = enviandoOt === l.otNumero;
             return (
               <div
                 key={l.id}
                 title={`${l.label} — ${labelCalendarioAmbito(l.ambito)}: ${styles.title}${
                   isForeign ? " · solo lectura" : ""
-                }${l.marcadoHecho ? " · Hecho (marca manual)" : ""}`}
+                }${l.marcadoHecho ? " · Hecho (marca manual)" : ""}${
+                  espejo.title ? ` · ${espejo.title}` : ""
+                }${pasoLabel ? ` · Paso: ${pasoLabel}` : ""}`}
                 className={cn(
                   "flex w-full items-center gap-1 rounded-md border border-slate-200/90 bg-white text-left shadow-xs",
                   "border-l-[3px] transition-colors",
@@ -237,6 +273,7 @@ function DiaCelda({
                   ambitoPill.borderTint,
                   isForeign && "opacity-75",
                   l.marcadoHecho && "bg-slate-50/90 opacity-60",
+                  espejo.fechaDifiere && "ring-1 ring-amber-400/70",
                   isSemana ? "px-1.5 py-1.5" : "px-1 py-1",
                 )}
               >
@@ -287,8 +324,47 @@ function DiaCelda({
                     )}
                   >
                     {l.trabajo?.trim() || "—"}
+                    {pasoLabel ? (
+                      <span className="ml-1 font-normal text-slate-500">
+                        · {pasoLabel}
+                      </span>
+                    ) : null}
                   </span>
+                  {espejo.badge ? (
+                    <span
+                      className={cn(
+                        "shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold leading-none",
+                        ESPEJO_FASE_STYLES[espejo.fase].chip,
+                        espejo.fechaDifiere &&
+                          "bg-amber-100 text-amber-950 ring-1 ring-amber-400",
+                      )}
+                    >
+                      {espejo.badge}
+                    </span>
+                  ) : null}
                 </button>
+                {canEnviar ? (
+                  <button
+                    type="button"
+                    disabled={enviando}
+                    title="Enviar a cola de Mesa (sin máquina/día)"
+                    aria-label="Enviar a cola de Mesa"
+                    className={cn(
+                      "flex size-5 shrink-0 items-center justify-center rounded border border-slate-300 bg-white text-[#002147] transition-colors hover:border-[#002147] hover:bg-slate-50",
+                      enviando && "opacity-50",
+                    )}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEnviarCola(l, dayYmd);
+                    }}
+                  >
+                    {enviando ? (
+                      <Loader2 className="size-3 animate-spin" />
+                    ) : (
+                      <Send className="size-3" />
+                    )}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   disabled={!canToggle}
@@ -383,6 +459,10 @@ export function CalendarioProduccionPage() {
   const [itinerarioByOt, setItinerarioByOt] = useState<
     Map<string, CalendarioItinerarioOt>
   >(() => new Map());
+  const [espejoByOt, setEspejoByOt] = useState<Map<string, CalendarioEspejoOt>>(
+    () => new Map(),
+  );
+  const [enviandoOt, setEnviandoOt] = useState<string | null>(null);
   const [hojaRutaOt, setHojaRutaOt] = useState<string | null>(null);
   const [hojaRutaOpen, setHojaRutaOpen] = useState(false);
   const [cafeOpen, setCafeOpen] = useState(false);
@@ -596,6 +676,7 @@ export function CalendarioProduccionPage() {
       if (ots.length === 0) {
         setTituloByOt(new Map());
         setItinerarioByOt(new Map());
+        setEspejoByOt(new Map());
         return;
       }
 
@@ -613,14 +694,16 @@ export function CalendarioProduccionPage() {
       setTituloByOt(map);
 
       try {
-        const itinerario = await fetchItinerarioCalendarioByOtNumeros(
-          supabase,
-          ots,
-        );
+        const [itinerario, espejo] = await Promise.all([
+          fetchItinerarioCalendarioByOtNumeros(supabase, ots),
+          fetchCalendarioEspejoByOtNumeros(supabase, ots),
+        ]);
         setItinerarioByOt(itinerario);
+        setEspejoByOt(espejo);
       } catch (progErr) {
-        console.warn("[calendario] itinerario semáforo", progErr);
+        console.warn("[calendario] itinerario / espejo mesa", progErr);
         setItinerarioByOt(new Map());
+        setEspejoByOt(new Map());
       }
     } catch (e) {
       toast.error(errorMessageFromUnknown(e, "No se pudo cargar el calendario."));
@@ -1253,6 +1336,56 @@ export function CalendarioProduccionPage() {
     }
   };
 
+  /** Bloque 11 PR1 — cola de Mesa (sin slot). Agnóstico de ámbito. */
+  const enviarAColaMesa = useCallback(
+    async (otNumero: string) => {
+      const ot = otNumero.trim();
+      if (!ot || enviandoOt) return;
+      setEnviandoOt(ot);
+      try {
+        const gates = await fetchPasarAMesaGateByOt(supabase, [ot]);
+        const gate = gates.get(ot);
+        if (!gate) {
+          toast.error(`No se encontraron datos de OT ${ot}.`);
+          return;
+        }
+        const result = await pasarOtsAColaMesa(
+          supabase,
+          [
+            {
+              ot: gate.ot,
+              otTipo: gate.otTipo,
+              hasCompraGenerada: gate.hasCompraGenerada,
+              hojasStockCartelado: gate.hojasStockCartelado,
+              fechaEntrega: gate.fechaEntrega,
+            },
+          ],
+          { notas: "Enviada desde Calendario a cola de Mesa" },
+        );
+        if (result.rechazadas.length > 0) {
+          const r = result.rechazadas[0]!;
+          toast.error(`${r.ot}: ${r.motivo}`);
+          return;
+        }
+        if (result.yaEnMesa.length > 0 && result.enviadas.length === 0) {
+          toast.message(`OT ${ot} ya estaba en mesa activa.`);
+          return;
+        }
+        if (result.enviadas.length > 0) {
+          toast.success(`OT ${ot} enviada a cola de Mesa.`);
+          await load();
+        }
+      } catch (e) {
+        toast.error(
+          errorMessageFromUnknown(e, "No se pudo enviar a cola de Mesa."),
+        );
+      } finally {
+        setEnviandoOt(null);
+      }
+    },
+    [enviandoOt, load, supabase],
+  );
+
   const exportMes = () => {
     exportCalendarioProduccionMensualPdf({
       year,
@@ -1674,14 +1807,18 @@ export function CalendarioProduccionPage() {
                   celda ? (
                     <DiaCelda
                       key={celda.ymd}
+                      dayYmd={celda.ymd}
                       dayNum={celda.dayNum}
                       lineas={entradasByDay.get(celda.ymd) ?? []}
                       notas={notasByDay.get(celda.ymd) ?? []}
                       onEditDay={() => openDay(celda.ymd)}
                       onOpenOt={(ot) => void openDetalle(ot)}
                       onToggleMarcadoHecho={(l) => void toggleMarcadoHecho(l)}
+                      onEnviarCola={(l) => void enviarAColaMesa(l.otNumero)}
                       variant="semana"
                       itinerarioByOt={itinerarioByOt}
+                      espejoByOt={espejoByOt}
+                      enviandoOt={enviandoOt}
                       duplicatedOtSet={duplicatedOtSet}
                       ambitoActivo={ambitoActivo}
                       canEditActivo={canEditActivo}
@@ -1698,14 +1835,18 @@ export function CalendarioProduccionPage() {
                     celda ? (
                       <DiaCelda
                         key={celda.ymd}
+                        dayYmd={celda.ymd}
                         dayNum={celda.dayNum}
                         lineas={entradasByDay.get(celda.ymd) ?? []}
                         notas={notasByDay.get(celda.ymd) ?? []}
                         onEditDay={() => openDay(celda.ymd)}
                         onOpenOt={(ot) => void openDetalle(ot)}
                         onToggleMarcadoHecho={(l) => void toggleMarcadoHecho(l)}
+                        onEnviarCola={(l) => void enviarAColaMesa(l.otNumero)}
                         variant="mes"
                         itinerarioByOt={itinerarioByOt}
+                        espejoByOt={espejoByOt}
+                        enviandoOt={enviandoOt}
                         duplicatedOtSet={duplicatedOtSet}
                         ambitoActivo={ambitoActivo}
                         canEditActivo={canEditActivo}
@@ -1926,6 +2067,54 @@ export function CalendarioProduccionPage() {
                       </button>
                       {editable ? (
                       <div className="flex shrink-0 items-center gap-0.5">
+                        {(() => {
+                          const espejo = derivePastillaEspejo({
+                            ambito: l.ambito,
+                            fechaCalendario: dayYmd ?? l.id,
+                            itinerario: itinerarioByOt.get(l.otNumero),
+                            espejo: espejoByOt.get(l.otNumero),
+                          });
+                          const canEnviar =
+                            espejo.fase !== "hecha" &&
+                            espejo.fase !== "en_curso" &&
+                            espejo.fase !== "en_mesa";
+                          const pasoLabel = labelPasoDisponible(
+                            itinerarioByOt.get(l.otNumero)?.pasos ?? [],
+                          );
+                          return (
+                            <>
+                              {pasoLabel || espejo.badge ? (
+                                <span
+                                  className="mr-1 max-w-[7rem] truncate text-[10px] text-slate-500"
+                                  title={espejo.title || pasoLabel || undefined}
+                                >
+                                  {pasoLabel}
+                                  {pasoLabel && espejo.badge ? " · " : ""}
+                                  {espejo.badge}
+                                </span>
+                              ) : null}
+                              {canEnviar ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 w-7 p-0 text-[#002147]"
+                                  disabled={saving || enviandoOt === l.otNumero}
+                                  title="Enviar a cola de Mesa"
+                                  onClick={() =>
+                                    void enviarAColaMesa(l.otNumero)
+                                  }
+                                >
+                                  {enviandoOt === l.otNumero ? (
+                                    <Loader2 className="size-3.5 animate-spin" />
+                                  ) : (
+                                    <Send className="size-3.5" />
+                                  )}
+                                </Button>
+                              ) : null}
+                            </>
+                          );
+                        })()}
                         <Button
                           type="button"
                           variant="ghost"
@@ -2117,20 +2306,41 @@ export function CalendarioProduccionPage() {
             <p className="text-sm text-slate-500">Sin datos.</p>
           )}
           <DialogFooter className="gap-2 sm:justify-between">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!detalle?.otNumero}
-              onClick={() => {
-                if (!detalle?.otNumero) return;
-                setHojaRutaOt(detalle.otNumero);
-                setDetalleOpen(false);
-                setHojaRutaOpen(true);
-              }}
-            >
-              Ver hoja de ruta
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!detalle?.otNumero}
+                onClick={() => {
+                  if (!detalle?.otNumero) return;
+                  setHojaRutaOt(detalle.otNumero);
+                  setDetalleOpen(false);
+                  setHojaRutaOpen(true);
+                }}
+              >
+                Ver hoja de ruta
+              </Button>
+              {detalle?.otNumero &&
+              canEditActivo &&
+              (espejoByOt.get(detalle.otNumero)?.mesaTrabajos.length ?? 0) ===
+                0 ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="bg-[#002147] hover:bg-[#003366]"
+                  disabled={enviandoOt === detalle.otNumero}
+                  onClick={() => void enviarAColaMesa(detalle.otNumero)}
+                >
+                  {enviandoOt === detalle.otNumero ? (
+                    <Loader2 className="mr-1 size-3.5 animate-spin" />
+                  ) : (
+                    <Send className="mr-1 size-3.5" />
+                  )}
+                  Enviar a cola de Mesa
+                </Button>
+              ) : null}
+            </div>
             <Button
               type="button"
               size="sm"
