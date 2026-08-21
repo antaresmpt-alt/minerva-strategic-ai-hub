@@ -50,6 +50,11 @@ import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import { StockAiDialog } from "@/components/produccion/almacen/stock/stock-ai-dialog";
 import { OtDestinoSearchInput } from "@/components/produccion/almacen/ot-destino-search-input";
 import {
+  puedeOfrecerRedespachoAsistido,
+  RedespachoAsistidoHost,
+  type RedespachoAsistidoOffer,
+} from "@/components/produccion/almacen/redespacho-asistido-dialog";
+import {
   openCartelaPrintWindow,
   printCartelasWindow,
   writeCartelasToWindow,
@@ -173,6 +178,9 @@ export function StockPage() {
   const [tipoFiltro, setTipoFiltro] = useState<StockTipo | "todos">("todos");
 
   const [detalle, setDetalle] = useState<StockPaletAtpConOts | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [redespachoOffer, setRedespachoOffer] =
+    useState<RedespachoAsistidoOffer | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importPreview, setImportPreview] = useState<StockOptimusParseResult | null>(
     null
@@ -277,6 +285,33 @@ export function StockPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user || cancelled) return;
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (!cancelled) {
+          setUserRole(
+            (profile as { role?: string | null } | null)?.role ?? null
+          );
+        }
+      } catch {
+        /* sin rol → no oferta redespacho */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const tiposPresentes = useMemo(() => {
     return [...new Set(rows.map((r) => r.tipo_stock))];
@@ -779,6 +814,18 @@ export function StockPage() {
         onClose={() => setDetalle(null)}
         onPrint={handlePrint}
         onChanged={load}
+        onOfrecerRedespacho={(offer) => {
+          if (puedeOfrecerRedespachoAsistido(userRole)) {
+            setRedespachoOffer(offer);
+          }
+        }}
+      />
+
+      <RedespachoAsistidoHost
+        offer={redespachoOffer}
+        userRole={userRole}
+        onDismiss={() => setRedespachoOffer(null)}
+        onDespachado={() => void load()}
       />
 
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
@@ -922,11 +969,13 @@ function StockDetalleDialog({
   onClose,
   onPrint,
   onChanged,
+  onOfrecerRedespacho,
 }: {
   row: StockPaletAtpConOts | null;
   onClose: () => void;
   onPrint: (row: StockPaletAtpConOts) => void;
   onChanged: () => Promise<void> | void;
+  onOfrecerRedespacho: (offer: RedespachoAsistidoOffer) => void;
 }) {
   const [movs, setMovs] = useState<ProdStockMovimientoRow[]>([]);
   const [loadingMovs, setLoadingMovs] = useState(false);
@@ -1084,9 +1133,21 @@ function StockDetalleDialog({
       toast.success(
         `Cartela #${row.id_stock} asignada a OT ${ot}. Material en stock asignado.`
       );
+      const materialLabel = [
+        row.material_nombre ?? row.descripcion_material,
+        row.gramaje ? `${row.gramaje} gr` : null,
+        row.formato,
+      ]
+        .filter(Boolean)
+        .join(" · ");
       setAsignarOtOpen(false);
       onClose();
       await onChanged();
+      onOfrecerRedespacho({
+        otNumero: ot,
+        materialLabel,
+        idStock: row.id_stock,
+      });
     } catch (e) {
       toast.error(
         `Error al asignar: ${e instanceof Error ? e.message : String(e)}`

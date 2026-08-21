@@ -71,6 +71,11 @@ import { CartelaWizardDialog, type CartelaWizardCreatedInfo } from "./cartela-wi
 import { RecepcionStockDialog } from "./recepcion-stock-dialog";
 import { RecepcionFotosPanel } from "@/components/produccion/recepcion/recepcion-fotos-panel";
 import { OtDestinoSearchInput } from "@/components/produccion/almacen/ot-destino-search-input";
+import {
+  puedeOfrecerRedespachoAsistido,
+  RedespachoAsistidoHost,
+  type RedespachoAsistidoOffer,
+} from "@/components/produccion/almacen/redespacho-asistido-dialog";
 
 const ROLES_LIBERAR = new Set(["admin", "oficina_tecnica", "gerencia"]);
 
@@ -148,6 +153,9 @@ export function CartelasPage() {
   // ── Bloque 9.8.4 — Asignar stock libre a OT ──────────────────────────────
   const [asignarPalet, setAsignarPalet] = useState<ProdStockPaletConOts | null>(null);
   const [asignarDialogOpen, setAsignarDialogOpen] = useState(false);
+  // ── Bloque 9.8.6 — Oferta redespacho tras asignar ────────────────────────
+  const [redespachoOffer, setRedespachoOffer] =
+    useState<RedespachoAsistidoOffer | null>(null);
 
   // ── Carga bandeja pendientes ──────────────────────────────────────────
   const loadPendientes = useCallback(async () => {
@@ -702,10 +710,13 @@ export function CartelasPage() {
     setAsignarDialogOpen(true);
   }
 
-  function handleAsignarDone() {
+  function handleAsignarDone(offer?: RedespachoAsistidoOffer) {
     setAsignarDialogOpen(false);
     setAsignarPalet(null);
     loadCartelas();
+    if (offer && puedeOfrecerRedespachoAsistido(userRole)) {
+      setRedespachoOffer(offer);
+    }
   }
 
   async function handleDeletePrueba(palet: ProdStockPaletConOts) {
@@ -1110,6 +1121,13 @@ export function CartelasPage() {
           onDone={handleAsignarDone}
         />
       )}
+
+      <RedespachoAsistidoHost
+        offer={redespachoOffer}
+        userRole={userRole}
+        onDismiss={() => setRedespachoOffer(null)}
+        onDespachado={() => loadCartelas()}
+      />
     </div>
   );
 }
@@ -1553,7 +1571,7 @@ function AsignarOtDialog({
   open: boolean;
   palet: ProdStockPaletConOts;
   onClose: () => void;
-  onDone: () => void;
+  onDone: (offer?: RedespachoAsistidoOffer) => void;
 }) {
   const [otNumero, setOtNumero] = useState("");
   const [notas, setNotas] = useState("");
@@ -1586,7 +1604,18 @@ function AsignarOtDialog({
       });
       if (error) throw error;
       toast.success(`Cartela #${palet.id_stock} asignada a OT ${ot}. Material en stock asignado.`);
-      onDone();
+      const materialLabel = [
+        palet.material_nombre ?? palet.descripcion_material,
+        palet.gramaje ? `${palet.gramaje} gr` : null,
+        palet.formato,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      onDone({
+        otNumero: ot,
+        materialLabel,
+        idStock: palet.id_stock,
+      });
     } catch (e) {
       toast.error(`Error al asignar: ${errorMessageFromUnknown(e)}`);
     } finally {

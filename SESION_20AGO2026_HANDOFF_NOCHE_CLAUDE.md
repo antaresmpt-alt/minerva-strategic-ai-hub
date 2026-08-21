@@ -12,11 +12,11 @@
 
 | Pregunta | Respuesta |
 |----------|-----------|
-| ¿Qué se cerró hoy? | P0 7.1–7.3 + P2 §18.9/11/15 + **9.8.3 compra corrección + hooks salida STOP** + harden UI |
+| ¿Qué se cerró hoy? | P0 7.1–7.3 + P2 §18.9/11/15 + **9.8.3** + harden UI |
 | ¿Verificado en planta? | **Sí.** Camino asignación (mañana) + Camino B consumo limpio (noche, OT **98022**) |
 | ¿Qué NO hay que repetir? | Otro lab «Camino A» de asignación — **ya validado hace horas** (§18.11 / 7.2) |
-| ¿Qué queda de 9.8? | **9.8.6** popup redespacho asistido (única fase grande abierta) |
-| ¿Qué molesta ahora? | **Rendimiento Compras**: tocar fechas / cambiar estado bloquea UI varios segundos (P2 ↑) |
+| ¿Qué queda de 9.8? | ~~**9.8.6**~~ → **MVP 21 ago** (popup «¿Abrir lápiz?»). Smoke planta + merge auto = opcional |
+| ¿Qué molesta ahora? | ~~Rendimiento Compras~~ → **cerrado usable 21 ago** (`20a06a5`/`217e500`). Histórico/Despachadas = polish |
 | Fuente detallada mañana | `SESION_20AGO2026_BACKLOG_P0_STOP.md` |
 | Fuente detallada 9.8.3 | `SESION_20AGO2026_BLOQUE9_8_3_VALIDACION_HOOK.md` |
 | Brief módulo | `MINERVA_BLOQUE9_REASIGNACION_STOP.md` |
@@ -283,10 +283,19 @@ Si tocas 9.8.3: SESION_20AGO2026_BLOQUE9_8_3_VALIDACION_HOOK.md
 Si tocas smoke P0 mañana: SESION_20AGO2026_BACKLOG_P0_STOP.md
 
 Contexto: 9.8.3 VALIDADO (98022 Camino B). No re-labear Camino A.
-Siguiente: 9.8.6 O rendimiento Compras (P2↑ fechas/estado).
-Supabase ref: jrwwuqplilbydxptsbqz. Branch main.
+Siguiente: smoke 9.8.6 MVP (popup lápiz tras asignar) o polish Histórico.
+Perf Compras cerrado usable 21 ago. Supabase ref: jrwwuqplilbydxptsbqz. Branch main.
 ```
 
+---
+
+## 13. Addendum 21 ago (Cursor / Composer)
+
+| Ítem | Estado |
+|------|--------|
+| Perf Compras (`20a06a5` + fix `217e500`) | ✅ Usable ~1–2 s; modal editar fluido |
+| **9.8.6 MVP** | ✅ Popup «¿Abrir lápiz despacho?» tras asignar en **Stock** y **Cartelas** (roles oficina). Merge auto = fase 2 |
+| Smoke planta 9.8.6 | ⏳ Pendiente Manel |
 ---
 
 ## 13. Checklist «día cerrado» (para Manel)

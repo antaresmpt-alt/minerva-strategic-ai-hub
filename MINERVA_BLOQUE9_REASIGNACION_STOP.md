@@ -3,9 +3,9 @@
 > **Fuente de verdad de este módulo.** No es un parche de sesión: es maquinaria permanente de inventario.
 > Complementa `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` (ATP, cartelas, consumo). Si hay contradicción sobre *liberar / recomprar / aviso formato*, **manda este documento**.
 >
-> **Estado:** ✅ **9.8.1–9.8.5 + compra sin OT** en `main` y planta (98019/98020 + smoke P0/P2 + **9.8.3 Camino B 98022**). Pendiente: **9.8.6** (+ P2↑ perf Compras).
-> **OT laboratorio:** **98019** · **98020** · **98021** (parcial) · **98022** (Camino B limpio) · **35643** (stock libre/Pool).
-> **Sesiones:** 18–19 ago · `SESION_20AGO2026_BACKLOG_P0_STOP.md` · `SESION_20AGO2026_BLOQUE9_8_3_VALIDACION_HOOK.md` · **`SESION_20AGO2026_HANDOFF_NOCHE_CLAUDE.md`**.
+> **Estado:** ✅ **9.8.1–9.8.6 MVP + compra sin OT** en `main`. Perf Compras usable (21 ago). Histórico/Despachadas = polish.
+> **OT laboratorio:** **98019** · **98020** · **98021** · **98022** · **35643**.
+> **Sesiones:** `SESION_20AGO2026_HANDOFF_NOCHE_CLAUDE.md` · perf `20a06a5`/`217e500` · 9.8.6 MVP (popup lápiz tras asignar).
 >
 > **Numeración:** el roadmap B9 tenía «9.8 fotos/adjuntos» *sin empezar* (baja). **9.8 queda para este módulo** (prioridad planta). Fotos/adjuntos pasa a **9.10**. **9.9** (IA Stock) no se toca.
 
@@ -210,7 +210,7 @@ Disciplina: **probar en 98019 antes de abrir la siguiente.**
 | **9.8.3** | Compra corrección P2 + **salida explícita de estado STOP** (`estado_material` al cartelar/consumir) + sync post-consumo 9.4 | **Sonnet** | ✅ **Implementado + validado 20 ago noche** (harden + Camino B **98022**). Ver handoff. |
 | **9.8.4** | Asignar stock libre → OT (Juan); buscar por material/gramaje/`formato` | **Composer** | ✅ **Hecho + validado 20 ago** (P0 7.2, §18.11, §18.15) |
 | **9.8.5** | RPC `prod_stock_revertir_consumo` simétrica | **Sonnet** | ✅ **Hecho + validado 19 ago** (98020-B) |
-| **9.8.6** | Popup redespacho asistido tras reasignar | **Composer** | |
+| **9.8.6** | Popup redespacho asistido tras reasignar | **Composer** | ✅ **MVP 21 ago** — tras asignar (Stock/Cartelas), roles oficina: «¿Abrir lápiz despacho?». Merge auto `datos_proceso` = fase siguiente. |
 
 ### 9.8.1b — trampa `includes("sin")` (bloqueante)
 
@@ -333,7 +333,7 @@ No es un tercer módulo: es 9.8.4 sobre palets que nunca tuvieron reserva, más 
 5. Camino B: 2.ª compra 72×102 → recibir → cartelar → asignar. ✅
    - **Workaround validado:** duplicar P1 en Compras → **P2** (mismo OT 98019, formato 72×102, notas RECOMPRA). El botón «Generar compras en lote» en Despachadas **sigue sin crear P2** (toast «ya tenían registro») → **9.8.3 pendiente**.
    - Cartela nueva `#10984` reservada 98019 (albarán RECOMPRA; no marcada prueba — OK para demo).
-6. Popup redespacho (9.8.6) o lápiz: 72×102 / 72×51. ✅ **Lápiz** (popup 9.8.6 no existe aún). Despacho `tamano_hoja = 72X102`. Guillotina plan `72X102 → 72X51`.
+6. Popup redespacho (9.8.6) o lápiz: 72×102 / 72×51. ✅ **Lápiz** + ✅ **MVP popup** (21 ago: «¿Abrir lápiz?» tras asignar). Despacho `tamano_hoja = 72X102`. Guillotina plan `72X102 → 72X51`.
 7. Guillotina ve instrucción nueva. ✅ Mesa Miguel: entrada 72X102, salida 72X51, cartela **`#10984`** (no `#99019`).
 8. **Histórico:** OC1 65×92 Recibido; OC2 72×102 Recibido; cartela `#99019` **libre** 1000 h 65×92 con notas liberación; cartela `#10984` **consumida** (0 h, cierre Guillotina 9.4). PDF `hoja-ruta-98019.pdf` 18 ago 21:25 OK.
 
@@ -486,7 +486,7 @@ Si 98019 ya está “sucia” de A, clonar **98020** para B/C. No mezclar estado
 | # | Fase | Tarea |
 |---|------|--------|
 | 18.4 ✅ | 9.8.3 | Compra corrección (`tipo=correccion`) + hooks + harden. Validado **98022** Camino B. |
-| 18.5 | 9.8.6 | Popup redespacho asistido tras liberar/asignar. |
+| 18.5 ✅ MVP | 9.8.6 | Popup «¿Abrir lápiz despacho?» tras asignar (Stock + Cartelas). Merge auto pendiente. |
 
 ### P2 — Polish / deuda
 
@@ -495,7 +495,8 @@ Si 98019 ya está “sucia” de A, clonar **98020** para B/C. No mezclar estado
 | 18.6 | Toast reabrir: avisar que OT sigue en mesa (no vuelve al Pool). |
 | 18.7 | Split palet prueba → id_stock coherente o aviso. |
 | 18.8 | Stock KPI reservas blandas. |
-| 18.8b ↑ | **Rendimiento Compras** — tocar fechas / cambiar estado bloquea UI varios segundos (Manel 20 ago noche). Priorizar antes que polish menor. |
+| 18.8b | Stock KPI / Histórico Compras lento (~5–6 s con 300 recibidos) — no urgencia TEST sept. |
+| ~~18.8c~~ | ~~Rendimiento Compras fechas/estado / modal editar~~ ✅ 21 ago (`20a06a5`/`217e500`): cascada columns + waterfall Recibido + modal aislado. Fecha inline ~1–2 s = aceptable. |
 | ~~18.9~~ | ~~Pool semáforo material con stock libre + histórico compras.~~ ✅ 20 ago: `isPoolRowSelectableForMesa` acepta `hojasStockCartelado`; gate y mensaje ámbar. |
 | 18.10 | Fix observaciones CTP (§12.1). |
 | ~~18.11~~ | ~~Sync `estado_material` tras asignar stock libre.~~ ✅ 20 ago: migración `20260820090000` amplía WHERE para cubrir null/vacío/`Sin orden compra`/`Sin orden de compra`/`Compra cancelada`/`Pendiente de pedir`. |
