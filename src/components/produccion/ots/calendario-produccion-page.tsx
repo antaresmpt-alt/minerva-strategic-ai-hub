@@ -256,6 +256,7 @@ function DiaCelda({
             const canEnviar =
               canEditActivo &&
               !isForeign &&
+              !l.marcadoHecho &&
               espejo.fase !== "hecha" &&
               espejo.fase !== "en_curso" &&
               espejo.fase !== "en_mesa";
@@ -1362,6 +1363,25 @@ export function CalendarioProduccionPage() {
       if (!ot || enviandoOt) return;
       setEnviandoOt(ot);
       try {
+        const [{ data: maestro, error: mErr }, pasos] = await Promise.all([
+          supabase
+            .from(TABLE_MAESTRO)
+            .select("despachado")
+            .eq("num_pedido", ot)
+            .maybeSingle(),
+          fetchPasosResumenOt(supabase, ot).catch(() => []),
+        ]);
+        if (mErr) throw mErr;
+        const despachado = Boolean(
+          (maestro as { despachado?: boolean | null } | null)?.despachado,
+        );
+        if (!despachado && pasos.length === 0) {
+          toast.error(
+            `OT ${ot}: sin despacho ni itinerario en Minerva. No se puede enviar a cola de Mesa.`,
+          );
+          return;
+        }
+
         const gates = await fetchPasarAMesaGateByOt(supabase, [ot]);
         const gate = gates.get(ot);
         if (!gate) {
@@ -2119,6 +2139,7 @@ export function CalendarioProduccionPage() {
                             espejo: espejoByOt.get(l.otNumero),
                           });
                           const canEnviar =
+                            !l.marcadoHecho &&
                             espejo.fase !== "hecha" &&
                             espejo.fase !== "en_curso" &&
                             espejo.fase !== "en_mesa";
@@ -2367,6 +2388,7 @@ export function CalendarioProduccionPage() {
               </Button>
               {detalle?.otNumero &&
               canEditActivo &&
+              (detalle.despachado || detalle.pasos.length > 0) &&
               (espejoByOt.get(detalle.otNumero)?.mesaTrabajos.length ?? 0) ===
                 0 ? (
                 <Button
