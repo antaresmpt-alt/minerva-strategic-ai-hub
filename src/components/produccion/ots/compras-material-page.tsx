@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { addDays, addWeeks, format, startOfDay, startOfWeek } from "date-fns";
 import { es as esLocale } from "date-fns/locale";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
@@ -36,6 +36,7 @@ import {
   ComprasMaterialManualDialog,
   type ManualCompraInitialValues,
 } from "@/components/produccion/ots/compras-material-manual-dialog";
+import { ComprasMaterialEditDialog } from "@/components/produccion/ots/compras-material-edit-dialog";
 import { createComprasMaterialColumns } from "@/components/produccion/ots/compras-material-columns";
 import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
 import { Button } from "@/components/ui/button";
@@ -52,7 +53,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { NativeSelect, type Option } from "@/components/ui/select-native";
 import {
   Table,
@@ -106,16 +106,6 @@ type PendingCompraCorreoEnvio = {
   cuerpo: string;
 };
 
-type CompraComunicacionLogRow = {
-  id: string;
-  compra_ids: string[] | null;
-  proveedor_id: string | null;
-  asunto: string | null;
-  cuerpo: string | null;
-  enviado_por: string | null;
-  created_at: string;
-};
-
 const RECEPCION_FOTOS_MODAL_INITIAL = {
   open: false,
   ot: "",
@@ -146,16 +136,6 @@ async function descargarFotoRecepcionDesdeUrl(
   URL.revokeObjectURL(a.href);
 }
 
-function toDateInputValue(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const s = String(iso).trim();
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toISOString().slice(0, 10);
-}
-
-/** fecha_prevista_recepcion → medianoche local (agrupación tablero / día) */
 function fechaRecepcionToLocalDate(
   iso: string | null | undefined
 ): Date | null {
@@ -205,25 +185,6 @@ function formatGramajeResumen(g: number | null | undefined): string {
   const n = Number(g);
   const s = Number.isInteger(n) ? String(Math.trunc(n)) : String(n);
   return `${s}g`;
-}
-
-function numStr(n: number | null | undefined): string {
-  return n != null && Number.isFinite(n) ? String(n) : "";
-}
-
-function parseOptionalDecimalInput(s: string): number | null {
-  const t = s.trim();
-  if (!t) return null;
-  const n = Number(t.replace(",", "."));
-  return Number.isFinite(n) ? n : null;
-}
-
-function parseOptionalIntInput(s: string): number | null {
-  const t = s.trim();
-  if (!t) return null;
-  const n = Number(t);
-  if (!Number.isFinite(n)) return null;
-  return Math.trunc(n);
 }
 
 function getErrorMessage(err: unknown): string {
@@ -334,6 +295,11 @@ export function ComprasMaterialPage() {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [sorting, setSorting] = useState<SortingState>([]);
   const [savingById, setSavingById] = useState<Record<string, boolean>>({});
+  /** Refs estables: evitan recrear `columns` (TanStack) en cada setRows / setSavingById. */
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+  const savingByIdRef = useRef(savingById);
+  savingByIdRef.current = savingById;
 
   const [proveedoresPapelCarton, setProveedoresPapelCarton] = useState<
     { id: string; nombre: string }[]
@@ -357,19 +323,6 @@ export function ComprasMaterialPage() {
   const [recepcionFotosModal, setRecepcionFotosModal] = useState(
     RECEPCION_FOTOS_MODAL_INITIAL
   );
-  const [editMaterial, setEditMaterial] = useState("");
-  const [editGramaje, setEditGramaje] = useState("");
-  const [editTamano, setEditTamano] = useState("");
-  const [editBrutas, setEditBrutas] = useState("");
-  const [editFecha, setEditFecha] = useState("");
-  const [editAlbaran, setEditAlbaran] = useState("");
-  const [editNotasCompra, setEditNotasCompra] = useState("");
-  const [editSaving, setEditSaving] = useState(false);
-  const [editComunicacionLogs, setEditComunicacionLogs] = useState<
-    CompraComunicacionLogRow[]
-  >([]);
-  const [editComunicacionLogsLoading, setEditComunicacionLogsLoading] =
-    useState(false);
 
   const [solicitarOpen, setSolicitarOpen] = useState(false);
   const [solicitarSaving, setSolicitarSaving] = useState(false);
@@ -476,33 +429,7 @@ export function ComprasMaterialPage() {
     })();
   }, [supabase]);
 
-  useEffect(() => {
-    if (!editOpen || !editRow) {
-      setEditComunicacionLogs([]);
-      setEditComunicacionLogsLoading(false);
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      setEditComunicacionLogsLoading(true);
-      const { data, error } = await supabase
-        .from(TABLE_COMPRAS_COMUNICACION)
-        .select("*")
-        .contains("compra_ids", [editRow.id])
-        .order("created_at", { ascending: false });
-      if (cancelled) return;
-      setEditComunicacionLogsLoading(false);
-      if (error) {
-        console.error("[prod_compras_material_comunicacion]", error);
-        setEditComunicacionLogs([]);
-        return;
-      }
-      setEditComunicacionLogs((data ?? []) as CompraComunicacionLogRow[]);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [editOpen, editRow, supabase]);
+  }, [supabase]);
 
   const loadRows = useCallback(async () => {
     setLoading(true);
@@ -975,8 +902,8 @@ export function ComprasMaterialPage() {
   }, [proveedoresMezclados, selectedRows]);
 
   const isSavingRow = useCallback(
-    (id: string) => Boolean(savingById[id]),
-    [savingById]
+    (id: string) => Boolean(savingByIdRef.current[id]),
+    []
   );
 
   const isRowCheckboxDisabled = useCallback(
@@ -1029,29 +956,19 @@ export function ComprasMaterialPage() {
 
   const openEdit = useCallback((row: ComprasMaterialTableRow) => {
     setEditRow(row);
-    setEditMaterial(row.material?.trim() ?? "");
-    setEditGramaje(numStr(row.gramaje));
-    setEditTamano(row.tamano_hoja?.trim() ?? "");
-    setEditBrutas(numStr(row.num_hojas_brutas));
-    setEditFecha(toDateInputValue(row.fecha_prevista_recepcion));
-    setEditAlbaran(row.albaran_proveedor?.trim() ?? "");
-    setEditNotasCompra(row.notas?.trim() ?? "");
     setEditOpen(true);
   }, []);
 
-  const sugerirSiguientePosicionOt = useCallback(
-    (otNumero: string) => {
-      const ot = String(otNumero ?? "").trim();
-      if (!ot) return 1;
-      const maxPos = rows.reduce((acc, r) => {
-        if (String(r.ot_numero ?? "").trim() !== ot) return acc;
-        const p = r.posicion ?? 1;
-        return p > acc ? p : acc;
-      }, 0);
-      return Math.max(1, maxPos + 1);
-    },
-    [rows]
-  );
+  const sugerirSiguientePosicionOt = useCallback((otNumero: string) => {
+    const ot = String(otNumero ?? "").trim();
+    if (!ot) return 1;
+    const maxPos = rowsRef.current.reduce((acc, r) => {
+      if (String(r.ot_numero ?? "").trim() !== ot) return acc;
+      const p = r.posicion ?? 1;
+      return p > acc ? p : acc;
+    }, 0);
+    return Math.max(1, maxPos + 1);
+  }, []);
 
   const openManualDuplicate = useCallback(
     (row: ComprasMaterialTableRow) => {
@@ -1138,7 +1055,7 @@ export function ComprasMaterialPage() {
     async (rowId: string, estado: string) => {
       setSavingById((s) => ({ ...s, [rowId]: true }));
       try {
-        const row = rows.find((r) => r.id === rowId) ?? null;
+        const row = rowsRef.current.find((r) => r.id === rowId) ?? null;
         const esRecibido = normalizeCompraEstado(estado) === "recibido";
         const ahoraIso = new Date().toISOString();
         const payloadCompra: Record<string, unknown> = { estado };
@@ -1146,64 +1063,106 @@ export function ComprasMaterialPage() {
           payloadCompra.fecha_recepcion = ahoraIso;
         }
 
+        // 1) UPDATE compra — obligatorio primero (resto asume estado ya persistido).
         const { error } = await supabase
           .from(TABLE_COMPRA)
           .update(payloadCompra)
           .eq("id", rowId);
         if (error) throw error;
+
         const ot = row?.ot_numero;
         const mat = estadoMaterialDesdeEstadoCompra(estado);
-        if (ot && mat) {
-          // Guard 9.8.3: no pisar estado STOP (liberado ni pendiente corrección).
-          // La OT sale del STOP solo vía 9.8.4 (asignar) o 9.8.3 (consumir).
-          const { data: despRow } = await supabase
-            .from(TABLE_DESPACHADAS)
-            .select("estado_material")
-            .eq("ot_numero", ot)
-            .maybeSingle();
-          const currentEstado = (despRow?.estado_material ?? "").trim();
-          if (!esEstadoMaterialStopBloqueado(currentEstado)) {
-            const { error: dErr } = await supabase
+        const needDespSync = Boolean(ot && mat);
+        const needRecepcionFlow = Boolean(esRecibido && row);
+
+        // 2) Lecturas independientes en paralelo (no hay dependencia entre ellas).
+        //    - despachadas: solo para decidir si pisar estado_material (STOP guard).
+        //    - recepción existente + getUser: solo si pasamos a Recibido.
+        const [despSelect, recepSelect, userResult] = await Promise.all([
+          needDespSync
+            ? supabase
+                .from(TABLE_DESPACHADAS)
+                .select("estado_material")
+                .eq("ot_numero", ot as string)
+                .maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
+          needRecepcionFlow
+            ? supabase
+                .from(TABLE_RECEPCION)
+                .select("id")
+                .eq("compra_id", rowId)
+                .limit(1)
+            : Promise.resolve({ data: null, error: null }),
+          needRecepcionFlow
+            ? supabase.auth.getUser()
+            : Promise.resolve({ data: { user: null }, error: null }),
+        ]);
+
+        if (despSelect.error) throw despSelect.error;
+        if (recepSelect.error) throw recepSelect.error;
+        if (userResult.error) throw userResult.error;
+
+        const currentEstado = (
+          (despSelect.data as { estado_material?: string | null } | null)
+            ?.estado_material ?? ""
+        ).trim();
+        const shouldUpdateDesp =
+          needDespSync && !esEstadoMaterialStopBloqueado(currentEstado);
+
+        const existente = (recepSelect.data as { id?: string }[] | null) ?? null;
+        const needsRecepcionInsert =
+          needRecepcionFlow && (!existente || existente.length === 0);
+
+        // 3) Escrituras independientes en paralelo (tras lecturas).
+        const writeTasks: PromiseLike<unknown>[] = [];
+
+        if (shouldUpdateDesp && ot && mat) {
+          writeTasks.push(
+            supabase
               .from(TABLE_DESPACHADAS)
               .update({ estado_material: mat })
-              .eq("ot_numero", ot);
-            if (dErr) console.warn(dErr);
-          }
+              .eq("ot_numero", ot)
+              .then(({ error: dErr }) => {
+                if (dErr) console.warn(dErr);
+              })
+          );
         }
-        if (esRecibido && row) {
-          const { data: existente, error: exErr } = await supabase
-            .from(TABLE_RECEPCION)
-            .select("id")
-            .eq("compra_id", rowId)
-            .limit(1);
-          if (exErr) throw exErr;
-          if (!existente || existente.length === 0) {
-            const {
-              data: { user },
-            } = await supabase.auth.getUser();
-            const recepcionadoPorUuid =
-              typeof user?.id === "string" && /^[0-9a-f-]{36}$/i.test(user.id.trim())
-                ? user.id.trim()
-                : null;
-            const albaranCompra = row.albaran_proveedor?.trim() ?? "";
-            const { error: recErr } = await supabase.from(TABLE_RECEPCION).insert({
-              compra_id: rowId,
-              fecha_recepcion:
-                row.fecha_recepcion?.trim() && row.fecha_recepcion.trim().length > 0
-                  ? row.fecha_recepcion
-                  : ahoraIso,
-              albaran_proveedor: albaranCompra.length > 0 ? albaranCompra : "-",
-              hojas_recibidas: row.num_hojas_brutas ?? 0,
-              palets_recibidos: 0,
-              estado_recepcion: "Total",
-              notas: buildRecepcionAdminNotas(),
-              recepcionado_por: recepcionadoPorUuid,
-              recepcionado_por_email: "compras@minervaglobal.es",
-              recepcionado_por_nombre: "Dpto. Compras",
-            });
-            if (recErr) throw recErr;
-          }
+
+        if (needsRecepcionInsert && row) {
+          const user = userResult.data?.user ?? null;
+          const recepcionadoPorUuid =
+            typeof user?.id === "string" && /^[0-9a-f-]{36}$/i.test(user.id.trim())
+              ? user.id.trim()
+              : null;
+          const albaranCompra = row.albaran_proveedor?.trim() ?? "";
+          writeTasks.push(
+            supabase
+              .from(TABLE_RECEPCION)
+              .insert({
+                compra_id: rowId,
+                fecha_recepcion:
+                  row.fecha_recepcion?.trim() && row.fecha_recepcion.trim().length > 0
+                    ? row.fecha_recepcion
+                    : ahoraIso,
+                albaran_proveedor: albaranCompra.length > 0 ? albaranCompra : "-",
+                hojas_recibidas: row.num_hojas_brutas ?? 0,
+                palets_recibidos: 0,
+                estado_recepcion: "Total",
+                notas: buildRecepcionAdminNotas(),
+                recepcionado_por: recepcionadoPorUuid,
+                recepcionado_por_email: "compras@minervaglobal.es",
+                recepcionado_por_nombre: "Dpto. Compras",
+              })
+              .then(({ error: recErr }) => {
+                if (recErr) throw recErr;
+              })
+          );
         }
+
+        if (writeTasks.length > 0) {
+          await Promise.all(writeTasks);
+        }
+
         setRows((prev) =>
           prev.map((r) =>
             r.id === rowId
@@ -1231,7 +1190,7 @@ export function ComprasMaterialPage() {
         });
       }
     },
-    [rows, supabase]
+    [loadRows, supabase]
   );
 
   const onFechaPrevistaCommit = useCallback(
@@ -1400,68 +1359,6 @@ export function ComprasMaterialPage() {
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
-
-  const guardarEdicion = useCallback(async () => {
-    if (!editRow) return;
-    setEditSaving(true);
-    const ot = String(editRow.ot_numero ?? "").trim();
-    const material = editMaterial.trim() || null;
-    const gramaje = parseOptionalDecimalInput(editGramaje);
-    const tamano_hoja = editTamano.trim() || null;
-    const num_hojas_brutas = parseOptionalIntInput(editBrutas);
-    const fecha = editFecha.trim() === "" ? null : editFecha.trim();
-    const albaran = editAlbaran.trim() === "" ? null : editAlbaran.trim();
-    const notas = editNotasCompra.trim() || null;
-
-    const payloadTecnico = {
-      material,
-      gramaje,
-      tamano_hoja,
-      num_hojas_brutas,
-    };
-
-    try {
-      const { error: errDesp } = await supabase
-        .from(TABLE_DESPACHADAS)
-        .update(payloadTecnico)
-        .eq("ot_numero", ot);
-      if (errDesp) throw errDesp;
-
-      const { error: errCompra } = await supabase
-        .from(TABLE_COMPRA)
-        .update({
-          ...payloadTecnico,
-          fecha_prevista_recepcion: fecha,
-          albaran_proveedor: albaran,
-          notas,
-        })
-        .eq("id", editRow.id);
-      if (errCompra) throw errCompra;
-
-      toast.success("Compra y despacho actualizados.");
-      setEditOpen(false);
-      setEditRow(null);
-      void loadRows();
-    } catch (e) {
-      console.error(e);
-      toast.error(
-        e instanceof Error ? e.message : "No se pudo guardar los cambios."
-      );
-    } finally {
-      setEditSaving(false);
-    }
-  }, [
-    editAlbaran,
-    editBrutas,
-    editFecha,
-    editGramaje,
-    editMaterial,
-    editNotasCompra,
-    editRow,
-    editTamano,
-    loadRows,
-    supabase,
-  ]);
 
   const abrirGmailYModalConfirmCompras = useCallback(async () => {
     if (selectedRows.length === 0) return;
@@ -2421,191 +2318,15 @@ export function ComprasMaterialPage() {
         </div>
       )}
 
-      <Dialog
+      <ComprasMaterialEditDialog
         open={editOpen}
+        row={editRow}
         onOpenChange={(o) => {
           setEditOpen(o);
           if (!o) setEditRow(null);
         }}
-      >
-        <DialogContent className="max-h-[min(92vh,640px)] max-w-lg gap-0 overflow-hidden p-0 sm:max-w-lg">
-          <DialogHeader className="shrink-0 border-b border-slate-100 px-4 py-3">
-            <DialogTitle className="text-base">Editar compra</DialogTitle>
-            <DialogDescription className="text-xs">
-              {editRow ? (
-                <>
-                  OT{" "}
-                  <span className="font-mono font-normal">{editRow.ot_numero}</span>{" "}
-                  · {editRow.num_compra}
-                </>
-              ) : null}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="max-h-[min(60vh,480px)] space-y-4 overflow-y-auto px-4 py-3">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Material acordado
-              </p>
-              <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                <div className="grid gap-1 sm:col-span-1">
-                  <Label htmlFor="edit-compra-material" className="text-xs">
-                    Material
-                  </Label>
-                  <Input
-                    id="edit-compra-material"
-                    className="h-8 text-xs"
-                    value={editMaterial}
-                    onChange={(e) => setEditMaterial(e.target.value)}
-                    placeholder="Ej. Estucado mate"
-                  />
-                </div>
-                <div className="grid gap-1 sm:col-span-1">
-                  <Label htmlFor="edit-compra-gramaje" className="text-xs">
-                    Gramaje (g/m²)
-                  </Label>
-                  <Input
-                    id="edit-compra-gramaje"
-                    type="number"
-                    step="any"
-                    className="h-8 text-xs"
-                    value={editGramaje}
-                    onChange={(e) => setEditGramaje(e.target.value)}
-                    placeholder="—"
-                  />
-                </div>
-                <div className="grid gap-1 sm:col-span-1">
-                  <Label htmlFor="edit-compra-formato" className="text-xs">
-                    Formato
-                  </Label>
-                  <Input
-                    id="edit-compra-formato"
-                    className="h-8 text-xs"
-                    value={editTamano}
-                    onChange={(e) => setEditTamano(e.target.value)}
-                    placeholder="Ej. 72×102"
-                  />
-                </div>
-                <div className="grid gap-1 sm:col-span-1">
-                  <Label htmlFor="edit-compra-brutas" className="text-xs">
-                    Hojas brutas
-                  </Label>
-                  <Input
-                    id="edit-compra-brutas"
-                    type="number"
-                    inputMode="numeric"
-                    className="h-8 text-xs"
-                    value={editBrutas}
-                    onChange={(e) => setEditBrutas(e.target.value)}
-                    placeholder="—"
-                  />
-                </div>
-              </div>
-            </div>
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Seguimiento
-              </p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <div className="grid gap-1">
-                  <Label htmlFor="edit-fecha-prev" className="text-xs">
-                    Fecha prevista recepción
-                  </Label>
-                  <Input
-                    id="edit-fecha-prev"
-                    type="date"
-                    className="h-8 text-xs"
-                    value={editFecha}
-                    onChange={(e) => setEditFecha(e.target.value)}
-                  />
-                </div>
-                <div className="grid gap-1">
-                  <Label htmlFor="edit-albaran" className="text-xs">
-                    Albarán proveedor
-                  </Label>
-                  <Input
-                    id="edit-albaran"
-                    type="text"
-                    className="h-8 text-xs"
-                    value={editAlbaran}
-                    onChange={(e) => setEditAlbaran(e.target.value)}
-                    placeholder="Opcional"
-                  />
-                </div>
-              </div>
-              <div className="mt-3 grid gap-1">
-                <Label htmlFor="edit-notas-compra" className="text-xs">
-                  Notas compra (Jordi)
-                </Label>
-                <Textarea
-                  id="edit-notas-compra"
-                  rows={3}
-                  value={editNotasCompra}
-                  onChange={(e) => setEditNotasCompra(e.target.value)}
-                  placeholder="Instrucciones o comentarios para muelle"
-                  className="resize-y text-xs leading-snug"
-                />
-              </div>
-            </div>
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Historial de comunicación
-              </p>
-              {editComunicacionLogsLoading ? (
-                <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                  Cargando historial...
-                </div>
-              ) : editComunicacionLogs.length === 0 ? (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Sin logs para esta compra.
-                </p>
-              ) : (
-                <div className="mt-2 space-y-2">
-                  {editComunicacionLogs.map((log) => (
-                    <div
-                      key={log.id}
-                      className="rounded-md border border-slate-200 bg-slate-50/70 p-2"
-                    >
-                      <p className="text-[11px] font-medium text-[#002147]">
-                        {log.asunto?.trim() || "Sin asunto"}
-                      </p>
-                      <p className="mt-0.5 text-[10px] text-muted-foreground">
-                        {formatFechaEsCorta(log.created_at)} ·{" "}
-                        {log.enviado_por?.trim() || "usuario no identificado"}
-                      </p>
-                      <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-[11px] text-slate-700">
-                        {log.cuerpo?.trim() || "Sin cuerpo"}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-          <DialogFooter className="gap-2 border-t border-slate-100 px-4 py-3 sm:flex-row">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setEditOpen(false)}
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              disabled={editSaving}
-              onClick={() => void guardarEdicion()}
-            >
-              {editSaving ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                "Guardar"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onSaved={() => void loadRows()}
+      />
 
       <ComprasMaterialManualDialog
         open={manualOpen}
