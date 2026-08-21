@@ -309,7 +309,7 @@ Perf Compras cerrado usable 21 ago. Supabase ref: jrwwuqplilbydxptsbqz. Branch m
 - [x] Harden STOP (no pisar badge)
 - [x] Camino B consumo limpio (98022)
 - [x] Camino A asignación (mañana — no repetir)
-- [ ] 9.8.6
+- [x] 9.8.6
 - [ ] Perf Compras (fechas/estado)
 - [x] Docs maestro/brief alineados con «9.8.3 validado» + handoff Claude
 
