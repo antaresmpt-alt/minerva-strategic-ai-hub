@@ -289,30 +289,38 @@ export async function fetchContenedorSeccionPasosDisponibles(
     .map((m) => m.num_pedido);
   const horasByOt = new Map<string, number>();
   if (otNumeros.length > 0 && (def.horasDespachoField || def.horasDespachoSumFields?.length)) {
-    const selectCols = new Set<string>(["ot_numero"]);
-    if (def.horasDespachoField) selectCols.add(def.horasDespachoField);
-    for (const f of def.horasDespachoSumFields ?? []) selectCols.add(f);
-    const select = [...selectCols].join(", ");
+    // Select estático (Supabase tipa mal el select dinámico → GenericStringError en tsc/Vercel).
     const despRows = await fetchAllInChunks(otNumeros, 80, async (chunk) => {
       const { data, error } = await supabase
         .from("produccion_ot_despachadas")
-        .select(select)
+        .select(
+          "ot_numero, horas_estimadas_engomado, horas_estimadas_troquelado, horas_entrada, horas_tiraje",
+        )
         .in("ot_numero", chunk);
       if (error) throw error;
       return data ?? [];
     });
-    for (const d of despRows as Array<Record<string, unknown>>) {
+    for (const d of despRows as Array<{
+      ot_numero?: string;
+      horas_estimadas_engomado?: number | null;
+      horas_estimadas_troquelado?: number | null;
+      horas_entrada?: number | null;
+      horas_tiraje?: number | null;
+    }>) {
       const ot = String(d.ot_numero ?? "").trim();
       if (!ot) continue;
       let h = 0;
-      if (def.horasDespachoField) {
-        const v = d[def.horasDespachoField];
+      if (def.horasDespachoField === "horas_estimadas_engomado") {
+        const v = d.horas_estimadas_engomado;
+        if (typeof v === "number" && Number.isFinite(v) && v > 0) h = v;
+      } else if (def.horasDespachoField === "horas_estimadas_troquelado") {
+        const v = d.horas_estimadas_troquelado;
         if (typeof v === "number" && Number.isFinite(v) && v > 0) h = v;
       }
       if (def.horasDespachoSumFields?.length) {
         let sum = 0;
         for (const f of def.horasDespachoSumFields) {
-          const v = d[f];
+          const v = f === "horas_entrada" ? d.horas_entrada : d.horas_tiraje;
           if (typeof v === "number" && Number.isFinite(v) && v > 0) sum += v;
         }
         if (sum > 0) h = sum;
