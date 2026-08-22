@@ -33,4 +33,40 @@ describe("planificacion-ejecucion-horas", () => {
         .horas_reales,
     ).toBe(0.5);
   });
+
+  it("impresión: horas_reales = entrada + impresión (línea gorda)", () => {
+    const patch = buildEjecucionHorasSyncPatch(1, {
+      horas_entrada_real: 0.5,
+      horas_impresion_real: 1.25,
+    });
+    expect(patch.horas_reales).toBe(1.75);
+    expect(patch.horas_reales_entrada).toBe(0.5);
+    expect(patch.horas_reales_tiraje).toBe(1.25);
+  });
+
+  it("digital: misma suma entrada + impresión", () => {
+    const patch = buildEjecucionHorasSyncPatch(2, {
+      horas_entrada_real: 0.5,
+      horas_impresion_real: 1,
+    });
+    expect(patch.horas_reales).toBe(1.5);
+  });
+
+  it("troquelado: horas_reales y horas_reales_troquelado = prep + tiraje", () => {
+    const patch = buildEjecucionHorasSyncPatch(10, {
+      horas_preparacion_real: 1,
+      horas_tiraje_real: 1,
+    });
+    expect(patch.horas_reales).toBe(2);
+    expect(patch.horas_reales_troquelado).toBe(2);
+  });
+
+  it("engomado: horas_reales y horas_reales_engomado = prep + tiraje", () => {
+    const patch = buildEjecucionHorasSyncPatch(12, {
+      horas_preparacion_real: 0.25,
+      horas_tiraje_real: 0.75,
+    });
+    expect(patch.horas_reales).toBe(1);
+    expect(patch.horas_reales_engomado).toBe(1);
+  });
 });

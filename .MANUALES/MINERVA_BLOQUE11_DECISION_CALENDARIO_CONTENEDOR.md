@@ -1,9 +1,9 @@
 # Bloque 11 — Calendario, bandeja, contenedor y mesa (decisión de diseño)
 
-> **Fecha:** 21 ago 2026 · **Rev. completa:** **22 ago 2026 tarde** (brainstorming Manel + Claude Opus + Cursor)
-> **Estado:** diseño **cerrado** para implementación · validación planta pendiente (Jordi / Carlos)
+> **Fecha:** 21 ago 2026 · **Rev. completa:** **22 ago 2026 noche** (diseño + spike contenedor + smoke planta)
+> **Estado:** diseño **cerrado** · spike contenedor **smoke OK** (rama `feature/bloque11-contenedor-ctp-spike`) · merge a `main` pendiente OK Manel/planta
 > **Complementa:** `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` · `.MANUALES/MINERVA_BLOQUE11_ANALISIS_CONTENEDOR_VS_MESA.md` · `.MANUALES/MINERVA_BLOQUE11_BRIEF_JORDI_CARLOS.md`
-> **Código 22 ago tarde:** botón «Enviar a cola de Mesa» **retirado** del calendario (`calendario-produccion-page.tsx`). Motor contenedor: **pendiente**.
+> **Código 22 ago:** botón «Enviar a cola» retirado del calendario · motor contenedor CTP→…→I/D en spike · fix horas línea gorda (§22)
 
 ---
 
@@ -455,4 +455,61 @@ Bandeja Carlos / detalle-día / pulir claim UX (default por operario).
 
 ---
 
-*Manel + Claude · Bloque 11 contenedor cerrado en spike (CTP→…→I/D)*
+## 21. Smoke planta noche 22 ago 2026 — **contenedor validado** 🎉
+
+**Rama:** `feature/bloque11-contenedor-ctp-spike`  
+**Quién:** Manel (mesa) · Cursor (código)
+
+### Qué se celebró
+El spike deja de ser teoría: **sin Pool ni Mesa**, el operario ve el contenedor por sección, inicia (con claim donde toca) y el itinerario avanza paso a paso. Sustituye la puerta Optimus/Pool para la ejecución diaria.
+
+### Matriz smoke (OK)
+
+| OT / escenario | Qué se probó | Resultado |
+|----------------|--------------|-----------|
+| Lab CTP→T→D→E (98010-02 y similares) | Contenedor CTP, claim Troquel, Desbroce, Engomado | OK |
+| **35900** Digital | Contenedor Digital + claim Xerox → Troquel → Engomado (sin desbroce) | OK — respeta itinerario 100 % |
+| **35900** hojas | Al abrir Troquel: 1200 (despacho); al **Iniciar**: 1050 del paso Digital | OK — misma lógica encadenada que Offset |
+| **35904** Offset | Contenedor Impresión (SpeedMaster, sin claim) → Troquel | OK |
+| Lista SpeedMaster CD 102 | Muchas OTs «Contenedor Impresión» | OK — el contenedor ve todo lo `disponible` |
+| Cartela al cerrar Offset | Obligatoria; 6 palets visibles; se eligió 1 (10235 / 1640) | OK para smoke; **multi-palet mañana** |
+
+### Bugs detectados en smoke → estado
+
+| Tema | Hallazgo | Estado |
+|------|----------|--------|
+| Línea gorda «0 min» en Troquel / Engomado | Sync escribía solo `horas_reales_troquelado` / `_engomado`, no `horas_reales` (lo que pinta la lista) | **Fix** §22 |
+| Impresión solo contaba tiraje en línea gorda | `horas_reales` = impresión, sin sumar entrada | **Fix** §22 |
+| Multi-cartela (300+1400 de dos IDs) | UI 1 dropdown; hace falta sumar varias cartelas al cerrar | **Mañana** — hermana de 35904 |
+| Ordenar OTs ejecución por fecha | No hay filtro fecha en esta pantalla | Con **bandeja/calendario** (no bloquea contenedor) |
+| Cierre → histórico / promedios | No forzar en smoke; barco pendiente | Aplazado |
+
+### Qué **no** hace falta re-probar esta noche
+- LEGACY Pool/Mesa (intacto).
+- Calendario Carlos (no tocado).
+- Cerrar OT a histórico (no cuenta promedio si se hace en lab).
+
+### Mañana (sugerido)
+1. Multi-cartela al cerrar (hermana 35904 / mismo material).
+2. Smoke re-cierre Troquel/Engomado tras fix horas → línea gorda debe mostrar prep+tiraje.
+3. Opcional: Manipulados (OT con interiores) cuando toque calendario.
+
+---
+
+## 22. Fix horas línea gorda (22 ago noche post-smoke)
+
+**Archivo:** `src/lib/planificacion-ejecucion-horas.ts` → `buildEjecucionHorasSyncPatch`
+
+| Proceso | Antes | Después |
+|---------|-------|---------|
+| Impresión / Digital (1, 2) | `horas_reales` = solo impresión | `horas_reales` = **entrada + impresión**; desglose en `_entrada` / `_tiraje` |
+| Troquelado (10) | solo `horas_reales_troquelado` | **también** `horas_reales` = prep + tiraje |
+| Engomado (12) | solo `horas_reales_engomado` | **también** `horas_reales` = prep + tiraje |
+
+La UI `tiempoColaLabel` en filas `finalizada` usa `row.horasReales` → con el fix la línea gorda coincide con el total del modal «Cerrar proceso».
+
+**Nota:** ejecuciones ya cerradas esta noche con «0 min» **no se recalculan solas**; reabrir/cerrar o editar paso si hace falta corregir histórico de lab.
+
+---
+
+*Manel + Cursor · 22 ago noche — contenedor spike smoke OK + fix horas*

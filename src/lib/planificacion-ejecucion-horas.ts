@@ -181,7 +181,14 @@ export function sumHorasDeclaradasDatosProceso(
   return num(datos.horas_proceso);
 }
 
-/** Sincroniza `prod_mesa_ejecuciones.horas_reales*` desde datos_proceso al guardar/cerrar. */
+/**
+ * Sincroniza `prod_mesa_ejecuciones.horas_reales*` desde datos_proceso al guardar/cerrar.
+ *
+ * Regla (smoke 22 ago): la **línea gorda** de «OTs en ejecución» lee `horas_reales`.
+ * Por eso el total declarado (entrada+impresión, prep+tiraje, etc.) debe ir siempre
+ * a `horas_reales`, además de los campos desglosados (`horas_reales_entrada`,
+ * `horas_reales_troquelado`, …) usados en hoja de ruta / promedios.
+ */
 export function buildEjecucionHorasSyncPatch(
   procesoId: number | null | undefined,
   datos: DatosProcesoGenerico,
@@ -191,8 +198,10 @@ export function buildEjecucionHorasSyncPatch(
 
   if (procesoId === 1 || procesoId === 2) {
     const horasImpReal = num(datos.horas_impresion_real);
-    if (horasImpReal != null) sync.horas_reales = horasImpReal;
     const horasEntReal = num(datos.horas_entrada_real);
+    const totalImp =
+      (horasEntReal ?? 0) + (horasImpReal ?? 0);
+    if (totalImp > 0) sync.horas_reales = roundHorasEjecucion(totalImp);
     if (horasEntReal != null) sync.horas_reales_entrada = horasEntReal;
     if (horasImpReal != null) sync.horas_reales_tiraje = horasImpReal;
     const hojasImp = num(datos.hojas_impresas);
@@ -203,7 +212,11 @@ export function buildEjecucionHorasSyncPatch(
     const hPrep = num(datos.horas_preparacion_real);
     const hTir = num(datos.horas_tiraje_real);
     const totalTroq = (hPrep ?? 0) + (hTir ?? 0);
-    if (totalTroq > 0) sync.horas_reales_troquelado = roundHorasEjecucion(totalTroq);
+    if (totalTroq > 0) {
+      const rounded = roundHorasEjecucion(totalTroq);
+      sync.horas_reales = rounded;
+      sync.horas_reales_troquelado = rounded;
+    }
     const hojasTroq = num(datos.hojas_troqueladas);
     if (hojasTroq != null) sync.num_hojas_producidas = hojasTroq;
     return sync;
@@ -212,10 +225,16 @@ export function buildEjecucionHorasSyncPatch(
     const hPrep = num(datos.horas_preparacion_real);
     const hTir = num(datos.horas_tiraje_real);
     const totalEng = (hPrep ?? 0) + (hTir ?? 0);
-    if (totalEng > 0) sync.horas_reales_engomado = roundHorasEjecucion(totalEng);
-    else {
+    if (totalEng > 0) {
+      const rounded = roundHorasEjecucion(totalEng);
+      sync.horas_reales = rounded;
+      sync.horas_reales_engomado = rounded;
+    } else {
       const legacy = num(datos.tiempo_real);
-      if (legacy != null && legacy > 0) sync.horas_reales_engomado = legacy;
+      if (legacy != null && legacy > 0) {
+        sync.horas_reales = legacy;
+        sync.horas_reales_engomado = legacy;
+      }
     }
     const estEng = num(datos.estuches_engomados);
     if (estEng != null) sync.cantidad_unidades = estEng;
