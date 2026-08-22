@@ -185,6 +185,11 @@ export interface MesaEjecucion {
   observaciones: string | null;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Bloque 11 spike: fila virtual del contenedor CTP (aún no hay
+   * `prod_mesa_ejecuciones`). Al iniciar se materializa con mesa_trabajo_id null.
+   */
+  origenContenedorCtp?: boolean;
 }
 
 export interface MesaEjecucionPausa {

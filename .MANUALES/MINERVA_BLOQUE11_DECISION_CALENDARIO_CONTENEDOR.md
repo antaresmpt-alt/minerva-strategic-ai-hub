@@ -316,11 +316,12 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 - [x] Retirar botón «Enviar a cola» del calendario
 - [ ] Validar brief Jordi/Carlos
 - [ ] Spike bandeja computada
-- [ ] Spike contenedor `prod_ot_pasos`
+- [x] **Spike contenedor CTP** (`feature/bloque11-contenedor-ctp-spike`) — ver §17
 - [ ] **Spike persistencia detalle del día (§6.5) — obligatorio antes de fase 3**
 - [ ] Ejecución modal
 - [ ] Detalle del día (Carlos) — **solo tras spike persistencia**
 - [ ] LEGACY tab
+- [ ] Spike troquel + claim (siguiente tras CTP limpio)
 
 ---
 
@@ -335,7 +336,8 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 | Mesa diaria LEGACY | `planificacion-mesa-diaria-tab.tsx` | No modificar camino feliz |
 | Detalle día (futuro) | `planificacion-detalle-dia-tab.tsx` | Por crear |
 | Helpers mesa | `planificacion-mesa-diaria.ts` | Reutilizar |
-| Ejecución | `planificacion-ots-ejecucion-tab.tsx` | Contenedor + modal |
+| Ejecución | `planificacion-ots-ejecucion-tab.tsx` | + contenedor CTP spike |
+| Contenedor CTP | `contenedor-ctp.ts` | Query + fila ligera |
 
 ---
 
@@ -351,4 +353,35 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 
 ---
 
-*Manel + Claude Opus + Cursor · 21–22 ago 2026*
+## 17. Spike CTP — resultado (22 ago 2026 noche)
+
+**Rama:** `feature/bloque11-contenedor-ctp-spike`
+
+### Qué se hizo
+- Lista de ejecución mezcla filas reales + **virtuales** del contenedor CTP (pasos `disponible`, OT despachada, sin ejecución activa en ese `ot_paso_id`).
+- Badge «Contenedor CTP»; toggles **Mostrar OTs prueba** (off por defecto) y **Solo ejecutable**.
+- Al **Iniciar**: `crearEjecucionLigeraCtp` → INSERT `pendiente_inicio` con `mesa_trabajo_id = null` + UPDATE `en_curso` (para disparar triggers de itinerario).
+- Calendario Carlos **no tocado**.
+
+### Sorpresas / fricción al desacoplar `prod_mesa_ejecuciones`
+
+| Hallazgo | Impacto |
+|----------|---------|
+| `maquina_id` es **NOT NULL** | Fila «ligera» exige máquina CTP (`tipo_maquina = preimpresion`, hoy «CTP MNRV»). No se puede omitir. |
+| `mesa_trabajo_id` **nullable** | OK — no hace falta hueco de mesa. |
+| Unique parcial `(ot_numero, maquina_id)` en estados activos | Deduplicar por paso ocupado **y** no crear segunda activa misma OT+máquina. |
+| Triggers itinerario son **AFTER UPDATE**, no INSERT | Insertar directo como `en_curso` **no** pondría el paso en marcha. Solución: INSERT `pendiente_inicio` → UPDATE `en_curso`. |
+| CTP no consume papel | «Ejecutable» = siempre true si `disponible`; el toggle queda listo para otras secciones. |
+
+### Smoke manual recomendado
+1. Activar «Mostrar OTs prueba» → debe verse p.ej. **98005** (CTP disponible) con badge Contenedor CTP.
+2. Desactivar el toggle → 98005 **desaparece** de la lista planta.
+3. Con pruebas ON: abrir → Iniciar → debe nacer fila real sin mesa; cerrar paso → itinerario avanza.
+4. LEGACY Pool/Mesa: sin cambios.
+
+### Siguiente
+Troquelado + claim al iniciar (mismo patrón, multi-máquina).
+
+---
+
+*Manel + Claude Opus + Cursor · 21–22 ago 2026 · spike CTP 22 ago noche*

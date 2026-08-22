@@ -56,6 +56,16 @@ import {
   getPlanificacionTipoMaquinaFilter,
   PLANIFICACION_TIPOS_MAQUINA,
 } from "@/lib/planificacion-ambito";
+import {
+  contenedorCtpVirtualId,
+  crearEjecucionLigeraCtp,
+  fetchContenedorCtpPasosDisponibles,
+  fetchMaquinaCtpActiva,
+  isContenedorCtpVirtualId,
+  parseContenedorCtpVirtualId,
+  type ContenedorCtpPaso,
+} from "@/lib/contenedor-ctp";
+import { isOtNumeroPrueba } from "@/lib/ot-prueba";
 import { useFormatoMargenParametros } from "@/hooks/use-formato-margen-parametros";
 import { useSysParametrosSobreproduccion } from "@/hooks/use-sys-parametros-sobreproduccion";
 import { formatoCabeAvisoEjecucion } from "@/lib/formato-cabe-ejecucion";
@@ -112,6 +122,77 @@ const TABLE_DESPACHO = "produccion_ot_despachadas";
 const TABLE_DESPACHO_MATERIALES_LINEAS = "prod_despacho_materiales_lineas";
 const TABLE_OTS_GENERAL = "prod_ots_general";
 const TABLE_TROQUELES = "prod_troqueles";
+
+/** Igual espíritu que calendario: OTs lab ≥98000 ocultas por defecto. */
+const STORAGE_EJECUCION_MOSTRAR_PRUEBAS = "minerva.ejecucion.mostrarPruebas";
+const STORAGE_EJECUCION_SOLO_EJECUTABLE_CTP =
+  "minerva.ejecucion.contenedorCtp.soloEjecutable";
+
+function readLocalFlag(key: string, defaultValue: boolean): boolean {
+  if (typeof window === "undefined") return defaultValue;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (raw === "1") return true;
+    if (raw === "0") return false;
+  } catch {
+    /* ignore */
+  }
+  return defaultValue;
+}
+
+function buildContenedorCtpVirtualRow(
+  paso: ContenedorCtpPaso,
+  maquina: { id: string; nombre: string; tipoMaquina: string },
+): MesaEjecucion {
+  const nowIso = new Date().toISOString();
+  return {
+    id: contenedorCtpVirtualId(paso.otPasoId),
+    mesaTrabajoId: null,
+    otPasoId: paso.otPasoId,
+    otId: paso.otId,
+    procesoId: PROCESO_CTP_ID,
+    datosProcesoJson: paso.datosProceso,
+    procesoAnteriorId: null,
+    salidaProcesoAnterior: null,
+    salidaProcesoAnteriorNombre: null,
+    formatoAnterior: null,
+    formatoAnteriorOrigenNombre: null,
+    ot: paso.otNumero,
+    maquinaId: maquina.id,
+    maquinaNombre: maquina.nombre,
+    maquinaTipo: maquina.tipoMaquina,
+    fechaPlanificada: null,
+    turno: null,
+    slotOrden: null,
+    liberadaAt: null,
+    inicioRealAt: null,
+    finRealAt: null,
+    estadoEjecucion: "pendiente_inicio",
+    pausaActivaDesde: null,
+    motivoPausaActiva: null,
+    motivoPausaCategoriaActiva: null,
+    motivoPausaColorHexActiva: null,
+    haEstadoPausada: false,
+    numPausas: 0,
+    minutosPausadaAcum: 0,
+    horasPlanificadasSnapshot: 0.25,
+    horasReales: null,
+    horasRealesEntrada: null,
+    horasRealesTiraje: null,
+    horasRealesTroquelado: null,
+    horasRealesEngomado: null,
+    numHojasProducidas: null,
+    cantidadUnidades: null,
+    incidencia: null,
+    accionCorrectiva: null,
+    maquinista: null,
+    densidadesJson: null,
+    observaciones: null,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    origenContenedorCtp: true,
+  };
+}
 
 const EJECUCION_COLUMNS =
   "id, mesa_trabajo_id, ot_paso_id, ot_numero, maquina_id, fecha_planificada, turno, slot_orden, liberada_at, inicio_real_at, fin_real_at, estado_ejecucion, ha_estado_pausada, num_pausas, minutos_pausada_acum, horas_planificadas_snapshot, horas_reales, horas_reales_entrada, horas_reales_tiraje, horas_reales_troquelado, horas_reales_engomado, num_hojas_producidas, cantidad_unidades, incidencia, accion_correctiva, maquinista, densidades_json, observaciones, created_at, updated_at, prod_maquinas(nombre,tipo_maquina), prod_ot_pasos(ot_id,orden,proceso_id,datos_proceso)";
@@ -1029,6 +1110,12 @@ export function PlanificacionOtsEjecucionTab({
   const [estado, setEstado] = useState<FiltroEstadoEjecucion>("activas");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const [mostrarPruebas, setMostrarPruebas] = useState(() =>
+    readLocalFlag(STORAGE_EJECUCION_MOSTRAR_PRUEBAS, false),
+  );
+  const [soloEjecutableCtp, setSoloEjecutableCtp] = useState(() =>
+    readLocalFlag(STORAGE_EJECUCION_SOLO_EJECUTABLE_CTP, true),
+  );
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const hasAutoExpandedRef = useRef(false);
@@ -1768,11 +1855,183 @@ export function PlanificacionOtsEjecucionTab({
       setPausesByExecutionId(
         Object.fromEntries(Array.from(pauseMap.entries()).map(([k, v]) => [k, v] as const)),
       );
-      setDespachoByOt(despachoMap);
-      setOtMetaByOt(otMetaMap);
       setHijaComponentesByOt(hijaComponentesMap);
       setPasosItinerarioPorOtId(pasosItinerarioPorOtId);
-      setRows(execRows.map((r) => mapRow(r, pauseMap, salidaAnteriorByPasoKey, formatoAnteriorByOtPasoId)));
+
+      const baseRows = execRows.map((r) =>
+        mapRow(r, pauseMap, salidaAnteriorByPasoKey, formatoAnteriorByOtPasoId),
+      );
+
+      // Bloque 11 spike: contenedor CTP (pasos disponible sin mesa).
+      let contenedorRows: MesaEjecucion[] = [];
+      const showContenedorCtp =
+        (!tipoFiltro || tipoFiltro === "preimpresion") &&
+        (estado === "activas" ||
+          estado === "pendiente_inicio" ||
+          estado === "all");
+      if (showContenedorCtp) {
+        try {
+          const ctpMaq = await fetchMaquinaCtpActiva(supabase);
+          if (ctpMaq) {
+            const { data: activasPaso } = await supabase
+              .from(TABLE_EJECUCIONES)
+              .select("ot_paso_id")
+              .in("estado_ejecucion", ESTADOS_ACTIVAS)
+              .not("ot_paso_id", "is", null);
+            const occupied = new Set(
+              (activasPaso ?? [])
+                .map((r) => String((r as { ot_paso_id?: string }).ot_paso_id ?? "").trim())
+                .filter(Boolean),
+            );
+            // includePruebas: true → filtro UI (toggle). soloEjecutable false aquí; filtro UI.
+            const candidatos = await fetchContenedorCtpPasosDisponibles(supabase, {
+              includePruebas: true,
+              soloEjecutable: false,
+              otPasoIdsConEjecucionActiva: occupied,
+            });
+            contenedorRows = candidatos.map((p) =>
+              buildContenedorCtpVirtualRow(p, ctpMaq),
+            );
+
+            const otsContenedor = [
+              ...new Set(candidatos.map((c) => c.otNumero).filter(Boolean)),
+            ].filter((ot) => !despachoMap[ot]);
+            if (otsContenedor.length > 0) {
+              const [extraDesp, extraGen] = await Promise.all([
+                fetchAllInChunks(otsContenedor, 100, async (chunk) => {
+                  const { data, error } = await supabase
+                    .from(TABLE_DESPACHO)
+                    .select(
+                      `
+              ot_numero,
+              material,
+              gramaje,
+              tamano_hoja,
+              num_hojas_brutas,
+              num_hojas_netas,
+              tintas,
+              acabado_pral,
+              troquel,
+              poses,
+              horas_entrada,
+              horas_tiraje,
+              horas_estimadas_troquelado,
+              horas_engomado_preparacion,
+              horas_engomado_tiraje,
+              horas_estimadas_engomado,
+              tipo_engomado
+            `,
+                    )
+                    .in("ot_numero", chunk);
+                  if (error) throw error;
+                  return data ?? [];
+                }),
+                fetchAllInChunks(otsContenedor, 100, async (chunk) => {
+                  const { data, error } = await supabase
+                    .from(TABLE_OTS_GENERAL)
+                    .select(
+                      "num_pedido, cliente, titulo, cantidad, fecha_entrega, ot_tipo, ot_padre_numero, tipo_hija, forma_descripcion",
+                    )
+                    .in("num_pedido", chunk);
+                  if (error) throw error;
+                  return data ?? [];
+                }),
+              ]);
+              for (const g of extraGen as Array<{
+                num_pedido?: string;
+                cliente?: string | null;
+                titulo?: string | null;
+                cantidad?: number | null;
+                fecha_entrega?: string | null;
+                ot_tipo?: string | null;
+                ot_padre_numero?: string | null;
+                tipo_hija?: string | null;
+                forma_descripcion?: string | null;
+              }>) {
+                const ot = String(g.num_pedido ?? "").trim();
+                if (!ot) continue;
+                otMetaMap[ot] = {
+                  otTipo: g.ot_tipo ?? null,
+                  otPadreNumero: g.ot_padre_numero ?? null,
+                  tipoHija: g.tipo_hija ?? null,
+                  formaDescripcion: g.forma_descripcion ?? null,
+                };
+              }
+              for (const d of extraDesp as Array<{
+                ot_numero?: string;
+                material?: string | null;
+                gramaje?: number | null;
+                tamano_hoja?: string | null;
+                num_hojas_brutas?: number | null;
+                num_hojas_netas?: number | null;
+                tintas?: string | null;
+                acabado_pral?: string | null;
+                troquel?: string | null;
+                poses?: number | null;
+                horas_entrada?: number | null;
+                horas_tiraje?: number | null;
+                horas_estimadas_troquelado?: number | null;
+                horas_engomado_preparacion?: number | null;
+                horas_engomado_tiraje?: number | null;
+                horas_estimadas_engomado?: number | null;
+                tipo_engomado?: string | null;
+              }>) {
+                const ot = String(d.ot_numero ?? "").trim();
+                if (!ot || despachoMap[ot]) continue;
+                const gen = otMetaMap[ot];
+                const gRow = (extraGen as Array<{ num_pedido?: string; cliente?: string | null; titulo?: string | null; cantidad?: number | null; fecha_entrega?: string | null }>).find(
+                  (x) => String(x.num_pedido ?? "").trim() === ot,
+                );
+                despachoMap[ot] = {
+                  cliente: gRow?.cliente ?? null,
+                  cantidad: typeof gRow?.cantidad === "number" ? gRow.cantidad : null,
+                  titulo: gRow?.titulo ?? gen?.formaDescripcion ?? null,
+                  material: d.material ?? null,
+                  gramaje: typeof d.gramaje === "number" ? d.gramaje : null,
+                  tamanoHoja: d.tamano_hoja ?? null,
+                  hojasBrutas: typeof d.num_hojas_brutas === "number" ? d.num_hojas_brutas : null,
+                  hojasNetas: typeof d.num_hojas_netas === "number" ? d.num_hojas_netas : null,
+                  tintas: d.tintas ?? null,
+                  acabadoPral: d.acabado_pral ?? null,
+                  troquel: d.troquel ?? null,
+                  poses: typeof d.poses === "number" ? d.poses : null,
+                  tamanoCorte: null,
+                  pinza: null,
+                  expulsor: null,
+                  cauchoAcrilico: null,
+                  horasEntrada: typeof d.horas_entrada === "number" ? d.horas_entrada : null,
+                  horasTiraje: typeof d.horas_tiraje === "number" ? d.horas_tiraje : null,
+                  horasTroquelado:
+                    typeof d.horas_estimadas_troquelado === "number"
+                      ? d.horas_estimadas_troquelado
+                      : null,
+                  horasEngomadoPrep:
+                    typeof d.horas_engomado_preparacion === "number"
+                      ? d.horas_engomado_preparacion
+                      : null,
+                  horasEngomadoTiraje:
+                    typeof d.horas_engomado_tiraje === "number"
+                      ? d.horas_engomado_tiraje
+                      : null,
+                  horasEngomado:
+                    typeof d.horas_estimadas_engomado === "number"
+                      ? d.horas_estimadas_engomado
+                      : null,
+                  tipoEngomado: d.tipo_engomado ?? null,
+                  fechaEntrega: gRow?.fecha_entrega ?? null,
+                  materiales: [],
+                };
+              }
+            }
+          }
+        } catch (ctpErr) {
+          console.warn("[ejecucion] contenedor CTP", ctpErr);
+        }
+      }
+
+      setDespachoByOt(despachoMap);
+      setOtMetaByOt(otMetaMap);
+      setRows([...baseRows, ...contenedorRows]);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "No se pudieron cargar las OTs en ejecución.";
       toast.error(msg);
@@ -1794,6 +2053,15 @@ export function PlanificacionOtsEjecucionTab({
     const q = search.trim().toLowerCase();
     const now = new Date();
     return rows.filter((r) => {
+      if (!mostrarPruebas && isOtNumeroPrueba(r.ot)) return false;
+      // Contenedor CTP: ejecutable siempre true hoy; toggle listo para otras secciones.
+      if (
+        soloEjecutableCtp &&
+        r.origenContenedorCtp &&
+        r.procesoId === PROCESO_CTP_ID
+      ) {
+        // CTP disponible = ejecutable; nada que filtrar aún.
+      }
       if (selectedMaquina !== "all" && r.maquinaId !== selectedMaquina) return false;
       if (estado === "activas") {
         if (
@@ -1826,12 +2094,22 @@ export function PlanificacionOtsEjecucionTab({
         meta?.formaDescripcion,
         meta?.otPadreNumero,
         meta?.tipoHija,
+        r.origenContenedorCtp ? "contenedor ctp" : "",
       ]
         .map((v) => String(v ?? "").toLowerCase())
         .join(" ");
       return haystack.includes(q);
     });
-  }, [rows, selectedMaquina, estado, search, despachoByOt, otMetaByOt]);
+  }, [
+    rows,
+    selectedMaquina,
+    estado,
+    search,
+    despachoByOt,
+    otMetaByOt,
+    mostrarPruebas,
+    soloEjecutableCtp,
+  ]);
 
   const colaRows = useMemo(() => {
     const next = [...filtered];
@@ -1993,6 +2271,41 @@ export function PlanificacionOtsEjecucionTab({
       setSavingId(row.id);
       try {
         const nowIso = new Date().toISOString();
+        let execId = row.id;
+
+        // Contenedor CTP: materializar fila ligera (sin mesa) antes de iniciar.
+        if (row.origenContenedorCtp || isContenedorCtpVirtualId(row.id)) {
+          const pasoId =
+            parseContenedorCtpVirtualId(row.id) ??
+            String(row.otPasoId ?? "").trim();
+          if (!pasoId) {
+            throw new Error("Paso CTP no encontrado para materializar ejecución.");
+          }
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          const created = await crearEjecucionLigeraCtp(supabase, {
+            otNumero: row.ot,
+            otPasoId: pasoId,
+            maquinaId: row.maquinaId,
+            userId: user?.id ?? null,
+            userEmail: user?.email ?? null,
+            startImmediately: true,
+          });
+          execId = created.id;
+          if (datosProcesoUpdate && pasoId) {
+            const { error: dpErr } = await supabase
+              .from(TABLE_OT_PASOS)
+              .update({ datos_proceso: datosProcesoUpdate as Json })
+              .eq("id", pasoId);
+            if (dpErr) throw dpErr;
+          }
+          toast.success(`OT ${row.ot} iniciada desde contenedor CTP (sin mesa).`);
+          setExpandedId(execId);
+          await loadData();
+          return;
+        }
+
         const { error } = await supabase
           .from(TABLE_EJECUCIONES)
           .update({
@@ -2001,7 +2314,7 @@ export function PlanificacionOtsEjecucionTab({
             estado_ejecucion: "en_curso",
             updated_at: nowIso,
           })
-          .eq("id", row.id);
+          .eq("id", execId);
         if (error) throw error;
         if (datosProcesoUpdate && row.otPasoId) {
           const { error: dpErr } = await supabase
@@ -2302,6 +2615,52 @@ export function PlanificacionOtsEjecucionTab({
             <option value="finalizada">Finalizadas</option>
             <option value="all">Todas</option>
           </select>
+          <label
+            className="flex cursor-pointer items-center gap-1.5 text-[11px] text-slate-600"
+            title="OTs de laboratorio Minerva (número ≥ 98000). Por defecto ocultas."
+          >
+            <input
+              type="checkbox"
+              className="size-3.5 rounded border-slate-300"
+              checked={mostrarPruebas}
+              onChange={(e) => {
+                const v = e.target.checked;
+                setMostrarPruebas(v);
+                try {
+                  localStorage.setItem(
+                    STORAGE_EJECUCION_MOSTRAR_PRUEBAS,
+                    v ? "1" : "0",
+                  );
+                } catch {
+                  /* ignore */
+                }
+              }}
+            />
+            Mostrar OTs prueba (≥98.000)
+          </label>
+          <label
+            className="flex cursor-pointer items-center gap-1.5 text-[11px] text-slate-600"
+            title="Contenedor CTP: por defecto solo ejecutable. CTP disponible = ejecutable (sin papel)."
+          >
+            <input
+              type="checkbox"
+              className="size-3.5 rounded border-slate-300"
+              checked={soloEjecutableCtp}
+              onChange={(e) => {
+                const v = e.target.checked;
+                setSoloEjecutableCtp(v);
+                try {
+                  localStorage.setItem(
+                    STORAGE_EJECUCION_SOLO_EJECUTABLE_CTP,
+                    v ? "1" : "0",
+                  );
+                } catch {
+                  /* ignore */
+                }
+              }}
+            />
+            Solo ejecutable (CTP)
+          </label>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -2358,6 +2717,11 @@ export function PlanificacionOtsEjecucionTab({
                     <div className="min-w-0 flex-1">
                       <p className="font-mono text-base font-bold tabular-nums text-[#002147]">
                         OT {row.ot}
+                        {row.origenContenedorCtp ? (
+                          <span className="ml-1.5 rounded bg-sky-100 px-1.5 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wide text-sky-900">
+                            Contenedor CTP
+                          </span>
+                        ) : null}
                         {otMetaByOt[row.ot]?.formaDescripcion ? (
                           <span className="ml-1.5 font-sans text-xs font-normal text-slate-600">
                             · {otMetaByOt[row.ot]?.formaDescripcion}
