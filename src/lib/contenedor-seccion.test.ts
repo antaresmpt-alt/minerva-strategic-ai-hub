@@ -27,7 +27,7 @@ describe("contenedor-seccion", () => {
   });
 
   it("filters sections by planificacion tipo", () => {
-    expect(seccionesVisiblesParaTipoFiltro(null)).toHaveLength(4);
+    expect(seccionesVisiblesParaTipoFiltro(null)).toHaveLength(6);
     expect(seccionesVisiblesParaTipoFiltro("guillotina").map((d) => d.kind)).toEqual([
       "guillotina",
     ]);
@@ -37,6 +37,12 @@ describe("contenedor-seccion", () => {
     ]);
     expect(seccionesVisiblesParaTipoFiltro("desbroce").map((d) => d.kind)).toEqual([
       "desbroce",
+    ]);
+    expect(seccionesVisiblesParaTipoFiltro("impresion").map((d) => d.kind)).toEqual([
+      "impresion",
+    ]);
+    expect(seccionesVisiblesParaTipoFiltro("digital").map((d) => d.kind)).toEqual([
+      "digital",
     ]);
   });
 });

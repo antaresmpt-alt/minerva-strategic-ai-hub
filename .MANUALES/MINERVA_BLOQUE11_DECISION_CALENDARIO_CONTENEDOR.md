@@ -323,6 +323,7 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 - [ ] LEGACY tab
 - [x] Spike troquel + claim (`contenedor-troquel.ts` · ver §18)
 - [x] Spike contenedores Guillotina/Desbroce/Manipulados + Engomado claim (`contenedor-seccion.ts` · ver §19)
+- [x] Spike Contenedor Impresión + Digital (ver §20)
 
 ---
 
@@ -430,8 +431,28 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 3. Guillotina / Manipulados si hay pasos `disponible` en lab.
 
 ### Siguiente
-Contenedor Impresión (SpeedMaster) tras cena / validación.
+~~Contenedor Impresión~~ → ver §20.
 
 ---
 
-*Manel + Claude Opus + Cursor · 21–22 ago 2026 · CTP · Troquel · G/D/M/E*
+## 20. Spike Contenedor Impresión + Digital (22 ago 2026 noche)
+
+**Rama:** `feature/bloque11-contenedor-ctp-spike`
+
+### Qué se hizo
+- Extiende `contenedor-seccion.ts`:
+  - **Impresión Offset** (`proceso_id` 1): máquina SpeedMaster (1 activa) → **sin claim** (como CTP).
+  - **Digital** (`proceso_id` 2): Xerox / K-01 / N-01 / T-01 → **claim** obligatorio.
+- Horas plan: suma `horas_entrada` + `horas_tiraje` del despacho cuando existen.
+
+### Smoke
+1. **35900** (post-guillotina): Contenedor Digital → claim máquina → Iniciar → cerrar.
+2. OT con Offset `disponible` (p.ej. 35904 / lab): Contenedor Impresión → Iniciar directo en SpeedMaster.
+3. LEGACY intacto.
+
+### Siguiente
+Bandeja Carlos / detalle-día / pulir claim UX (default por operario).
+
+---
+
+*Manel + Claude · Bloque 11 contenedor cerrado en spike (CTP→…→I/D)*

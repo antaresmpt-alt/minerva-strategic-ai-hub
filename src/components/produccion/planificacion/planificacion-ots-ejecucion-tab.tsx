@@ -334,6 +334,8 @@ const CONTENEDOR_SECCION_BADGE: Record<ContenedorSeccionKind, string> = {
   desbroce: "Contenedor Desbroce",
   manipulados: "Contenedor Manipulados",
   engomado: "Contenedor Engomado",
+  impresion: "Contenedor Impresión",
+  digital: "Contenedor Digital",
 };
 
 const EJECUCION_COLUMNS =
@@ -1251,9 +1253,9 @@ export function PlanificacionOtsEjecucionTab({
   const [maquinasTroquel, setMaquinasTroquel] = useState<ContenedorTroquelMaquina[]>(
     [],
   );
-  const [maquinasEngomado, setMaquinasEngomado] = useState<
-    ContenedorSeccionMaquina[]
-  >([]);
+  const [maquinasClaimSeccion, setMaquinasClaimSeccion] = useState<
+    Partial<Record<ContenedorSeccionKind, ContenedorSeccionMaquina[]>>
+  >({});
   const [selectedMaquina, setSelectedMaquina] = useState<string>("all");
   const [estado, setEstado] = useState<FiltroEstadoEjecucion>("activas");
   const [searchInput, setSearchInput] = useState("");
@@ -2090,10 +2092,12 @@ export function PlanificacionOtsEjecucionTab({
 
       if (showContenedorSecciones) {
         try {
-          let engomadoMaqs: ContenedorSeccionMaquina[] = [];
+          const claimMap: Partial<
+            Record<ContenedorSeccionKind, ContenedorSeccionMaquina[]>
+          > = {};
           for (const def of seccionesExtra) {
             const maqs = await fetchMaquinasContenedorSeccion(supabase, def);
-            if (def.kind === "engomado") engomadoMaqs = maqs;
+            if (def.claim) claimMap[def.kind] = maqs;
             if (maqs.length === 0) continue;
             const candidatosSec = await fetchContenedorSeccionPasosDisponibles(
               supabase,
@@ -2115,12 +2119,12 @@ export function PlanificacionOtsEjecucionTab({
               ),
             ];
           }
-          setMaquinasEngomado(engomadoMaqs);
+          setMaquinasClaimSeccion(claimMap);
         } catch (secErr) {
           console.warn("[ejecucion] contenedor secciones", secErr);
         }
       } else {
-        setMaquinasEngomado([]);
+        setMaquinasClaimSeccion({});
       }
 
       const otsContenedor = [
@@ -2292,10 +2296,15 @@ export function PlanificacionOtsEjecucionTab({
     () => new Set(maquinasTroquel.map((m) => m.id)),
     [maquinasTroquel],
   );
-  const maquinasEngomadoIds = useMemo(
-    () => new Set(maquinasEngomado.map((m) => m.id)),
-    [maquinasEngomado],
-  );
+  const maquinasClaimSeccionIds = useMemo(() => {
+    const map = new Map<ContenedorSeccionKind, Set<string>>();
+    for (const [kind, list] of Object.entries(maquinasClaimSeccion) as Array<
+      [ContenedorSeccionKind, ContenedorSeccionMaquina[] | undefined]
+    >) {
+      map.set(kind, new Set((list ?? []).map((m) => m.id)));
+    }
+    return map;
+  }, [maquinasClaimSeccion]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -2313,13 +2322,17 @@ export function PlanificacionOtsEjecucionTab({
       if (selectedMaquina !== "all") {
         const isTroquelVirtual =
           r.origenContenedorTroquel || isContenedorTroquelVirtualId(r.id);
-        const isEngomadoVirtual =
-          r.origenContenedorSeccion === "engomado" ||
-          parseContenedorSeccionVirtualId(r.id)?.kind === "engomado";
+        const seccionKind =
+          r.origenContenedorSeccion ??
+          parseContenedorSeccionVirtualId(r.id)?.kind ??
+          null;
+        const seccionDef = seccionKind ? defContenedorSeccion(seccionKind) : null;
         if (isTroquelVirtual) {
           if (!maquinasTroquelIds.has(selectedMaquina)) return false;
-        } else if (isEngomadoVirtual) {
-          if (!maquinasEngomadoIds.has(selectedMaquina)) return false;
+        } else if (seccionDef?.claim && seccionKind) {
+          if (!maquinasClaimSeccionIds.get(seccionKind)?.has(selectedMaquina)) {
+            return false;
+          }
         } else if (r.maquinaId !== selectedMaquina) {
           return false;
         }
@@ -2376,7 +2389,7 @@ export function PlanificacionOtsEjecucionTab({
     mostrarPruebas,
     soloEjecutableCtp,
     maquinasTroquelIds,
-    maquinasEngomadoIds,
+    maquinasClaimSeccionIds,
   ]);
 
   const colaRows = useMemo(() => {
@@ -2666,7 +2679,10 @@ export function PlanificacionOtsEjecucionTab({
             if (dpErr) throw dpErr;
           }
           const maqNombre =
-            maquinasEngomado.find((m) => m.id === claimMaquinaId)?.nombre ??
+            (seccionParsed.kind
+              ? maquinasClaimSeccion[seccionParsed.kind]
+              : undefined
+            )?.find((m) => m.id === claimMaquinaId)?.nombre ??
             row.maquinaNombre ??
             claimMaquinaId;
           toast.success(
@@ -2703,7 +2719,7 @@ export function PlanificacionOtsEjecucionTab({
         setSavingId(null);
       }
     },
-    [loadData, supabase, maquinasTroquel, maquinasEngomado],
+    [loadData, supabase, maquinasTroquel, maquinasClaimSeccion],
   );
 
   const devolverEjecucionAlPool = useCallback(
@@ -3187,7 +3203,7 @@ export function PlanificacionOtsEjecucionTab({
                         desviacion={desviacion}
                         saving={savingId === row.id}
                         maquinasTroquel={maquinasTroquel}
-                        maquinasEngomado={maquinasEngomado}
+                        maquinasClaimSeccion={maquinasClaimSeccion}
                         selectedMaquinaFilter={selectedMaquina}
                         pasosOt={
                           row.otId
@@ -3236,7 +3252,7 @@ function ExecutionCard({
   desviacion,
   saving,
   maquinasTroquel,
-  maquinasEngomado,
+  maquinasClaimSeccion,
   selectedMaquinaFilter,
   pasosOt,
   pasosItinerario,
@@ -3263,7 +3279,9 @@ function ExecutionCard({
   desviacion: number | null;
   saving: boolean;
   maquinasTroquel: ContenedorTroquelMaquina[];
-  maquinasEngomado: ContenedorSeccionMaquina[];
+  maquinasClaimSeccion: Partial<
+    Record<ContenedorSeccionKind, ContenedorSeccionMaquina[]>
+  >;
   selectedMaquinaFilter: string;
   pasosOt: PasoItinerarioFormato[];
   pasosItinerario: PasoItinerarioConsumo[];
@@ -3295,15 +3313,26 @@ function ExecutionCard({
     isContenedorSeccionVirtualId(row.id);
   const needsTroquelClaim =
     Boolean(row.origenContenedorTroquel) || isContenedorTroquelVirtualId(row.id);
-  const needsEngomadoClaim =
-    row.origenContenedorSeccion === "engomado" ||
-    parseContenedorSeccionVirtualId(row.id)?.kind === "engomado";
-  const needsClaim = needsTroquelClaim || needsEngomadoClaim;
-  const maquinasClaim = needsEngomadoClaim ? maquinasEngomado : maquinasTroquel;
-  const claimTitulo = needsEngomadoClaim
-    ? "Elige engomadora (claim) antes de Iniciar"
-    : "Elige troqueladora (claim) antes de Iniciar";
-  const claimSelectLabel = needsEngomadoClaim ? "Engomadora" : "Troqueladora";
+  const seccionKindForClaim =
+    row.origenContenedorSeccion ??
+    parseContenedorSeccionVirtualId(row.id)?.kind ??
+    null;
+  const seccionDefClaim = seccionKindForClaim
+    ? defContenedorSeccion(seccionKindForClaim)
+    : null;
+  const needsSeccionClaim = Boolean(seccionDefClaim?.claim);
+  const needsClaim = needsTroquelClaim || needsSeccionClaim;
+  const maquinasClaim = needsTroquelClaim
+    ? maquinasTroquel
+    : seccionKindForClaim
+      ? (maquinasClaimSeccion[seccionKindForClaim] ?? [])
+      : [];
+  const claimTitulo = needsTroquelClaim
+    ? "Elige troqueladora (claim) antes de Iniciar"
+    : `Elige ${(seccionDefClaim?.claimSelectLabel ?? "máquina").toLowerCase()} (claim) antes de Iniciar`;
+  const claimSelectLabel = needsTroquelClaim
+    ? "Troqueladora"
+    : (seccionDefClaim?.claimSelectLabel ?? "Máquina");
   const isEjecucionLigeraSinMesa =
     !isContenedorVirtual && !row.mesaTrabajoId;
   /** Solo preseleccionar si el filtro de lista ya es una máquina concreta del claim. */

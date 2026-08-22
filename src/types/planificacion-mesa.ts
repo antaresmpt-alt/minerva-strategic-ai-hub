@@ -201,7 +201,9 @@ export interface MesaEjecucion {
     | "guillotina"
     | "desbroce"
     | "manipulados"
-    | "engomado";
+    | "engomado"
+    | "impresion"
+    | "digital";
 }
 
 export interface MesaEjecucionPausa {

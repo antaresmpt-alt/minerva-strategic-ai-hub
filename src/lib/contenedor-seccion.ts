@@ -1,15 +1,17 @@
 /**
  * Bloque 11 — Contenedor genérico por sección (sin Pool/Mesa).
  * CTP/Troquel siguen en sus módulos; aquí Guillotina, Desbroce,
- * Manipulados (1 máquina) y Engomado (claim multi-máquina).
+ * Manipulados, Engomado, Impresión Offset y Digital.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
   PROCESO_DESBROCE_ID,
+  PROCESO_DIGITAL_ID,
   PROCESO_ENGOMADO_ID,
   PROCESO_GUILLOTINA_ID,
   PROCESO_MANIPULADOS_ID,
+  PROCESO_OFFSET_ID,
 } from "@/lib/despacho-wizard-shared";
 import { isOtNumeroPrueba } from "@/lib/ot-prueba";
 import { fetchAllInChunks } from "@/lib/supabase-query-chunks";
@@ -19,7 +21,9 @@ export type ContenedorSeccionKind =
   | "guillotina"
   | "desbroce"
   | "manipulados"
-  | "engomado";
+  | "engomado"
+  | "impresion"
+  | "digital";
 
 export type ContenedorSeccionMaquina = {
   id: string;
@@ -62,6 +66,10 @@ export type ContenedorSeccionDef = {
   horasDespachoField?:
     | "horas_estimadas_engomado"
     | "horas_estimadas_troquelado";
+  /** Suma de columnas despacho (Offset: entrada + tiraje). */
+  horasDespachoSumFields?: readonly ("horas_entrada" | "horas_tiraje")[];
+  /** Etiqueta del selector claim. */
+  claimSelectLabel?: string;
 };
 
 export const CONTENEDOR_SECCION_DEFS: readonly ContenedorSeccionDef[] = [
@@ -99,6 +107,27 @@ export const CONTENEDOR_SECCION_DEFS: readonly ContenedorSeccionDef[] = [
     horasDefault: 1,
     excludeMaquinaNombres: ["Manipulados MNRV"],
     horasDespachoField: "horas_estimadas_engomado",
+    claimSelectLabel: "Engomadora",
+  },
+  {
+    // Hoy 1 Heidelberg → sin claim (como CTP). Si hay más, pasar claim:true.
+    kind: "impresion",
+    procesoId: PROCESO_OFFSET_ID,
+    labelBadge: "Contenedor Impresión",
+    tipoMaquina: "impresion",
+    claim: false,
+    horasDefault: 2,
+    horasDespachoSumFields: ["horas_entrada", "horas_tiraje"],
+  },
+  {
+    kind: "digital",
+    procesoId: PROCESO_DIGITAL_ID,
+    labelBadge: "Contenedor Digital",
+    tipoMaquina: "digital",
+    claim: true,
+    horasDefault: 1,
+    horasDespachoSumFields: ["horas_entrada", "horas_tiraje"],
+    claimSelectLabel: "Máquina digital",
   },
 ] as const;
 
@@ -259,22 +288,36 @@ export async function fetchContenedorSeccionPasosDisponibles(
     .filter((m) => m.despachado)
     .map((m) => m.num_pedido);
   const horasByOt = new Map<string, number>();
-  if (def.horasDespachoField && otNumeros.length > 0) {
-    const field = def.horasDespachoField;
+  if (otNumeros.length > 0 && (def.horasDespachoField || def.horasDespachoSumFields?.length)) {
+    const selectCols = new Set<string>(["ot_numero"]);
+    if (def.horasDespachoField) selectCols.add(def.horasDespachoField);
+    for (const f of def.horasDespachoSumFields ?? []) selectCols.add(f);
+    const select = [...selectCols].join(", ");
     const despRows = await fetchAllInChunks(otNumeros, 80, async (chunk) => {
       const { data, error } = await supabase
         .from("produccion_ot_despachadas")
-        .select(`ot_numero, ${field}`)
+        .select(select)
         .in("ot_numero", chunk);
       if (error) throw error;
       return data ?? [];
     });
     for (const d of despRows as Array<Record<string, unknown>>) {
       const ot = String(d.ot_numero ?? "").trim();
-      const h = d[field];
-      if (ot && typeof h === "number" && Number.isFinite(h) && h > 0) {
-        horasByOt.set(ot, h);
+      if (!ot) continue;
+      let h = 0;
+      if (def.horasDespachoField) {
+        const v = d[def.horasDespachoField];
+        if (typeof v === "number" && Number.isFinite(v) && v > 0) h = v;
       }
+      if (def.horasDespachoSumFields?.length) {
+        let sum = 0;
+        for (const f of def.horasDespachoSumFields) {
+          const v = d[f];
+          if (typeof v === "number" && Number.isFinite(v) && v > 0) sum += v;
+        }
+        if (sum > 0) h = sum;
+      }
+      if (h > 0) horasByOt.set(ot, h);
     }
   }
 
