@@ -194,6 +194,14 @@ export interface MesaEjecucion {
    * Bloque 11 spike: fila virtual Troquel. Claim = elegir máquina al Iniciar.
    */
   origenContenedorTroquel?: boolean;
+  /**
+   * Bloque 11: Guillotina / Desbroce / Manipulados / Engomado (ver contenedor-seccion).
+   */
+  origenContenedorSeccion?:
+    | "guillotina"
+    | "desbroce"
+    | "manipulados"
+    | "engomado";
 }
 
 export interface MesaEjecucionPausa {

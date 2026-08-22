@@ -322,6 +322,7 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 - [ ] Detalle del día (Carlos) — **solo tras spike persistencia**
 - [ ] LEGACY tab
 - [x] Spike troquel + claim (`contenedor-troquel.ts` · ver §18)
+- [x] Spike contenedores Guillotina/Desbroce/Manipulados + Engomado claim (`contenedor-seccion.ts` · ver §19)
 
 ---
 
@@ -409,8 +410,28 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 - UX fix: claim obligatorio + visible; anular ejecución ligera.
 
 ### Siguiente
-Contenedor Impresión (SpeedMaster) y/o bandeja computada Carlos (paralelo).
+~~Contenedor Impresión~~ → tras validar §19 (Desbroce/Guillotina/Manipulados/Engomado).
 
 ---
 
-*Manel + Claude Opus + Cursor · 21–22 ago 2026 · spike CTP 22 ago noche · spike Troquel 22 ago noche*
+## 19. Spike contenedores G/D/M + Engomado (22 ago 2026 noche)
+
+**Rama:** `feature/bloque11-contenedor-ctp-spike`
+
+### Qué se hizo
+- Módulo genérico `contenedor-seccion.ts`: Guillotina, Desbroce, Manipulados, Engomado.
+- **Guillotina / Desbroce / Manipulados MNRV:** 1 máquina (como CTP). Manipulados = nombre exacto `Manipulados MNRV` (tipo BD `engomado`).
+- **Engomado:** claim multi-máquina (engomadora 65/110, KONIKA; excluye Manipulados).
+- Badges violeta; Anular ligera sigue valiendo.
+
+### Smoke
+1. **98010-02** → Contenedor Desbroce → Iniciar → cerrar → Engomado `disponible`.
+2. Engomado → claim engomadora → Iniciar.
+3. Guillotina / Manipulados si hay pasos `disponible` en lab.
+
+### Siguiente
+Contenedor Impresión (SpeedMaster) tras cena / validación.
+
+---
+
+*Manel + Claude Opus + Cursor · 21–22 ago 2026 · CTP · Troquel · G/D/M/E*

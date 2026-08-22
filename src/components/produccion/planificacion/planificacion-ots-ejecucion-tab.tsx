@@ -75,6 +75,19 @@ import {
   type ContenedorTroquelMaquina,
   type ContenedorTroquelPaso,
 } from "@/lib/contenedor-troquel";
+import {
+  contenedorSeccionVirtualId,
+  crearEjecucionLigeraSeccion,
+  defContenedorSeccion,
+  fetchContenedorSeccionPasosDisponibles,
+  fetchMaquinasContenedorSeccion,
+  isContenedorSeccionVirtualId,
+  parseContenedorSeccionVirtualId,
+  seccionesVisiblesParaTipoFiltro,
+  type ContenedorSeccionKind,
+  type ContenedorSeccionMaquina,
+  type ContenedorSeccionPaso,
+} from "@/lib/contenedor-seccion";
 import { isOtNumeroPrueba } from "@/lib/ot-prueba";
 import { useFormatoMargenParametros } from "@/hooks/use-formato-margen-parametros";
 import { useSysParametrosSobreproduccion } from "@/hooks/use-sys-parametros-sobreproduccion";
@@ -257,6 +270,71 @@ function buildContenedorTroquelVirtualRow(
     origenContenedorTroquel: true,
   };
 }
+
+function buildContenedorSeccionVirtualRow(
+  paso: ContenedorSeccionPaso,
+  maquina: ContenedorSeccionMaquina | null,
+  opts: { claim: boolean; labelBadge: string },
+): MesaEjecucion {
+  const nowIso = new Date().toISOString();
+  const claim = opts.claim;
+  return {
+    id: contenedorSeccionVirtualId(paso.kind, paso.otPasoId),
+    mesaTrabajoId: null,
+    otPasoId: paso.otPasoId,
+    otId: paso.otId,
+    procesoId: paso.procesoId,
+    datosProcesoJson: paso.datosProceso,
+    procesoAnteriorId: null,
+    salidaProcesoAnterior: null,
+    salidaProcesoAnteriorNombre: null,
+    formatoAnterior: null,
+    formatoAnteriorOrigenNombre: null,
+    ot: paso.otNumero,
+    maquinaId: claim ? "" : (maquina?.id ?? ""),
+    maquinaNombre: claim
+      ? `${opts.labelBadge.replace(/^Contenedor\s+/i, "")} (elegir al iniciar)`
+      : (maquina?.nombre ?? opts.labelBadge),
+    maquinaTipo: maquina?.tipoMaquina ?? defContenedorSeccion(paso.kind).tipoMaquina,
+    fechaPlanificada: null,
+    turno: null,
+    slotOrden: null,
+    liberadaAt: null,
+    inicioRealAt: null,
+    finRealAt: null,
+    estadoEjecucion: "pendiente_inicio",
+    pausaActivaDesde: null,
+    motivoPausaActiva: null,
+    motivoPausaCategoriaActiva: null,
+    motivoPausaColorHexActiva: null,
+    haEstadoPausada: false,
+    numPausas: 0,
+    minutosPausadaAcum: 0,
+    horasPlanificadasSnapshot: paso.horasPlanificadas,
+    horasReales: null,
+    horasRealesEntrada: null,
+    horasRealesTiraje: null,
+    horasRealesTroquelado: null,
+    horasRealesEngomado: null,
+    numHojasProducidas: null,
+    cantidadUnidades: null,
+    incidencia: null,
+    accionCorrectiva: null,
+    maquinista: null,
+    densidadesJson: null,
+    observaciones: null,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    origenContenedorSeccion: paso.kind,
+  };
+}
+
+const CONTENEDOR_SECCION_BADGE: Record<ContenedorSeccionKind, string> = {
+  guillotina: "Contenedor Guillotina",
+  desbroce: "Contenedor Desbroce",
+  manipulados: "Contenedor Manipulados",
+  engomado: "Contenedor Engomado",
+};
 
 const EJECUCION_COLUMNS =
   "id, mesa_trabajo_id, ot_paso_id, ot_numero, maquina_id, fecha_planificada, turno, slot_orden, liberada_at, inicio_real_at, fin_real_at, estado_ejecucion, ha_estado_pausada, num_pausas, minutos_pausada_acum, horas_planificadas_snapshot, horas_reales, horas_reales_entrada, horas_reales_tiraje, horas_reales_troquelado, horas_reales_engomado, num_hojas_producidas, cantidad_unidades, incidencia, accion_correctiva, maquinista, densidades_json, observaciones, created_at, updated_at, prod_maquinas(nombre,tipo_maquina), prod_ot_pasos(ot_id,orden,proceso_id,datos_proceso)";
@@ -1173,6 +1251,9 @@ export function PlanificacionOtsEjecucionTab({
   const [maquinasTroquel, setMaquinasTroquel] = useState<ContenedorTroquelMaquina[]>(
     [],
   );
+  const [maquinasEngomado, setMaquinasEngomado] = useState<
+    ContenedorSeccionMaquina[]
+  >([]);
   const [selectedMaquina, setSelectedMaquina] = useState<string>("all");
   const [estado, setEstado] = useState<FiltroEstadoEjecucion>("activas");
   const [searchInput, setSearchInput] = useState("");
@@ -1943,7 +2024,13 @@ export function PlanificacionOtsEjecucionTab({
           estado === "all");
 
       let occupiedPasos = new Set<string>();
-      if (showContenedorCtp || showContenedorTroquel) {
+      const seccionesExtra = seccionesVisiblesParaTipoFiltro(tipoFiltro);
+      const showContenedorSecciones =
+        seccionesExtra.length > 0 &&
+        (estado === "activas" ||
+          estado === "pendiente_inicio" ||
+          estado === "all");
+      if (showContenedorCtp || showContenedorTroquel || showContenedorSecciones) {
         const { data: activasPaso } = await supabase
           .from(TABLE_EJECUCIONES)
           .select("ot_paso_id")
@@ -1999,6 +2086,41 @@ export function PlanificacionOtsEjecucionTab({
         }
       } else {
         setMaquinasTroquel([]);
+      }
+
+      if (showContenedorSecciones) {
+        try {
+          let engomadoMaqs: ContenedorSeccionMaquina[] = [];
+          for (const def of seccionesExtra) {
+            const maqs = await fetchMaquinasContenedorSeccion(supabase, def);
+            if (def.kind === "engomado") engomadoMaqs = maqs;
+            if (maqs.length === 0) continue;
+            const candidatosSec = await fetchContenedorSeccionPasosDisponibles(
+              supabase,
+              def,
+              {
+                includePruebas: true,
+                soloEjecutable: false,
+                otPasoIdsConEjecucionActiva: occupiedPasos,
+              },
+            );
+            const fixedMaq = def.claim ? null : maqs[0] ?? null;
+            contenedorRows = [
+              ...contenedorRows,
+              ...candidatosSec.map((p) =>
+                buildContenedorSeccionVirtualRow(p, fixedMaq, {
+                  claim: def.claim,
+                  labelBadge: def.labelBadge,
+                }),
+              ),
+            ];
+          }
+          setMaquinasEngomado(engomadoMaqs);
+        } catch (secErr) {
+          console.warn("[ejecucion] contenedor secciones", secErr);
+        }
+      } else {
+        setMaquinasEngomado([]);
       }
 
       const otsContenedor = [
@@ -2170,6 +2292,10 @@ export function PlanificacionOtsEjecucionTab({
     () => new Set(maquinasTroquel.map((m) => m.id)),
     [maquinasTroquel],
   );
+  const maquinasEngomadoIds = useMemo(
+    () => new Set(maquinasEngomado.map((m) => m.id)),
+    [maquinasEngomado],
+  );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -2187,8 +2313,13 @@ export function PlanificacionOtsEjecucionTab({
       if (selectedMaquina !== "all") {
         const isTroquelVirtual =
           r.origenContenedorTroquel || isContenedorTroquelVirtualId(r.id);
+        const isEngomadoVirtual =
+          r.origenContenedorSeccion === "engomado" ||
+          parseContenedorSeccionVirtualId(r.id)?.kind === "engomado";
         if (isTroquelVirtual) {
           if (!maquinasTroquelIds.has(selectedMaquina)) return false;
+        } else if (isEngomadoVirtual) {
+          if (!maquinasEngomadoIds.has(selectedMaquina)) return false;
         } else if (r.maquinaId !== selectedMaquina) {
           return false;
         }
@@ -2213,6 +2344,9 @@ export function PlanificacionOtsEjecucionTab({
         r.procesoId != null
           ? (getCamposConfigByProcesoId(r.procesoId)?.procesoNombre ?? "")
           : "";
+      const seccionBadge = r.origenContenedorSeccion
+        ? CONTENEDOR_SECCION_BADGE[r.origenContenedorSeccion]
+        : "";
       const haystack = [
         r.ot,
         r.maquinaNombre,
@@ -2226,6 +2360,7 @@ export function PlanificacionOtsEjecucionTab({
         meta?.tipoHija,
         r.origenContenedorCtp ? "contenedor ctp" : "",
         r.origenContenedorTroquel ? "contenedor troquel" : "",
+        seccionBadge,
       ]
         .map((v) => String(v ?? "").toLowerCase())
         .join(" ");
@@ -2241,6 +2376,7 @@ export function PlanificacionOtsEjecucionTab({
     mostrarPruebas,
     soloEjecutableCtp,
     maquinasTroquelIds,
+    maquinasEngomadoIds,
   ]);
 
   const colaRows = useMemo(() => {
@@ -2487,6 +2623,60 @@ export function PlanificacionOtsEjecucionTab({
           return;
         }
 
+        // Contenedor Guillotina / Desbroce / Manipulados / Engomado.
+        const seccionParsed =
+          parseContenedorSeccionVirtualId(row.id) ??
+          (row.origenContenedorSeccion
+            ? {
+                kind: row.origenContenedorSeccion,
+                otPasoId: String(row.otPasoId ?? "").trim(),
+              }
+            : null);
+        if (seccionParsed?.otPasoId) {
+          const def = defContenedorSeccion(seccionParsed.kind);
+          const claimMaquinaId = String(
+            (patch.maquina_id as string | undefined) ?? row.maquinaId ?? "",
+          ).trim();
+          if (!claimMaquinaId) {
+            throw new Error(
+              def.claim
+                ? `Elige máquina de ${def.labelBadge} (claim) antes de iniciar.`
+                : `No hay máquina para ${def.labelBadge}.`,
+            );
+          }
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          const created = await crearEjecucionLigeraSeccion(supabase, {
+            otNumero: row.ot,
+            otPasoId: seccionParsed.otPasoId,
+            maquinaId: claimMaquinaId,
+            userId: user?.id ?? null,
+            userEmail: user?.email ?? null,
+            startImmediately: true,
+            horasPlanificadas: row.horasPlanificadasSnapshot,
+            horasDefault: def.horasDefault,
+          });
+          execId = created.id;
+          if (datosProcesoUpdate && seccionParsed.otPasoId) {
+            const { error: dpErr } = await supabase
+              .from(TABLE_OT_PASOS)
+              .update({ datos_proceso: datosProcesoUpdate as Json })
+              .eq("id", seccionParsed.otPasoId);
+            if (dpErr) throw dpErr;
+          }
+          const maqNombre =
+            maquinasEngomado.find((m) => m.id === claimMaquinaId)?.nombre ??
+            row.maquinaNombre ??
+            claimMaquinaId;
+          toast.success(
+            `OT ${row.ot} iniciada${def.claim ? ` en ${maqNombre}` : ""} (${def.labelBadge}, sin mesa).`,
+          );
+          setExpandedId(execId);
+          await loadData();
+          return;
+        }
+
         const { error } = await supabase
           .from(TABLE_EJECUCIONES)
           .update({
@@ -2513,7 +2703,7 @@ export function PlanificacionOtsEjecucionTab({
         setSavingId(null);
       }
     },
-    [loadData, supabase, maquinasTroquel],
+    [loadData, supabase, maquinasTroquel, maquinasEngomado],
   );
 
   const devolverEjecucionAlPool = useCallback(
@@ -2953,6 +3143,11 @@ export function PlanificacionOtsEjecucionTab({
                             Contenedor Troquel
                           </span>
                         ) : null}
+                        {row.origenContenedorSeccion ? (
+                          <span className="ml-1.5 rounded bg-violet-100 px-1.5 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wide text-violet-950">
+                            {CONTENEDOR_SECCION_BADGE[row.origenContenedorSeccion]}
+                          </span>
+                        ) : null}
                         {otMetaByOt[row.ot]?.formaDescripcion ? (
                           <span className="ml-1.5 font-sans text-xs font-normal text-slate-600">
                             · {otMetaByOt[row.ot]?.formaDescripcion}
@@ -2992,6 +3187,7 @@ export function PlanificacionOtsEjecucionTab({
                         desviacion={desviacion}
                         saving={savingId === row.id}
                         maquinasTroquel={maquinasTroquel}
+                        maquinasEngomado={maquinasEngomado}
                         selectedMaquinaFilter={selectedMaquina}
                         pasosOt={
                           row.otId
@@ -3040,6 +3236,7 @@ function ExecutionCard({
   desviacion,
   saving,
   maquinasTroquel,
+  maquinasEngomado,
   selectedMaquinaFilter,
   pasosOt,
   pasosItinerario,
@@ -3066,6 +3263,7 @@ function ExecutionCard({
   desviacion: number | null;
   saving: boolean;
   maquinasTroquel: ContenedorTroquelMaquina[];
+  maquinasEngomado: ContenedorSeccionMaquina[];
   selectedMaquinaFilter: string;
   pasosOt: PasoItinerarioFormato[];
   pasosItinerario: PasoItinerarioConsumo[];
@@ -3091,37 +3289,43 @@ function ExecutionCard({
   const isContenedorVirtual =
     Boolean(row.origenContenedorCtp) ||
     Boolean(row.origenContenedorTroquel) ||
+    Boolean(row.origenContenedorSeccion) ||
     isContenedorCtpVirtualId(row.id) ||
-    isContenedorTroquelVirtualId(row.id);
+    isContenedorTroquelVirtualId(row.id) ||
+    isContenedorSeccionVirtualId(row.id);
   const needsTroquelClaim =
     Boolean(row.origenContenedorTroquel) || isContenedorTroquelVirtualId(row.id);
+  const needsEngomadoClaim =
+    row.origenContenedorSeccion === "engomado" ||
+    parseContenedorSeccionVirtualId(row.id)?.kind === "engomado";
+  const needsClaim = needsTroquelClaim || needsEngomadoClaim;
+  const maquinasClaim = needsEngomadoClaim ? maquinasEngomado : maquinasTroquel;
+  const claimTitulo = needsEngomadoClaim
+    ? "Elige engomadora (claim) antes de Iniciar"
+    : "Elige troqueladora (claim) antes de Iniciar";
+  const claimSelectLabel = needsEngomadoClaim ? "Engomadora" : "Troqueladora";
   const isEjecucionLigeraSinMesa =
     !isContenedorVirtual && !row.mesaTrabajoId;
-  /** Solo preseleccionar si el filtro de lista ya es una troquel concreta. Nunca ASPAS por defecto. */
+  /** Solo preseleccionar si el filtro de lista ya es una máquina concreta del claim. */
   const [claimMaquinaId, setClaimMaquinaId] = useState(() => {
-    if (!needsTroquelClaim) return "";
+    if (!needsClaim) return "";
     if (
       selectedMaquinaFilter !== "all" &&
-      maquinasTroquel.some((m) => m.id === selectedMaquinaFilter)
+      maquinasClaim.some((m) => m.id === selectedMaquinaFilter)
     ) {
       return selectedMaquinaFilter;
     }
     return "";
   });
   useEffect(() => {
-    if (!needsTroquelClaim || claimMaquinaId) return;
+    if (!needsClaim || claimMaquinaId) return;
     if (
       selectedMaquinaFilter !== "all" &&
-      maquinasTroquel.some((m) => m.id === selectedMaquinaFilter)
+      maquinasClaim.some((m) => m.id === selectedMaquinaFilter)
     ) {
       setClaimMaquinaId(selectedMaquinaFilter);
     }
-  }, [
-    needsTroquelClaim,
-    claimMaquinaId,
-    maquinasTroquel,
-    selectedMaquinaFilter,
-  ]);
+  }, [needsClaim, claimMaquinaId, maquinasClaim, selectedMaquinaFilter]);
   const [incidencia, setIncidencia] = useState(row.incidencia ?? "");
   const [accion, setAccion] = useState(row.accionCorrectiva ?? "");
   const [maquinista, setMaquinista] = useState(row.maquinista ?? "");
@@ -3530,25 +3734,23 @@ function ExecutionCard({
         </div>
       </div>
 
-      {needsTroquelClaim && isPendingStart ? (
+      {needsClaim && isPendingStart ? (
         <div className="mt-3 rounded-md border-2 border-amber-400 bg-amber-50 px-3 py-2.5 shadow-sm">
-          <p className="text-sm font-bold text-amber-950">
-            Elige troqueladora (claim) antes de Iniciar
-          </p>
+          <p className="text-sm font-bold text-amber-950">{claimTitulo}</p>
           <p className="mt-0.5 text-[11px] text-amber-900/80">
-            Sin Mesa: la máquina se elige aquí. No hay default (evita ASPAS por
-            orden alfabético).
+            Sin Mesa: la máquina se elige aquí. No hay default (evita la primera
+            alfabética).
           </p>
           <label className="mt-2 flex flex-col gap-1 text-xs font-semibold text-amber-950">
-            Troqueladora
+            {claimSelectLabel}
             <select
               className="h-11 w-full max-w-md rounded-md border-2 border-amber-500 bg-white px-3 text-sm font-medium text-slate-900"
               value={claimMaquinaId}
               onChange={(e) => setClaimMaquinaId(e.target.value)}
-              disabled={saving || maquinasTroquel.length === 0}
+              disabled={saving || maquinasClaim.length === 0}
             >
               <option value="">— Selecciona máquina —</option>
-              {maquinasTroquel.map((m) => (
+              {maquinasClaim.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.nombre}
                 </option>
@@ -4050,19 +4252,21 @@ function ExecutionCard({
               type="button"
               size="sm"
               className="bg-emerald-700 text-white hover:bg-emerald-800"
-              disabled={saving || (needsTroquelClaim && !claimMaquinaId)}
+              disabled={saving || (needsClaim && !claimMaquinaId)}
               title={
-                needsTroquelClaim && !claimMaquinaId
-                  ? "Elige troqueladora arriba (claim)"
+                needsClaim && !claimMaquinaId
+                  ? `Elige ${claimSelectLabel.toLowerCase()} arriba (claim)`
                   : undefined
               }
               onClick={() => {
-                if (needsTroquelClaim && !claimMaquinaId) {
-                  toast.error("Elige troqueladora (claim) antes de iniciar.");
+                if (needsClaim && !claimMaquinaId) {
+                  toast.error(
+                    `Elige ${claimSelectLabel.toLowerCase()} (claim) antes de iniciar.`,
+                  );
                   return;
                 }
                 const patch = buildCommonFieldsPatch();
-                if (needsTroquelClaim && claimMaquinaId) {
+                if (needsClaim && claimMaquinaId) {
                   patch.maquina_id = claimMaquinaId;
                 }
                 onBegin(patch, datosProcesoPatch);
