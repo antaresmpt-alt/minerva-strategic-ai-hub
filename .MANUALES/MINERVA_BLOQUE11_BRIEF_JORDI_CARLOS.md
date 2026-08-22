@@ -7,7 +7,17 @@
 
 ## En una frase (modelo destino)
 
-> **Despacho pone la OT en el circuito (como Optimus). El contenedor muestra todo lo que el itinerario deja hacer en cada sección. Carlos, Antonio y Gabri usan el calendario solo para ordenar el día de su gente. Mesa queda solo donde el cuello de botella lo exija (hoy: offset).**
+> **Despacho pone la OT en el circuito (como Optimus). El contenedor muestra todo lo que el itinerario deja hacer en cada sección. Carlos, Antonio y Gabri usan el calendario para ordenar el día. En offset (cuello de botella) se mantiene la secuencia fina — turnos y horas — encima del contenedor, no la mesa actual como puerta.**
+
+---
+
+## Nota para quien lleve la reunión (offset)
+
+Si Carlos pregunta *«¿en offset no cambia nada?»* — la respuesta honesta es:
+
+- **Sí cambia** el circuito: Abraham/David verán la OT en el **contenedor** y trabajarán desde ahí (como el resto de secciones), **sin** pasar por Pool ni por «lanzar desde mesa».
+- **No pierde** lo que hoy le importa: el **detalle fino del día** (orden 1-2-3, turnos, horas, PDF) sigue existiendo — es la pantalla «Organizar detalle del día», no la mesa antigua como obligatorio previo.
+- En resumen: **le añadimos contenedor; no le quitamos la planificación fina.**
 
 ---
 
@@ -35,7 +45,7 @@ Lo que ya tenéis hecho (calendario, pastillas, ejecución, material) **no se ti
 
 **Bandeja lateral (próximo paso):** panel «Despachadas / sin planificar» sustituirá las hojas Optimus en la mesa de Carlos — filas compactas, sin botón «enviar a mesa».
 
-**Mesa:** en el modelo nuevo **no ejecuta**; solo «organizar detalle del día» (opcional). Secuencia fina en **cuello de botella** (hoy offset).
+**Mesa:** en el modelo nuevo **no ejecuta** en ninguna sección (tampoco offset). Solo «organizar detalle del día» para secuencia fina donde haga falta (hoy offset: turnos/horas/PDF **encima** del contenedor).
 
 ---
 

@@ -23,7 +23,9 @@
 
 **Frase enseñable (Jordi/Carlos):**
 
-> Despacho pone la OT en el circuito (como Optimus). El contenedor muestra todo lo que el itinerario deja hacer en cada sección. Carlos, Antonio y Gabri usan el calendario solo para ordenar el día de su gente. Mesa queda solo donde el cuello de botella lo exija (hoy: offset).
+> Despacho pone la OT en el circuito (como Optimus). El contenedor muestra todo lo que el itinerario deja hacer en cada sección. Carlos, Antonio y Gabri usan el calendario para ordenar el día. En offset (cuello de botella) se mantiene secuencia fina (turnos/horas) **encima** del contenedor — no la mesa LEGACY como puerta de ejecución.
+
+*(Frase para planta alineada con el brief Jordi/Carlos — incluye matiz offset.)*
 
 ---
 
@@ -190,11 +192,31 @@ Contenedor refleja orden (operario)
 | `launchExecution` obligatorio | **No ejecuta** |
 | Semanal + diaria | Solo **día** (+ navegar ±1) |
 
-Persistencia del orden por máquina: decidir en spike (reutilizar `prod_mesa_planificacion_trabajos` con otro origen vs tabla ligera).
+Persistencia del orden por máquina: **decisión abierta** — ver §6.5. No empezar fase 3 sin cerrarla.
 
 ### 6.4 Offset (cuello de botella)
 
-Secuencia fina con turnos/horas vía detalle del día o evolución mesa **sin** ser puerta de ejecución. Criterio: **Drum-Buffer-Rope**.
+**Regla:** offset **también** entra al contenedor (mismo motor que CTP/troquel). No es excepción al `launchExecution` LEGACY en el camino feliz.
+
+Lo específico de offset es la **secuencia fina del día** (turnos, horas, PDF) vía «Organizar detalle del día» — **encima** del contenedor, **sin** ser puerta previa a ejecutar. Criterio Drum-Buffer-Rope: más detalle de planificación donde limita el flujo; no un circuito distinto de ejecución.
+
+| Pregunta típica planta | Respuesta |
+|------------------------|-----------|
+| «¿En offset no cambia nada?» | Cambia el circuito (contenedor); **no** pierde turnos/horas/PDF (detalle del día). |
+| «¿Seguimos lanzando desde mesa?» | **No** en camino feliz. LEGACY solo admin/gerencia en transición. |
+
+### 6.5 Spike persistencia detalle del día (bloqueante fase 3)
+
+Única decisión de arquitectura **genuinamente abierta** en este documento.
+
+**Resolver antes de picar fase 3**, no durante:
+
+| Opción | Pros | Riesgos |
+|--------|------|---------|
+| Reutilizar `prod_mesa_planificacion_trabajos` con otro origen | Menos migraciones; UI mesa similar | Columnas/constraints pensadas para `launchExecution` y pool |
+| Tabla/vista ligera solo «orden día + máquina» | Modelo limpio para planning sin ejecución | Trabajo de migración / doble lectura temporal |
+
+**Entregable del spike:** diagrama origen de datos + decisión escrita + impacto en `planificacion-detalle-dia-tab.tsx`. Si se elige mal, fase 3 puede obligar a rehacer a medio construir.
 
 ---
 
@@ -261,8 +283,9 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 | **1a** | Contenedor + modal ejecución (CTP + T) |
 | **1b** | Bandeja computada + ocultar panel (Carlos) |
 | **2** | Filtros cadena bandeja + overlay |
-| **3** | Detalle del día — Carlos |
-| **4** | Offset secuencia fina |
+| **2b** | **Spike persistencia detalle del día** (§6.5 — **antes** de fase 3) |
+| **3** | Detalle del día — Carlos (solo tras spike 2b) |
+| **4** | Offset secuencia fina (refinar detalle si hace falta) |
 | **5** | LEGACY tab |
 
 ---
@@ -283,6 +306,7 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 | 13.10 | PR1 botón fuera calendario |
 | 13.11 | Retener = diseño, no build |
 | 13.12 | Gate por proceso = pendiente |
+| 13.13 | Persistencia detalle del día = **pendiente spike 2b** (bloqueante fase 3) |
 
 ---
 
@@ -293,9 +317,9 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 - [ ] Validar brief Jordi/Carlos
 - [ ] Spike bandeja computada
 - [ ] Spike contenedor `prod_ot_pasos`
-- [ ] Spike persistencia detalle del día
+- [ ] **Spike persistencia detalle del día (§6.5) — obligatorio antes de fase 3**
 - [ ] Ejecución modal
-- [ ] Detalle del día (Carlos)
+- [ ] Detalle del día (Carlos) — **solo tras spike persistencia**
 - [ ] LEGACY tab
 
 ---
