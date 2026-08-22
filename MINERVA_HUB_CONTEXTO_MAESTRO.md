@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: **21 ago 2026** (noche: **Bloque 11 PR1 en código** — enviar cola Mesa + espejo lectura; CTP momento 0 = después).
+> Última actualización: **22 ago 2026 tarde** (**Bloque 11 diseño cerrado** — bandeja computada, contenedor, detalle-día en archivos nuevos, PR1 botón fuera calendario).
 
 ---
 
@@ -18,7 +18,9 @@
    - `MINERVA_BLOQUE9_REASIGNACION_STOP.md` (9.8: liberar/reasignar/recomprar; OT **98019** + **98020** validadas)
    - `MINERVA_BLOQUE10_PRESUPUESTOS.md` (futuro)
    - `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` (brainstorming)
-   - `.MANUALES/MINERVA_BLOQUE11_DECISION_CALENDARIO_CONTENEDOR.md` (**PR1 cerrado** · decisión diseño 21 ago)
+   - `.MANUALES/MINERVA_BLOQUE11_DECISION_CALENDARIO_CONTENEDOR.md` (**diseño cerrado 22 ago tarde** · bandeja + contenedor + detalle-día)
+   - `.MANUALES/MINERVA_BLOQUE11_ANALISIS_CONTENEDOR_VS_MESA.md` (validación Odoo/industria)
+   - `.MANUALES/MINERVA_BLOQUE11_BRIEF_JORDI_CARLOS.md` (media página planta)
    - `MINERVA_BLOQUE12_ROLES_PERMISOS_NAVEGACION.md` (landing por perfil — sept)
 4. Añadir `MINERVA_CONTEXTO_TECNICO.md` solo si la IA necesita detalles técnicos del repo.
 5. Si el tema es mesa / externos / itinerario post-despacho: `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`.
@@ -39,7 +41,9 @@
 | `MINERVA_BLOQUE12_ROLES_PERMISOS_NAVEGACION.md` | Brief implementación: landing operario vs gestor. |
 | `MINERVA_BLOQUE10_PRESUPUESTOS.md` | Bloque futuro: presupuestos, formas, versión real al copiar. |
 | `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` | Brainstorming Bloque 11 (calendario master). |
-| `.MANUALES/MINERVA_BLOQUE11_DECISION_CALENDARIO_CONTENEDOR.md` | **Decisión 21 ago:** PR1 (label + enviar cola + espejo Mesa); híbrido = propuesta; gate por proceso = pendiente. |
+| `.MANUALES/MINERVA_BLOQUE11_DECISION_CALENDARIO_CONTENEDOR.md` | **Diseño cerrado 22 ago tarde:** bandeja computada, contenedor, detalle-día (archivos nuevos), LEGACY, filtros cadena visualización. |
+| `.MANUALES/MINERVA_BLOQUE11_ANALISIS_CONTENEDOR_VS_MESA.md` | Análisis dispatch list / Odoo / SAP; correcciones modelo; piloto CTP+Troquel. |
+| `.MANUALES/MINERVA_BLOQUE11_BRIEF_JORDI_CARLOS.md` | Media página para validar con planta. |
 | `MINERVA_REUNION_HOJA_RUTA_JUEVES.md` | Guía reunión demo 98010 + preguntas §12. |
 | `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md` | Sesión 13 ago: imprimir fuera, anular al Pool, ajustar itinerario / reeditar despacho. |
 | `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md` | Sesión 14 ago (mañana): Encajar en Manipulados, flags wizard, Pool sin lápiz, `/produccion` → OTs. |
@@ -315,12 +319,13 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 3. Manual usuario reservas/stock (inventario botones listo → Claude)
 4. **Bloque 11 PR1** (código listo → smoke) · **Bloque 12** (sept)
 
-- [ ] **Bloque 11 PR1 smoke:** label paso + «Enviar a cola de Mesa» + espejo Mesa. CTP momento 0 = hilo aparte después. — `.MANUALES/MINERVA_BLOQUE11_DECISION_…`
+- [ ] **Bloque 11:** validar brief Jordi/Carlos · contenedor (CTP+T) ∥ bandeja Carlos · detalle-día · LEGACY — `.MANUALES/MINERVA_BLOQUE11_*`
 - [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor; tableta = máquina — `MINERVA_BLOQUE12_…` (no abrir ya; default gestor = maestro OTs)
 - [ ] **Bloque 5 puente**: Rita lanza OTs a Hugo (no bloquea paralelo si Hugo sigue a mano)
 
 ### Hecho reciente (jul–ago)
-- [x] **21 ago noche:** Bloque 11 **PR1 código** — `planificacion-pasar-a-mesa.ts` + espejo + UI calendario; CTP momento 0 aparcado
+- [x] **22 ago tarde:** Bloque 11 — **diseño arquitectura cerrado** (bandeja computada, contenedor, detalle-día, LEGACY) + botón PR1 **retirado** del calendario — `.MANUALES/MINERVA_BLOQUE11_DECISION_…`
+- [x] **22 ago:** Bloque 11 — brief Jordi/Carlos + análisis Odoo/contenedor + veredicto contenedor
 - [x] **21 ago noche:** Bloque 11 — diseño PR1 cerrado (espejo lectura + ciclo autoridad + corrección gate §6.6) — `.MANUALES/MINERVA_BLOQUE11_DECISION_…`
 - [x] **21 ago tarde:** smoke 9.8.6 OT **36112** (#10989) + prorrateo split (#99029→10989) + sync albarán
 - [x] **21 ago:** perf Compras + 9.8.6 MVP + sync albarán — `20a06a5`/`217e500`/`df84679`/`ab9bb4f`
@@ -396,7 +401,7 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 
 19. **Cartelas impresión (18 jul 2026)**: **1 copia** por palet (antes 2). Confirmado Emma/Ramón.
 
-20. **Bloque 11 — Calendario como master (28 jul · 11 ago · PR1 21 ago noche):** planificar desde calendario; botón **«Enviar a cola de Mesa»** (`pasarOtsAColaMesa` → `enviada_mesa`, sin fecha/slot). **Espejo de lectura** Mesa (En cola / Mesa DD/MM / En curso / Hecha; si fechas difieren, badge `≠`). Ciclo autoridad documentado. **CTP momento 0 = fuera de PR1** (después del smoke). Híbrido = propuesta Jordi/Carlos. Gate material = por OT. Decisión: `.MANUALES/MINERVA_BLOQUE11_DECISION_CALENDARIO_CONTENEDOR.md`.
+20. **Bloque 11 — Calendario + contenedor (28 jul · veredicto 22 ago · diseño cerrado 22 ago tarde):** **Despacho ≈ launch.** **Contenedor** (CTP/guillotina/desbroce/manipulados + ejecución) desde pasos `disponible`; **calendario I/D/T/E** ordena; **bandeja computada** (panel izquierdo, sin auto-insert BD); **detalle del día** = mesa nueva en archivos nuevos (**no ejecuta**); LEGACY Pool/Mesa admin/gerencia. Filtro cadena = **visualización** (I→T→E), no autorización. PR1 botón **fuera del calendario**. Piloto: contenedor CTP+T ∥ bandeja Carlos. Doc: `.MANUALES/MINERVA_BLOQUE11_DECISION_…` · brief Jordi/Carlos.
 
 21. **Paralelo septiembre (11 ago 2026)**: no smoke fijo 10–20; por tanda de despacho elegir **~3 OTs** y seguir E2E en Minerva. Cierre contenedor MVP: **barco listo cuando todas las hijas terminan** (8.4) ✅. Convergencia física = 8.5 documentada, sin código aún.
 

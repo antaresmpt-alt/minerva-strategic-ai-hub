@@ -1,236 +1,330 @@
-# Bloque 11 — §9: Calendario, contenedor y lanzamiento (decisión de diseño)
+# Bloque 11 — Calendario, bandeja, contenedor y mesa (decisión de diseño)
 
-> **Fecha:** 21 ago 2026 (rev. noche · **PR1 implementado en código**) · **Estado:** modelo híbrido = **propuesta** (pendiente Jordi/Carlos) · **PR1 en app** · Modelo B / CTP momento 0 documentados sin picar
-> **Origen:** petición Albert/Jordi tras uso real del calendario (jul–ago 2026) + sesión de diseño Manel + Claude + Cursor
-> **Complementa:** `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` (§0–§8, brainstorming 11 ago)
-> **Pendiente de validar con planta:** Jordi (lunes) · Carlos (31 ago) · **smoke PR1**
-> **Fuera de PR1 (siguiente hilo):** CTP «momento 0» (Paula ve CTP `disponible` sin Mesa) — este puente no lo resuelve.
+> **Fecha:** 21 ago 2026 · **Rev. completa:** **22 ago 2026 tarde** (brainstorming Manel + Claude Opus + Cursor)
+> **Estado:** diseño **cerrado** para implementación · validación planta pendiente (Jordi / Carlos)
+> **Complementa:** `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` · `.MANUALES/MINERVA_BLOQUE11_ANALISIS_CONTENEDOR_VS_MESA.md` · `.MANUALES/MINERVA_BLOQUE11_BRIEF_JORDI_CARLOS.md`
+> **Código 22 ago tarde:** botón «Enviar a cola de Mesa» **retirado** del calendario (`calendario-produccion-page.tsx`). Motor contenedor: **pendiente**.
 
 ---
 
-## 1. El nudo conceptual (y su desatado)
+## 0. Veredicto ejecutivo
 
-La duda que bloqueaba el diseño, en palabras de Manel:
+| Tema | Decisión |
+|------|----------|
+| **Sustituir Optimus** | Despacho ≈ launch; operario tira del **contenedor** (pull) |
+| **Calendario I/D/T/E** | **Planning visual** del responsable — Carlos ya lo usa como mesa real |
+| **Bandeja izquierda** | **Computada** (sin filas auto en BD al despachar); sustituye hojas Optimus / Excel |
+| **Contenedor** | Lista por sección desde pasos `disponible`; **desacoplar** de `prod_mesa_ejecuciones` |
+| **Mesa (repensada)** | **No ejecuta.** «Organizar detalle del día» — archivos **nuevos**; LEGACY intacto |
+| **PR1 «Enviar a cola»** | **Retirado del calendario** (22 ago). Rama/lib aparcados para LEGACY |
+| **Retener OT** | Excepción válida (diseño); **no construir** hasta que lo pidan |
+| **Piloto contenedor** | CTP + Troquelado |
+| **Piloto planning** | Bandeja + calendario con **Carlos**; detalle del día cuando quite Excel |
 
-> *"el calendario puede decir misa pero si una OT no tiene papel o está en CTP, por mucho que me digas que se troquela hoy, no se troquela hoy ni de broma"*
+**Frase enseñable (Jordi/Carlos):**
 
-No hay contradicción. Son **tres capas distintas** que hoy están mezcladas mentalmente:
+> Despacho pone la OT en el circuito (como Optimus). El contenedor muestra todo lo que el itinerario deja hacer en cada sección. Carlos, Antonio y Gabri usan el calendario solo para ordenar el día de su gente. Mesa queda solo donde el cuello de botella lo exija (hoy: offset).
 
-| Capa | Qué responde | Dónde vive hoy | Quién la mueve |
-|------|--------------|----------------|----------------|
-| **Calendario** | ¿Cuándo QUIERO que se haga? ¿En qué orden? | `prod_calendario_produccion_ot` | Carlos, Antonio, Gabri, Rita |
-| **Itinerario** | ¿Qué se PUEDE hacer ahora? | `prod_ot_pasos.estado = 'disponible'` | El sistema (secuencia de pasos) |
-| **Ejecución** | ¿Quién lo hace y en qué máquina? | `prod_mesa_ejecuciones` | Operario / responsable |
+---
 
-**Regla que desata el nudo:**
+## 1. Evidencia de campo (no hipótesis)
+
+Observaciones **22 ago 2026**:
+
+- Carlos lleva **semanas** con el calendario Minerva en la **segunda pantalla**.
+- Gemma (CTP) usa **listado/PDF del calendario** impreso como guía.
+- Carlos planifica en Minerva y **copia a Excel** el listado del día → faena doble que bandeja + detalle del día deben eliminar.
+
+**Implicación:** la pregunta ya no es «¿adoptarán el calendario?». Es «¿cómo quitamos Excel, Pool y mesa como puertas obligatorias?».
+
+---
+
+## 2. Mapa conceptual
+
+```mermaid
+flowchart TB
+  subgraph despacho [Despacho]
+    D[OT despachada]
+  end
+  subgraph plan [Planificación]
+    B[Bandeja computada - filas compactas]
+    C[Calendario I/D/T/E - pastillas en días]
+    MD[Organizar detalle del día - opcional]
+  end
+  subgraph exec [Ejecución]
+    K[Contenedor por sección]
+    E[Modal / pantalla de trabajo]
+  end
+  subgraph legacy [LEGACY - admin/gerencia]
+    P[Pool + Mesa clásica]
+  end
+  D --> K
+  D --> B
+  B -->|Colocar en calendario| C
+  C --> MD
+  C -.->|ordena| K
+  K --> E
+  P -.->|transición| K
+```
+
+> **§11:** este diagrama es **mapa conceptual**, no plan de trabajo secuencial.
+
+---
+
+## 3. Tres capas + regla de oro
+
+| Capa | Pregunta | Fuente de verdad | Quién mueve |
+|------|----------|------------------|-------------|
+| **Calendario** | ¿Cuándo **quiero** que se haga? ¿Orden del día? | `prod_calendario_produccion_ot` | Carlos, Rita, Antonio, Gabri |
+| **Itinerario** | ¿Qué **se puede** hacer ahora? | `prod_ot_pasos.estado` | Sistema (trigger) |
+| **Contenedor** | ¿Qué ve y hace el operario? | Hoy: `prod_mesa_ejecuciones` → **destino:** pasos `disponible` | Operario |
 
 > **El calendario ORDENA. El itinerario AUTORIZA.**
 
-El contenedor (OTs en ejecución) muestra **lo que se puede hacer** (itinerario), **ordenado por lo que se quiere** (fecha de calendario). Sin conflicto: responden preguntas diferentes.
+### Dos ejes independientes (Bloque 9)
 
-Es el mismo principio de *"el estado nunca miente"* del Bloque 9, aplicado a planificación: el itinerario es **estado**; el calendario es **plan**. El plan puede estar equivocado; el estado no.
+| Eje | Fuente | Pregunta |
+|-----|--------|----------|
+| **Disponible** | `prod_ot_pasos.estado` | ¿Paso anterior hecho? |
+| **Ejecutable** | Consulta viva compra/stock/cartela | ¿Hay material? |
 
----
-
-## 2. Lo que realmente pidieron Albert y Jordi
-
-**No pidieron un rediseño.** Pidieron **no tener que ir a otra pantalla después de planificar**.
-
-Hoy el circuito es: colocar pastilla en calendario → ir al Pool → pasar a mesa → colocar día/máquina/orden → confirmar plan → lanzar.
-
-Lo que sobra en el camino feliz es el **paso por el Pool**: si el calendario ya dice "esta OT va el día 20, ámbito Impresión", esa decisión ya está tomada. Eso se resuelve con un botón, no tirando Pool y Mesa.
-
-La visión del "contenedor plano" (§5 de este documento) es una idea **propia de Manel**, surgida al pensar el problema — es interesante y puede ser el futuro, pero es otra conversación y no es lo que se pidió.
+**No** almacenar `esperando_material` en BD. UI: por defecto **solo ejecutable**; toggle «ver todo».
 
 ---
 
-## 3. Bloqueo técnico que condiciona todo
+## 4. Dos tipos de proceso
 
-**`prod_mesa_ejecuciones` exige máquina, mesa y slot.** `launchExecution` falla literalmente con *"La OT no tiene máquina asignada"*.
+### 4.1 Calendario — ámbitos I / D / T / E
 
-Es decir: **la lista del operario existe hoy PORQUE alguien pasó por la mesa.**
+| Ámbito | Responsable | Rol |
+|--------|-------------|-----|
+| **I** Impresión offset | Carlos (+ Jordi) | Planning principal |
+| **D** Digital | Rita | Igual en su ámbito |
+| **T** Troquelado | Antonio | Orden del día + previsión |
+| **E** Engomado | Gabri | Orden del día + previsión |
 
-Consecuencia directa: "lanzar a saco a un contenedor" no es un botón — es cambiar de dónde se alimenta esa lista (de pasos disponibles, no de mesa). Es **motor, no UI**.
+Una OT puede tener **pastillas en varios ámbitos y fechas** (estela: I hecha día 5, T planificada día 8, E día 10). **No** auto-mover al día siguiente; queda **vencida visible**; el responsable mueve manualmente.
 
-Corolario no obvio: **el slot de mesa está resolviendo hoy, sin que nadie lo diseñara así, el problema de concurrencia** que Manel identificó (*"si uno selecciona una, el otro no podría tocarla"*). Si se quita la mesa, hay que construir un mecanismo de *claim* explícito.
+### 4.2 Contenedor puro — sin calendario propio
 
----
-
-## 4. §4.1 PROPUESTA — Modelo híbrido: mesa opcional por área
-
-> **No está “decidido”.** Es la propuesta de diseño a validar con Jordi (lunes) y Carlos (31 ago). Hasta entonces: no picar Modelo B; el PR1 vale con o sin híbrido.
-
-**No es "contenedor SÍ" o "mesa SÍ". Es mesa donde aporta, contenedor donde estorba.**
-
-El criterio no es el número de máquinas, es **si el orden importa**:
-
-| Área | Máquinas | ¿Importa el orden del día? | Modelo propuesto |
-|------|----------|---------------------------|------------------|
-| **Impresión Offset** | 1 | **Sí** — secuencia y horas de turno mandan | **Mesa** |
-| **Impresión Digital** | 2 | Según Rita | Mesa (si Rita la quiere) |
-| **Troquelado** | 4 | No — cualquiera coge | Contenedor |
-| **Engomado** | 3 | No — cualquiera coge | Contenedor |
-| **CTP** | — | No | Contenedor |
-| **Guillotina** | 1 | Poco | Contenedor |
-| **Desbroce / Manipulados** | 1 | No | Contenedor |
-
-**Lógica:** con **una sola máquina**, el orden del día es la decisión importante → la mesa (drag & drop, cálculo de horas por turno) es exactamente donde está el valor. Con **varias máquinas**, cualquiera puede coger el siguiente trabajo → la mesa solo añade fricción.
-
-**Consecuencia:** el trabajo hecho en Pool/Mesa **no se tira**. Se reutiliza donde aporta y se deja de imponer donde estorba.
+| Proceso | Notas |
+|---------|--------|
+| **CTP** | Orden heredado de I de Carlos o fallback entrega |
+| **Guillotina** | Contenedor; Miguel tira de lista |
+| **Desbroce** | Área engomado; Gabri ordena vía E / contenedor |
+| **Manipulados internos** | Contenedor |
+| **Externos (Ramón)** | Módulo actual; pastilla refleja «externo» mientras dure |
 
 ---
 
-## 5. Los dos modelos, con su precio
+## 5. Bandeja computada (panel izquierdo)
 
-### Modelo A — Mesa opcional (PR1, barato)
+Sustituye **hojas HR de Optimus** en la mesa de Carlos.
 
-El calendario deja la OT en la cola lateral de mesa (`estado_pool = 'enviada_mesa'`, exactamente lo que hace hoy `pasarAMesa`). El responsable sigue usando la mesa para colocar día/máquina/orden.
+| Aspecto | Decisión |
+|---------|----------|
+| **UI** | Filas compactas (1 por OT); pastillas solo en calendario con día |
+| **Toggle** | «Ocultar panel» / «Mostrar panel» (patrón IDE/Edge) |
+| **Interacción** | **Sin drag** desde bandeja. «Colocar en calendario…» o flujo actual |
+| **Datos** | **Query computada** — no auto-insert al despachar (`fecha` obligatoria en BD) |
+| **Al colocar** | Desaparece de bandeja (para ese ámbito) |
 
-- ✅ Elimina el paso por el Pool en el camino feliz
-- ✅ Cero migraciones; reutiliza el gate de material **a nivel OT** que existe hoy (ver §6.6)
-- ✅ No rompe el modelo mental de Carlos/Antonio/Gabri/Rita
-- ✅ `pasarAMesa` extraída a `src/lib/planificacion-pasar-a-mesa.ts`
+### Filtro por defecto — cadena de **visualización**
 
-### Modelo B — Contenedor real (post-TEST, motor)
+⚠️ **No** confundir con cadena de **autorización** (§3). Solo ordena qué se ve primero. Toggle «ver todas».
 
-El operario ve sus pasos disponibles ordenados por fecha de calendario; al iniciar se registra usuario + máquina.
+| Responsable | Bandeja por defecto |
+|-------------|---------------------|
+| **Carlos (I)** | Despachadas con impresión, **sin pastilla I** |
+| **Rita (D)** | Análogo digital |
+| **Antonio (T)** | Con troquel sin pastilla T, **I colocada o hecha** |
+| **Gabri (E)** | Con engomado sin pastilla E, **T colocada o hecha** |
 
-Necesita:
-1. Alimentar la lista desde **pasos disponibles**, no desde mesa
-2. Elegir máquina **al iniciar**, no al planificar
-3. Mecanismo de **claim/reserva** (que hoy resuelve el slot de mesa implícitamente)
-
-- ✅ Un solo sitio mental para planta
-- ✅ Coherente con cómo trabajan hoy en Optimus (cogen de una lista, sin orden estricto)
-- ⚠️ Se pierde cálculo de horas por turno y drag & drop de secuencia (crítico en offset)
-- ⚠️ Toca el motor que planta usa a diario, a semanas del TEST
-- ⚠️ Riesgo primo hermano del Bloque 12
-
----
-
-## 5bis. Ciclo de autoridad (quién manda en cada fase)
-
-Calendario y Mesa son sistemas **paralelos** hoy (cero JOIN, cero FK). No hay que decidir “quién manda siempre”: hay que decir **quién manda en cada fase**. El PR1 **lee** ese ciclo; no escribe sincronización.
-
-| Fase | Qué ha pasado | Quién manda | Qué muestra la pastilla |
-|------|---------------|-------------|-------------------------|
-| **Planificada** | Pastilla en calendario; aún no enviada | **Calendario** (intención) | Fecha del calendario |
-| **En cola** | Botón → `estado_pool = 'enviada_mesa'` | **Calendario** sigue (aún **no hay** `fecha_planificada` en Mesa) | Fecha intención + badge «En cola» |
-| **Colocada en Mesa** | Responsable arrastra día/máquina/turno | **Mesa** (fecha operativa) | Fecha calendario + espejo «Mesa: DD/MM» si difiere |
-| **En curso / hecha** | Paso iniciado o finalizado | **Itinerario** (estado) | Semáforo + label de paso |
-
-**Implicación clave (spike 21 ago):** al pulsar el botón que reutiliza `pasarAMesa` **no se escribe ninguna fecha** en Mesa — solo el estado de pool. La segunda fecha nace **después**, al colocar.
-
-**Opción elegida para PR1:** espejo de lectura, sin sync de escritura.
+**Overlay calendarios** (tipo Outlook): Antonio/Gabri ven I de Carlos mientras planifican T/E.
 
 ---
 
-## 5ter. CTP — fuera de PR1 (siguiente hilo)
+## 6. «Organizar detalle del día» (mesa repensada)
 
-Hoy en Optimus: en el **momento 0** de generar/despachar la OT, CTP ya puede abrirla. Eso **no** lo arregla el puente calendario→cola Mesa (incluso puede empeorar el modelo mental si se confunde con “Paula ya puede”).
+### 6.1 Qué muere en el camino feliz
 
-| | Impresión / Offset | CTP |
-|---|---|---|
-| ¿Sirve PR1? | Sí | **No** es la solución |
-| ¿Cuándo trabajar? | Cuando se planifica / envía | **Momento 0** de la OT |
-| Siguiente paso | Smoke PR1 | **CTP momento 0** (lista por paso `disponible` sin Mesa) |
+- Mesa como **puerta** a ejecución (`launchExecution`).
+- Mesa **semanal** (calendario la sustituye).
+- Pool como paso obligatorio.
 
-Acuerdo Manel 21 ago: **primero smoke PR1; CTP después**.
+### 6.2 Qué es la pantalla nueva
+
+Flujo desde calendario (día X + ámbito) → botón **«Organizar detalle del día»**:
+
+```
+┌─────────────────────────────────────────────────────┐
+│ Izquierda: OTs de ESE día (del calendario)          │
+│ Derecha: columnas máquina × turno (drag, horas)     │
+│ Navegar día ±1 · sábado · PDF · cálculo horas       │
+│ NO lanza ejecución                                  │
+└─────────────────────────────────────────────────────┘
+         ↓
+Contenedor refleja orden (operario)
+```
+
+**Composición del día (v1):** añadir/quitar/mover OTs entre días = **calendario**. Detalle = **solo orden fino** por máquina/turno. Atajos desde detalle = fase posterior si lo piden.
+
+**Piloto:** solo **Carlos** (offset, 1 máquina → orden 1-2-3). Si quita Excel, extender a Antonio/Gabri.
+
+### 6.3 LEGACY vs archivos nuevos
+
+| LEGACY (sin tocar, tab admin/gerencia) | Nuevo (implementar) |
+|----------------------------------------|---------------------|
+| `planificacion-pool-ots-tab-v2.tsx` | Bandeja en calendario |
+| `planificacion-mesa-diaria-tab.tsx` | `planificacion-detalle-dia-tab.tsx` (nombre orientativo) |
+| `planificacion-mesa-secuenciacion-tab.tsx` | No replicar semanal |
+| `planificacion-pasar-a-mesa.ts` | Solo LEGACY |
+
+**Reutilizar libs:** `planificacion-mesa-diaria.ts`, `types/planificacion-mesa.ts`, lógica horas/turnos/sábado/PDF donde aplique.
+
+**Diferencias clave vs mesa actual:**
+
+| Mesa LEGACY | Detalle del día |
+|-------------|-----------------|
+| OTs desde Pool (`enviada_mesa`) | OTs desde **calendario del día** |
+| `launchExecution` obligatorio | **No ejecuta** |
+| Semanal + diaria | Solo **día** (+ navegar ±1) |
+
+Persistencia del orden por máquina: decidir en spike (reutilizar `prod_mesa_planificacion_trabajos` con otro origen vs tabla ligera).
+
+### 6.4 Offset (cuello de botella)
+
+Secuencia fina con turnos/horas vía detalle del día o evolución mesa **sin** ser puerta de ejecución. Criterio: **Drum-Buffer-Rope**.
 
 ---
 
-## 6. Decisiones (cerradas vs pendientes)
+## 7. Contenedor y ejecución
 
-| # | Decisión | Estado | Motivo |
-|---|----------|--------|--------|
-| 6.1 | **Colocar en calendario ≠ enviar a cola** | Cerrada | Gate explícito; no equiparar. |
-| 6.2 | **Mantener ámbitos I/T/D/E** | Cerrada | + label paso en pastilla. |
-| 6.3 | **MVP sin slot** | Cerrada | Cola sin máquina/día/turno. |
-| 6.4 | **Mesa opcional por área** | **Propuesta** (§4) | Validar Jordi/Carlos. |
-| 6.5 | **Movimiento de pastillas** | Cerrada en principio | Lab si Mesa/en curso. |
-| 6.6 | **Gate de material por proceso** | **Pendiente — no existe** | PR1 = gate OT. |
-| 6.7 | **Nombre del botón** | Cerrada | «Enviar a cola de Mesa». |
-| 6.8 | **Espejo de lectura Mesa** | Cerrada (PR1) | Solo lectura. |
-| 6.9 | **CTP momento 0** | **Fuera de PR1** | Hilo aparte post-smoke. |
+### Trabajo de verdad (motor)
 
-### 6.6 Gate de material — corrección explícita
+| ✅ Ya funciona | ❌ Falta |
+|---------------|---------|
+| Primer paso `disponible` al despachar | Lista operario **sin** mesa obligatoria |
+| Trigger avanza itinerario | Claim = **iniciar** |
+| `ExecutionCard`, cartelas, gates 9 | Gate material por **proceso** |
 
-**Falso (versión anterior):** *«la regla ya existe, solo hay que aplicarla por proceso»*.
+### UI ejecución
 
-**Hecho:** `isPoolRowSelectableForMesa` solo mira OT: no contenedor; `hasCompraGenerada || hojasStockCartelado > 0`. No sabe si es CTP o guillotina.
-
-**PR1:** gate OT. **Post-PR1:** gate por proceso.
+- Lista fina; **modal grande** o pantalla completa al abrir OT.
+- **Orden arreglos:** filtro + orden **antes** que modal.
 
 ---
 
-## 7. PR1 — Implementado (8 puntos)
+## 8. PR1 — retirada del calendario
 
-Código (21 ago noche):
-
-| Pieza | Dónde |
+| Pieza | Estado |
 |-------|--------|
-| Lib enviar cola | `src/lib/planificacion-pasar-a-mesa.ts` |
-| Espejo lectura | `src/lib/calendario-mesa-espejo.ts` (+ test) |
-| UI pastilla / día / detalle | `calendario-produccion-page.tsx` |
-| Pool reutiliza lib | `planificacion-pool-ots-tab-v2.tsx` |
-
-### 7.1 Etiqueta de paso disponible — ✅
-### 7.2 Botón «Enviar a cola de Mesa» — ✅ (agnóstico de ámbito; lab §7.2)
-### 7.3 Espejo solo lectura — ✅ (Planificada / En cola / Mesa / En curso / Hecha)
-### 7.4 Emparejamiento ámbito ↔ `tipo_maquina` — ✅
-### 7.5 Sin sync escritura / sin migraciones — ✅
-### 7.6 Fechas difieren → ambas + badge `≠` — ✅
-### 7.7 Gate por proceso = fuera — ✅ documentado
-### 7.8 Híbrido = propuesta — ✅
-
-**No incluido:** contenedor real, máquina al iniciar, claim, sync fechas, gate por proceso, **CTP momento 0**.
+| Label paso, espejo lectura, semáforos, PDF | ✅ Mantener |
+| Botón «Enviar a cola de Mesa» | ❌ **Retirado** (22 ago tarde) |
+| `planificacion-pasar-a-mesa.ts` | LEGACY / rama feature |
+| Rama `feature/bloque11-calendario-enviar-cola-mesa` | Sin merge como arquitectura |
 
 ---
 
-## 8. Por qué NO tocar el Modelo B antes del TEST
+## 9. Retener (futuro)
 
-1. Modelo mental Pool → Mesa ya asentado.
-2. Planta entera entra en semanas: mal momento para reescribir motor.
-3. El TEST dará el dato de si hace falta contenedor en N máquinas.
+Toggle «Retener / no lanzar aún»: OT despachada excluida del contenedor hasta liberación. **No construir** hasta demanda.
 
 ---
 
-## 9. Retomar
+## 10. LEGACY
 
-- [ ] **Smoke PR1:** label · enviar cola · badge En cola/Mesa · aviso fechas
-- [ ] Lab §7.2: envío agnóstico con paso del ámbito aún no disponible
-- [ ] Validar §4 con **Jordi** (lunes) / **Carlos** (31 ago)
-- [x] PR1 código (lib + calendario + espejo)
-- [ ] **CTP momento 0** (post-smoke PR1)
-- [ ] Gate material por proceso
-- [ ] Post-TEST: Modelo B en áreas N máquinas
-- [ ] Encaje Bloque 12
+Pestaña **Planificación clásica (Pool / Mesa)** — solo **admin / gerencia** durante transición.
 
 ---
 
-## 10. Referencias de código
+## 11. Orden conceptual ≠ orden de construcción
 
-| Acción | Función / dato | Archivo | ¿PR1? |
-|--------|----------------|---------|-------|
-| Enviar a cola | `pasarOtsAColaMesa` | `planificacion-pasar-a-mesa.ts` | ✅ |
-| Gate material OT | `isPoolRowSelectableForMesa` / `fetchPasarAMesaGateByOt` | contenedor-query + pasar-a-mesa | ✅ reutilizado |
-| Espejo Mesa | `fetchCalendarioEspejoByOtNumeros`, `derivePastillaEspejo` | `calendario-mesa-espejo.ts` | ✅ |
-| UI | — | `calendario-produccion-page.tsx` | ✅ |
-| Lanzar con máquina | `launchExecution` | mesa-diaria | No |
-| Iniciar tableta | `beginExecution` | ots-ejecucion | No |
+El diagrama §2 **no** implica terminar contenedor antes de bandeja.
 
----
+| Track A — Motor | Track B — Planning UI |
+|-----------------|----------------------|
+| Contenedor + ejecución sin mesa | Bandeja + toggle panel |
+| Claim al iniciar | Overlay calendarios |
+| Filtro ejecutable | Detalle del día (Carlos) |
+| Piloto CTP + Troquel | Quitar Excel |
 
-## 11. Resumen ejecutivo
-
-1. Pidieron un botón, no un rediseño.
-2. Botón = **«Enviar a cola de Mesa»** (`enviada_mesa`).
-3. Espejo de lectura sin sync.
-4. Gate por proceso **aún no existe**.
-5. Híbrido = propuesta.
-6. **CTP momento 0 = después** del smoke PR1.
-7. Modelo B = post-TEST.
+La bandeja **no depende** del contenedor; solo de despacho + itinerario (operativos).
 
 ---
 
-*Documento consolidado Manel + Claude + Cursor, 21 ago 2026 · PR1 en código + CTP fuera de alcance.*
+## 12. Fases
+
+| Fase | Entregable |
+|------|------------|
+| **0** | Validar brief Jordi/Carlos |
+| **1a** | Contenedor + modal ejecución (CTP + T) |
+| **1b** | Bandeja computada + ocultar panel (Carlos) |
+| **2** | Filtros cadena bandeja + overlay |
+| **3** | Detalle del día — Carlos |
+| **4** | Offset secuencia fina |
+| **5** | LEGACY tab |
+
+---
+
+## 13. Decisiones cerradas
+
+| # | Decisión |
+|---|----------|
+| 13.1 | Calendario ordena; itinerario autoriza |
+| 13.2 | Bandeja **computada** |
+| 13.3 | Filtro cadena = **visualización** |
+| 13.4 | CTP/guillotina/desbroce/manipulados = contenedor |
+| 13.5 | Solo I/D/T/E en calendario |
+| 13.6 | Mesa nueva **no ejecuta**; archivos nuevos; LEGACY intacto |
+| 13.7 | Composición día v1 = calendario; detalle = orden fino |
+| 13.8 | Claim = iniciar |
+| 13.9 | No auto-mover vencidas |
+| 13.10 | PR1 botón fuera calendario |
+| 13.11 | Retener = diseño, no build |
+| 13.12 | Gate por proceso = pendiente |
+
+---
+
+## 14. Checklist
+
+- [x] Documentar modelo completo
+- [x] Retirar botón «Enviar a cola» del calendario
+- [ ] Validar brief Jordi/Carlos
+- [ ] Spike bandeja computada
+- [ ] Spike contenedor `prod_ot_pasos`
+- [ ] Spike persistencia detalle del día
+- [ ] Ejecución modal
+- [ ] Detalle del día (Carlos)
+- [ ] LEGACY tab
+
+---
+
+## 15. Referencias código
+
+| Pieza | Archivo | Notas |
+|-------|---------|-------|
+| Itinerario | `prod-ot-itinerario-client.ts` | Paso 1 disponible |
+| Calendario | `calendario-produccion-page.tsx` | Sin botón cola |
+| Espejo | `calendario-mesa-espejo.ts` | Lectura |
+| Pasar a mesa | `planificacion-pasar-a-mesa.ts` | LEGACY |
+| Mesa diaria LEGACY | `planificacion-mesa-diaria-tab.tsx` | No modificar camino feliz |
+| Detalle día (futuro) | `planificacion-detalle-dia-tab.tsx` | Por crear |
+| Helpers mesa | `planificacion-mesa-diaria.ts` | Reutilizar |
+| Ejecución | `planificacion-ots-ejecucion-tab.tsx` | Contenedor + modal |
+
+---
+
+## 16. Resumen una página
+
+1. Carlos **ya usa** el calendario — reforzarlo.
+2. **Bandeja computada** quita hojas Optimus y Excel (con detalle del día).
+3. **Contenedor** sustituye Pool/Mesa como puerta.
+4. **CTP/guillotina/desbroce/manipulados** = contenedor; **I/D/T/E** = calendario.
+5. **Detalle del día** = mesa nueva en **archivos nuevos**, no ejecuta; LEGACY vive en `.tsx` actuales.
+6. **Construcción en paralelo:** motor + UI planning.
+7. **PR1 botón eliminado** del calendario.
+
+---
+
+*Manel + Claude Opus + Cursor · 21–22 ago 2026*

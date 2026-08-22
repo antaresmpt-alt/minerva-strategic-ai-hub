@@ -14,7 +14,6 @@ import {
   Route,
   Scissors,
   Search,
-  Send,
   Trash2,
   Upload,
   X,
@@ -95,10 +94,6 @@ import {
 } from "@/lib/calendario-produccion-progreso";
 import { errorMessageFromUnknown } from "@/lib/error-message";
 import { resolveEstadoOtLabel } from "@/lib/hoja-ruta/hoja-ruta-query";
-import {
-  fetchPasarAMesaGateByOt,
-  pasarOtsAColaMesa,
-} from "@/lib/planificacion-pasar-a-mesa";
 import { isOtNumeroPrueba } from "@/lib/ot-prueba";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -159,10 +154,8 @@ function DiaCelda({
   onEditDay,
   onOpenOt,
   onToggleMarcadoHecho,
-  onEnviarCola,
   itinerarioByOt,
   espejoByOt,
-  enviandoOt,
   duplicatedOtSet,
   ambitoActivo,
   canEditActivo,
@@ -175,10 +168,8 @@ function DiaCelda({
   onEditDay: () => void;
   onOpenOt: (otNumero: string) => void;
   onToggleMarcadoHecho: (linea: CalendarioProduccionLinea) => void;
-  onEnviarCola: (linea: CalendarioProduccionLinea, fechaYmd: string) => void;
   itinerarioByOt: Map<string, CalendarioItinerarioOt>;
   espejoByOt: Map<string, CalendarioEspejoOt>;
-  enviandoOt: string | null;
   duplicatedOtSet: Set<string>;
   ambitoActivo: CalendarioAmbito;
   canEditActivo: boolean;
@@ -253,14 +244,6 @@ function DiaCelda({
               itinerario: info,
               espejo: espejoByOt.get(l.otNumero),
             });
-            const canEnviar =
-              canEditActivo &&
-              !isForeign &&
-              !l.marcadoHecho &&
-              espejo.fase !== "hecha" &&
-              espejo.fase !== "en_curso" &&
-              espejo.fase !== "en_mesa";
-            const enviando = enviandoOt === l.otNumero;
             return (
               <div
                 key={l.id}
@@ -346,28 +329,6 @@ function DiaCelda({
                     </span>
                   ) : null}
                 </button>
-                {canEnviar ? (
-                  <button
-                    type="button"
-                    disabled={enviando}
-                    title="Enviar a cola de Mesa (sin máquina/día)"
-                    aria-label="Enviar a cola de Mesa"
-                    className={cn(
-                      "flex size-5 shrink-0 items-center justify-center rounded border border-slate-300 bg-white text-[#002147] transition-colors hover:border-[#002147] hover:bg-slate-50",
-                      enviando && "opacity-50",
-                    )}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEnviarCola(l, dayYmd);
-                    }}
-                  >
-                    {enviando ? (
-                      <Loader2 className="size-3 animate-spin" />
-                    ) : (
-                      <Send className="size-3" />
-                    )}
-                  </button>
-                ) : null}
                 <button
                   type="button"
                   disabled={!canToggle}
@@ -466,7 +427,6 @@ export function CalendarioProduccionPage() {
   const [espejoByOt, setEspejoByOt] = useState<Map<string, CalendarioEspejoOt>>(
     () => new Map(),
   );
-  const [enviandoOt, setEnviandoOt] = useState<string | null>(null);
   const [hojaRutaOt, setHojaRutaOt] = useState<string | null>(null);
   const [hojaRutaOpen, setHojaRutaOpen] = useState(false);
   const [cafeOpen, setCafeOpen] = useState(false);
@@ -1356,75 +1316,6 @@ export function CalendarioProduccionPage() {
     }
   };
 
-  /** Bloque 11 PR1 — cola de Mesa (sin slot). Agnóstico de ámbito. */
-  const enviarAColaMesa = useCallback(
-    async (otNumero: string) => {
-      const ot = otNumero.trim();
-      if (!ot || enviandoOt) return;
-      setEnviandoOt(ot);
-      try {
-        const [{ data: maestro, error: mErr }, pasos] = await Promise.all([
-          supabase
-            .from(TABLE_MAESTRO)
-            .select("despachado")
-            .eq("num_pedido", ot)
-            .maybeSingle(),
-          fetchPasosResumenOt(supabase, ot).catch(() => []),
-        ]);
-        if (mErr) throw mErr;
-        const despachado = Boolean(
-          (maestro as { despachado?: boolean | null } | null)?.despachado,
-        );
-        if (!despachado && pasos.length === 0) {
-          toast.error(
-            `OT ${ot}: sin despacho ni itinerario en Minerva. No se puede enviar a cola de Mesa.`,
-          );
-          return;
-        }
-
-        const gates = await fetchPasarAMesaGateByOt(supabase, [ot]);
-        const gate = gates.get(ot);
-        if (!gate) {
-          toast.error(`No se encontraron datos de OT ${ot}.`);
-          return;
-        }
-        const result = await pasarOtsAColaMesa(
-          supabase,
-          [
-            {
-              ot: gate.ot,
-              otTipo: gate.otTipo,
-              hasCompraGenerada: gate.hasCompraGenerada,
-              hojasStockCartelado: gate.hojasStockCartelado,
-              fechaEntrega: gate.fechaEntrega,
-            },
-          ],
-          { notas: "Enviada desde Calendario a cola de Mesa" },
-        );
-        if (result.rechazadas.length > 0) {
-          const r = result.rechazadas[0]!;
-          toast.error(`${r.ot}: ${r.motivo}`);
-          return;
-        }
-        if (result.yaEnMesa.length > 0 && result.enviadas.length === 0) {
-          toast.message(`OT ${ot} ya estaba en mesa activa.`);
-          return;
-        }
-        if (result.enviadas.length > 0) {
-          toast.success(`OT ${ot} enviada a cola de Mesa.`);
-          await load();
-        }
-      } catch (e) {
-        toast.error(
-          errorMessageFromUnknown(e, "No se pudo enviar a cola de Mesa."),
-        );
-      } finally {
-        setEnviandoOt(null);
-      }
-    },
-    [enviandoOt, load, supabase],
-  );
-
   const exportMes = () => {
     exportCalendarioProduccionMensualPdf({
       year,
@@ -1878,11 +1769,9 @@ export function CalendarioProduccionPage() {
                       onEditDay={() => openDay(celda.ymd)}
                       onOpenOt={(ot) => void openDetalle(ot)}
                       onToggleMarcadoHecho={(l) => void toggleMarcadoHecho(l)}
-                      onEnviarCola={(l) => void enviarAColaMesa(l.otNumero)}
                       variant="semana"
                       itinerarioByOt={itinerarioByOt}
                       espejoByOt={espejoByOt}
-                      enviandoOt={enviandoOt}
                       duplicatedOtSet={duplicatedOtSet}
                       ambitoActivo={ambitoActivo}
                       canEditActivo={canEditActivo}
@@ -1906,11 +1795,9 @@ export function CalendarioProduccionPage() {
                         onEditDay={() => openDay(celda.ymd)}
                         onOpenOt={(ot) => void openDetalle(ot)}
                         onToggleMarcadoHecho={(l) => void toggleMarcadoHecho(l)}
-                        onEnviarCola={(l) => void enviarAColaMesa(l.otNumero)}
                         variant="mes"
                         itinerarioByOt={itinerarioByOt}
                         espejoByOt={espejoByOt}
-                        enviandoOt={enviandoOt}
                         duplicatedOtSet={duplicatedOtSet}
                         ambitoActivo={ambitoActivo}
                         canEditActivo={canEditActivo}
@@ -2138,11 +2025,6 @@ export function CalendarioProduccionPage() {
                             itinerario: itinerarioByOt.get(l.otNumero),
                             espejo: espejoByOt.get(l.otNumero),
                           });
-                          const canEnviar =
-                            !l.marcadoHecho &&
-                            espejo.fase !== "hecha" &&
-                            espejo.fase !== "en_curso" &&
-                            espejo.fase !== "en_mesa";
                           const pasoLabel = labelPasoDisponible(
                             itinerarioByOt.get(l.otNumero)?.pasos ?? [],
                           );
@@ -2157,25 +2039,6 @@ export function CalendarioProduccionPage() {
                                   {pasoLabel && espejo.badge ? " · " : ""}
                                   {espejo.badge}
                                 </span>
-                              ) : null}
-                              {canEnviar ? (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 w-7 p-0 text-[#002147]"
-                                  disabled={saving || enviandoOt === l.otNumero}
-                                  title="Enviar a cola de Mesa"
-                                  onClick={() =>
-                                    void enviarAColaMesa(l.otNumero)
-                                  }
-                                >
-                                  {enviandoOt === l.otNumero ? (
-                                    <Loader2 className="size-3.5 animate-spin" />
-                                  ) : (
-                                    <Send className="size-3.5" />
-                                  )}
-                                </Button>
                               ) : null}
                             </>
                           );
@@ -2386,26 +2249,6 @@ export function CalendarioProduccionPage() {
               >
                 Ver hoja de ruta
               </Button>
-              {detalle?.otNumero &&
-              canEditActivo &&
-              (detalle.despachado || detalle.pasos.length > 0) &&
-              (espejoByOt.get(detalle.otNumero)?.mesaTrabajos.length ?? 0) ===
-                0 ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  className="bg-[#002147] hover:bg-[#003366]"
-                  disabled={enviandoOt === detalle.otNumero}
-                  onClick={() => void enviarAColaMesa(detalle.otNumero)}
-                >
-                  {enviandoOt === detalle.otNumero ? (
-                    <Loader2 className="mr-1 size-3.5 animate-spin" />
-                  ) : (
-                    <Send className="mr-1 size-3.5" />
-                  )}
-                  Enviar a cola de Mesa
-                </Button>
-              ) : null}
             </div>
             <Button
               type="button"
