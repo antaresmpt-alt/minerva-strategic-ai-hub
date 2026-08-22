@@ -38,7 +38,7 @@ import {
   derivarOtAImpresionExterna,
   devolverHuecoMesaAlPool,
 } from "@/lib/derivar-impresion-externa";
-import { PROCESO_DIGITAL_ID, PROCESO_OFFSET_ID } from "@/lib/despacho-wizard-shared";
+import { PROCESO_DIGITAL_ID, PROCESO_OFFSET_ID, PROCESO_TROQUEL_ID } from "@/lib/despacho-wizard-shared";
 import { errorMessageFromUnknown } from "@/lib/error-message";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -65,6 +65,16 @@ import {
   parseContenedorCtpVirtualId,
   type ContenedorCtpPaso,
 } from "@/lib/contenedor-ctp";
+import {
+  contenedorTroquelVirtualId,
+  crearEjecucionLigeraTroquel,
+  fetchContenedorTroquelPasosDisponibles,
+  fetchMaquinasTroquelActivas,
+  isContenedorTroquelVirtualId,
+  parseContenedorTroquelVirtualId,
+  type ContenedorTroquelMaquina,
+  type ContenedorTroquelPaso,
+} from "@/lib/contenedor-troquel";
 import { isOtNumeroPrueba } from "@/lib/ot-prueba";
 import { useFormatoMargenParametros } from "@/hooks/use-formato-margen-parametros";
 import { useSysParametrosSobreproduccion } from "@/hooks/use-sys-parametros-sobreproduccion";
@@ -191,6 +201,60 @@ function buildContenedorCtpVirtualRow(
     createdAt: nowIso,
     updatedAt: nowIso,
     origenContenedorCtp: true,
+  };
+}
+
+function buildContenedorTroquelVirtualRow(
+  paso: ContenedorTroquelPaso,
+): MesaEjecucion {
+  const nowIso = new Date().toISOString();
+  return {
+    id: contenedorTroquelVirtualId(paso.otPasoId),
+    mesaTrabajoId: null,
+    otPasoId: paso.otPasoId,
+    otId: paso.otId,
+    procesoId: PROCESO_TROQUEL_ID,
+    datosProcesoJson: paso.datosProceso,
+    procesoAnteriorId: null,
+    salidaProcesoAnterior: null,
+    salidaProcesoAnteriorNombre: null,
+    formatoAnterior: null,
+    formatoAnteriorOrigenNombre: null,
+    ot: paso.otNumero,
+    // Claim al iniciar: aún sin máquina concreta.
+    maquinaId: "",
+    maquinaNombre: "Troquelado (elegir al iniciar)",
+    maquinaTipo: "troquelado",
+    fechaPlanificada: null,
+    turno: null,
+    slotOrden: null,
+    liberadaAt: null,
+    inicioRealAt: null,
+    finRealAt: null,
+    estadoEjecucion: "pendiente_inicio",
+    pausaActivaDesde: null,
+    motivoPausaActiva: null,
+    motivoPausaCategoriaActiva: null,
+    motivoPausaColorHexActiva: null,
+    haEstadoPausada: false,
+    numPausas: 0,
+    minutosPausadaAcum: 0,
+    horasPlanificadasSnapshot: paso.horasPlanificadas,
+    horasReales: null,
+    horasRealesEntrada: null,
+    horasRealesTiraje: null,
+    horasRealesTroquelado: null,
+    horasRealesEngomado: null,
+    numHojasProducidas: null,
+    cantidadUnidades: null,
+    incidencia: null,
+    accionCorrectiva: null,
+    maquinista: null,
+    densidadesJson: null,
+    observaciones: null,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    origenContenedorTroquel: true,
   };
 }
 
@@ -1106,6 +1170,9 @@ export function PlanificacionOtsEjecucionTab({
   const [cajasEmbalaje, setCajasEmbalaje] = useState<CajaEmbalajeOption[]>([]);
   const [tipoEngomadoOptions, setTipoEngomadoOptions] = useState<string[]>([]);
   const [maquinas, setMaquinas] = useState<Array<{ id: string; nombre: string }>>([]);
+  const [maquinasTroquel, setMaquinasTroquel] = useState<ContenedorTroquelMaquina[]>(
+    [],
+  );
   const [selectedMaquina, setSelectedMaquina] = useState<string>("all");
   const [estado, setEstado] = useState<FiltroEstadoEjecucion>("activas");
   const [searchInput, setSearchInput] = useState("");
@@ -1862,47 +1929,89 @@ export function PlanificacionOtsEjecucionTab({
         mapRow(r, pauseMap, salidaAnteriorByPasoKey, formatoAnteriorByOtPasoId),
       );
 
-      // Bloque 11 spike: contenedor CTP (pasos disponible sin mesa).
+      // Bloque 11 spike: contenedor CTP + Troquel (pasos disponible sin mesa).
       let contenedorRows: MesaEjecucion[] = [];
       const showContenedorCtp =
         (!tipoFiltro || tipoFiltro === "preimpresion") &&
         (estado === "activas" ||
           estado === "pendiente_inicio" ||
           estado === "all");
+      const showContenedorTroquel =
+        (!tipoFiltro || tipoFiltro === "troquelado") &&
+        (estado === "activas" ||
+          estado === "pendiente_inicio" ||
+          estado === "all");
+
+      let occupiedPasos = new Set<string>();
+      if (showContenedorCtp || showContenedorTroquel) {
+        const { data: activasPaso } = await supabase
+          .from(TABLE_EJECUCIONES)
+          .select("ot_paso_id")
+          .in("estado_ejecucion", ESTADOS_ACTIVAS)
+          .not("ot_paso_id", "is", null);
+        occupiedPasos = new Set(
+          (activasPaso ?? [])
+            .map((r) =>
+              String((r as { ot_paso_id?: string }).ot_paso_id ?? "").trim(),
+            )
+            .filter(Boolean),
+        );
+      }
+
       if (showContenedorCtp) {
         try {
           const ctpMaq = await fetchMaquinaCtpActiva(supabase);
           if (ctpMaq) {
-            const { data: activasPaso } = await supabase
-              .from(TABLE_EJECUCIONES)
-              .select("ot_paso_id")
-              .in("estado_ejecucion", ESTADOS_ACTIVAS)
-              .not("ot_paso_id", "is", null);
-            const occupied = new Set(
-              (activasPaso ?? [])
-                .map((r) => String((r as { ot_paso_id?: string }).ot_paso_id ?? "").trim())
-                .filter(Boolean),
-            );
-            // includePruebas: true → filtro UI (toggle). soloEjecutable false aquí; filtro UI.
             const candidatos = await fetchContenedorCtpPasosDisponibles(supabase, {
               includePruebas: true,
               soloEjecutable: false,
-              otPasoIdsConEjecucionActiva: occupied,
+              otPasoIdsConEjecucionActiva: occupiedPasos,
             });
             contenedorRows = candidatos.map((p) =>
               buildContenedorCtpVirtualRow(p, ctpMaq),
             );
+          }
+        } catch (ctpErr) {
+          console.warn("[ejecucion] contenedor CTP", ctpErr);
+        }
+      }
 
-            const otsContenedor = [
-              ...new Set(candidatos.map((c) => c.otNumero).filter(Boolean)),
-            ].filter((ot) => !despachoMap[ot]);
-            if (otsContenedor.length > 0) {
-              const [extraDesp, extraGen] = await Promise.all([
-                fetchAllInChunks(otsContenedor, 100, async (chunk) => {
-                  const { data, error } = await supabase
-                    .from(TABLE_DESPACHO)
-                    .select(
-                      `
+      if (showContenedorTroquel) {
+        try {
+          const troquelMaqs = await fetchMaquinasTroquelActivas(supabase);
+          setMaquinasTroquel(troquelMaqs);
+          if (troquelMaqs.length > 0) {
+            const candidatosTroq = await fetchContenedorTroquelPasosDisponibles(
+              supabase,
+              {
+                includePruebas: true,
+                soloEjecutable: false,
+                otPasoIdsConEjecucionActiva: occupiedPasos,
+              },
+            );
+            contenedorRows = [
+              ...contenedorRows,
+              ...candidatosTroq.map((p) => buildContenedorTroquelVirtualRow(p)),
+            ];
+          }
+        } catch (troqErr) {
+          console.warn("[ejecucion] contenedor Troquel", troqErr);
+        }
+      } else {
+        setMaquinasTroquel([]);
+      }
+
+      const otsContenedor = [
+        ...new Set(contenedorRows.map((c) => c.ot).filter(Boolean)),
+      ].filter((ot) => !despachoMap[ot]);
+      if (otsContenedor.length > 0) {
+        try {
+          const [extraDesp, extraGen] = await Promise.all([
+            fetchAllInChunks(otsContenedor, 100, async (chunk) => {
+              const { data, error } = await supabase
+                .from(TABLE_DESPACHO)
+                .select(
+                  `
               ot_numero,
               material,
               gramaje,
@@ -1921,111 +2030,119 @@ export function PlanificacionOtsEjecucionTab({
               horas_estimadas_engomado,
               tipo_engomado
             `,
-                    )
-                    .in("ot_numero", chunk);
-                  if (error) throw error;
-                  return data ?? [];
-                }),
-                fetchAllInChunks(otsContenedor, 100, async (chunk) => {
-                  const { data, error } = await supabase
-                    .from(TABLE_OTS_GENERAL)
-                    .select(
-                      "num_pedido, cliente, titulo, cantidad, fecha_entrega, ot_tipo, ot_padre_numero, tipo_hija, forma_descripcion",
-                    )
-                    .in("num_pedido", chunk);
-                  if (error) throw error;
-                  return data ?? [];
-                }),
-              ]);
-              for (const g of extraGen as Array<{
+                )
+                .in("ot_numero", chunk);
+              if (error) throw error;
+              return data ?? [];
+            }),
+            fetchAllInChunks(otsContenedor, 100, async (chunk) => {
+              const { data, error } = await supabase
+                .from(TABLE_OTS_GENERAL)
+                .select(
+                  "num_pedido, cliente, titulo, cantidad, fecha_entrega, ot_tipo, ot_padre_numero, tipo_hija, forma_descripcion",
+                )
+                .in("num_pedido", chunk);
+              if (error) throw error;
+              return data ?? [];
+            }),
+          ]);
+          for (const g of extraGen as Array<{
+            num_pedido?: string;
+            cliente?: string | null;
+            titulo?: string | null;
+            cantidad?: number | null;
+            fecha_entrega?: string | null;
+            ot_tipo?: string | null;
+            ot_padre_numero?: string | null;
+            tipo_hija?: string | null;
+            forma_descripcion?: string | null;
+          }>) {
+            const ot = String(g.num_pedido ?? "").trim();
+            if (!ot) continue;
+            otMetaMap[ot] = {
+              otTipo: g.ot_tipo ?? null,
+              otPadreNumero: g.ot_padre_numero ?? null,
+              tipoHija: g.tipo_hija ?? null,
+              formaDescripcion: g.forma_descripcion ?? null,
+            };
+          }
+          for (const d of extraDesp as Array<{
+            ot_numero?: string;
+            material?: string | null;
+            gramaje?: number | null;
+            tamano_hoja?: string | null;
+            num_hojas_brutas?: number | null;
+            num_hojas_netas?: number | null;
+            tintas?: string | null;
+            acabado_pral?: string | null;
+            troquel?: string | null;
+            poses?: number | null;
+            horas_entrada?: number | null;
+            horas_tiraje?: number | null;
+            horas_estimadas_troquelado?: number | null;
+            horas_engomado_preparacion?: number | null;
+            horas_engomado_tiraje?: number | null;
+            horas_estimadas_engomado?: number | null;
+            tipo_engomado?: string | null;
+          }>) {
+            const ot = String(d.ot_numero ?? "").trim();
+            if (!ot || despachoMap[ot]) continue;
+            const gen = otMetaMap[ot];
+            const gRow = (
+              extraGen as Array<{
                 num_pedido?: string;
                 cliente?: string | null;
                 titulo?: string | null;
                 cantidad?: number | null;
                 fecha_entrega?: string | null;
-                ot_tipo?: string | null;
-                ot_padre_numero?: string | null;
-                tipo_hija?: string | null;
-                forma_descripcion?: string | null;
-              }>) {
-                const ot = String(g.num_pedido ?? "").trim();
-                if (!ot) continue;
-                otMetaMap[ot] = {
-                  otTipo: g.ot_tipo ?? null,
-                  otPadreNumero: g.ot_padre_numero ?? null,
-                  tipoHija: g.tipo_hija ?? null,
-                  formaDescripcion: g.forma_descripcion ?? null,
-                };
-              }
-              for (const d of extraDesp as Array<{
-                ot_numero?: string;
-                material?: string | null;
-                gramaje?: number | null;
-                tamano_hoja?: string | null;
-                num_hojas_brutas?: number | null;
-                num_hojas_netas?: number | null;
-                tintas?: string | null;
-                acabado_pral?: string | null;
-                troquel?: string | null;
-                poses?: number | null;
-                horas_entrada?: number | null;
-                horas_tiraje?: number | null;
-                horas_estimadas_troquelado?: number | null;
-                horas_engomado_preparacion?: number | null;
-                horas_engomado_tiraje?: number | null;
-                horas_estimadas_engomado?: number | null;
-                tipo_engomado?: string | null;
-              }>) {
-                const ot = String(d.ot_numero ?? "").trim();
-                if (!ot || despachoMap[ot]) continue;
-                const gen = otMetaMap[ot];
-                const gRow = (extraGen as Array<{ num_pedido?: string; cliente?: string | null; titulo?: string | null; cantidad?: number | null; fecha_entrega?: string | null }>).find(
-                  (x) => String(x.num_pedido ?? "").trim() === ot,
-                );
-                despachoMap[ot] = {
-                  cliente: gRow?.cliente ?? null,
-                  cantidad: typeof gRow?.cantidad === "number" ? gRow.cantidad : null,
-                  titulo: gRow?.titulo ?? gen?.formaDescripcion ?? null,
-                  material: d.material ?? null,
-                  gramaje: typeof d.gramaje === "number" ? d.gramaje : null,
-                  tamanoHoja: d.tamano_hoja ?? null,
-                  hojasBrutas: typeof d.num_hojas_brutas === "number" ? d.num_hojas_brutas : null,
-                  hojasNetas: typeof d.num_hojas_netas === "number" ? d.num_hojas_netas : null,
-                  tintas: d.tintas ?? null,
-                  acabadoPral: d.acabado_pral ?? null,
-                  troquel: d.troquel ?? null,
-                  poses: typeof d.poses === "number" ? d.poses : null,
-                  tamanoCorte: null,
-                  pinza: null,
-                  expulsor: null,
-                  cauchoAcrilico: null,
-                  horasEntrada: typeof d.horas_entrada === "number" ? d.horas_entrada : null,
-                  horasTiraje: typeof d.horas_tiraje === "number" ? d.horas_tiraje : null,
-                  horasTroquelado:
-                    typeof d.horas_estimadas_troquelado === "number"
-                      ? d.horas_estimadas_troquelado
-                      : null,
-                  horasEngomadoPrep:
-                    typeof d.horas_engomado_preparacion === "number"
-                      ? d.horas_engomado_preparacion
-                      : null,
-                  horasEngomadoTiraje:
-                    typeof d.horas_engomado_tiraje === "number"
-                      ? d.horas_engomado_tiraje
-                      : null,
-                  horasEngomado:
-                    typeof d.horas_estimadas_engomado === "number"
-                      ? d.horas_estimadas_engomado
-                      : null,
-                  tipoEngomado: d.tipo_engomado ?? null,
-                  fechaEntrega: gRow?.fecha_entrega ?? null,
-                  materiales: [],
-                };
-              }
-            }
+              }>
+            ).find((x) => String(x.num_pedido ?? "").trim() === ot);
+            despachoMap[ot] = {
+              cliente: gRow?.cliente ?? null,
+              cantidad: typeof gRow?.cantidad === "number" ? gRow.cantidad : null,
+              titulo: gRow?.titulo ?? gen?.formaDescripcion ?? null,
+              material: d.material ?? null,
+              gramaje: typeof d.gramaje === "number" ? d.gramaje : null,
+              tamanoHoja: d.tamano_hoja ?? null,
+              hojasBrutas:
+                typeof d.num_hojas_brutas === "number" ? d.num_hojas_brutas : null,
+              hojasNetas:
+                typeof d.num_hojas_netas === "number" ? d.num_hojas_netas : null,
+              tintas: d.tintas ?? null,
+              acabadoPral: d.acabado_pral ?? null,
+              troquel: d.troquel ?? null,
+              poses: typeof d.poses === "number" ? d.poses : null,
+              tamanoCorte: null,
+              pinza: null,
+              expulsor: null,
+              cauchoAcrilico: null,
+              horasEntrada:
+                typeof d.horas_entrada === "number" ? d.horas_entrada : null,
+              horasTiraje:
+                typeof d.horas_tiraje === "number" ? d.horas_tiraje : null,
+              horasTroquelado:
+                typeof d.horas_estimadas_troquelado === "number"
+                  ? d.horas_estimadas_troquelado
+                  : null,
+              horasEngomadoPrep:
+                typeof d.horas_engomado_preparacion === "number"
+                  ? d.horas_engomado_preparacion
+                  : null,
+              horasEngomadoTiraje:
+                typeof d.horas_engomado_tiraje === "number"
+                  ? d.horas_engomado_tiraje
+                  : null,
+              horasEngomado:
+                typeof d.horas_estimadas_engomado === "number"
+                  ? d.horas_estimadas_engomado
+                  : null,
+              tipoEngomado: d.tipo_engomado ?? null,
+              fechaEntrega: gRow?.fecha_entrega ?? null,
+              materiales: [],
+            };
           }
-        } catch (ctpErr) {
-          console.warn("[ejecucion] contenedor CTP", ctpErr);
+        } catch (metaErr) {
+          console.warn("[ejecucion] meta contenedor", metaErr);
         }
       }
 
@@ -2049,6 +2166,11 @@ export function PlanificacionOtsEjecucionTab({
     return () => window.clearTimeout(t);
   }, [searchInput]);
 
+  const maquinasTroquelIds = useMemo(
+    () => new Set(maquinasTroquel.map((m) => m.id)),
+    [maquinasTroquel],
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const now = new Date();
@@ -2062,7 +2184,15 @@ export function PlanificacionOtsEjecucionTab({
       ) {
         // CTP disponible = ejecutable; nada que filtrar aún.
       }
-      if (selectedMaquina !== "all" && r.maquinaId !== selectedMaquina) return false;
+      if (selectedMaquina !== "all") {
+        const isTroquelVirtual =
+          r.origenContenedorTroquel || isContenedorTroquelVirtualId(r.id);
+        if (isTroquelVirtual) {
+          if (!maquinasTroquelIds.has(selectedMaquina)) return false;
+        } else if (r.maquinaId !== selectedMaquina) {
+          return false;
+        }
+      }
       if (estado === "activas") {
         if (
           r.estadoEjecucion !== "pendiente_inicio" &&
@@ -2095,6 +2225,7 @@ export function PlanificacionOtsEjecucionTab({
         meta?.otPadreNumero,
         meta?.tipoHija,
         r.origenContenedorCtp ? "contenedor ctp" : "",
+        r.origenContenedorTroquel ? "contenedor troquel" : "",
       ]
         .map((v) => String(v ?? "").toLowerCase())
         .join(" ");
@@ -2109,6 +2240,7 @@ export function PlanificacionOtsEjecucionTab({
     otMetaByOt,
     mostrarPruebas,
     soloEjecutableCtp,
+    maquinasTroquelIds,
   ]);
 
   const colaRows = useMemo(() => {
@@ -2306,6 +2438,55 @@ export function PlanificacionOtsEjecucionTab({
           return;
         }
 
+        // Contenedor Troquel: claim = máquina elegida al iniciar.
+        if (row.origenContenedorTroquel || isContenedorTroquelVirtualId(row.id)) {
+          const pasoId =
+            parseContenedorTroquelVirtualId(row.id) ??
+            String(row.otPasoId ?? "").trim();
+          if (!pasoId) {
+            throw new Error(
+              "Paso Troquel no encontrado para materializar ejecución.",
+            );
+          }
+          const claimMaquinaId = String(
+            (patch.maquina_id as string | undefined) ?? row.maquinaId ?? "",
+          ).trim();
+          if (!claimMaquinaId) {
+            throw new Error(
+              "Elige máquina troquel (claim) antes de iniciar.",
+            );
+          }
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          const created = await crearEjecucionLigeraTroquel(supabase, {
+            otNumero: row.ot,
+            otPasoId: pasoId,
+            maquinaId: claimMaquinaId,
+            userId: user?.id ?? null,
+            userEmail: user?.email ?? null,
+            startImmediately: true,
+            horasPlanificadas: row.horasPlanificadasSnapshot,
+          });
+          execId = created.id;
+          if (datosProcesoUpdate && pasoId) {
+            const { error: dpErr } = await supabase
+              .from(TABLE_OT_PASOS)
+              .update({ datos_proceso: datosProcesoUpdate as Json })
+              .eq("id", pasoId);
+            if (dpErr) throw dpErr;
+          }
+          const maqNombre =
+            maquinasTroquel.find((m) => m.id === claimMaquinaId)?.nombre ??
+            claimMaquinaId;
+          toast.success(
+            `OT ${row.ot} iniciada en ${maqNombre} (contenedor Troquel, sin mesa).`,
+          );
+          setExpandedId(execId);
+          await loadData();
+          return;
+        }
+
         const { error } = await supabase
           .from(TABLE_EJECUCIONES)
           .update({
@@ -2332,7 +2513,7 @@ export function PlanificacionOtsEjecucionTab({
         setSavingId(null);
       }
     },
-    [loadData, supabase],
+    [loadData, supabase, maquinasTroquel],
   );
 
   const devolverEjecucionAlPool = useCallback(
@@ -2722,6 +2903,11 @@ export function PlanificacionOtsEjecucionTab({
                             Contenedor CTP
                           </span>
                         ) : null}
+                        {row.origenContenedorTroquel ? (
+                          <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wide text-amber-950">
+                            Contenedor Troquel
+                          </span>
+                        ) : null}
                         {otMetaByOt[row.ot]?.formaDescripcion ? (
                           <span className="ml-1.5 font-sans text-xs font-normal text-slate-600">
                             · {otMetaByOt[row.ot]?.formaDescripcion}
@@ -2760,6 +2946,8 @@ export function PlanificacionOtsEjecucionTab({
                         margenesSobreproduccion={margenesSobreproduccion}
                         desviacion={desviacion}
                         saving={savingId === row.id}
+                        maquinasTroquel={maquinasTroquel}
+                        selectedMaquinaFilter={selectedMaquina}
                         pasosOt={
                           row.otId
                             ? (pasosItinerarioPorOtId.get(row.otId) ?? [])
@@ -2805,6 +2993,8 @@ function ExecutionCard({
   margenesSobreproduccion,
   desviacion,
   saving,
+  maquinasTroquel,
+  selectedMaquinaFilter,
   pasosOt,
   pasosItinerario,
   onPatch,
@@ -2828,6 +3018,8 @@ function ExecutionCard({
   margenesSobreproduccion: SobreproduccionMargenesParametros;
   desviacion: number | null;
   saving: boolean;
+  maquinasTroquel: ContenedorTroquelMaquina[];
+  selectedMaquinaFilter: string;
   pasosOt: PasoItinerarioFormato[];
   pasosItinerario: PasoItinerarioConsumo[];
   onPatch: (patch: Record<string, unknown>, datosProcesoUpdate?: DatosProcesoGenerico | null) => void;
@@ -2848,6 +3040,39 @@ function ExecutionCard({
   adminProfile: ProfileConPermisos | null;
   onAdminSuccess: () => void;
 }) {
+  const isContenedorVirtual =
+    Boolean(row.origenContenedorCtp) ||
+    Boolean(row.origenContenedorTroquel) ||
+    isContenedorCtpVirtualId(row.id) ||
+    isContenedorTroquelVirtualId(row.id);
+  const needsTroquelClaim =
+    Boolean(row.origenContenedorTroquel) || isContenedorTroquelVirtualId(row.id);
+  const [claimMaquinaId, setClaimMaquinaId] = useState(() => {
+    if (!needsTroquelClaim) return "";
+    if (
+      selectedMaquinaFilter !== "all" &&
+      maquinasTroquel.some((m) => m.id === selectedMaquinaFilter)
+    ) {
+      return selectedMaquinaFilter;
+    }
+    return maquinasTroquel[0]?.id ?? "";
+  });
+  useEffect(() => {
+    if (!needsTroquelClaim || claimMaquinaId) return;
+    if (
+      selectedMaquinaFilter !== "all" &&
+      maquinasTroquel.some((m) => m.id === selectedMaquinaFilter)
+    ) {
+      setClaimMaquinaId(selectedMaquinaFilter);
+      return;
+    }
+    if (maquinasTroquel[0]?.id) setClaimMaquinaId(maquinasTroquel[0].id);
+  }, [
+    needsTroquelClaim,
+    claimMaquinaId,
+    maquinasTroquel,
+    selectedMaquinaFilter,
+  ]);
   const [incidencia, setIncidencia] = useState(row.incidencia ?? "");
   const [accion, setAccion] = useState(row.accionCorrectiva ?? "");
   const [maquinista, setMaquinista] = useState(row.maquinista ?? "");
@@ -3717,7 +3942,28 @@ function ExecutionCard({
             ) : null}
           </p>
         )}
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {needsTroquelClaim && isPendingStart ? (
+            <label className="flex items-center gap-1.5 text-[11px] text-slate-700">
+              <span className="font-semibold">Claim</span>
+              <select
+                className="h-8 rounded-md border border-amber-300 bg-amber-50 px-2 text-xs"
+                value={claimMaquinaId}
+                onChange={(e) => setClaimMaquinaId(e.target.value)}
+                disabled={saving || maquinasTroquel.length === 0}
+              >
+                {maquinasTroquel.length === 0 ? (
+                  <option value="">Sin máquinas troquel</option>
+                ) : (
+                  maquinasTroquel.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.nombre}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
+          ) : null}
           {canEdit ? (
             <Button
               type="button"
@@ -3748,8 +3994,14 @@ function ExecutionCard({
               type="button"
               size="sm"
               className="bg-emerald-700 text-white hover:bg-emerald-800"
-              disabled={saving}
-              onClick={() => onBegin(buildCommonFieldsPatch(), datosProcesoPatch)}
+              disabled={saving || (needsTroquelClaim && !claimMaquinaId)}
+              onClick={() => {
+                const patch = buildCommonFieldsPatch();
+                if (needsTroquelClaim && claimMaquinaId) {
+                  patch.maquina_id = claimMaquinaId;
+                }
+                onBegin(patch, datosProcesoPatch);
+              }}
             >
               <Play className="mr-1 size-4" /> Iniciar
             </Button>
@@ -3767,7 +4019,7 @@ function ExecutionCard({
               <Truck className="mr-1 size-4" /> Imprimir fuera
             </Button>
           ) : null}
-          {isPendingStart ? (
+          {isPendingStart && !isContenedorVirtual ? (
             <Button
               type="button"
               size="sm"

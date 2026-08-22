@@ -190,6 +190,10 @@ export interface MesaEjecucion {
    * `prod_mesa_ejecuciones`). Al iniciar se materializa con mesa_trabajo_id null.
    */
   origenContenedorCtp?: boolean;
+  /**
+   * Bloque 11 spike: fila virtual Troquel. Claim = elegir máquina al Iniciar.
+   */
+  origenContenedorTroquel?: boolean;
 }
 
 export interface MesaEjecucionPausa {

@@ -321,7 +321,7 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 - [ ] Ejecución modal
 - [ ] Detalle del día (Carlos) — **solo tras spike persistencia**
 - [ ] LEGACY tab
-- [ ] Spike troquel + claim (siguiente tras CTP limpio)
+- [x] Spike troquel + claim (`contenedor-troquel.ts` · ver §18)
 
 ---
 
@@ -380,8 +380,32 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 4. LEGACY Pool/Mesa: sin cambios.
 
 ### Siguiente
-Troquelado + claim al iniciar (mismo patrón, multi-máquina).
+~~Troquelado + claim al iniciar (mismo patrón, multi-máquina).~~ → ver §18
 
 ---
 
-*Manel + Claude Opus + Cursor · 21–22 ago 2026 · spike CTP 22 ago noche*
+## 18. Spike Troquel + claim — resultado (22 ago 2026 noche)
+
+**Rama:** `feature/bloque11-contenedor-ctp-spike` (mismo spike CTP + Troquel)
+
+### Qué se hizo
+- Lista de ejecución mezcla filas reales + **virtuales Contenedor Troquel** (pasos `disponible`, OT despachada, sin ejecución activa en ese `ot_paso_id`).
+- Badge «Contenedor Troquel»; máquina placeholder hasta claim.
+- **Claim = Iniciar:** selector de máquinas `tipo_maquina = troquelado` (JR, …). Al iniciar → `crearEjecucionLigeraTroquel` (mesa null + UPDATE `en_curso`).
+- Filtro por máquina troquel: filas virtuales siguen visibles (el claim preselecciona esa máquina).
+- «Devolver al Pool» oculto en filas virtuales contenedor (CTP y Troquel).
+- Calendario Carlos **no tocado**.
+
+### Smoke manual recomendado
+1. Activar «Mostrar OTs prueba» → buscar OT con Troquel `disponible` (p.ej. lab con CTP ya cerrado) → badge **Contenedor Troquel**.
+2. Abrir → elegir máquina en **Claim** (p.ej. JR) → **Iniciar** → debe nacer fila real sin mesa, estado En curso.
+3. Cerrar proceso Troquel → itinerario avanza (p.ej. Desbroce/Engomado).
+4. Filtro máquina JR: virtuales troquel siguen listándose; al iniciar claimea JR.
+5. LEGACY Pool/Mesa: sin cambios.
+
+### Siguiente
+Contenedor Impresión (SpeedMaster) y/o bandeja computada Carlos (paralelo).
+
+---
+
+*Manel + Claude Opus + Cursor · 21–22 ago 2026 · spike CTP 22 ago noche · spike Troquel 22 ago noche*
