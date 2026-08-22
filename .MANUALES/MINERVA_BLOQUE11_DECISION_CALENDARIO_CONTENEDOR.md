@@ -397,11 +397,16 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 - Calendario Carlos **no tocado**.
 
 ### Smoke manual recomendado
-1. Activar «Mostrar OTs prueba» → buscar OT con Troquel `disponible` (p.ej. lab con CTP ya cerrado) → badge **Contenedor Troquel**.
-2. Abrir → elegir máquina en **Claim** (p.ej. JR) → **Iniciar** → debe nacer fila real sin mesa, estado En curso.
-3. Cerrar proceso Troquel → itinerario avanza (p.ej. Desbroce/Engomado).
-4. Filtro máquina JR: virtuales troquel siguen listándose; al iniciar claimea JR.
+1. Activar «Mostrar OTs prueba» → buscar OT con Troquel `disponible` (p.ej. **98010-02**) → badge **Contenedor Troquel** y texto *elegir al iniciar*.
+2. Abrir parte → caja ámbar **«Elige troqueladora (claim)»** (sin default ASPAS). Elegir JR → **Iniciar**.
+3. Si claimas mal: **Anular (volver a Contenedor)** (no «Devolver al Pool» — eso exige mesa).
+4. Cerrar proceso Troquel → itinerario avanza.
 5. LEGACY Pool/Mesa: sin cambios.
+
+### Lab 22 ago — 98010-02
+- Offset finalizada OK; claim accidental ASPAS; «Devolver al Pool» fallaba sin mesa.
+- BD: ejecución ASPAS cancelada → Troquel `disponible` otra vez (estado post-impresión).
+- UX fix: claim obligatorio + visible; anular ejecución ligera.
 
 ### Siguiente
 Contenedor Impresión (SpeedMaster) y/o bandeja computada Carlos (paralelo).

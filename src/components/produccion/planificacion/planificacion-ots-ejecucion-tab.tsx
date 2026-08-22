@@ -2520,7 +2520,9 @@ export function PlanificacionOtsEjecucionTab({
     async (row: MesaEjecucion) => {
       const mesaId = String(row.mesaTrabajoId ?? "").trim();
       if (!mesaId) {
-        toast.error("Esta ejecución no tiene hueco de mesa asociado.");
+        toast.error(
+          "Esta ejecución no tiene mesa. Usa «Anular (volver a Contenedor)» si salió mal el claim.",
+        );
         return;
       }
       const ok = window.confirm(
@@ -2538,6 +2540,49 @@ export function PlanificacionOtsEjecucionTab({
         await loadData();
       } catch (e) {
         toast.error(errorMessageFromUnknown(e, "No se pudo devolver la OT al Pool."));
+      } finally {
+        setSavingId(null);
+      }
+    },
+    [loadData, supabase],
+  );
+
+  /** Ejecución ligera (contenedor, sin mesa): anular claim → paso vuelve a Contenedor. */
+  const anularEjecucionLigera = useCallback(
+    async (row: MesaEjecucion) => {
+      if (row.mesaTrabajoId) {
+        toast.error("Esta ejecución tiene mesa; usa «Devolver al Pool».");
+        return;
+      }
+      if (
+        row.estadoEjecucion !== "pendiente_inicio" &&
+        row.estadoEjecucion !== "en_curso" &&
+        row.estadoEjecucion !== "pausada"
+      ) {
+        toast.error("Solo se pueden anular ejecuciones activas.");
+        return;
+      }
+      const ok = window.confirm(
+        `¿Anular claim de ${row.ot}?\n\nLa ejecución se cancela y la OT vuelve al Contenedor (elegir máquina de nuevo). El paso de itinerario no se cierra.`,
+      );
+      if (!ok) return;
+      setSavingId(row.id);
+      try {
+        const nowIso = new Date().toISOString();
+        const { error } = await supabase
+          .from(TABLE_EJECUCIONES)
+          .update({
+            estado_ejecucion: "cancelada",
+            updated_at: nowIso,
+          })
+          .eq("id", row.id);
+        if (error) throw error;
+        toast.success(`Claim de ${row.ot} anulado. Recarga: debe salir Contenedor otra vez.`);
+        await loadData();
+      } catch (e) {
+        toast.error(
+          errorMessageFromUnknown(e, "No se pudo anular la ejecución ligera."),
+        );
       } finally {
         setSavingId(null);
       }
@@ -2961,6 +3006,7 @@ export function PlanificacionOtsEjecucionTab({
                         onPatch={(patch, dp) => void patchExecution(row, patch, dp)}
                         onBegin={(patch, dp) => void beginExecution(row, patch, dp)}
                         onDevolverAlPool={() => void devolverEjecucionAlPool(row)}
+                        onAnularEjecucionLigera={() => void anularEjecucionLigera(row)}
                         onImprimirFuera={() => void imprimirFueraDesdeEjecucion(row)}
                         onPause={(motivo, patch, dp) => void pauseExecution(row, motivo, patch, dp)}
                         onResume={(pausesNext, patch, dp) => void resumeExecution(row, pausesNext, patch, dp)}
@@ -3000,6 +3046,7 @@ function ExecutionCard({
   onPatch,
   onBegin,
   onDevolverAlPool,
+  onAnularEjecucionLigera,
   onImprimirFuera,
   onPause,
   onResume,
@@ -3025,6 +3072,7 @@ function ExecutionCard({
   onPatch: (patch: Record<string, unknown>, datosProcesoUpdate?: DatosProcesoGenerico | null) => void;
   onBegin: (patch: Record<string, unknown>, datosProcesoUpdate?: DatosProcesoGenerico | null) => void;
   onDevolverAlPool: () => void;
+  onAnularEjecucionLigera: () => void;
   onImprimirFuera: () => void;
   onPause: (
     motivo: MotivoPausa | null,
@@ -3047,6 +3095,9 @@ function ExecutionCard({
     isContenedorTroquelVirtualId(row.id);
   const needsTroquelClaim =
     Boolean(row.origenContenedorTroquel) || isContenedorTroquelVirtualId(row.id);
+  const isEjecucionLigeraSinMesa =
+    !isContenedorVirtual && !row.mesaTrabajoId;
+  /** Solo preseleccionar si el filtro de lista ya es una troquel concreta. Nunca ASPAS por defecto. */
   const [claimMaquinaId, setClaimMaquinaId] = useState(() => {
     if (!needsTroquelClaim) return "";
     if (
@@ -3055,7 +3106,7 @@ function ExecutionCard({
     ) {
       return selectedMaquinaFilter;
     }
-    return maquinasTroquel[0]?.id ?? "";
+    return "";
   });
   useEffect(() => {
     if (!needsTroquelClaim || claimMaquinaId) return;
@@ -3064,9 +3115,7 @@ function ExecutionCard({
       maquinasTroquel.some((m) => m.id === selectedMaquinaFilter)
     ) {
       setClaimMaquinaId(selectedMaquinaFilter);
-      return;
     }
-    if (maquinasTroquel[0]?.id) setClaimMaquinaId(maquinasTroquel[0].id);
   }, [
     needsTroquelClaim,
     claimMaquinaId,
@@ -3480,6 +3529,34 @@ function ExecutionCard({
           </span>
         </div>
       </div>
+
+      {needsTroquelClaim && isPendingStart ? (
+        <div className="mt-3 rounded-md border-2 border-amber-400 bg-amber-50 px-3 py-2.5 shadow-sm">
+          <p className="text-sm font-bold text-amber-950">
+            Elige troqueladora (claim) antes de Iniciar
+          </p>
+          <p className="mt-0.5 text-[11px] text-amber-900/80">
+            Sin Mesa: la máquina se elige aquí. No hay default (evita ASPAS por
+            orden alfabético).
+          </p>
+          <label className="mt-2 flex flex-col gap-1 text-xs font-semibold text-amber-950">
+            Troqueladora
+            <select
+              className="h-11 w-full max-w-md rounded-md border-2 border-amber-500 bg-white px-3 text-sm font-medium text-slate-900"
+              value={claimMaquinaId}
+              onChange={(e) => setClaimMaquinaId(e.target.value)}
+              disabled={saving || maquinasTroquel.length === 0}
+            >
+              <option value="">— Selecciona máquina —</option>
+              {maquinasTroquel.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      ) : null}
 
       {!canEdit ? (
         <>
@@ -3943,27 +4020,6 @@ function ExecutionCard({
           </p>
         )}
         <div className="flex flex-wrap items-center gap-1.5">
-          {needsTroquelClaim && isPendingStart ? (
-            <label className="flex items-center gap-1.5 text-[11px] text-slate-700">
-              <span className="font-semibold">Claim</span>
-              <select
-                className="h-8 rounded-md border border-amber-300 bg-amber-50 px-2 text-xs"
-                value={claimMaquinaId}
-                onChange={(e) => setClaimMaquinaId(e.target.value)}
-                disabled={saving || maquinasTroquel.length === 0}
-              >
-                {maquinasTroquel.length === 0 ? (
-                  <option value="">Sin máquinas troquel</option>
-                ) : (
-                  maquinasTroquel.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.nombre}
-                    </option>
-                  ))
-                )}
-              </select>
-            </label>
-          ) : null}
           {canEdit ? (
             <Button
               type="button"
@@ -3995,7 +4051,16 @@ function ExecutionCard({
               size="sm"
               className="bg-emerald-700 text-white hover:bg-emerald-800"
               disabled={saving || (needsTroquelClaim && !claimMaquinaId)}
+              title={
+                needsTroquelClaim && !claimMaquinaId
+                  ? "Elige troqueladora arriba (claim)"
+                  : undefined
+              }
               onClick={() => {
+                if (needsTroquelClaim && !claimMaquinaId) {
+                  toast.error("Elige troqueladora (claim) antes de iniciar.");
+                  return;
+                }
                 const patch = buildCommonFieldsPatch();
                 if (needsTroquelClaim && claimMaquinaId) {
                   patch.maquina_id = claimMaquinaId;
@@ -4019,7 +4084,7 @@ function ExecutionCard({
               <Truck className="mr-1 size-4" /> Imprimir fuera
             </Button>
           ) : null}
-          {isPendingStart && !isContenedorVirtual ? (
+          {isPendingStart && !isContenedorVirtual && row.mesaTrabajoId ? (
             <Button
               type="button"
               size="sm"
@@ -4029,6 +4094,22 @@ function ExecutionCard({
               onClick={onDevolverAlPool}
             >
               <Undo2 className="mr-1 size-4" /> Devolver al Pool
+            </Button>
+          ) : null}
+          {!isContenedorVirtual &&
+          isEjecucionLigeraSinMesa &&
+          (isPendingStart ||
+            row.estadoEjecucion === "en_curso" ||
+            row.estadoEjecucion === "pausada") ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="border-amber-400 text-amber-950 hover:bg-amber-50"
+              disabled={saving}
+              onClick={onAnularEjecucionLigera}
+            >
+              <Undo2 className="mr-1 size-4" /> Anular (volver a Contenedor)
             </Button>
           ) : null}
           {row.estadoEjecucion === "pausada" ? (
