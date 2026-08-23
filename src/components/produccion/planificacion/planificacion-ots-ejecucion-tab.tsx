@@ -22,6 +22,13 @@ import type { Json } from "@/types/database";
 
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Card,
   CardContent,
   CardDescription,
@@ -1234,6 +1241,19 @@ function tiempoColaLabel(
   return base;
 }
 
+/** Claim obligatorio (multi-máquina) antes de Iniciar desde contenedor. */
+function ejecucionNeedsClaim(row: MesaEjecucion): boolean {
+  if (row.origenContenedorTroquel || isContenedorTroquelVirtualId(row.id)) {
+    return true;
+  }
+  const seccionKind =
+    row.origenContenedorSeccion ??
+    parseContenedorSeccionVirtualId(row.id)?.kind ??
+    null;
+  if (!seccionKind) return false;
+  return Boolean(defContenedorSeccion(seccionKind)?.claim);
+}
+
 export function PlanificacionOtsEjecucionTab({
   tabletMode = false,
 }: {
@@ -1267,9 +1287,11 @@ export function PlanificacionOtsEjecucionTab({
   const [soloEjecutableCtp, setSoloEjecutableCtp] = useState(() =>
     readLocalFlag(STORAGE_EJECUCION_SOLO_EJECUTABLE_CTP, true),
   );
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [workScreenId, setWorkScreenId] = useState<string | null>(null);
+  const [workScreenIntent, setWorkScreenIntent] = useState<
+    null | "pause" | "cerrar"
+  >(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
-  const hasAutoExpandedRef = useRef(false);
   const catalogosRef = useRef<CatalogosEjecucion | null>(null);
   const roleRef = useRef<string | null>(null);
   const roleLoadedRef = useRef(false);
@@ -2421,18 +2443,11 @@ export function PlanificacionOtsEjecucionTab({
   }, [rows]);
 
   useEffect(() => {
-    if (loading) return;
-    if (expandedId != null && colaRows.some((r) => r.id === expandedId)) return;
-    const firstEnCurso = colaRows.find((r) => r.estadoEjecucion === "en_curso");
-    if (expandedId != null) {
-      setExpandedId(firstEnCurso?.id ?? null);
-      return;
-    }
-    if (!hasAutoExpandedRef.current && colaRows.length > 0) {
-      hasAutoExpandedRef.current = true;
-      setExpandedId(firstEnCurso?.id ?? null);
-    }
-  }, [loading, colaRows, expandedId]);
+    if (loading || workScreenId == null) return;
+    if (colaRows.some((r) => r.id === workScreenId)) return;
+    setWorkScreenId(null);
+    setWorkScreenIntent(null);
+  }, [loading, colaRows, workScreenId]);
 
   const patchExecution = useCallback(
     async (row: MesaEjecucion, patch: Record<string, unknown>, datosProcesoUpdate?: DatosProcesoGenerico | null) => {
@@ -2583,7 +2598,7 @@ export function PlanificacionOtsEjecucionTab({
             if (dpErr) throw dpErr;
           }
           toast.success(`OT ${row.ot} iniciada desde contenedor CTP (sin mesa).`);
-          setExpandedId(execId);
+          setWorkScreenId(execId);
           await loadData();
           return;
         }
@@ -2632,7 +2647,7 @@ export function PlanificacionOtsEjecucionTab({
           toast.success(
             `OT ${row.ot} iniciada en ${maqNombre} (contenedor Troquel, sin mesa).`,
           );
-          setExpandedId(execId);
+          setWorkScreenId(execId);
           await loadData();
           return;
         }
@@ -2689,7 +2704,7 @@ export function PlanificacionOtsEjecucionTab({
           toast.success(
             `OT ${row.ot} iniciada${def.claim ? ` en ${maqNombre}` : ""} (${def.labelBadge}, sin mesa).`,
           );
-          setExpandedId(execId);
+          setWorkScreenId(execId);
           await loadData();
           return;
         }
@@ -2983,7 +2998,8 @@ export function PlanificacionOtsEjecucionTab({
           <div>
             <CardTitle className="text-lg text-[#002147]">OTs en ejecución</CardTitle>
             <CardDescription>
-              Toca una OT para abrir el parte. En curso queda abierta al entrar. Terminadas, ocultas salvo filtro.
+              Botones rápidos en la línea. Toca la OT o «Parte» para abrir la pantalla de trabajo.
+              Terminadas, ocultas salvo filtro.
             </CardDescription>
           </div>
           <div className="flex gap-1.5">
@@ -3113,7 +3129,6 @@ export function PlanificacionOtsEjecucionTab({
         {colaRows.length > 0 ? (
           <ul className="space-y-2">
             {colaRows.map((row) => {
-              const expanded = expandedId === row.id;
               const pauses = pausesByExecutionId[row.id] ?? [];
               const despacho = despachoByOt[row.ot] ?? null;
               const procesoNombre =
@@ -3121,6 +3136,205 @@ export function PlanificacionOtsEjecucionTab({
                   ? (getCamposConfigByProcesoId(row.procesoId)?.procesoNombre ?? null)
                   : null;
               const tiempo = tiempoColaLabel(row, pauses, new Date(nowTick));
+              const needsClaim = ejecucionNeedsClaim(row);
+              const isPending = row.estadoEjecucion === "pendiente_inicio";
+              const isEnCurso = row.estadoEjecucion === "en_curso";
+              const isPausada = row.estadoEjecucion === "pausada";
+              const canCerrar =
+                row.estadoEjecucion !== "finalizada" &&
+                row.estadoEjecucion !== "cancelada" &&
+                !isPending;
+              const saving = savingId === row.id;
+              const openWork = (intent: null | "pause" | "cerrar" = null) => {
+                setWorkScreenIntent(intent);
+                setWorkScreenId(row.id);
+              };
+
+              return (
+                <li
+                  key={row.id}
+                  className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xs"
+                >
+                  <div
+                    className={cn(
+                      "flex w-full min-h-16 flex-wrap items-center gap-2 border-l-4 px-3 py-2.5 sm:flex-nowrap sm:gap-3",
+                      estadoColaRowClass(row.estadoEjecucion),
+                      workScreenId === row.id && "ring-1 ring-inset ring-[#002147]/20",
+                    )}
+                  >
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                      onClick={() => openWork(null)}
+                    >
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                          estadoColaClass(row.estadoEjecucion),
+                        )}
+                      >
+                        {estadoLabel(row.estadoEjecucion)}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-mono text-base font-bold tabular-nums text-[#002147]">
+                          OT {row.ot}
+                          {row.origenContenedorCtp ? (
+                            <span className="ml-1.5 rounded bg-sky-100 px-1.5 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wide text-sky-900">
+                              Contenedor CTP
+                            </span>
+                          ) : null}
+                          {row.origenContenedorTroquel ? (
+                            <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wide text-amber-950">
+                              Contenedor Troquel
+                            </span>
+                          ) : null}
+                          {row.origenContenedorSeccion ? (
+                            <span className="ml-1.5 rounded bg-violet-100 px-1.5 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wide text-violet-950">
+                              {CONTENEDOR_SECCION_BADGE[row.origenContenedorSeccion]}
+                            </span>
+                          ) : null}
+                          {otMetaByOt[row.ot]?.formaDescripcion ? (
+                            <span className="ml-1.5 font-sans text-xs font-normal text-slate-600">
+                              · {otMetaByOt[row.ot]?.formaDescripcion}
+                            </span>
+                          ) : null}
+                        </p>
+                        <p className="truncate text-sm text-slate-700">
+                          {[despacho?.cliente, despacho?.titulo].filter(Boolean).join(" · ") ||
+                            "Sin cliente / trabajo"}
+                        </p>
+                        <p className="truncate text-xs text-slate-500">
+                          {[procesoNombre, row.maquinaNombre].filter(Boolean).join(" · ")}
+                        </p>
+                      </div>
+                      <span className="hidden shrink-0 text-right text-xs font-semibold tabular-nums text-slate-700 sm:inline">
+                        {tiempo}
+                      </span>
+                    </button>
+
+                    <div className="flex w-full shrink-0 flex-wrap items-center justify-end gap-1.5 sm:w-auto">
+                      <span className="mr-auto text-xs font-semibold tabular-nums text-slate-700 sm:hidden">
+                        {tiempo}
+                      </span>
+                      {isPending ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-8 bg-emerald-700 px-2.5 text-white hover:bg-emerald-800"
+                          disabled={saving}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (needsClaim) {
+                              openWork(null);
+                              toast.message("Elige máquina (claim) en la pantalla y pulsa Iniciar.");
+                              return;
+                            }
+                            void beginExecution(row, {});
+                          }}
+                        >
+                          {saving ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <Play className="size-3.5" />
+                          )}
+                          <span className="ml-1">Iniciar</span>
+                        </Button>
+                      ) : null}
+                      {isEnCurso ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 px-2.5"
+                          disabled={saving}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openWork("pause");
+                          }}
+                        >
+                          <Pause className="size-3.5" />
+                          <span className="ml-1">Pausar</span>
+                        </Button>
+                      ) : null}
+                      {isPausada ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 px-2.5"
+                          disabled={saving}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void resumeExecution(row, pauses);
+                          }}
+                        >
+                          <Play className="size-3.5" />
+                          <span className="ml-1">Reanudar</span>
+                        </Button>
+                      ) : null}
+                      {canCerrar ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-8 bg-[#002147] px-2.5 text-white hover:bg-[#001735]"
+                          disabled={saving}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openWork("cerrar");
+                          }}
+                        >
+                          <CheckCircle2 className="size-3.5" />
+                          <span className="ml-1">Cerrar</span>
+                        </Button>
+                      ) : null}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 px-2 text-slate-600"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openWork(null);
+                        }}
+                      >
+                        Parte
+                      </Button>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+
+        <Dialog
+          open={workScreenId != null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setWorkScreenId(null);
+              setWorkScreenIntent(null);
+            }
+          }}
+        >
+          <DialogContent
+            className="flex max-h-[min(94vh,960px)] w-[calc(100%-1rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
+            showCloseButton
+          >
+            {(() => {
+              const row = colaRows.find((r) => r.id === workScreenId);
+              if (!row) {
+                return (
+                  <div className="p-6 text-sm text-slate-600">
+                    Esta OT ya no está en la lista activa.
+                  </div>
+                );
+              }
+              const pauses = pausesByExecutionId[row.id] ?? [];
+              const despacho = despachoByOt[row.ot] ?? null;
+              const procesoNombre =
+                row.procesoId != null
+                  ? (getCamposConfigByProcesoId(row.procesoId)?.procesoNombre ?? null)
+                  : null;
               const desviacion =
                 row.procesoId !== PROCESO_CTP_ID &&
                 row.horasReales != null &&
@@ -3128,112 +3342,70 @@ export function PlanificacionOtsEjecucionTab({
                   ? row.horasReales - row.horasPlanificadasSnapshot
                   : null;
               return (
-                <li key={row.id} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xs">
-                  <button
-                    type="button"
-                    aria-expanded={expanded}
-                    onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-                    className={cn(
-                      "flex w-full min-h-16 items-center gap-3 border-l-4 px-3 py-2.5 text-left",
-                      estadoColaRowClass(row.estadoEjecucion),
-                      expanded && "ring-1 ring-inset ring-[#002147]/20",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold",
-                        estadoColaClass(row.estadoEjecucion),
-                      )}
-                    >
-                      {estadoLabel(row.estadoEjecucion)}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-mono text-base font-bold tabular-nums text-[#002147]">
-                        OT {row.ot}
-                        {row.origenContenedorCtp ? (
-                          <span className="ml-1.5 rounded bg-sky-100 px-1.5 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wide text-sky-900">
-                            Contenedor CTP
-                          </span>
-                        ) : null}
-                        {row.origenContenedorTroquel ? (
-                          <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wide text-amber-950">
-                            Contenedor Troquel
-                          </span>
-                        ) : null}
-                        {row.origenContenedorSeccion ? (
-                          <span className="ml-1.5 rounded bg-violet-100 px-1.5 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wide text-violet-950">
-                            {CONTENEDOR_SECCION_BADGE[row.origenContenedorSeccion]}
-                          </span>
-                        ) : null}
-                        {otMetaByOt[row.ot]?.formaDescripcion ? (
-                          <span className="ml-1.5 font-sans text-xs font-normal text-slate-600">
-                            · {otMetaByOt[row.ot]?.formaDescripcion}
-                          </span>
-                        ) : null}
-                      </p>
-                      <p className="truncate text-sm text-slate-700">
-                        {[despacho?.cliente, despacho?.titulo].filter(Boolean).join(" · ") || "Sin cliente / trabajo"}
-                      </p>
-                      <p className="truncate text-xs text-slate-500">
-                        {[procesoNombre, row.maquinaNombre].filter(Boolean).join(" · ")}
-                      </p>
-                    </div>
-                    <span className="shrink-0 text-right text-xs font-semibold tabular-nums text-slate-700">
-                      {tiempo}
-                    </span>
-                    <ChevronDown
-                      className={cn(
-                        "size-5 shrink-0 text-slate-400 transition-transform",
-                        expanded && "rotate-180",
-                      )}
+                <>
+                  <DialogHeader className="shrink-0 px-4 py-3 sm:px-6">
+                    <DialogTitle>
+                      OT {row.ot}
+                      {procesoNombre ? ` · ${procesoNombre}` : ""}
+                    </DialogTitle>
+                    <DialogDescription>
+                      {[despacho?.cliente, despacho?.titulo, row.maquinaNombre]
+                        .filter(Boolean)
+                        .join(" · ") || "Parte de ejecución"}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4 sm:px-5">
+                    <ExecutionCard
+                      key={`${row.id}-${row.updatedAt}-${workScreenIntent ?? "none"}`}
+                      row={row}
+                      despacho={despacho}
+                      otMeta={otMetaByOt[row.ot] ?? null}
+                      hijaComponentes={hijaComponentesByOt[row.ot] ?? []}
+                      pauses={pauses}
+                      motivosPausa={motivosPausa}
+                      cajasEmbalaje={cajasEmbalaje}
+                      tipoEngomadoOptions={tipoEngomadoOptions}
+                      margenesSobreproduccion={margenesSobreproduccion}
+                      desviacion={desviacion}
+                      saving={savingId === row.id}
+                      maquinasTroquel={maquinasTroquel}
+                      maquinasClaimSeccion={maquinasClaimSeccion}
+                      selectedMaquinaFilter={selectedMaquina}
+                      autoOpenPausa={workScreenIntent === "pause"}
+                      autoOpenCerrar={workScreenIntent === "cerrar"}
+                      pasosOt={
+                        row.otId
+                          ? (pasosItinerarioPorOtId.get(row.otId) ?? [])
+                          : []
+                      }
+                      pasosItinerario={
+                        row.otId
+                          ? pasosItinerarioParaConsumo(
+                              pasosItinerarioPorOtId.get(row.otId) ?? [],
+                            )
+                          : []
+                      }
+                      onPatch={(patch, dp) => void patchExecution(row, patch, dp)}
+                      onBegin={(patch, dp) => void beginExecution(row, patch, dp)}
+                      onDevolverAlPool={() => void devolverEjecucionAlPool(row)}
+                      onAnularEjecucionLigera={() => void anularEjecucionLigera(row)}
+                      onImprimirFuera={() => void imprimirFueraDesdeEjecucion(row)}
+                      onPause={(motivo, patch, dp) =>
+                        void pauseExecution(row, motivo, patch, dp)
+                      }
+                      onResume={(pausesNext, patch, dp) =>
+                        void resumeExecution(row, pausesNext, patch, dp)
+                      }
+                      onOpenHojaRuta={() => setHojaRutaOt(row.ot)}
+                      adminProfile={adminProfile}
+                      onAdminSuccess={() => void loadData()}
                     />
-                  </button>
-                  {expanded ? (
-                    <div className="border-t border-slate-200 p-2">
-                      <ExecutionCard
-                        key={`${row.id}-${row.updatedAt}`}
-                        row={row}
-                        despacho={despacho}
-                        otMeta={otMetaByOt[row.ot] ?? null}
-                        hijaComponentes={hijaComponentesByOt[row.ot] ?? []}
-                        pauses={pauses}
-                        motivosPausa={motivosPausa}
-                        cajasEmbalaje={cajasEmbalaje}
-                        tipoEngomadoOptions={tipoEngomadoOptions}
-                        margenesSobreproduccion={margenesSobreproduccion}
-                        desviacion={desviacion}
-                        saving={savingId === row.id}
-                        maquinasTroquel={maquinasTroquel}
-                        maquinasClaimSeccion={maquinasClaimSeccion}
-                        selectedMaquinaFilter={selectedMaquina}
-                        pasosOt={
-                          row.otId
-                            ? (pasosItinerarioPorOtId.get(row.otId) ?? [])
-                            : []
-                        }
-                        pasosItinerario={
-                          row.otId
-                            ? pasosItinerarioParaConsumo(pasosItinerarioPorOtId.get(row.otId) ?? [])
-                            : []
-                        }
-                        onPatch={(patch, dp) => void patchExecution(row, patch, dp)}
-                        onBegin={(patch, dp) => void beginExecution(row, patch, dp)}
-                        onDevolverAlPool={() => void devolverEjecucionAlPool(row)}
-                        onAnularEjecucionLigera={() => void anularEjecucionLigera(row)}
-                        onImprimirFuera={() => void imprimirFueraDesdeEjecucion(row)}
-                        onPause={(motivo, patch, dp) => void pauseExecution(row, motivo, patch, dp)}
-                        onResume={(pausesNext, patch, dp) => void resumeExecution(row, pausesNext, patch, dp)}
-                        onOpenHojaRuta={() => setHojaRutaOt(row.ot)}
-                        adminProfile={adminProfile}
-                        onAdminSuccess={() => void loadData()}
-                      />
-                    </div>
-                  ) : null}
-                </li>
+                  </div>
+                </>
               );
-            })}
-          </ul>
-        ) : null}
+            })()}
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
     </>
@@ -3255,6 +3427,8 @@ function ExecutionCard({
   maquinasTroquel,
   maquinasClaimSeccion,
   selectedMaquinaFilter,
+  autoOpenPausa = false,
+  autoOpenCerrar = false,
   pasosOt,
   pasosItinerario,
   onPatch,
@@ -3284,6 +3458,8 @@ function ExecutionCard({
     Record<ContenedorSeccionKind, ContenedorSeccionMaquina[]>
   >;
   selectedMaquinaFilter: string;
+  autoOpenPausa?: boolean;
+  autoOpenCerrar?: boolean;
   pasosOt: PasoItinerarioFormato[];
   pasosItinerario: PasoItinerarioConsumo[];
   onPatch: (patch: Record<string, unknown>, datosProcesoUpdate?: DatosProcesoGenerico | null) => void;
@@ -3360,7 +3536,7 @@ function ExecutionCard({
   const [accion, setAccion] = useState(row.accionCorrectiva ?? "");
   const [maquinista, setMaquinista] = useState(row.maquinista ?? "");
   const [observaciones, setObservaciones] = useState(row.observaciones ?? "");
-  const [pausePickerOpen, setPausePickerOpen] = useState(false);
+  const [pausePickerOpen, setPausePickerOpen] = useState(autoOpenPausa);
   const [selectedMotivoId, setSelectedMotivoId] = useState("");
   const [datosProcesoOpen, setDatosProcesoOpen] = useState(false);
   const motivosPausaDisponibles = useMemo(
@@ -3658,6 +3834,13 @@ function ExecutionCard({
     setDatosProcesoOpen(true);
     setCerrarProcesoOpen(true);
   }, [row.inicioRealAt, row.procesoId, row.minutosPausadaAcum, pauses, datosProcesoLocal]);
+
+  const autoCerrarFiredRef = useRef(false);
+  useEffect(() => {
+    if (!autoOpenCerrar || autoCerrarFiredRef.current) return;
+    autoCerrarFiredRef.current = true;
+    openCerrarProceso();
+  }, [autoOpenCerrar, openCerrarProceso]);
 
   const confirmCerrarProceso = useCallback(() => {
     const datosFinal = { ...datosProcesoLocal, ...cerrarDatosDraft };

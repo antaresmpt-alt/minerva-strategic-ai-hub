@@ -318,7 +318,7 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 - [ ] Spike bandeja computada
 - [x] **Spike contenedor CTP** (`feature/bloque11-contenedor-ctp-spike`) — ver §17
 - [ ] **Spike persistencia detalle del día (§6.5) — obligatorio antes de fase 3**
-- [ ] Ejecución modal
+- [x] Ejecución modal (pantalla de trabajo + botones Iniciar/Pausar/Cerrar en línea gorda · 23 ago)
 - [ ] Detalle del día (Carlos) — **solo tras spike persistencia**
 - [ ] LEGACY tab
 - [x] Spike troquel + claim (`contenedor-troquel.ts` · ver §18)
