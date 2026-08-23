@@ -1548,22 +1548,21 @@ export function CalendarioProduccionPage() {
   }, [showSaturday]);
 
   return (
-    <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
-      {bandejaOpen ? (
-        <CalendarioBandejaPanel
-          ambito={ambitoActivo}
-          canEdit={canEditActivo}
-          mostrarPruebas={mostrarPruebas}
-          refreshKey={bandejaRefreshKey}
-          onColocada={() => setBandejaRefreshKey((k) => k + 1)}
-          onOpenOt={(ot) => void openDetalle(ot)}
-          onOpenHojaRuta={(ot) => {
-            setHojaRutaOt(ot);
-            setHojaRutaOpen(true);
-          }}
-          onColocarEnFecha={colocarOtEnCalendario}
-        />
-      ) : null}
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
+      <CalendarioBandejaPanel
+        className={cn(!bandejaOpen && "hidden")}
+        ambito={ambitoActivo}
+        canEdit={canEditActivo}
+        mostrarPruebas={mostrarPruebas}
+        refreshKey={bandejaRefreshKey}
+        onColocada={() => setBandejaRefreshKey((k) => k + 1)}
+        onOpenOt={(ot) => void openDetalle(ot)}
+        onOpenHojaRuta={(ot) => {
+          setHojaRutaOt(ot);
+          setHojaRutaOpen(true);
+        }}
+        onColocarEnFecha={colocarOtEnCalendario}
+      />
 
       <div className="min-w-0 flex-1 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">

@@ -1,9 +1,9 @@
 # Bloque 11 — Calendario, bandeja, contenedor y mesa (decisión de diseño)
 
-> **Fecha:** 21 ago 2026 · **Rev. completa:** **22 ago 2026 noche** (diseño + spike contenedor + smoke planta)
-> **Estado:** diseño **cerrado** · spike contenedor **smoke OK** (rama `feature/bloque11-contenedor-ctp-spike`) · merge a `main` pendiente OK Manel/planta
+> **Fecha:** 21 ago 2026 · **Rev. completa:** **23 ago 2026 mediodía** (diseño + contenedor smoke + **bandeja 1b smoke OK**)
+> **Estado:** diseño **cerrado** · spike contenedor **smoke OK** · **bandeja computada smoke OK** (rama `feature/bloque11-contenedor-ctp-spike`) · merge a `main` pendiente OK Manel/planta
 > **Complementa:** `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` · `.MANUALES/MINERVA_BLOQUE11_ANALISIS_CONTENEDOR_VS_MESA.md` · `.MANUALES/MINERVA_BLOQUE11_BRIEF_JORDI_CARLOS.md`
-> **Código 22 ago:** botón «Enviar a cola» retirado del calendario · motor contenedor CTP→…→I/D en spike · fix horas línea gorda (§22)
+> **Código 23 ago:** bandeja §5/§23 + multi-cartela + pantalla trabajo · motor contenedor CTP→…→I/D · fix horas
 
 ---
 
@@ -315,7 +315,7 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 - [x] Documentar modelo completo
 - [x] Retirar botón «Enviar a cola» del calendario
 - [ ] Validar brief Jordi/Carlos
-- [ ] Spike bandeja computada
+- [x] **Spike bandeja computada** (§5 · smoke planta 23 ago · ver §23)
 - [x] **Spike contenedor CTP** (`feature/bloque11-contenedor-ctp-spike`) — ver §17
 - [ ] **Spike persistencia detalle del día (§6.5) — obligatorio antes de fase 3**
 - [x] Ejecución modal (pantalla de trabajo + botones Iniciar/Pausar/Cerrar en línea gorda · 23 ago)
@@ -332,7 +332,8 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 | Pieza | Archivo | Notas |
 |-------|---------|-------|
 | Itinerario | `prod-ot-itinerario-client.ts` | Paso 1 disponible |
-| Calendario | `calendario-produccion-page.tsx` | Sin botón cola |
+| Calendario | `calendario-produccion-page.tsx` | Sin botón cola · + bandeja §23 |
+| Bandeja | `calendario-bandeja.ts` · `calendario-bandeja-panel.tsx` | Query + panel §5 |
 | Espejo | `calendario-mesa-espejo.ts` | Lectura |
 | Pasar a mesa | `planificacion-pasar-a-mesa.ts` | LEGACY |
 | Mesa diaria LEGACY | `planificacion-mesa-diaria-tab.tsx` | No modificar camino feliz |
@@ -512,4 +513,37 @@ La UI `tiempoColaLabel` en filas `finalizada` usa `row.horasReales` → con el f
 
 ---
 
-*Manel + Cursor · 22 ago noche — contenedor spike smoke OK + fix horas*
+## 23. Spike bandeja computada — smoke OK (23 ago 2026 mediodía)
+
+**Rama:** `feature/bloque11-contenedor-ctp-spike`  
+**Sesión:** `SESION_23AGO2026_BLOQUE11_BANDEJA_SMOKE.md`
+
+### Qué se entregó (fase 1b)
+
+| Pieza | Detalle |
+|-------|---------|
+| Query | `calendario-bandeja.ts` — despachadas sin pastilla del ámbito; filtro cadena T/E; tests |
+| UI | `calendario-bandeja-panel.tsx` — panel izq., colocar por fecha, HR, semáforo, toggle |
+| Wiring | `calendario-produccion-page.tsx` — layout + insert pastilla |
+
+### Smoke planta (Manel)
+
+- I/D/T/E OK; colocar/quitar; cadena «Ver todas»; 99910 Engomado → **Hecha** navy en calendario.
+- Manipulados = ámbito **E** (diseño, no bug).
+- Gemma: PDF/listado **I** de Carlos = previsión semana CTP (sin calendario CTP propio).
+
+### Pulidos mismo día
+
+Altura + scroll interno · icono mapa HR · toggle sin remount · subtítulo E = engomado+manipulados.
+
+### No bloquean
+
+«Solo pendientes» = checkbox Carlos, no Hecho HR · PDF usa checks Ver (overlay) · PDF día solo en modal del día.
+
+### Siguiente
+
+Spike persistencia detalle del día (§6.5) → fase 3 detalle día Carlos.
+
+---
+
+*Manel + Cursor · 22 ago noche contenedor · 23 ago mediodía bandeja 1b smoke OK*

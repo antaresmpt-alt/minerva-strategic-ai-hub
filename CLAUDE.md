@@ -7,8 +7,9 @@ El maestro indexa sesiones y briefs. Abrir MINERVA_CONTEXTO_TECNICO.md o SESION_
 cuando el maestro lo cite; no hace falta pegarlos todos en cada chat.
 
 Sesión activa Bloque 11 → .MANUALES/MINERVA_BLOQUE11_DECISION_CALENDARIO_CONTENEDOR.md
-  (22 ago noche: spike contenedor smoke OK §17–22 + fix horas; merge main pendiente).
-Smoke noche → SESION_22AGO2026_BLOQUE11_CONTENEDOR_SMOKE.md
+  (23 ago: bandeja 1b smoke OK §23 + contenedor §17–22; merge main pendiente).
+Smoke bandeja → SESION_23AGO2026_BLOQUE11_BANDEJA_SMOKE.md
+Smoke contenedor → SESION_22AGO2026_BLOQUE11_CONTENEDOR_SMOKE.md
 Handoff previo 20 ago NOCHE → SESION_20AGO2026_HANDOFF_NOCHE_CLAUDE.md
 Detalle mañana smoke: SESION_20AGO2026_BACKLOG_P0_STOP.md
 Detalle 9.8.3 hooks: SESION_20AGO2026_BLOQUE9_8_3_VALIDACION_HOOK.md

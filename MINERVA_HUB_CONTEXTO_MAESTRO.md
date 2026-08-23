@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: **22 ago 2026 noche** (**Bloque 11** — spike contenedor **smoke OK** CTP→…→I/D + fix horas línea gorda · merge a `main` pendiente).
+> Última actualización: **23 ago 2026 mediodía** (**Bloque 11** — contenedor smoke OK + **bandeja 1b smoke OK** · multi-cartela · merge `main` pendiente).
 
 ---
 
@@ -18,7 +18,7 @@
    - `MINERVA_BLOQUE9_REASIGNACION_STOP.md` (9.8: liberar/reasignar/recomprar; OT **98019** + **98020** validadas)
    - `MINERVA_BLOQUE10_PRESUPUESTOS.md` (futuro)
    - `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` (brainstorming)
-   - `.MANUALES/MINERVA_BLOQUE11_DECISION_CALENDARIO_CONTENEDOR.md` (**diseño + spike smoke OK 22 ago noche** · §17–22 contenedor · bandeja/detalle-día pendientes)
+   - `.MANUALES/MINERVA_BLOQUE11_DECISION_CALENDARIO_CONTENEDOR.md` (**diseño + contenedor §17–22 + bandeja §23 smoke OK 23 ago** · detalle-día pendiente)
    - `SESION_22AGO2026_BLOQUE11_CONTENEDOR_SMOKE.md` (celebración smoke + backlog mañana)
    - `.MANUALES/MINERVA_BLOQUE11_ANALISIS_CONTENEDOR_VS_MESA.md` (validación Odoo/industria)
    - `.MANUALES/MINERVA_BLOQUE11_BRIEF_JORDI_CARLOS.md` (media página planta)
@@ -42,8 +42,9 @@
 | `MINERVA_BLOQUE12_ROLES_PERMISOS_NAVEGACION.md` | Brief implementación: landing operario vs gestor. |
 | `MINERVA_BLOQUE10_PRESUPUESTOS.md` | Bloque futuro: presupuestos, formas, versión real al copiar. |
 | `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` | Brainstorming Bloque 11 (calendario master). |
-| `.MANUALES/MINERVA_BLOQUE11_DECISION_CALENDARIO_CONTENEDOR.md` | Diseño cerrado + **spike contenedor smoke OK** (§17–22) · bandeja/detalle-día pendientes · LEGACY. |
-| `SESION_22AGO2026_BLOQUE11_CONTENEDOR_SMOKE.md` | Smoke noche 22 ago: 35900 Digital, 35904 Offset, fix horas, multi-cartela mañana. |
+| `.MANUALES/MINERVA_BLOQUE11_DECISION_CALENDARIO_CONTENEDOR.md` | Diseño cerrado + contenedor smoke + **bandeja 1b smoke OK** (§23) · detalle-día / LEGACY pendientes. |
+| `SESION_22AGO2026_BLOQUE11_CONTENEDOR_SMOKE.md` | Smoke noche 22 ago: 35900 Digital, 35904 Offset, fix horas. |
+| `SESION_23AGO2026_BLOQUE11_BANDEJA_SMOKE.md` | Smoke 23 ago: bandeja I/D/T/E + Hecho HR 99910 + pulidos UI. |
 | `.MANUALES/MINERVA_BLOQUE11_ANALISIS_CONTENEDOR_VS_MESA.md` | Análisis dispatch list / Odoo / SAP; correcciones modelo; piloto CTP+Troquel. |
 | `.MANUALES/MINERVA_BLOQUE11_BRIEF_JORDI_CARLOS.md` | Media página para validar con planta. |
 | `MINERVA_REUNION_HOJA_RUTA_JUEVES.md` | Guía reunión demo 98010 + preguntas §12. |
@@ -319,14 +320,16 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 1. Opcional: merge automático formato en pasos pendientes (9.8.6 fase 2) — solo si planta lo pide
 2. Polish: Histórico Compras / Despachadas / §18.8
 3. Manual usuario reservas/stock (inventario botones listo → Claude)
-4. **Bloque 11** (contenedor spike OK → multi-cartela + bandeja Carlos) · **Bloque 12** (sept)
+4. **Bloque 11** (contenedor + bandeja 1b smoke OK → detalle-día) · **Bloque 12** (sept)
 
 - [x] **Bloque 11 contenedor spike:** smoke planta OK (rama `feature/bloque11-contenedor-ctp-spike`) — merge `main` cuando diga Manel
-- [ ] **Bloque 11 siguiente:** multi-cartela al cerrar · bandeja Carlos · detalle-día · brief Jordi/Carlos · LEGACY
+- [x] **Bloque 11 bandeja 1b:** smoke planta OK 23 ago — `SESION_23AGO2026_BLOQUE11_BANDEJA_SMOKE.md`
+- [ ] **Bloque 11 siguiente:** spike persistencia detalle-día · detalle-día Carlos · brief Jordi/Carlos · LEGACY
 - [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor; tableta = máquina — `MINERVA_BLOQUE12_…` (no abrir ya; default gestor = maestro OTs)
 - [ ] **Bloque 5 puente**: Rita lanza OTs a Hugo (no bloquea paralelo si Hugo sigue a mano)
 
 ### Hecho reciente (jul–ago)
+- [x] **23 ago mediodía:** Bloque 11 — **smoke bandeja + calendario OK** (I/D/T/E, cadena, 99910 Hecho HR, PDF) + pulidos UI — `SESION_23AGO2026_BLOQUE11_BANDEJA_SMOKE.md` · decisión §23
 - [x] **22 ago noche:** Bloque 11 — **smoke contenedor OK** (35900 Digital claim, 35904 Offset, itinerario, cola SpeedMaster) + **fix horas línea gorda** — `SESION_22AGO2026_BLOQUE11_CONTENEDOR_SMOKE.md` · decisión §17–22
 - [x] **22 ago tarde:** Bloque 11 — **diseño arquitectura cerrado** (bandeja computada, contenedor, detalle-día, LEGACY) + botón PR1 **retirado** del calendario — `.MANUALES/MINERVA_BLOQUE11_DECISION_…`
 - [x] **22 ago:** Bloque 11 — brief Jordi/Carlos + análisis Odoo/contenedor + veredicto contenedor
@@ -405,7 +408,7 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 
 19. **Cartelas impresión (18 jul 2026)**: **1 copia** por palet (antes 2). Confirmado Emma/Ramón.
 
-20. **Bloque 11 — Calendario + contenedor (28 jul · diseño 22 ago · smoke contenedor 22 ago noche ✅):** **Despacho ≈ launch.** **Contenedor** desde pasos `disponible` (CTP, Guillotina, Desbroce, Manipulados, Engomado claim, Offset, Digital claim) — spike smoke OK en rama `feature/bloque11-contenedor-ctp-spike` (merge `main` pendiente). **Calendario I/D/T/E** ordena; **bandeja computada** + **detalle del día** = siguiente (archivos nuevos, no ejecuta). LEGACY Pool/Mesa intacto. Doc: `.MANUALES/MINERVA_BLOQUE11_DECISION_…` §17–22 · `SESION_22AGO2026_BLOQUE11_CONTENEDOR_SMOKE.md`.
+20. **Bloque 11 — Calendario + contenedor (28 jul · diseño 22 ago · smoke contenedor 22 ago noche ✅ · bandeja 1b 23 ago ✅):** **Despacho ≈ launch.** **Contenedor** desde pasos `disponible` (CTP→…→I/D) — smoke OK. **Bandeja computada** en calendario (I/D/T/E) — smoke OK 23 ago. **Detalle del día** = siguiente (spike persistencia §6.5). LEGACY Pool/Mesa intacto. Doc: `.MANUALES/MINERVA_BLOQUE11_DECISION_…` §17–23 · `SESION_22AGO2026_BLOQUE11_CONTENEDOR_SMOKE.md` · `SESION_23AGO2026_BLOQUE11_BANDEJA_SMOKE.md`.
 
 21. **Paralelo septiembre (11 ago 2026)**: no smoke fijo 10–20; por tanda de despacho elegir **~3 OTs** y seguir E2E en Minerva. Cierre contenedor MVP: **barco listo cuando todas las hijas terminan** (8.4) ✅. Convergencia física = 8.5 documentada, sin código aún.
 
