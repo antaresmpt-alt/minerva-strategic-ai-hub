@@ -441,6 +441,10 @@ export function CalendarioProduccionPage() {
   } | null>(null);
   const [bandejaOpen, setBandejaOpen] = useState(true);
   const [bandejaRefreshKey, setBandejaRefreshKey] = useState(0);
+  const [bandejaMatchHeight, setBandejaMatchHeight] = useState<number | null>(
+    null,
+  );
+  const calendarGridRef = useRef<HTMLDivElement>(null);
 
   const canEditActivo = canEditCalendarioAmbito(userRole, ambitoActivo);
 
@@ -713,6 +717,38 @@ export function CalendarioProduccionPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  /** Desktop: bandeja = altura del grid (tope viewport). No hincha el calendario. */
+  useEffect(() => {
+    if (!bandejaOpen || loading) {
+      setBandejaMatchHeight(null);
+      return;
+    }
+    const grid = calendarGridRef.current;
+    if (!grid) return;
+
+    const sync = () => {
+      if (typeof window === "undefined") return;
+      if (!window.matchMedia("(min-width: 1024px)").matches) {
+        setBandejaMatchHeight(null);
+        return;
+      }
+      const h = Math.round(grid.getBoundingClientRect().height);
+      const max = Math.max(280, window.innerHeight - 96);
+      setBandejaMatchHeight(h > 0 ? Math.min(h, max) : null);
+    };
+
+    const ro = new ResizeObserver(() => sync());
+    ro.observe(grid);
+    window.addEventListener("resize", sync);
+    // Tras pintar el grid (loading → false).
+    const t = window.setTimeout(sync, 0);
+    return () => {
+      window.clearTimeout(t);
+      ro.disconnect();
+      window.removeEventListener("resize", sync);
+    };
+  }, [bandejaOpen, loading, vista, showSaturday, entradasByDay, notasByDay, cols]);
 
   const setVistaPersist = (v: VistaCalendario) => {
     setVista(v);
@@ -1548,23 +1584,7 @@ export function CalendarioProduccionPage() {
   }, [showSaturday]);
 
   return (
-    <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
-      <CalendarioBandejaPanel
-        className={cn(!bandejaOpen && "hidden")}
-        ambito={ambitoActivo}
-        canEdit={canEditActivo}
-        mostrarPruebas={mostrarPruebas}
-        refreshKey={bandejaRefreshKey}
-        onColocada={() => setBandejaRefreshKey((k) => k + 1)}
-        onOpenOt={(ot) => void openDetalle(ot)}
-        onOpenHojaRuta={(ot) => {
-          setHojaRutaOt(ot);
-          setHojaRutaOpen(true);
-        }}
-        onColocarEnFecha={colocarOtEnCalendario}
-      />
-
-      <div className="min-w-0 flex-1 space-y-3">
+    <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-base font-semibold text-[#002147]">
@@ -1876,83 +1896,103 @@ export function CalendarioProduccionPage() {
         </div>
       ) : null}
 
-      {loading ? (
-        <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
-          <Loader2 className="size-4 animate-spin" />
-          Cargando calendario…
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-slate-50/50">
-          <div
-            className="grid min-w-[640px] gap-px bg-slate-200"
-            style={{
-              gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-            }}
-          >
-            {cabecera.map((d) => (
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
+        <CalendarioBandejaPanel
+          className={cn(!bandejaOpen && "hidden")}
+          ambito={ambitoActivo}
+          canEdit={canEditActivo}
+          mostrarPruebas={mostrarPruebas}
+          refreshKey={bandejaRefreshKey}
+          matchHeightPx={bandejaOpen ? bandejaMatchHeight : null}
+          onColocada={() => setBandejaRefreshKey((k) => k + 1)}
+          onOpenOt={(ot) => void openDetalle(ot)}
+          onOpenHojaRuta={(ot) => {
+            setHojaRutaOt(ot);
+            setHojaRutaOpen(true);
+          }}
+          onColocarEnFecha={colocarOtEnCalendario}
+        />
+
+        <div ref={calendarGridRef} className="min-w-0 flex-1">
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
+              <Loader2 className="size-4 animate-spin" />
+              Cargando calendario…
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-slate-50/50">
               <div
-                key={d}
-                className="bg-slate-100 px-2 py-1.5 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-600"
+                className="grid min-w-[640px] gap-px bg-slate-200"
+                style={{
+                  gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+                }}
               >
-                {d}
+                {cabecera.map((d) => (
+                  <div
+                    key={d}
+                    className="bg-slate-100 px-2 py-1.5 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-600"
+                  >
+                    {d}
+                  </div>
+                ))}
+                {vista === "semana"
+                  ? semanaActual.map((celda, ci) =>
+                      celda ? (
+                        <DiaCelda
+                          key={celda.ymd}
+                          dayYmd={celda.ymd}
+                          dayNum={celda.dayNum}
+                          lineas={entradasByDay.get(celda.ymd) ?? []}
+                          notas={notasByDay.get(celda.ymd) ?? []}
+                          onEditDay={() => openDay(celda.ymd)}
+                          onOpenOt={(ot) => void openDetalle(ot)}
+                          onToggleMarcadoHecho={(l) => void toggleMarcadoHecho(l)}
+                          variant="semana"
+                          itinerarioByOt={itinerarioByOt}
+                          espejoByOt={espejoByOt}
+                          duplicatedOtSet={duplicatedOtSet}
+                          ambitoActivo={ambitoActivo}
+                          canEditActivo={canEditActivo}
+                        />
+                      ) : (
+                        <div
+                          key={`empty-w-${ci}`}
+                          className="min-h-[min(70vh,42rem)] bg-slate-100/60"
+                        />
+                      ),
+                    )
+                  : semanasMes.map((semana, si) =>
+                      semana.map((celda, ci) =>
+                        celda ? (
+                          <DiaCelda
+                            key={celda.ymd}
+                            dayYmd={celda.ymd}
+                            dayNum={celda.dayNum}
+                            lineas={entradasByDay.get(celda.ymd) ?? []}
+                            notas={notasByDay.get(celda.ymd) ?? []}
+                            onEditDay={() => openDay(celda.ymd)}
+                            onOpenOt={(ot) => void openDetalle(ot)}
+                            onToggleMarcadoHecho={(l) => void toggleMarcadoHecho(l)}
+                            variant="mes"
+                            itinerarioByOt={itinerarioByOt}
+                            espejoByOt={espejoByOt}
+                            duplicatedOtSet={duplicatedOtSet}
+                            ambitoActivo={ambitoActivo}
+                            canEditActivo={canEditActivo}
+                          />
+                        ) : (
+                          <div
+                            key={`empty-${si}-${ci}`}
+                            className="min-h-[11rem] bg-slate-100/60"
+                          />
+                        ),
+                      ),
+                    )}
               </div>
-            ))}
-            {vista === "semana"
-              ? semanaActual.map((celda, ci) =>
-                  celda ? (
-                    <DiaCelda
-                      key={celda.ymd}
-                      dayYmd={celda.ymd}
-                      dayNum={celda.dayNum}
-                      lineas={entradasByDay.get(celda.ymd) ?? []}
-                      notas={notasByDay.get(celda.ymd) ?? []}
-                      onEditDay={() => openDay(celda.ymd)}
-                      onOpenOt={(ot) => void openDetalle(ot)}
-                      onToggleMarcadoHecho={(l) => void toggleMarcadoHecho(l)}
-                      variant="semana"
-                      itinerarioByOt={itinerarioByOt}
-                      espejoByOt={espejoByOt}
-                      duplicatedOtSet={duplicatedOtSet}
-                      ambitoActivo={ambitoActivo}
-                      canEditActivo={canEditActivo}
-                    />
-                  ) : (
-                    <div
-                      key={`empty-w-${ci}`}
-                      className="min-h-[min(70vh,42rem)] bg-slate-100/60"
-                    />
-                  ),
-                )
-              : semanasMes.map((semana, si) =>
-                  semana.map((celda, ci) =>
-                    celda ? (
-                      <DiaCelda
-                        key={celda.ymd}
-                        dayYmd={celda.ymd}
-                        dayNum={celda.dayNum}
-                        lineas={entradasByDay.get(celda.ymd) ?? []}
-                        notas={notasByDay.get(celda.ymd) ?? []}
-                        onEditDay={() => openDay(celda.ymd)}
-                        onOpenOt={(ot) => void openDetalle(ot)}
-                        onToggleMarcadoHecho={(l) => void toggleMarcadoHecho(l)}
-                        variant="mes"
-                        itinerarioByOt={itinerarioByOt}
-                        espejoByOt={espejoByOt}
-                        duplicatedOtSet={duplicatedOtSet}
-                        ambitoActivo={ambitoActivo}
-                        canEditActivo={canEditActivo}
-                      />
-                    ) : (
-                      <div
-                        key={`empty-${si}-${ci}`}
-                        className="min-h-[11rem] bg-slate-100/60"
-                      />
-                    ),
-                  ),
-                )}
-          </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       <Dialog open={dayOpen} onOpenChange={setDayOpen}>
         <DialogContent className="max-w-lg">
@@ -2422,7 +2462,6 @@ export function CalendarioProduccionPage() {
           setCafePending(null);
         }}
       />
-      </div>
     </div>
   );
 }

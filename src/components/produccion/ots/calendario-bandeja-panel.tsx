@@ -49,6 +49,8 @@ export type CalendarioBandejaPanelProps = {
   /** Insertar pastilla en fecha (reutiliza lógica del calendario). */
   onColocarEnFecha: (otNumero: string, fechaYmd: string) => Promise<boolean>;
   className?: string;
+  /** Desktop: altura alineada al grid del calendario (px). */
+  matchHeightPx?: number | null;
 };
 
 function bandejaAmbitoHint(ambito: CalendarioAmbito): string {
@@ -76,6 +78,7 @@ export function CalendarioBandejaPanel({
   onOpenHojaRuta,
   onColocarEnFecha,
   className,
+  matchHeightPx = null,
 }: CalendarioBandejaPanelProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [loading, setLoading] = useState(true);
@@ -133,12 +136,18 @@ export function CalendarioBandejaPanel({
   return (
     <aside
       className={cn(
-        // Desktop: misma altura que la columna del calendario (items-stretch del padre).
-        // Móvil: tope razonable; el grid va debajo.
         "flex w-[min(100%,17.5rem)] shrink-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm",
-        "max-h-[min(70vh,42rem)] lg:max-h-none lg:min-h-0 lg:self-stretch",
+        // Móvil: tope fijo. Desktop: altura vía matchHeightPx (+ sticky).
+        matchHeightPx == null
+          ? "max-h-[min(70vh,42rem)]"
+          : "lg:sticky lg:top-3 lg:max-h-none",
         className,
       )}
+      style={
+        matchHeightPx != null && matchHeightPx > 0
+          ? { height: matchHeightPx }
+          : undefined
+      }
     >
       <div className="shrink-0 border-b border-slate-100 px-3 py-2.5">
         <h3 className="text-sm font-semibold text-[#002147]">Bandeja</h3>
