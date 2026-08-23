@@ -22,6 +22,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
+import {
+  CalendarioBandejaPanel,
+  CalendarioBandejaToggle,
+} from "@/components/produccion/ots/calendario-bandeja-panel";
 import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
 import { STEP_BADGE_STYLES } from "@/components/produccion/hoja-ruta/hoja-ruta-step-styles";
 import {
@@ -118,6 +122,7 @@ const STORAGE_SHOW_SATURDAY = "cal-prod-show-saturday";
 const STORAGE_VISTA = "cal-prod-vista";
 const STORAGE_AMBITO_VIS = "cal-prod-ambito-vis";
 const STORAGE_MOSTRAR_PRUEBAS = "cal-prod-mostrar-pruebas";
+const STORAGE_BANDEJA = "cal-prod-bandeja-open";
 
 type VistaCalendario = "mes" | "semana";
 
@@ -434,6 +439,8 @@ export function CalendarioProduccionPage() {
     hit: OtSearchHit;
     otherYmd: string;
   } | null>(null);
+  const [bandejaOpen, setBandejaOpen] = useState(true);
+  const [bandejaRefreshKey, setBandejaRefreshKey] = useState(0);
 
   const canEditActivo = canEditCalendarioAmbito(userRole, ambitoActivo);
 
@@ -447,9 +454,23 @@ export function CalendarioProduccionPage() {
         localStorage.getItem(STORAGE_AMBITO_VIS),
       );
       if (vis) setAmbitoVisibility(vis);
+      const bandejaStored = localStorage.getItem(STORAGE_BANDEJA);
+      if (bandejaStored === "0") setBandejaOpen(false);
     } catch {
       /* ignore */
     }
+  }, []);
+
+  const toggleBandeja = useCallback(() => {
+    setBandejaOpen((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(STORAGE_BANDEJA, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
   }, []);
 
   useEffect(() => {
@@ -960,6 +981,108 @@ export function CalendarioProduccionPage() {
     await insertOtToDay(hit);
   };
 
+  /** Bandeja §5 — colocar OT despachada en calendario (sin drag). */
+  const colocarOtEnCalendario = useCallback(
+    async (otNumero: string, fechaYmd: string): Promise<boolean> => {
+      const ot = String(otNumero ?? "").trim();
+      const ymd = String(fechaYmd ?? "").slice(0, 10);
+      if (!ot || !ymd) return false;
+      if (!canEditCalendarioAmbito(userRole, ambitoActivo)) {
+        toast.error(
+          `No puedes colocar OTs en ${labelCalendarioAmbito(ambitoActivo)}.`,
+        );
+        return false;
+      }
+
+      const yaEnDia = rows.some(
+        (r) =>
+          r.fecha.slice(0, 10) === ymd &&
+          String(r.ot_numero ?? "").trim() === ot &&
+          (isCalendarioAmbito(r.ambito) ? r.ambito : "impresion") === ambitoActivo,
+      );
+      if (yaEnDia) {
+        toast.message(
+          `La OT ${ot} ya está en ${fechaDiaLabel(ymd)} (${labelCalendarioAmbito(ambitoActivo)}).`,
+        );
+        return false;
+      }
+
+      const otraFecha = rows.find(
+        (r) =>
+          String(r.ot_numero ?? "").trim() === ot &&
+          r.fecha.slice(0, 10) !== ymd &&
+          (isCalendarioAmbito(r.ambito) ? r.ambito : "impresion") === ambitoActivo,
+      );
+      if (otraFecha) {
+        toast.message(
+          `La OT ${ot} ya está planificada el ${fechaDiaLabel(otraFecha.fecha.slice(0, 10))}. Muévela desde el calendario si quieres cambiarla.`,
+        );
+        return false;
+      }
+
+      setSaving(true);
+      try {
+        const existing = rows.filter(
+          (r) =>
+            r.fecha.slice(0, 10) === ymd &&
+            (isCalendarioAmbito(r.ambito) ? r.ambito : "impresion") === ambitoActivo,
+        );
+        const nextOrden =
+          existing.length === 0
+            ? 0
+            : Math.max(...existing.map((r) => r.orden)) + 1;
+
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        const { error } = await supabase.from(TABLE).insert({
+          fecha: ymd,
+          ot_numero: ot,
+          ambito: ambitoActivo,
+          orden: nextOrden,
+          created_by: user?.id ?? null,
+        });
+        if (error) {
+          if (error.code === "23505") {
+            toast.message(`La OT ${ot} ya está en el calendario (${labelCalendarioAmbito(ambitoActivo)}).`);
+            return false;
+          }
+          throw error;
+        }
+
+        const { data: maestro } = await supabase
+          .from(TABLE_MAESTRO)
+          .select("titulo")
+          .eq("num_pedido", ot)
+          .maybeSingle();
+        if (maestro) {
+          setTituloByOt((prev) => {
+            const next = new Map(prev);
+            next.set(ot, (maestro as { titulo?: string | null }).titulo ?? null);
+            return next;
+          });
+        }
+
+        if (isOtNumeroPrueba(ot) && !mostrarPruebas) {
+          toast.message(
+            `OT ${ot} es de prueba (≥98000). Activa «Mostrar OTs prueba» si no la ves en el grid.`,
+          );
+        }
+
+        await load();
+        setBandejaRefreshKey((k) => k + 1);
+        return true;
+      } catch (e) {
+        toast.error(errorMessageFromUnknown(e, "No se pudo colocar la OT."));
+        return false;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [ambitoActivo, load, mostrarPruebas, rows, supabase, userRole],
+  );
+
   const addNotaToDay = async () => {
     if (!dayYmd) return;
     const texto = notaTexto.trim();
@@ -1425,21 +1548,39 @@ export function CalendarioProduccionPage() {
   }, [showSaturday]);
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
+      {bandejaOpen ? (
+        <CalendarioBandejaPanel
+          ambito={ambitoActivo}
+          canEdit={canEditActivo}
+          mostrarPruebas={mostrarPruebas}
+          refreshKey={bandejaRefreshKey}
+          onColocada={() => setBandejaRefreshKey((k) => k + 1)}
+          onOpenOt={(ot) => void openDetalle(ot)}
+          onOpenHojaRuta={(ot) => {
+            setHojaRutaOt(ot);
+            setHojaRutaOpen(true);
+          }}
+          onColocarEnFecha={colocarOtEnCalendario}
+        />
+      ) : null}
+
+      <div className="min-w-0 flex-1 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-base font-semibold text-[#002147]">
             Calendario Producción
           </h2>
           <p className="text-xs text-slate-600">
-            Mapa mental por ámbito (I/D/T/E). Semáforo = estado del paso en
-            Minerva (no mueve fechas).
+            Mapa mental por ámbito (I/D/T/E). Bandeja = despachadas sin pastilla.
+            Semáforo = estado del paso en Minerva (no mueve fechas).
             {canEditActivo
               ? ` Editando ${labelCalendarioAmbito(ambitoActivo)}.`
               : ` Solo lectura en ${labelCalendarioAmbito(ambitoActivo)}.`}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <CalendarioBandejaToggle open={bandejaOpen} onToggle={toggleBandeja} />
           <label className="flex items-center gap-1.5 text-xs text-slate-700">
             <span className="font-medium">Ámbito</span>
             <select
@@ -2282,6 +2423,7 @@ export function CalendarioProduccionPage() {
           setCafePending(null);
         }}
       />
+      </div>
     </div>
   );
 }
