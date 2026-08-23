@@ -150,10 +150,22 @@ export const CARTELA_DATOS_KEYS = {
   hojasConsumidas: "cartela_hojas_consumidas",
   materialReal: "material_real_cartela",
   paletId: "cartela_palet_id",
+  /** N consumos (estilo Optimus): [{ id_stock, hojas, palet_id?, material_real? }] */
+  consumos: "cartela_consumos",
 } as const;
+
+/** Línea de consumo multi-cartela (datos_proceso + UI). */
+export type CartelaConsumoLineaDatos = {
+  id_stock: number;
+  hojas: number;
+  palet_id?: string | null;
+  material_real?: string | null;
+};
 
 export function datosIncluyenCartela(datos: Record<string, unknown> | null): boolean {
   if (!datos) return false;
+  const multi = readCartelaConsumosRaw(datos);
+  if (multi.some((l) => l.id_stock > 0 && l.hojas > 0)) return true;
   const idRaw = datos[CARTELA_DATOS_KEYS.idStock];
   const idNum =
     typeof idRaw === "number"
@@ -164,6 +176,161 @@ export function datosIncluyenCartela(datos: Record<string, unknown> | null): boo
   if (idNum != null && idNum > 0) return true;
   const hojas = datos[CARTELA_DATOS_KEYS.hojasConsumidas];
   return typeof hojas === "number" && hojas > 0;
+}
+
+function readCartelaConsumosRaw(
+  datos: Record<string, unknown>,
+): CartelaConsumoLineaDatos[] {
+  const raw = datos[CARTELA_DATOS_KEYS.consumos];
+  if (!Array.isArray(raw)) return [];
+  const out: CartelaConsumoLineaDatos[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    let idStock: number | null = null;
+    if (typeof row.id_stock === "number" && row.id_stock > 0) idStock = row.id_stock;
+    else if (typeof row.id_stock === "string") idStock = normalizeIdStockInput(row.id_stock);
+    const hojasRaw = row.hojas;
+    const hojas =
+      typeof hojasRaw === "number" && hojasRaw > 0
+        ? Math.round(hojasRaw)
+        : typeof hojasRaw === "string"
+          ? (() => {
+              const n = parseInt(hojasRaw, 10);
+              return Number.isFinite(n) && n > 0 ? n : null;
+            })()
+          : null;
+    if (idStock == null || hojas == null) continue;
+    const paletId =
+      typeof row.palet_id === "string" && row.palet_id.trim()
+        ? row.palet_id.trim()
+        : null;
+    const material =
+      typeof row.material_real === "string" && row.material_real.trim()
+        ? row.material_real.trim()
+        : null;
+    out.push({
+      id_stock: idStock,
+      hojas,
+      palet_id: paletId,
+      material_real: material,
+    });
+  }
+  return out;
+}
+
+/**
+ * Lee consumos multi-cartela. Si no hay array, cae al formato legacy (1 ID + hojas).
+ */
+export function parseCartelaConsumosLineasFromDatos(
+  datos: Record<string, unknown> | null | undefined,
+): CartelaConsumoLineaDatos[] {
+  if (!datos) return [];
+  const multi = readCartelaConsumosRaw(datos);
+  if (multi.length > 0) return multi;
+
+  const idRaw = datos[CARTELA_DATOS_KEYS.idStock];
+  let idStock: number | null = null;
+  if (typeof idRaw === "number" && idRaw > 0) idStock = idRaw;
+  else if (typeof idRaw === "string") idStock = normalizeIdStockInput(idRaw);
+  const hojasRaw = datos[CARTELA_DATOS_KEYS.hojasConsumidas];
+  const hojas =
+    typeof hojasRaw === "number" && hojasRaw > 0 ? Math.round(hojasRaw) : null;
+  if (idStock == null || hojas == null) return [];
+  const paletId =
+    typeof datos[CARTELA_DATOS_KEYS.paletId] === "string"
+      ? (datos[CARTELA_DATOS_KEYS.paletId] as string)
+      : null;
+  const material =
+    typeof datos[CARTELA_DATOS_KEYS.materialReal] === "string"
+      ? (datos[CARTELA_DATOS_KEYS.materialReal] as string)
+      : null;
+  return [
+    {
+      id_stock: idStock,
+      hojas,
+      palet_id: paletId,
+      material_real: material,
+    },
+  ];
+}
+
+/**
+ * Escribe consumos (completos e incompletos para validación) y sincroniza
+ * campos legacy (1ª línea completa + total hojas) para PDF / vistas antiguas.
+ */
+export function applyCartelaConsumosToDatos(
+  datos: DatosProcesoGenerico,
+  lineas: Array<{
+    id_stock?: number | null;
+    hojas?: number | null;
+    palet_id?: string | null;
+    material_real?: string | null;
+  }>,
+): DatosProcesoGenerico {
+  const next: DatosProcesoGenerico = { ...datos };
+  const nonEmpty = lineas.filter(
+    (l) =>
+      (l.id_stock != null && l.id_stock > 0) ||
+      (l.hojas != null && l.hojas > 0),
+  );
+
+  if (nonEmpty.length === 0) {
+    delete next[CARTELA_DATOS_KEYS.consumos];
+    delete next[CARTELA_DATOS_KEYS.idStock];
+    delete next[CARTELA_DATOS_KEYS.hojasConsumidas];
+    delete next[CARTELA_DATOS_KEYS.materialReal];
+    delete next[CARTELA_DATOS_KEYS.paletId];
+    return next;
+  }
+
+  next[CARTELA_DATOS_KEYS.consumos] = nonEmpty.map((l) => {
+    const row: Record<string, unknown> = {};
+    if (l.id_stock != null && l.id_stock > 0) row.id_stock = l.id_stock;
+    if (l.hojas != null && l.hojas > 0) row.hojas = l.hojas;
+    if (l.palet_id) row.palet_id = l.palet_id;
+    if (l.material_real) row.material_real = l.material_real;
+    return row;
+  });
+
+  const clean = nonEmpty.filter(
+    (l): l is CartelaConsumoLineaDatos =>
+      l.id_stock != null &&
+      l.id_stock > 0 &&
+      l.hojas != null &&
+      l.hojas > 0,
+  );
+
+  if (clean.length === 0) {
+    delete next[CARTELA_DATOS_KEYS.idStock];
+    delete next[CARTELA_DATOS_KEYS.hojasConsumidas];
+    delete next[CARTELA_DATOS_KEYS.materialReal];
+    delete next[CARTELA_DATOS_KEYS.paletId];
+    return next;
+  }
+
+  const first = clean[0]!;
+  const totalHojas = clean.reduce((s, l) => s + l.hojas, 0);
+  next[CARTELA_DATOS_KEYS.idStock] = first.id_stock;
+  next[CARTELA_DATOS_KEYS.hojasConsumidas] = totalHojas;
+  if (first.palet_id) next[CARTELA_DATOS_KEYS.paletId] = first.palet_id;
+  else delete next[CARTELA_DATOS_KEYS.paletId];
+  if (first.material_real) next[CARTELA_DATOS_KEYS.materialReal] = first.material_real;
+  else delete next[CARTELA_DATOS_KEYS.materialReal];
+  return next;
+}
+
+/** Copia claves cartela (incl. multi) de `from` sobre `base`. */
+export function mergeCartelaDatosInto(
+  base: DatosProcesoGenerico,
+  from: DatosProcesoGenerico,
+): DatosProcesoGenerico {
+  const next: DatosProcesoGenerico = { ...base };
+  for (const key of Object.values(CARTELA_DATOS_KEYS)) {
+    if (from[key] !== undefined) next[key] = from[key];
+    else delete next[key];
+  }
+  return next;
 }
 
 /** Normaliza entrada "10313", "10.313", "10 313" → 10313 */
@@ -263,28 +430,17 @@ export function applyCartelaToDatos(
   idStock: number | null,
   hojasConsumidas: number | null,
 ): DatosProcesoGenerico {
-  const next: DatosProcesoGenerico = { ...datos };
-  if (idStock == null) {
-    delete next[CARTELA_DATOS_KEYS.idStock];
-    delete next[CARTELA_DATOS_KEYS.hojasConsumidas];
-    delete next[CARTELA_DATOS_KEYS.materialReal];
-    delete next[CARTELA_DATOS_KEYS.paletId];
-    return next;
+  if (idStock == null || hojasConsumidas == null || hojasConsumidas <= 0) {
+    return applyCartelaConsumosToDatos(datos, []);
   }
-  next[CARTELA_DATOS_KEYS.idStock] = idStock;
-  if (hojasConsumidas != null && hojasConsumidas > 0) {
-    next[CARTELA_DATOS_KEYS.hojasConsumidas] = hojasConsumidas;
-  } else {
-    delete next[CARTELA_DATOS_KEYS.hojasConsumidas];
-  }
-  if (palet) {
-    next[CARTELA_DATOS_KEYS.materialReal] = buildMaterialRealLabel(palet);
-    next[CARTELA_DATOS_KEYS.paletId] = palet.id;
-  } else {
-    delete next[CARTELA_DATOS_KEYS.materialReal];
-    delete next[CARTELA_DATOS_KEYS.paletId];
-  }
-  return next;
+  return applyCartelaConsumosToDatos(datos, [
+    {
+      id_stock: idStock,
+      hojas: hojasConsumidas,
+      palet_id: palet?.id ?? null,
+      material_real: palet ? buildMaterialRealLabel(palet) : null,
+    },
+  ]);
 }
 
 export type CartelaVistaCampo = { label: string; valor: string };
@@ -295,7 +451,25 @@ export function buildCartelaCamposVista(
   datos: Record<string, unknown> | null,
 ): CartelaVistaCampo[] {
   if (!datosIncluyenCartela(datos)) return [];
+  const lineas = parseCartelaConsumosLineasFromDatos(datos);
   const out: CartelaVistaCampo[] = [];
+
+  if (lineas.length > 1) {
+    const total = lineas.reduce((s, l) => s + l.hojas, 0);
+    out.push({
+      label: "Cartelas consumidas",
+      valor: `${lineas.length} palets · ${total.toLocaleString("es-ES")} h total`,
+    });
+    for (const [i, l] of lineas.entries()) {
+      const mat = l.material_real ? ` · ${l.material_real}` : "";
+      out.push({
+        label: `Consumo ${i + 1}`,
+        valor: `#${formatIdStockDisplay(l.id_stock)} · ${l.hojas.toLocaleString("es-ES")} h${mat}`,
+      });
+    }
+    return out;
+  }
+
   const idRaw = datos![CARTELA_DATOS_KEYS.idStock];
   const idNum =
     typeof idRaw === "number"

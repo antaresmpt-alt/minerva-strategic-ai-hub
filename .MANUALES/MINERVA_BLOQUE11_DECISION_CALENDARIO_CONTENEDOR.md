@@ -480,7 +480,7 @@ El spike deja de ser teoría: **sin Pool ni Mesa**, el operario ve el contenedor
 |------|----------|--------|
 | Línea gorda «0 min» en Troquel / Engomado | Sync escribía solo `horas_reales_troquelado` / `_engomado`, no `horas_reales` (lo que pinta la lista) | **Fix** §22 |
 | Impresión solo contaba tiraje en línea gorda | `horas_reales` = impresión, sin sumar entrada | **Fix** §22 |
-| Multi-cartela (300+1400 de dos IDs) | UI 1 dropdown; hace falta sumar varias cartelas al cerrar | **Mañana** — hermana de 35904 |
+| Multi-cartela (300+1400 de dos IDs) | UI 1 dropdown; hace falta sumar varias cartelas al cerrar | **✅ 23 ago** — «Añadir otro consumo» + `cartela_consumos[]` |
 | Ordenar OTs ejecución por fecha | No hay filtro fecha en esta pantalla | Con **bandeja/calendario** (no bloquea contenedor) |
 | Cierre → histórico / promedios | No forzar en smoke; barco pendiente | Aplazado |
 

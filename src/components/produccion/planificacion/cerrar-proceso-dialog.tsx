@@ -29,7 +29,7 @@ import {
   roundHorasEjecucion,
   sumHorasDeclaradasDatosProceso,
 } from "@/lib/planificacion-ejecucion-horas";
-import { parseCartelaConsumoFromDatos } from "@/lib/cartela-stock-consumo";
+import { cartelaConsumoCompleto } from "@/lib/cartela-stock-consumo";
 
 type CerrarProcesoDialogProps = {
   open: boolean;
@@ -67,9 +67,7 @@ export function CerrarProcesoDialog({
   const declaradas = sumHorasDeclaradasDatosProceso(procesoId, datosDraft);
   const muestraCartela = procesoUsaCartela(procesoId, pasosItinerario);
   const cartelaObligatoria = muestraCartela && cartelasOtCount > 0;
-  const cartelaParsed = parseCartelaConsumoFromDatos(datosDraft);
-  const cartelaCompleta =
-    cartelaParsed.idStock != null && cartelaParsed.hojas != null && cartelaParsed.hojas > 0;
+  const cartelaCompleta = cartelaConsumoCompleto(datosDraft);
   const faltaCartela = cartelaObligatoria && !cartelaCompleta;
   const primerConsumoId = resolvePrimerProcesoConsumoMaterial(pasosItinerario ?? []);
   const esCandidatoSinConsumo =
@@ -88,7 +86,7 @@ export function CerrarProcesoDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Cerrar proceso</DialogTitle>
           <DialogDescription>

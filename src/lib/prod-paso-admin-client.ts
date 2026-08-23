@@ -1,8 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
-  applyCartelaToDatos,
-  fetchPaletByIdStock,
+  mergeCartelaDatosInto,
   type PasoItinerarioConsumo,
 } from "@/lib/cartela-ejecucion";
 import {
@@ -177,17 +176,9 @@ export async function corregirCartelaPasoAdmin(
   }
 
   const parsed = parseCartelaConsumoFromDatos(params.datosCartela);
-  let palet = null;
-  if (parsed.idStock != null) {
-    palet = await fetchPaletByIdStock(supabase, parsed.idStock);
-    if (!palet) throw new Error("ID Stock no encontrado en Minerva.");
-  }
-
-  const mergedCartela = applyCartelaToDatos(
+  const mergedCartela = mergeCartelaDatosInto(
     params.datosActuales,
-    palet,
-    parsed.idStock,
-    parsed.hojas,
+    params.datosCartela,
   );
 
   const { consumido, hojas } = await aplicarConsumoCartelaSiCorresponde(supabase, {

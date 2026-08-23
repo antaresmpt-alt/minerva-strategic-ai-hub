@@ -54,6 +54,16 @@ Probado de punta a punta en planta (lab + OTs reales 35900 / 35904).
 
 ---
 
+## Update 23 ago — multi-cartela al cerrar ✅
+
+**Código:** `cartela_consumos[]` en `datos_proceso` + UI «Añadir otro consumo» (`cartela-cierre-block.tsx`).  
+Cada línea → RPC `prod_stock_registrar_consumo`. Legacy (`id_stock_cartela` + total hojas) se sincroniza para PDF.  
+Aviso si hojas > stock del palet (no bloquea). Sobrante = misma cartela con `cantidad_actual` baja; liberar a libre = 9.8 Juan/oficina.
+
+**Smoke sugerido:** hermana 35904 / Offset con 2+ palets (p.ej. 300+#10234 + resto de otro).
+
+---
+
 ## Commits spike (referencia)
 
 Ver log de la rama: contenedor CTP → Troquel claim → G/D/M/E → Impresión/Digital → fix Vercel tsc → **fix horas**.

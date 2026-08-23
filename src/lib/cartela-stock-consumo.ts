@@ -5,7 +5,9 @@ import {
   fetchPaletByIdStock,
   normalizeIdStockInput,
   notaConsumoCartelaPorProceso,
+  parseCartelaConsumosLineasFromDatos,
   procesoUsaCartela,
+  type CartelaConsumoLineaDatos,
   type PasoItinerarioConsumo,
 } from "@/lib/cartela-ejecucion";
 import type { DatosProcesoGenerico } from "@/lib/hoja-ruta-campos-config";
@@ -16,9 +18,24 @@ export type CartelaConsumoParsed = {
   hojas: number | null;
 };
 
+/**
+ * Compat: 1ª línea o legacy. Para multi usa `parseCartelaConsumosLineasFromDatos`
+ * / `parseCartelaConsumosCompletosFromDatos`.
+ */
 export function parseCartelaConsumoFromDatos(
-  datos: DatosProcesoGenerico
+  datos: DatosProcesoGenerico,
 ): CartelaConsumoParsed {
+  const lineas = parseCartelaConsumosLineasFromDatos(datos);
+  if (lineas.length > 0) {
+    const first = lineas[0]!;
+    const total = lineas.reduce((s, l) => s + l.hojas, 0);
+    return {
+      paletId: first.palet_id ?? null,
+      idStock: first.id_stock,
+      hojas: total,
+    };
+  }
+
   const paletIdRaw = datos[CARTELA_DATOS_KEYS.paletId];
   const paletId =
     typeof paletIdRaw === "string" && paletIdRaw.trim()
@@ -39,20 +56,21 @@ export function parseCartelaConsumoFromDatos(
   return { paletId, idStock, hojas };
 }
 
-/** True si hay hojas declaradas y debe intentarse descontar stock. */
+/** Líneas completas listas para descontar stock. */
+export function parseCartelaConsumosCompletosFromDatos(
+  datos: DatosProcesoGenerico,
+): CartelaConsumoLineaDatos[] {
+  return parseCartelaConsumosLineasFromDatos(datos);
+}
+
+/** True si hay al menos una línea completa y debe intentarse descontar stock. */
 export function debeRegistrarConsumoCartela(
   procesoId: number | null,
   datos: DatosProcesoGenerico,
   pasosItinerario?: PasoItinerarioConsumo[] | null,
 ): boolean {
   if (!procesoUsaCartela(procesoId, pasosItinerario)) return false;
-  const parsed = parseCartelaConsumoFromDatos(datos);
-  const tienePalet = parsed.paletId != null || parsed.idStock != null;
-  return (
-    parsed.hojas != null &&
-    parsed.hojas > 0 &&
-    tienePalet
-  );
+  return parseCartelaConsumosCompletosFromDatos(datos).length > 0;
 }
 
 /**
@@ -66,7 +84,7 @@ export async function registrarConsumoCartelaEjecucion(
     otNumero: string;
     pasoId?: string | null;
     procesoId?: number | null;
-  }
+  },
 ): Promise<void> {
   const { error } = await supabase.rpc("prod_stock_registrar_consumo", {
     p_palet_id: params.paletId,
@@ -82,7 +100,7 @@ export async function registrarConsumoCartelaEjecucion(
 
 export async function resolverPaletIdParaConsumo(
   supabase: SupabaseClient,
-  parsed: CartelaConsumoParsed
+  parsed: CartelaConsumoParsed,
 ): Promise<string | null> {
   if (parsed.paletId) return parsed.paletId;
   if (parsed.idStock == null) return null;
@@ -90,8 +108,17 @@ export async function resolverPaletIdParaConsumo(
   return palet?.id ?? null;
 }
 
+async function resolverPaletIdLinea(
+  supabase: SupabaseClient,
+  linea: CartelaConsumoLineaDatos,
+): Promise<string | null> {
+  if (linea.palet_id) return linea.palet_id;
+  const palet = await fetchPaletByIdStock(supabase, linea.id_stock);
+  return palet?.id ?? null;
+}
+
 /**
- * Ejecuta consumo 9.4 si aplica. Lanza Error si hay hojas pero no se puede descontar.
+ * Ejecuta consumo 9.4 (1 o N cartelas). Lanza Error si hay hojas pero no se puede descontar.
  */
 export async function aplicarConsumoCartelaSiCorresponde(
   supabase: SupabaseClient,
@@ -101,37 +128,74 @@ export async function aplicarConsumoCartelaSiCorresponde(
     pasoId?: string | null;
     datos: DatosProcesoGenerico;
     pasosItinerario?: PasoItinerarioConsumo[] | null;
-  }
+  },
 ): Promise<{ consumido: boolean; hojas: number | null }> {
   if (!debeRegistrarConsumoCartela(params.procesoId, params.datos, params.pasosItinerario)) {
     return { consumido: false, hojas: null };
   }
 
-  const parsed = parseCartelaConsumoFromDatos(params.datos);
-  const hojas = parsed.hojas!;
-  const paletId = await resolverPaletIdParaConsumo(supabase, parsed);
+  const lineas = parseCartelaConsumosCompletosFromDatos(params.datos);
+  let totalHojas = 0;
 
-  if (!paletId) {
-    throw new Error(
-      "Hay hojas consumidas declaradas pero el ID Stock no existe en Minerva. Corrige la cartela o quita las hojas antes de cerrar."
-    );
+  for (const linea of lineas) {
+    const paletId = await resolverPaletIdLinea(supabase, linea);
+    if (!paletId) {
+      throw new Error(
+        `Hay hojas consumidas en cartela #${linea.id_stock} pero el ID Stock no existe en Minerva. Corrige la cartela o quita las hojas antes de cerrar.`,
+      );
+    }
+    await registrarConsumoCartelaEjecucion(supabase, {
+      paletId,
+      hojas: linea.hojas,
+      otNumero: params.otNumero,
+      pasoId: params.pasoId,
+      procesoId: params.procesoId,
+    });
+    totalHojas += linea.hojas;
   }
 
-  await registrarConsumoCartelaEjecucion(supabase, {
-    paletId,
-    hojas,
-    otNumero: params.otNumero,
-    pasoId: params.pasoId,
-    procesoId: params.procesoId,
-  });
-
-  return { consumido: true, hojas };
+  return { consumido: true, hojas: totalHojas };
 }
 
-/** Valida cartela parcial antes de cerrar (id sin hojas o hojas sin id). */
+/**
+ * Valida cartela(s) antes de cerrar.
+ * Acepta multi (`cartela_consumos`) o legacy 1 ID.
+ */
 export function validarCartelaConsumoAntesCerrar(
   datos: DatosProcesoGenerico,
 ): string | null {
+  const rawArray = datos[CARTELA_DATOS_KEYS.consumos];
+  if (Array.isArray(rawArray) && rawArray.length > 0) {
+    for (let i = 0; i < rawArray.length; i++) {
+      const item = rawArray[i];
+      if (!item || typeof item !== "object") {
+        return `Consumo ${i + 1}: datos de cartela incompletos.`;
+      }
+      const row = item as Record<string, unknown>;
+      let idStock: number | null = null;
+      if (typeof row.id_stock === "number" && row.id_stock > 0) idStock = row.id_stock;
+      else if (typeof row.id_stock === "string") idStock = normalizeIdStockInput(row.id_stock);
+      const hojas =
+        typeof row.hojas === "number" && row.hojas > 0 ? Math.round(row.hojas) : null;
+      if (idStock != null && hojas == null) {
+        return `Consumo ${i + 1}: indica las hojas o quita el ID Stock.`;
+      }
+      if (hojas != null && idStock == null) {
+        return `Consumo ${i + 1}: selecciona un ID Stock o deja vacías las hojas.`;
+      }
+    }
+    const completas = parseCartelaConsumosCompletosFromDatos(datos);
+    if (completas.length === 0) {
+      return "Indica al menos una cartela con hojas consumidas, o vacía los consumos.";
+    }
+    const ids = completas.map((l) => l.id_stock);
+    const dup = ids.find((id, idx) => ids.indexOf(id) !== idx);
+    if (dup != null) {
+      return `La cartela #${dup} está repetida. Une las hojas en una sola línea o elige otro palet.`;
+    }
+    return null;
+  }
+
   const parsed = parseCartelaConsumoFromDatos(datos);
   const hasId = parsed.paletId != null || parsed.idStock != null;
   const hasHojas = parsed.hojas != null && parsed.hojas > 0;
@@ -142,4 +206,9 @@ export function validarCartelaConsumoAntesCerrar(
     return "Selecciona un ID Stock válido o deja vacías las hojas de cartela.";
   }
   return null;
+}
+
+/** True si hay ≥1 consumo completo (para cartela obligatoria en UI). */
+export function cartelaConsumoCompleto(datos: DatosProcesoGenerico): boolean {
+  return parseCartelaConsumosCompletosFromDatos(datos).length > 0;
 }

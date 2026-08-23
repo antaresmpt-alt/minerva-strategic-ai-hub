@@ -22,7 +22,7 @@ import {
   procesoUsaCartela,
   type PasoItinerarioConsumo,
 } from "@/lib/cartela-ejecucion";
-import { parseCartelaConsumoFromDatos } from "@/lib/cartela-stock-consumo";
+import { cartelaConsumoCompleto } from "@/lib/cartela-stock-consumo";
 import type { DatosProcesoGenerico } from "@/lib/hoja-ruta-campos-config";
 import {
   corregirCartelaPasoAdmin,
@@ -143,8 +143,7 @@ export function PasoAdminActions({
   }, [esFinalizado, profile, paso.procesoId, paso.pasoId, pasosItinerario, supabase]);
 
   const cartelaIncompleta = useMemo(() => {
-    const parsed = parseCartelaConsumoFromDatos(paso.datosProceso);
-    return !(parsed.idStock != null && parsed.hojas != null && parsed.hojas > 0);
+    return !cartelaConsumoCompleto(paso.datosProceso);
   }, [paso.datosProceso]);
 
   const checkReabrir = useCallback(async () => {
