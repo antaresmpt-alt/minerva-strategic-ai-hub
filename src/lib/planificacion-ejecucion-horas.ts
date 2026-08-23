@@ -103,7 +103,45 @@ function splitHorasMesa(
   return [roundHorasEjecucion(h * defaultRatioA), roundHorasEjecucion(h * (1 - defaultRatioA))];
 }
 
-/** Precarga campos reales declarados desde el tiempo mesa (editable después). */
+/**
+ * Prefill al abrir «Cerrar proceso»:
+ * - Si ya hay horas reales declaradas → las respeta (no pisa con el reloj).
+ * - Si no → copia del previsto/plan del parte (entrada/impresión, prep/tiraje, horas_proceso…).
+ * El reloj solo se aplica con el botón «Usar tiempo mesa».
+ */
+export function prefillHorasDeclaradasParaCierre(
+  procesoId: number | null | undefined,
+  datos: DatosProcesoGenerico,
+): DatosProcesoGenerico {
+  const next: DatosProcesoGenerico = { ...datos };
+  const existing = sumHorasDeclaradasDatosProceso(procesoId, datos);
+  if (existing != null && existing > 0) return next;
+
+  if (!procesoId || procesoId === PROCESO_CTP_ID || procesoId === PROCESO_DESBROCE_ID) {
+    const plan = num(datos.horas_proceso);
+    if (plan != null && plan > 0) next.horas_proceso = plan;
+    return next;
+  }
+  if (PROCESOS_IMPRESION.has(procesoId)) {
+    const ent = num(datos.horas_entrada_real) ?? num(datos.horas_entrada);
+    const imp = num(datos.horas_impresion_real) ?? num(datos.horas_impresion);
+    if (ent != null && ent > 0) next.horas_entrada_real = ent;
+    if (imp != null && imp > 0) next.horas_impresion_real = imp;
+    return next;
+  }
+  if (procesoId === PROCESO_TROQUELADO || procesoId === PROCESO_ENGOMADO) {
+    const prep = num(datos.horas_preparacion_real) ?? num(datos.horas_preparacion);
+    const tir = num(datos.horas_tiraje_real) ?? num(datos.horas_tiraje);
+    if (prep != null && prep > 0) next.horas_preparacion_real = prep;
+    if (tir != null && tir > 0) next.horas_tiraje_real = tir;
+    return next;
+  }
+  const plan = num(datos.horas_proceso) ?? num(datos.tiempo_real);
+  if (plan != null && plan > 0) next.horas_proceso = plan;
+  return next;
+}
+
+/** Aplica el tiempo mesa (reloj) a los campos reales — solo vía «Usar tiempo mesa». */
 export function applyHorasMesaToDatosProceso(
   procesoId: number | null | undefined,
   datos: DatosProcesoGenerico,
@@ -119,8 +157,8 @@ export function applyHorasMesaToDatosProceso(
   if (PROCESOS_IMPRESION.has(procesoId)) {
     const [ent, imp] = splitHorasMesa(
       horasMesa,
-      num(datos.horas_entrada_real),
-      num(datos.horas_impresion_real),
+      num(datos.horas_entrada_real) ?? num(datos.horas_entrada),
+      num(datos.horas_impresion_real) ?? num(datos.horas_impresion),
       0.25,
     );
     next.horas_entrada_real = ent;
@@ -130,8 +168,8 @@ export function applyHorasMesaToDatosProceso(
   if (procesoId === PROCESO_TROQUELADO) {
     const [prep, tir] = splitHorasMesa(
       horasMesa,
-      num(datos.horas_preparacion_real),
-      num(datos.horas_tiraje_real),
+      num(datos.horas_preparacion_real) ?? num(datos.horas_preparacion),
+      num(datos.horas_tiraje_real) ?? num(datos.horas_tiraje),
       0.3,
     );
     next.horas_preparacion_real = prep;
@@ -141,8 +179,8 @@ export function applyHorasMesaToDatosProceso(
   if (procesoId === PROCESO_ENGOMADO) {
     const [prep, tir] = splitHorasMesa(
       horasMesa,
-      num(datos.horas_preparacion_real),
-      num(datos.horas_tiraje_real),
+      num(datos.horas_preparacion_real) ?? num(datos.horas_preparacion),
+      num(datos.horas_tiraje_real) ?? num(datos.horas_tiraje),
       0.3,
     );
     next.horas_preparacion_real = prep;

@@ -108,7 +108,9 @@ export function CerrarProcesoDialog({
                 ) : null}
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                Calculado desde inicio real − pausas. No editable (auditoría).
+                Calculado desde inicio real − pausas. Referencia de auditoría.
+                Usa «Usar tiempo mesa» solo si quieres copiar el reloj a las horas
+                declaradas.
               </p>
             </div>
           </div>

@@ -4,6 +4,7 @@ import {
   applyHorasMesaToDatosProceso,
   buildEjecucionHorasSyncPatch,
   computeHorasMesaNetas,
+  prefillHorasDeclaradasParaCierre,
 } from "@/lib/planificacion-ejecucion-horas";
 import { PROCESO_DESBROCE_ID } from "@/lib/hoja-ruta-campos-config";
 
@@ -22,6 +23,34 @@ describe("planificacion-ejecucion-horas", () => {
   it("applyHorasMesaToDatosProceso en CTP", () => {
     const out = applyHorasMesaToDatosProceso(16, {}, 1.45);
     expect(out.horas_proceso).toBeCloseTo(1.45);
+  });
+
+  it("prefill no pisa reales; copia del plan si faltan", () => {
+    const conReales = prefillHorasDeclaradasParaCierre(1, {
+      horas_entrada: 1.5,
+      horas_impresion: 6,
+      horas_entrada_real: 0.5,
+      horas_impresion_real: 1.25,
+    });
+    expect(conReales.horas_entrada_real).toBe(0.5);
+    expect(conReales.horas_impresion_real).toBe(1.25);
+
+    const desdePlan = prefillHorasDeclaradasParaCierre(1, {
+      horas_entrada: 1.5,
+      horas_impresion: 6,
+    });
+    expect(desdePlan.horas_entrada_real).toBe(1.5);
+    expect(desdePlan.horas_impresion_real).toBe(6);
+
+    const ctp = prefillHorasDeclaradasParaCierre(16, { horas_proceso: 0.25 });
+    expect(ctp.horas_proceso).toBe(0.25);
+
+    const troq = prefillHorasDeclaradasParaCierre(10, {
+      horas_preparacion: 1,
+      horas_tiraje: 2,
+    });
+    expect(troq.horas_preparacion_real).toBe(1);
+    expect(troq.horas_tiraje_real).toBe(2);
   });
 
   it("buildEjecucionHorasSyncPatch sincroniza CTP y desbroce", () => {

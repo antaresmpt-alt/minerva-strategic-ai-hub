@@ -5,7 +5,6 @@ import { AlertTriangle, Loader2, Package, Plus, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -44,9 +43,7 @@ type CartelaCierreBlockProps = {
   procesoId: number | null;
   datosDraft: DatosProcesoGenerico;
   onDatosChange: (datos: DatosProcesoGenerico) => void;
-  /** Si true, la cartela es obligatoria (OT con cartelas asignadas al cierre). */
   obligatorio?: boolean;
-  /** Notifica cuántas cartelas tiene la OT (para aviso en padre). */
   onCartelasOtCount?: (count: number) => void;
 };
 
@@ -88,6 +85,19 @@ function lineasFromDatos(
   }));
 }
 
+function stockHint(linea: LineaDraft): string | null {
+  if (!linea.paletPreview) return null;
+  const stock = linea.paletPreview.cantidad_actual;
+  const hojas = parseHojasInput(linea.hojasInput);
+  const resto =
+    hojas != null ? Math.max(0, stock - hojas) : null;
+  const base = `stock ${stock.toLocaleString("es-ES")}`;
+  if (resto != null && hojas != null) {
+    return `${base} → quedan ${resto.toLocaleString("es-ES")}`;
+  }
+  return base;
+}
+
 export function CartelaCierreBlock({
   otNumero,
   procesoId,
@@ -108,7 +118,6 @@ export function CartelaCierreBlock({
     lineasFromDatos(datosDraft, false),
   );
   const autoSelectedRef = useRef(false);
-  const hojasPrefilledRef = useRef(false);
   const lineasRef = useRef(lineas);
   lineasRef.current = lineas;
 
@@ -190,7 +199,6 @@ export function CartelaCierreBlock({
     };
   }, [supabase, otNumero]);
 
-  // Auto-seleccionar única cartela en la 1ª línea
   useEffect(() => {
     if (autoSelectedRef.current || loadingCartelas || cartelasOt.length !== 1) return;
     const first = lineasRef.current[0];
@@ -211,7 +219,6 @@ export function CartelaCierreBlock({
       } catch {
         lookupState = "error";
       }
-      if (suggested != null) hojasPrefilledRef.current = true;
       setLineas((prev) => {
         const next = prev.map((l, i) =>
           i === 0
@@ -231,7 +238,6 @@ export function CartelaCierreBlock({
     })();
   }, [cartelasOt, loadingCartelas, procesoId, supabase, emitFromLineas]);
 
-  // Lookup palet por línea cuando cambia ID
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
     const cancelledFlags = lineas.map(() => false);
@@ -296,7 +302,6 @@ export function CartelaCierreBlock({
       });
       timers.forEach(clearTimeout);
     };
-    // Solo reaccionar a cambios de IDs (no a cada patch de lookup)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lineas.map((l) => l.idInput).join("|"), supabase]);
 
@@ -315,10 +320,7 @@ export function CartelaCierreBlock({
 
   const addLinea = () => {
     setLineas((prev) => {
-      const next = [
-        ...prev,
-        emptyLinea(cartelasOt.length === 0),
-      ];
+      const next = [...prev, emptyLinea(cartelasOt.length === 0)];
       void emitFromLineas(next);
       return next;
     });
@@ -337,8 +339,8 @@ export function CartelaCierreBlock({
     if (!idStockStr) return;
     const option = cartelasOt.find((c) => String(c.idStock) === idStockStr);
     if (!option) return;
-    setLineas((prev) => {
-      const next = prev.map((l) =>
+    setLineas((prev) =>
+      prev.map((l) =>
         l.key === key
           ? {
               ...l,
@@ -346,9 +348,8 @@ export function CartelaCierreBlock({
               lookupState: "loading" as LookupState,
             }
           : l,
-      );
-      return next;
-    });
+      ),
+    );
     void (async () => {
       try {
         const palet = await fetchPaletByIdStock(supabase, option.idStock);
@@ -385,10 +386,10 @@ export function CartelaCierreBlock({
   };
 
   return (
-    <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-3">
+    <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
       <div className="flex items-start gap-2">
         <Package className="mt-0.5 size-4 shrink-0 text-[#002147]" aria-hidden />
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-[#002147]">
             Cartela / material usado
             {obligatorio ? (
@@ -398,9 +399,7 @@ export function CartelaCierreBlock({
             )}
           </p>
           <p className="text-xs text-slate-500">
-            {obligatorio
-              ? "Indica una o varias cartelas y hojas (como en Optimus). Se descuenta stock al cerrar."
-              : "Puedes añadir varios palets. Si indicas ID Stock, las hojas son obligatorias."}
+            Una fila por palet (como Optimus). El stock se descuenta al confirmar.
           </p>
         </div>
       </div>
@@ -408,12 +407,17 @@ export function CartelaCierreBlock({
       {loadingCartelas ? (
         <p className="flex items-center gap-1.5 text-xs text-slate-500">
           <Loader2 className="size-3.5 animate-spin" aria-hidden />
-          Cargando cartelas asignadas…
+          Cargando cartelas…
         </p>
-      ) : null}
+      ) : (
+        <div className="space-y-1.5">
+          <div className="hidden sm:grid sm:grid-cols-[minmax(0,1fr)_7rem_auto] gap-2 px-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+            <span>Cartela</span>
+            <span>Hojas</span>
+            <span className="w-8" />
+          </div>
 
-      {!loadingCartelas
-        ? lineas.map((linea, index) => {
+          {lineas.map((linea, index) => {
             const idStock = normalizeIdStockInput(linea.idInput);
             const hojas = parseHojasInput(linea.hojasInput);
             const stockActual = linea.paletPreview?.cantidad_actual;
@@ -425,198 +429,129 @@ export function CartelaCierreBlock({
               (opt) =>
                 opt.idStock === idStock || !idsUsados.has(opt.idStock),
             );
+            const hint = stockHint(linea);
 
             return (
               <div
                 key={linea.key}
-                className="space-y-2 rounded-md border border-slate-100 bg-slate-50/60 p-2.5"
+                className="rounded-md border border-slate-100 bg-slate-50/50 px-2 py-1.5"
               >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold text-slate-700">
-                    Consumo {index + 1}
-                    {lineas.length > 1 ? (
-                      <span className="ml-1 font-normal text-slate-500">
-                        de {lineas.length}
-                      </span>
-                    ) : null}
-                  </p>
-                  {lineas.length > 1 ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs text-red-700 hover:text-red-800"
-                      onClick={() => removeLinea(linea.key)}
-                      aria-label={`Quitar consumo ${index + 1}`}
-                    >
-                      <Trash2 className="size-3.5" aria-hidden />
-                    </Button>
-                  ) : null}
-                </div>
-
-                {cartelasOt.length > 0 && !linea.modoTextoLibre ? (
-                  <div className="space-y-2">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <Label className="text-xs text-slate-600">
-                          Cartelas asignadas a esta OT
-                        </Label>
-                        <Select
-                          value={idStock != null ? String(idStock) : undefined}
-                          onValueChange={(v) => handleSelectCartela(linea.key, v)}
-                        >
-                          <SelectTrigger className="mt-1">
-                            <SelectValue placeholder="Selecciona una cartela…" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {opcionesSelect.map((opt) => (
-                              <SelectItem key={opt.idStock} value={String(opt.idStock)}>
-                                {opt.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label className="text-xs text-slate-600">
-                          Hojas consumidas{obligatorio ? "" : " (opcional)"}
-                        </Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          step={1}
-                          placeholder="—"
-                          className="mt-1"
-                          value={linea.hojasInput}
-                          onChange={(e) =>
-                            patchLinea(linea.key, { hojasInput: e.target.value })
-                          }
-                        />
-                      </div>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={() =>
-                        patchLinea(linea.key, { modoTextoLibre: true })
-                      }
-                    >
-                      o introducir ID Stock manualmente
-                    </Button>
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[minmax(0,1fr)_7rem_auto] sm:items-center sm:gap-2">
+                  <div className="min-w-0">
+                    {cartelasOt.length > 0 && !linea.modoTextoLibre ? (
+                      <Select
+                        value={idStock != null ? String(idStock) : undefined}
+                        onValueChange={(v) => handleSelectCartela(linea.key, v)}
+                      >
+                        <SelectTrigger className="h-9 w-full">
+                          <SelectValue placeholder={`Consumo ${index + 1}…`} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {opcionesSelect.map((opt) => (
+                            <SelectItem key={opt.idStock} value={String(opt.idStock)}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="ID Stock"
+                        className="h-9 font-mono"
+                        value={linea.idInput}
+                        onChange={(e) =>
+                          patchLinea(linea.key, { idInput: e.target.value })
+                        }
+                      />
+                    )}
                   </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <Label className="text-xs text-slate-600">ID Stock</Label>
-                        <Input
-                          type="text"
-                          inputMode="numeric"
-                          placeholder="Ej. 10.313"
-                          className="mt-1 font-mono"
-                          value={linea.idInput}
-                          onChange={(e) =>
-                            patchLinea(linea.key, { idInput: e.target.value })
-                          }
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-xs text-slate-600">
-                          Hojas consumidas{obligatorio ? "" : " (opcional)"}
-                        </Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          step={1}
-                          placeholder="—"
-                          className="mt-1"
-                          value={linea.hojasInput}
-                          onChange={(e) =>
-                            patchLinea(linea.key, { hojasInput: e.target.value })
-                          }
-                        />
-                      </div>
-                    </div>
-                    {cartelasOt.length > 0 ? (
+                  <Input
+                    type="number"
+                    min={0}
+                    step={1}
+                    placeholder="—"
+                    className="h-9"
+                    value={linea.hojasInput}
+                    onChange={(e) =>
+                      patchLinea(linea.key, { hojasInput: e.target.value })
+                    }
+                    aria-label={`Hojas consumo ${index + 1}`}
+                  />
+                  <div className="flex justify-end">
+                    {lineas.length > 1 ? (
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-7 text-xs"
-                        onClick={() =>
-                          patchLinea(linea.key, { modoTextoLibre: false })
-                        }
+                        className="h-9 w-9 p-0 text-red-700 hover:text-red-800"
+                        onClick={() => removeLinea(linea.key)}
+                        aria-label={`Quitar consumo ${index + 1}`}
                       >
-                        Volver a cartelas asignadas
+                        <Trash2 className="size-3.5" aria-hidden />
                       </Button>
-                    ) : null}
+                    ) : (
+                      <span className="inline-block w-9" />
+                    )}
                   </div>
-                )}
+                </div>
 
-                {linea.lookupState === "loading" ? (
-                  <p className="flex items-center gap-1.5 text-xs text-slate-500">
-                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                    Buscando palet…
-                  </p>
-                ) : null}
-
-                {linea.lookupState === "found" && linea.paletPreview ? (
-                  <div className="rounded-md border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-xs text-emerald-900">
-                    <p className="font-semibold">
-                      #{formatIdStockDisplay(linea.paletPreview.id_stock)}
-                      {linea.paletPreview.codigo_articulo
-                        ? ` · ${linea.paletPreview.codigo_articulo}`
-                        : ""}
-                    </p>
-                    <p className="mt-0.5 text-emerald-800">
-                      {linea.paletPreview.material_nombre ??
-                        linea.paletPreview.descripcion_material ??
-                        "—"}
-                      {linea.paletPreview.gramaje != null
-                        ? ` · ${linea.paletPreview.gramaje} gr`
-                        : ""}
-                      {linea.paletPreview.formato
-                        ? ` · ${linea.paletPreview.formato}`
-                        : ""}
-                    </p>
-                    <p className="mt-0.5 text-emerald-700">
-                      Stock actual:{" "}
-                      {linea.paletPreview.cantidad_actual.toLocaleString("es-ES")} h
-                    </p>
-                  </div>
-                ) : null}
-
-                {linea.lookupState === "not_found" ? (
-                  <p className="flex items-start gap-1.5 text-xs text-amber-800">
-                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-                    ID Stock no encontrado. Se guardará el número; puedes cerrar igualmente.
-                  </p>
-                ) : null}
-
-                {linea.lookupState === "error" ? (
-                  <p className="flex items-start gap-1.5 text-xs text-red-700">
-                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-                    Error al buscar el palet.
-                  </p>
-                ) : null}
-
-                {superaStock ? (
-                  <p className="flex items-start gap-1.5 text-xs text-amber-800">
-                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-                    Las hojas ({hojas!.toLocaleString("es-ES")}) superan el stock del palet (
-                    {stockActual!.toLocaleString("es-ES")} h). Mejor reparte en otra cartela o
-                    corrige la cantidad.
-                  </p>
-                ) : null}
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 px-0.5 text-[11px] text-slate-500">
+                  {linea.lookupState === "loading" ? (
+                    <span className="inline-flex items-center gap-1">
+                      <Loader2 className="size-3 animate-spin" aria-hidden />
+                      …
+                    </span>
+                  ) : null}
+                  {hint && linea.lookupState === "found" ? (
+                    <span
+                      className={
+                        superaStock ? "text-amber-800 font-medium" : "text-emerald-800"
+                      }
+                      title={
+                        linea.paletPreview
+                          ? buildMaterialRealLabel(linea.paletPreview)
+                          : undefined
+                      }
+                    >
+                      #{formatIdStockDisplay(linea.paletPreview!.id_stock)} · {hint}
+                      {superaStock ? " · ¡supera stock!" : ""}
+                    </span>
+                  ) : null}
+                  {linea.lookupState === "not_found" ? (
+                    <span className="inline-flex items-center gap-1 text-amber-800">
+                      <AlertTriangle className="size-3" aria-hidden />
+                      ID no encontrado
+                    </span>
+                  ) : null}
+                  {linea.lookupState === "error" ? (
+                    <span className="text-red-700">Error al buscar</span>
+                  ) : null}
+                  {cartelasOt.length > 0 ? (
+                    <button
+                      type="button"
+                      className="text-[11px] text-slate-500 underline-offset-2 hover:underline"
+                      onClick={() =>
+                        patchLinea(linea.key, {
+                          modoTextoLibre: !linea.modoTextoLibre,
+                        })
+                      }
+                    >
+                      {linea.modoTextoLibre
+                        ? "usar lista OT"
+                        : "ID manual"}
+                    </button>
+                  ) : null}
+                </div>
               </div>
             );
-          })
-        : null}
+          })}
+        </div>
+      )}
 
       {!loadingCartelas ? (
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
           <Button
             type="button"
             variant="outline"
@@ -625,22 +560,21 @@ export function CartelaCierreBlock({
             onClick={addLinea}
           >
             <Plus className="mr-1 size-3.5" aria-hidden />
-            Añadir otro consumo
+            Añadir consumo
           </Button>
           {totalHojas > 0 ? (
             <p className="text-xs text-slate-600">
-              Total declarado:{" "}
-              <span className="font-semibold">{totalHojas.toLocaleString("es-ES")} h</span>
+              Total:{" "}
+              <span className="font-semibold">
+                {totalHojas.toLocaleString("es-ES")} hojas
+              </span>
+              {lineas.length > 1 ? (
+                <span className="text-slate-400"> · {lineas.length} palets</span>
+              ) : null}
             </p>
           ) : null}
         </div>
       ) : null}
-
-      <p className="text-[11px] text-slate-500">
-        Al confirmar el cierre, cada línea descuenta su palet en Minerva. El sobrante
-        queda en la misma cartela (cantidad actual); liberar a stock libre lo hace
-        almacén/oficina cuando toque.
-      </p>
     </div>
   );
 }

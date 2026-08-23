@@ -62,6 +62,15 @@ Aviso si hojas > stock del palet (no bloquea). Sobrante = misma cartela con `can
 
 **Smoke sugerido:** hermana 35904 / Offset con 2+ palets (p.ej. 300+#10234 + resto de otro).
 
+### Update 23 ago mediodía — smoke 35902 multi-cartela ✅ + fix horas reloj
+
+**Multi-cartela OK:** 9 palets; consumo parcial #10671 (530 → quedan 2000); liberar → stock libre; cartela impresa.
+
+**Bug horas:** al abrir «Cerrar proceso» se pisaban las horas declaradas con el **reloj** (`applyHorasMesaToDatosProceso`). Por eso CTP/Offset salían 0.01 / 0.02 h.  
+**Fix:** `prefillHorasDeclaradasParaCierre` — respeta reales tipadas o copia del **previsto**; el reloj solo con «Usar tiempo mesa». Aplica a todos los procesos del cierre (I/D/T/E/CTP/desbroce/guillotina/…).
+
+**UI multi:** filas compactas (cartela | hojas | 🗑) + hint de stock en una línea (sin cajas verdes).
+
 ---
 
 ## Commits spike (referencia)

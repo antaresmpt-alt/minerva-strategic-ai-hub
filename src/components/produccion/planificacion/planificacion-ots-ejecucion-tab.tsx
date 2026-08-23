@@ -50,6 +50,7 @@ import {
   applyHorasMesaToDatosProceso,
   buildEjecucionHorasSyncPatch,
   computeHorasMesaNetas,
+  prefillHorasDeclaradasParaCierre,
 } from "@/lib/planificacion-ejecucion-horas";
 import {
   etiquetaAmbitoPlanificacion,
@@ -3651,9 +3652,9 @@ function ExecutionCard({
         })),
       }) ?? 0;
     setHorasMesaSnapshot(mesa > 0 ? mesa : null);
-    setCerrarDatosDraft(
-      applyHorasMesaToDatosProceso(row.procesoId, datosProcesoLocal, mesa),
-    );
+    // NO pisar con el reloj: respeta reales ya tipadas o copia del previsto.
+    // El reloj solo entra con «Usar tiempo mesa».
+    setCerrarDatosDraft(prefillHorasDeclaradasParaCierre(row.procesoId, datosProcesoLocal));
     setDatosProcesoOpen(true);
     setCerrarProcesoOpen(true);
   }, [row.inicioRealAt, row.procesoId, row.minutosPausadaAcum, pauses, datosProcesoLocal]);
