@@ -133,8 +133,10 @@ export function CalendarioBandejaPanel({
   return (
     <aside
       className={cn(
+        // Desktop: misma altura que la columna del calendario (items-stretch del padre).
+        // Móvil: tope razonable; el grid va debajo.
         "flex w-[min(100%,17.5rem)] shrink-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm",
-        "max-h-[min(70vh,42rem)] lg:sticky lg:top-3 lg:max-h-[calc(100vh-7rem)] lg:self-stretch",
+        "max-h-[min(70vh,42rem)] lg:max-h-none lg:min-h-0 lg:self-stretch",
         className,
       )}
     >
