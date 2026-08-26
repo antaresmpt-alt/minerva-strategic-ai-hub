@@ -1,7 +1,7 @@
 # Bloque 11 — Calendario, bandeja, contenedor y mesa (decisión de diseño)
 
 > **Fecha:** 21 ago 2026 · **Rev. completa:** **26 ago 2026 noche** (diseño + contenedor + bandeja + **spike detalle-día §6.5 B**)
-> **Estado:** diseño **cerrado** · contenedor/bandeja **smoke OK** · **persistencia detalle-día = B** · fase 3 pendiente · merge `main` pendiente OK Manel
+> **Estado:** diseño **cerrado** · contenedor/bandeja **smoke OK** · **detalle-día B + fase 3 v2 + PDF §25** · merge `main` pendiente OK Manel
 > **Complementa:** `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` · `.MANUALES/MINERVA_BLOQUE11_ANALISIS_CONTENEDOR_VS_MESA.md` · `.MANUALES/MINERVA_BLOQUE11_BRIEF_JORDI_CARLOS.md`
 > **Código:** bandeja §5/§23 · contenedor CTP→…→I/D · hecho visual 26 ago · spike §6.5 → `SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md`
 
@@ -209,7 +209,7 @@ Lo específico de offset es la **secuencia fina del día** (turnos, horas, PDF) 
 
 **Decisión:** tabla ligera nueva. **No** reutilizar `prod_mesa_planificacion_trabajos`.
 
-Sesión: `SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md` · migración borrador: `supabase/migrations/20260826200000_prod_calendario_detalle_dia.sql` (**no aplicada** hasta fase 3 OK Manel).
+Sesión: `SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md` · migración: `supabase/migrations/20260826200000_prod_calendario_detalle_dia.sql` (**aplicada** en Supabase 26 ago).
 
 #### Por qué B (no A)
 
@@ -391,6 +391,7 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 | 13.11 | Retener = diseño, no build |
 | 13.12 | Gate por proceso = pendiente |
 | 13.13 | Persistencia detalle del día = **opción B** (`prod_calendario_detalle_dia`) — spike 26 ago ✅ |
+| 13.14 | PDF detalle-día rico + print en **ventana nueva** (no tumba Electron) — 26 ago ✅ · también mesa diaria LEGACY |
 
 ---
 
@@ -406,7 +407,7 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 - [x] Spike troquel + claim (`contenedor-troquel.ts` · ver §18)
 - [x] Spike contenedores Guillotina/Desbroce/Manipulados + Engomado claim (`contenedor-seccion.ts` · ver §19)
 - [x] Spike Contenedor Impresión + Digital (ver §20)
-- [ ] Detalle del día (Carlos) — fase 3 **UI v1 en calendario** (26 ago) · contenedor lee orden = siguiente
+- [x] Detalle del día (Carlos) — fase 3 **UI v2** (26 ago) · PDF rico + fix cierre print · orden «Hoy» por `slot_orden` · cabeceras visuales = siguiente
 - [ ] LEGACY tab — aislamiento por rol (valla §10); nombres/orden menú feliz → **Bloque 12**
 - [ ] Contenedor I/D: exponer estado Guillotina («¿cortado?») — backlog Rita/Ramón (no bloquea fase 3)
 
@@ -422,7 +423,8 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 | Espejo | `calendario-mesa-espejo.ts` | Lectura |
 | Pasar a mesa | `planificacion-pasar-a-mesa.ts` | LEGACY |
 | Mesa diaria LEGACY | `planificacion-mesa-diaria-tab.tsx` | No modificar camino feliz |
-| Detalle día (fase 3) | `calendario-detalle-dia-dialog.tsx` | Entrada desde modal día · escribe `prod_calendario_detalle_dia` |
+| Detalle día (fase 3) | `calendario-detalle-dia-dialog.tsx` · `calendario-detalle-dia.ts` | Entrada desde modal día · escribe `prod_calendario_detalle_dia` |
+| PDF detalle + print seguro | `calendario-detalle-dia-print.ts` | HTML rico · `printHtmlInNewWindow` / `printElementInNewWindow` (§25) |
 | Lib detalle | `calendario-detalle-dia.ts` | CRUD + join por pastilla (sin fecha duplicada) |
 | Tabla detalle | `prod_calendario_detalle_dia` | Migración `20260826200000` **aplicada** 26 ago |
 | Helpers mesa | `planificacion-mesa-diaria.ts` | Reutilizar UI avanzada luego; no writes LEGACY |
@@ -635,7 +637,7 @@ PDF usa checks Ver (overlay) · PDF día solo en modal del día · externos sigu
 
 ### Siguiente
 
-Fase 3 detalle día Carlos (aplicar migración + UI). LEGACY: valla rol cuando toque. Bloque 12: nombres menú Planificador.
+Piloto Carlos detalle-día (botones; DnD diferido). Smoke PDF + cierre impresión. LEGACY: valla rol cuando toque. Bloque 12: nombres menú Planificador.
 
 ---
 
@@ -643,6 +645,30 @@ Fase 3 detalle día Carlos (aplicar migración + UI). LEGACY: valla rol cuando t
 
 **Decisión B** — ver §6.5 completo + `SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md`.
 
+Migración aplicada · UI v2 (draft / Guardar / mañana·tarde / sync orden / pegar al final) · contenedor ordena «Hoy» por `slot_orden`.
+
 ---
 
-*Manel + Cursor · 22 ago noche contenedor · 23 ago mediodía bandeja 1b smoke OK · 26 ago hecho visual + altura bandeja · 26 ago noche spike detalle-día B*
+## 25. PDF detalle-día + bug cierre impresión — 26 ago noche
+
+### Contexto
+
+Carlos/Gemma necesitan un **plan del día imprimible** al nivel de la mesa diaria LEGACY (cards con cliente, tintas, acabado, papel, hojas, horas, % carga por turno), no un listado OT+título.
+
+Además: en el shell Electron/webview de Minerva, **cerrar el diálogo nativo de impresión** (tras `window.print()` / `react-to-print` en la **misma ventana** de la app) **tumbaba toda la aplicación**. Reproducido en detalle-día y en «Imprimir plan del día» de mesa diaria.
+
+### Decisión técnica
+
+1. **PDF rico** = HTML generado en `src/lib/calendario-detalle-dia-print.ts` (`buildDetalleDiaPrintHtml` + meta desde `prod_ots_general` + `produccion_ot_despachadas`). A4 landscape · 1 máquina · mañana/tarde.
+2. **Nunca imprimir en la ventana host.** Helpers:
+   - `printHtmlInNewWindow` — detalle-día.
+   - `printElementInNewWindow` — mesa diaria (clona `MesaDiariaPrintTemplate` offscreen).
+3. Tras `afterprint`, solo se cierra el **popup**. La app Minerva permanece.
+4. Otros módulos con `useReactToPrint` (externos, fichas, tablón semanal…) = **backlog** mismo patrón; no bloquean piloto planning.
+
+Detalle exhaustivo + smoke: `SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md` §3.
+
+---
+
+*Manel + Cursor · 22 ago noche contenedor · 23 ago mediodía bandeja 1b smoke OK · 26 ago hecho visual + altura bandeja · 26 ago noche spike detalle-día B · fase 3 v2 · PDF rico + fix cierre print*
+

@@ -17,8 +17,9 @@ import type {
 
 /**
  * Plantilla de impresión de la Mesa diaria — PDF visual para reunión.
- * Diseñada para A4 landscape, oculta off-screen en uso normal y solo
- * visible durante `useReactToPrint` (mismo patrón que `externos-print-parte`).
+ * Diseñada para A4 landscape, oculta off-screen en uso normal.
+ * Se imprime vía `printElementInNewWindow` (ventana nueva) para no tumbar
+ * Electron/Minerva al cerrar el diálogo de impresión del sistema.
  */
 
 export type MesaDiariaPrintMaquina = {

@@ -9,11 +9,9 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useReactToPrint } from "react-to-print";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { CalendarioDetalleDiaPrintTemplate } from "@/components/produccion/ots/calendario-detalle-dia-print";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -35,6 +33,11 @@ import {
   type CalendarioDetalleMaquina,
   type DetalleDiaDraftSlot,
 } from "@/lib/calendario-detalle-dia";
+import {
+  buildDetalleDiaPrintHtml,
+  fetchDetalleDiaPrintMetaByOts,
+  printHtmlInNewWindow,
+} from "@/lib/calendario-detalle-dia-print";
 import {
   labelCalendarioAmbito,
   type CalendarioAmbito,
@@ -74,9 +77,9 @@ export function CalendarioDetalleDiaDialog({
   onSaved,
 }: CalendarioDetalleDiaDialogProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-  const printRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const [maquinas, setMaquinas] = useState<CalendarioDetalleMaquina[]>([]);
   const [maquinaId, setMaquinaId] = useState("");
   const [savedRows, setSavedRows] = useState<ProdCalendarioDetalleDiaRow[]>([]);
@@ -337,14 +340,44 @@ export function CalendarioDetalleDiaDialog({
     tryClose(false);
   };
 
-  const handlePrint = useReactToPrint({
-    contentRef: printRef,
-    documentTitle: `Plan-${ambito}-${dayYmd}`,
-    pageStyle: `
-      @page { size: A4 portrait; margin: 10mm; }
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    `,
-  });
+  const handlePrint = async () => {
+    if (draft.length === 0 || printing) return;
+    setPrinting(true);
+    try {
+      const metaByOt = await fetchDetalleDiaPrintMetaByOts(
+        supabase,
+        draft.map((d) => d.otNumero),
+      );
+      for (const l of lineas) {
+        const t = l.trabajo?.trim();
+        if (!t) continue;
+        const prev = metaByOt.get(l.otNumero);
+        if (prev && (!prev.trabajo || prev.trabajo === "—")) {
+          metaByOt.set(l.otNumero, { ...prev, trabajo: t });
+        }
+      }
+      const html = buildDetalleDiaPrintHtml({
+        dayYmd,
+        dayLabel,
+        ambito,
+        maquinaNombre,
+        draft,
+        metaByOt,
+        generadoPor: userEmail,
+      });
+      const ok = printHtmlInNewWindow(html, `Plan-${ambito}-${dayYmd}`);
+      if (!ok) {
+        toast.error(
+          "No se pudo abrir la ventana de impresión. Revisa el bloqueador de ventanas emergentes.",
+        );
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error(errorMessageFromUnknown(e, "No se pudo generar el PDF."));
+    } finally {
+      setPrinting(false);
+    }
+  };
 
   const renderTurnoList = (
     turno: CalendarioDetalleDiaTurno,
@@ -494,10 +527,15 @@ export function CalendarioDetalleDiaDialog({
               variant="outline"
               size="sm"
               className="h-9 gap-1.5"
-              disabled={draft.length === 0}
-              onClick={() => handlePrint()}
+              disabled={draft.length === 0 || printing}
+              onClick={() => void handlePrint()}
+              title="Imprimir / Guardar como PDF (ventana nueva — no cierra Minerva)"
             >
-              <FileDown className="size-4" />
+              {printing ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <FileDown className="size-4" />
+              )}
               PDF
             </Button>
           </div>
@@ -639,17 +677,6 @@ export function CalendarioDetalleDiaDialog({
           </div>
         </DialogFooter>
       </DialogContent>
-
-      <CalendarioDetalleDiaPrintTemplate
-        ref={printRef}
-        dayYmd={dayYmd}
-        dayLabel={dayLabel}
-        ambito={ambito}
-        maquinaNombre={maquinaNombre}
-        draft={draft}
-        trabajoByOt={trabajoByOt}
-        generadoPor={userEmail}
-      />
     </Dialog>
   );
 }

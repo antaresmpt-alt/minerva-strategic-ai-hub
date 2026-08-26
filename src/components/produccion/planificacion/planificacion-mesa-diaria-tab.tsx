@@ -26,7 +26,6 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useReactToPrint } from "react-to-print";
 import { toast } from "sonner";
 
 import {
@@ -85,6 +84,7 @@ import {
   sortMaquinasPlanificacionUiOrder,
   type PlanificacionTipoMaquina,
 } from "@/lib/planificacion-ambito";
+import { printElementInNewWindow } from "@/lib/calendario-detalle-dia-print";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
   derivarOtAImpresionExterna,
@@ -403,19 +403,29 @@ export function PlanificacionMesaDiariaTab() {
     setExportDialogOpen(true);
   }, []);
 
-  // ---- Impresión visual del plan del día (PDF #2 — para reuniones).
-  // Patrón react-to-print: template offscreen + handler aislado, igual que
-  // el botón "PDF" de Gestión Externos. No usa `window.print()` sobre la UI viva.
+  // ---- Impresión visual del plan del día (PDF — reuniones).
+  // Ventana nueva: evita que cerrar el diálogo de impresión tumbe Electron/Minerva
+  // (bug de react-to-print con window.print() en la misma pestaña).
   const printDiariaRef = useRef<HTMLDivElement>(null);
   const { umbrales: umbralesOtsCompras } = useSysParametrosOtsCompras();
-  const handlePrintPlanDiario = useReactToPrint({
-    contentRef: printDiariaRef,
-    documentTitle: `Minerva-Plan-Diario-${dayKey}`,
-    pageStyle: `
-      @page { size: A4 landscape; margin: 10mm 10mm; }
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    `,
-  });
+  const handlePrintPlanDiario = useCallback(() => {
+    const el = printDiariaRef.current;
+    if (!el) {
+      toast.error("No hay contenido listo para imprimir.");
+      return;
+    }
+    const ok = printElementInNewWindow(
+      el,
+      `Minerva-Plan-Diario-${dayKey}`,
+      `@page { size: A4 landscape; margin: 10mm; }
+       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }`,
+    );
+    if (!ok) {
+      toast.error(
+        "No se pudo abrir la ventana de impresión. Revisa el bloqueador de ventanas emergentes.",
+      );
+    }
+  }, [dayKey]);
 
   // ---- Loaders ============================================================
 
@@ -2162,7 +2172,7 @@ export function PlanificacionMesaDiariaTab() {
               className="h-8"
               onClick={() => handlePrintPlanDiario()}
               disabled={loading || visibleMaquinas.length === 0}
-              title="Imprimir / Guardar como PDF el plan visual del día (todas las máquinas)"
+              title="Imprimir / Guardar como PDF el plan visual del día (ventana nueva — no cierra Minerva)"
             >
               <Printer className="mr-1 size-4" aria-hidden />
               Imprimir plan del día
