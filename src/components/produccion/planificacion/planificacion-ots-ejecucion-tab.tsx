@@ -65,6 +65,10 @@ import {
   PLANIFICACION_TIPOS_MAQUINA,
 } from "@/lib/planificacion-ambito";
 import {
+  compareConPlanHoy,
+  fetchPlanHoySlotByOt,
+} from "@/lib/calendario-detalle-dia";
+import {
   contenedorCtpVirtualId,
   crearEjecucionLigeraCtp,
   fetchContenedorCtpPasosDisponibles,
@@ -2131,10 +2135,33 @@ export function PlanificacionOtsEjecucionTab({
                 otPasoIdsConEjecucionActiva: occupiedPasos,
               },
             );
+            let pasosSec = candidatosSec;
+            if (
+              def.kind === "impresion" ||
+              def.kind === "digital" ||
+              def.kind === "engomado"
+            ) {
+              try {
+                const hoy = new Date();
+                const ymd = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
+                const slotByOt = await fetchPlanHoySlotByOt(
+                  supabase,
+                  ymd,
+                  def.kind,
+                );
+                if (slotByOt.size > 0) {
+                  pasosSec = [...candidatosSec].sort((a, b) =>
+                    compareConPlanHoy(a, b, slotByOt),
+                  );
+                }
+              } catch (planErr) {
+                console.warn("[ejecucion] plan hoy detalle-día", planErr);
+              }
+            }
             const fixedMaq = def.claim ? null : maqs[0] ?? null;
             contenedorRows = [
               ...contenedorRows,
-              ...candidatosSec.map((p) =>
+              ...pasosSec.map((p) =>
                 buildContenedorSeccionVirtualRow(p, fixedMaq, {
                   claim: def.claim,
                   labelBadge: def.labelBadge,

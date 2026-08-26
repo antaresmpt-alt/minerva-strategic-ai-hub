@@ -63,6 +63,9 @@ import {
   type CalendarioProduccionLinea,
 } from "@/lib/calendario-produccion";
 import {
+  appendDetalleSlotAfterCalendarMove,
+} from "@/lib/calendario-detalle-dia";
+import {
   allCalendarioAmbitoVisibilityOn,
   CALENDARIO_AMBITOS,
   CALENDARIO_AMBITO_LETRA,
@@ -1428,6 +1431,20 @@ export function CalendarioProduccionPage() {
         }
         throw error;
       }
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        await appendDetalleSlotAfterCalendarMove(supabase, {
+          calendarioOtId: portapapeles.id,
+          otNumero: portapapeles.otNumero,
+          ambito: portapapeles.ambito,
+          fechaDestinoYmd: dayYmd,
+          createdBy: user?.id ?? null,
+        });
+      } catch (detErr) {
+        console.warn("[calendario] append detalle tras pegar", detErr);
+      }
       toast.success(
         `OT ${portapapeles.otNumero} movida a ${fechaDiaLabel(dayYmd)}.`,
       );
@@ -2533,6 +2550,7 @@ export function CalendarioProduccionPage() {
           ambito={ambitoActivo}
           lineas={dayLineasParaDetalle}
           canEdit={canEditActivo}
+          onSaved={() => void load()}
         />
       ) : null}
     </div>
