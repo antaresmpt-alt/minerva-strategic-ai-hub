@@ -254,7 +254,7 @@ export function CalendarioDetalleDiaDialog({
               <Label className="text-xs">Máquina</Label>
               <Select
                 value={maquinaId || undefined}
-                onValueChange={setMaquinaId}
+                onValueChange={(v) => setMaquinaId(v ?? "")}
                 disabled={!canEdit || loading || maquinas.length === 0}
               >
                 <SelectTrigger className="mt-1 h-9">
