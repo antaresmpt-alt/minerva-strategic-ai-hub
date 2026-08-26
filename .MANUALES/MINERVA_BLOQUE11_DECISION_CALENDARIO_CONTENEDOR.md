@@ -1,9 +1,9 @@
 # Bloque 11 — Calendario, bandeja, contenedor y mesa (decisión de diseño)
 
-> **Fecha:** 21 ago 2026 · **Rev. completa:** **23 ago 2026 mediodía** (diseño + contenedor smoke + **bandeja 1b smoke OK**)
-> **Estado:** diseño **cerrado** · spike contenedor **smoke OK** · **bandeja computada smoke OK** (rama `feature/bloque11-contenedor-ctp-spike`) · merge a `main` pendiente OK Manel/planta
+> **Fecha:** 21 ago 2026 · **Rev. completa:** **26 ago 2026 noche** (diseño + contenedor + bandeja + **spike detalle-día §6.5 B**)
+> **Estado:** diseño **cerrado** · contenedor/bandeja **smoke OK** · **persistencia detalle-día = B** · fase 3 pendiente · merge `main` pendiente OK Manel
 > **Complementa:** `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` · `.MANUALES/MINERVA_BLOQUE11_ANALISIS_CONTENEDOR_VS_MESA.md` · `.MANUALES/MINERVA_BLOQUE11_BRIEF_JORDI_CARLOS.md`
-> **Código 23 ago:** bandeja §5/§23 + multi-cartela + pantalla trabajo · motor contenedor CTP→…→I/D · fix horas
+> **Código:** bandeja §5/§23 · contenedor CTP→…→I/D · hecho visual 26 ago · spike §6.5 → `SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md`
 
 ---
 
@@ -192,7 +192,7 @@ Contenedor refleja orden (operario)
 | `launchExecution` obligatorio | **No ejecuta** |
 | Semanal + diaria | Solo **día** (+ navegar ±1) |
 
-Persistencia del orden por máquina: **decisión abierta** — ver §6.5. No empezar fase 3 sin cerrarla.
+Persistencia del orden por máquina: **cerrada → opción B** — ver §6.5 (26 ago).
 
 ### 6.4 Offset (cuello de botella)
 
@@ -205,18 +205,103 @@ Lo específico de offset es la **secuencia fina del día** (turnos, horas, PDF) 
 | «¿En offset no cambia nada?» | Cambia el circuito (contenedor); **no** pierde turnos/horas/PDF (detalle del día). |
 | «¿Seguimos lanzando desde mesa?» | **No** en camino feliz. LEGACY solo admin/gerencia en transición. |
 
-### 6.5 Spike persistencia detalle del día (bloqueante fase 3)
+### 6.5 Spike persistencia detalle del día — **CERRADO 26 ago (opción B)**
 
-Única decisión de arquitectura **genuinamente abierta** en este documento.
+**Decisión:** tabla ligera nueva. **No** reutilizar `prod_mesa_planificacion_trabajos`.
 
-**Resolver antes de picar fase 3**, no durante:
+Sesión: `SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md` · migración borrador: `supabase/migrations/20260826200000_prod_calendario_detalle_dia.sql` (**no aplicada** hasta fase 3 OK Manel).
 
-| Opción | Pros | Riesgos |
-|--------|------|---------|
-| Reutilizar `prod_mesa_planificacion_trabajos` con otro origen | Menos migraciones; UI mesa similar | Columnas/constraints pensadas para `launchExecution` y pool |
-| Tabla/vista ligera solo «orden día + máquina» | Modelo limpio para planning sin ejecución | Trabajo de migración / doble lectura temporal |
+#### Por qué B (no A)
 
-**Entregable del spike:** diagrama origen de datos + decisión escrita + impacto en `planificacion-detalle-dia-tab.tsx`. Si se elige mal, fase 3 puede obligar a rehacer a medio construir.
+1. **LEGACY vivo + separación por rol** (admin/gerencia): aislar por tabla permite RLS limpia; misma tabla obligaría a discriminar por columna/`origen`.
+2. **Dos escritores = bugs de legado** (patrón Bloque 9): Pool/`launchExecution` vs calendario/detalle no deben compartir filas.
+3. **Due diligence coexistencia** (si se reutilizara la misma tabla):
+   - Índice único `ux_mesa_ot_activa` (OT + máquina, estados borrador/confirmado/en_ejecucion) → **conflicto** si Pool y detalle-día tienen la misma OT.
+   - `prod_mesa_ejecuciones.mesa_trabajo_id` + trigger `trg_prod_mesa_ejecuciones_itinerario_finaliza` cierra `estado_mesa` al finalizar → asume circuito de mesa.
+   - Contenedor ya inserta ejecuciones con `mesa_trabajo_id = null` (camino feliz sin mesa).
+   - `calendario-mesa-espejo.ts` leería filas detalle como «en mesa» y mentiría al planificador.
+   - `origen_pool_id`, `estado_mesa` (borrador→…→finalizada) = semántica Pool, no planning puro.
+
+Conclusión: A es peligroso aunque ahorre una migración hoy.
+
+#### Diagrama origen de datos (camino feliz)
+
+```
+prod_calendario_produccion_ot     ← qué OT está en qué día (ámbito I/D/T/E)
+         │
+         │ 1:1 / 1:N fino
+         ▼
+prod_calendario_detalle_dia       ← orden fino: máquina × turno × slot × horas
+         │                            (NO ejecuta, NO launchExecution)
+         │ lectura orden
+         ▼
+Contenedor / OTs ejecución        ← grupo «Hoy» = disponible ∩ planificado hoy
+                                    grupo «Cola» = disponible sin plan hoy
+                                    Itinerario autoriza; detalle solo prioriza
+```
+
+LEGACY (aislado): `prod_planificacion_pool` → `prod_mesa_planificacion_trabajos` → `prod_mesa_ejecuciones.mesa_trabajo_id` — **sin escritura** desde detalle-día.
+
+#### Modelo tabla ligera (fase 3)
+
+Nombre: `prod_calendario_detalle_dia`
+
+| Columna | Tipo | Notas |
+|---------|------|--------|
+| `id` | uuid PK | |
+| `calendario_ot_id` | uuid FK → `prod_calendario_produccion_ot` **ON DELETE CASCADE** | Quitar pastilla = limpia slot |
+| `fecha` | date | Desnormalizada (query rápida) |
+| `ambito` | text | mismo check I/D/T/E |
+| `ot_numero` | text | |
+| `maquina_id` | uuid NULL → `prod_maquinas` | Piloto Carlos: 1 máquina offset |
+| `turno` | text NULL | `manana` \| `tarde` |
+| `slot_orden` | int > 0 | Orden en columna |
+| `horas_planificadas_snapshot` | numeric NULL | |
+| `notas` | text NULL | |
+| `created_by` / `created_at` / `updated_at` | | |
+
+Unique sugerido: `(fecha, ambito, ot_numero)` en v1 (una fila fina por pastilla de día).  
+Índice: `(fecha, ambito, maquina_id, turno, slot_orden)`.
+
+#### Huérfanas / plan que no se cumple
+
+| Caso | Qué hacer |
+|------|-----------|
+| Quitar/mover pastilla del calendario | **CASCADE** borra el slot (no fantasmas) |
+| Día pasado, OT nunca `disponible` (STOP material, etc.) | Slot **permanece** mientras la pastilla exista (Carlos ve que el plan se rompió). Al borrar pastilla o mover día → CASCADE |
+| Retención | Job/UI opcional: avisar pastillas con `fecha < hoy` y semáforo no hecho; no auto-borrar sin acción humana en v1 |
+
+#### Impacto `planificacion-detalle-dia-tab.tsx` (fase 3)
+
+- **Lee** OTs del día desde `prod_calendario_produccion_ot` (no Pool).
+- **Escribe** orden/máquina/turno/horas solo en `prod_calendario_detalle_dia`.
+- **Reutiliza** UI/libs de mesa (`planificacion-mesa-diaria.ts`, PDF, turnos) donde encaje — **sin** `launchExecution` ni writes a `prod_mesa_planificacion_trabajos`.
+- Entrada: botón calendario «Organizar detalle del día» (día + ámbito). Ruta/tab técnica OK; **no** bautizar menú «Planificador» ni orden definitivo de pestañas → **Bloque 12**.
+- LEGACY: aislamiento por rol (§10) = valla de seguridad; no rediseño de navegación feliz ahora.
+
+#### Lista ejecución — 2 grupos visuales (diseño cerrado)
+
+| Grupo | Criterio | Orden |
+|-------|----------|--------|
+| **Hoy (planificado)** | Pastilla/detalle hoy **y** paso `disponible` (o en curso) | `slot_orden` del detalle |
+| **Disponibles sin plan** | Paso listo, sin plan hoy | Fecha entrega |
+
+Regla: **calendario/detalle ordenan; itinerario autoriza.** Estar en «Hoy» ≠ ejecutable si falta paso/material. No ocultar planificadas no ejecutables del día en el detalle de Carlos; en contenedor, no accionables o fuera del grupo activo según semáforo.
+
+#### Semáforo material en calendario/detalle (diseño cerrado)
+
+- **No bloquea** colocar OTs (TEST: 99% sin compra/despacho → no muro ni toasts).
+- Icono pequeño (palet/punto); compra en **tooltip**.
+- Color = **misma fuente que Pool `materialStatus`** (cartelas/muelle), no el semáforo de Externos-compras.
+
+| Color | Significado |
+|-------|-------------|
+| **Gris** | Sin despachar / material no aplica aún |
+| **Rojo** | Despachada, sin cobertura (Pool rojo) |
+| **Ámbar** | Muelle o cartelado parcial (Pool amarillo) |
+| **Verde** | Cartelado ≥ objetivo (Pool verde) — **no** «solo recibido» |
+
+I/D: útil (Carlos/Rita). E/T: bajo ruido (aguas arriba suele bastar). Dolor Rita↔Ramón↔Miguel (estado «¿cortado?») = **exponer paso Guillotina en contenedor I/D** (backlog alto impacto; no bloquea fase 3).
 
 ---
 
@@ -283,8 +368,8 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 | **1a** | Contenedor + modal ejecución (CTP + T) |
 | **1b** | Bandeja computada + ocultar panel (Carlos) |
 | **2** | Filtros cadena bandeja + overlay |
-| **2b** | **Spike persistencia detalle del día** (§6.5 — **antes** de fase 3) |
-| **3** | Detalle del día — Carlos (solo tras spike 2b) |
+| **2b** | **Spike persistencia detalle del día** (§6.5) — **✅ B 26 ago** |
+| **3** | Detalle del día — Carlos (migración + UI) |
 | **4** | Offset secuencia fina (refinar detalle si hace falta) |
 | **5** | LEGACY tab |
 
@@ -306,7 +391,7 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 | 13.10 | PR1 botón fuera calendario |
 | 13.11 | Retener = diseño, no build |
 | 13.12 | Gate por proceso = pendiente |
-| 13.13 | Persistencia detalle del día = **pendiente spike 2b** (bloqueante fase 3) |
+| 13.13 | Persistencia detalle del día = **opción B** (`prod_calendario_detalle_dia`) — spike 26 ago ✅ |
 
 ---
 
@@ -317,13 +402,14 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 - [ ] Validar brief Jordi/Carlos
 - [x] **Spike bandeja computada** (§5 · smoke planta 23 ago · ver §23)
 - [x] **Spike contenedor CTP** (`feature/bloque11-contenedor-ctp-spike`) — ver §17
-- [ ] **Spike persistencia detalle del día (§6.5) — obligatorio antes de fase 3**
+- [x] **Spike persistencia detalle del día (§6.5) — cerrado 26 ago opción B** · `SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md`
 - [x] Ejecución modal (pantalla de trabajo + botones Iniciar/Pausar/Cerrar en línea gorda · 23 ago)
-- [ ] Detalle del día (Carlos) — **solo tras spike persistencia**
-- [ ] LEGACY tab
 - [x] Spike troquel + claim (`contenedor-troquel.ts` · ver §18)
 - [x] Spike contenedores Guillotina/Desbroce/Manipulados + Engomado claim (`contenedor-seccion.ts` · ver §19)
 - [x] Spike Contenedor Impresión + Digital (ver §20)
+- [ ] Detalle del día (Carlos) — fase 3 (migración + UI; entrada desde calendario)
+- [ ] LEGACY tab — aislamiento por rol (valla §10); nombres/orden menú feliz → **Bloque 12**
+- [ ] Contenedor I/D: exponer estado Guillotina («¿cortado?») — backlog Rita/Ramón (no bloquea fase 3)
 
 ---
 
@@ -337,8 +423,9 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 | Espejo | `calendario-mesa-espejo.ts` | Lectura |
 | Pasar a mesa | `planificacion-pasar-a-mesa.ts` | LEGACY |
 | Mesa diaria LEGACY | `planificacion-mesa-diaria-tab.tsx` | No modificar camino feliz |
-| Detalle día (futuro) | `planificacion-detalle-dia-tab.tsx` | Por crear |
-| Helpers mesa | `planificacion-mesa-diaria.ts` | Reutilizar |
+| Detalle día (fase 3) | `planificacion-detalle-dia-tab.tsx` | Por crear · escribe `prod_calendario_detalle_dia` |
+| Tabla detalle | `prod_calendario_detalle_dia` | Migración borrador 20260826200000 (aplicar en fase 3) |
+| Helpers mesa | `planificacion-mesa-diaria.ts` | Reutilizar UI; no writes LEGACY |
 | Ejecución | `planificacion-ots-ejecucion-tab.tsx` | + contenedor CTP spike |
 | Contenedor CTP | `contenedor-ctp.ts` | Query + fila ligera |
 
@@ -548,8 +635,14 @@ PDF usa checks Ver (overlay) · PDF día solo en modal del día · externos sigu
 
 ### Siguiente
 
-Spike persistencia detalle del día (§6.5) → fase 3 detalle día Carlos.
+Fase 3 detalle día Carlos (aplicar migración + UI). LEGACY: valla rol cuando toque. Bloque 12: nombres menú Planificador.
 
 ---
 
-*Manel + Cursor · 22 ago noche contenedor · 23 ago mediodía bandeja 1b smoke OK · 26 ago hecho visual + altura bandeja*
+## 24. Spike persistencia detalle-día (§6.5) — 26 ago
+
+**Decisión B** — ver §6.5 completo + `SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md`.
+
+---
+
+*Manel + Cursor · 22 ago noche contenedor · 23 ago mediodía bandeja 1b smoke OK · 26 ago hecho visual + altura bandeja · 26 ago noche spike detalle-día B*

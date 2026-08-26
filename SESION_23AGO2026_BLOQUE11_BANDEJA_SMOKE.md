@@ -77,10 +77,10 @@ Smoke planta Manel **23 ago mediodía** — I/D/T/E + loop ejecución↔calendar
 
 ## Siguiente (Track B)
 
-1. Spike **persistencia detalle del día** (§6.5) — bloqueante fase 3.  
-2. Detalle del día Carlos (quitar Excel).  
-3. Brief Jordi/Carlos · LEGACY tab.  
-4. (Opcional) atajo «PDF semana Impresión (Gemma)».
+1. **Fase 3** detalle del día Carlos — aplicar migración + UI (spike §6.5 B cerrado).  
+2. Brief Jordi/Carlos · valla LEGACY por rol.  
+3. (Bloque 12) menú Planificador / roles.  
+4. Backlog: estado Guillotina visible en I/D (Rita/Ramón).
 
 ---
 
