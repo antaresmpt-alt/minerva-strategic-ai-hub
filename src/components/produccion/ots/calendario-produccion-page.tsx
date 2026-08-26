@@ -8,6 +8,7 @@ import {
   ChevronUp,
   ClipboardPaste,
   FileDown,
+  ListOrdered,
   Loader2,
   Plus,
   RefreshCw,
@@ -26,6 +27,7 @@ import {
   CalendarioBandejaPanel,
   CalendarioBandejaToggle,
 } from "@/components/produccion/ots/calendario-bandeja-panel";
+import { CalendarioDetalleDiaDialog } from "@/components/produccion/ots/calendario-detalle-dia-dialog";
 import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
 import { STEP_BADGE_STYLES } from "@/components/produccion/hoja-ruta/hoja-ruta-step-styles";
 import {
@@ -438,6 +440,7 @@ export function CalendarioProduccionPage() {
 
   const [dayOpen, setDayOpen] = useState(false);
   const [dayYmd, setDayYmd] = useState<string | null>(null);
+  const [detalleDiaOpen, setDetalleDiaOpen] = useState(false);
   const [otQuery, setOtQuery] = useState("");
   const [notaTexto, setNotaTexto] = useState("");
   const [otHits, setOtHits] = useState<OtSearchHit[]>([]);
@@ -645,6 +648,16 @@ export function CalendarioProduccionPage() {
     () => dayLineas.filter((l) => l.ambito === ambitoActivo),
     [dayLineas, ambitoActivo],
   );
+
+  /** Todas las pastillas del día/ámbito (sin filtro «Solo pendientes») para el detalle. */
+  const dayLineasParaDetalle = useMemo(() => {
+    if (!dayYmd) return [];
+    const dayRows = rowsVisibles.filter(
+      (r) =>
+        r.fecha.slice(0, 10) === dayYmd && r.ambito === ambitoActivo,
+    );
+    return entradasPorDia(dayRows, tituloByOt).get(dayYmd) ?? [];
+  }, [dayYmd, rowsVisibles, ambitoActivo, tituloByOt]);
 
   const dayNotas = useMemo(() => {
     if (!dayYmd) return [];
@@ -2056,6 +2069,19 @@ export function CalendarioProduccionPage() {
               </Button>
             ) : null}
 
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full border-[#002147]/30 text-[#002147]"
+              disabled={!dayYmd || dayLineasParaDetalle.length === 0}
+              onClick={() => setDetalleDiaOpen(true)}
+            >
+              <ListOrdered className="mr-1.5 size-4" />
+              Organizar detalle del día
+              {!canEditActivo ? " (ver)" : ""}
+            </Button>
+
             <div>
               <Label className="text-xs">
                 Añadir OT ({labelCalendarioAmbito(ambitoActivo)})
@@ -2497,6 +2523,18 @@ export function CalendarioProduccionPage() {
           setCafePending(null);
         }}
       />
+
+      {dayYmd ? (
+        <CalendarioDetalleDiaDialog
+          open={detalleDiaOpen}
+          onOpenChange={setDetalleDiaOpen}
+          dayYmd={dayYmd}
+          dayLabel={fechaDiaLabel(dayYmd)}
+          ambito={ambitoActivo}
+          lineas={dayLineasParaDetalle}
+          canEdit={canEditActivo}
+        />
+      ) : null}
     </div>
   );
 }

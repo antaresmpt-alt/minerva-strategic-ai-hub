@@ -59,11 +59,12 @@ calendario (pastilla día) ──CASCADE──► detalle_dia (máquina/turno/sl
 
 ## Siguiente (fase 3)
 
-1. Aplicar migración `20260826200000_…` (OK Manel).  
-2. UI `planificacion-detalle-dia-tab.tsx` (piloto Carlos / offset).  
+1. ~~Aplicar migración~~ ✅ 26 ago (sin columna `fecha`).  
+2. ~~UI detalle del día desde calendario~~ ✅ v1 (`calendario-detalle-dia-dialog.tsx`).  
 3. Contenedor lee `slot_orden` para grupo Hoy.  
-4. Semáforo material icono (reutilizar cálculo Pool).
+4. Semáforo material icono (reutilizar cálculo Pool).  
+5. Pendiente UX: cajón atrasadas / filtro N días.
 
 ---
 
-*Manel + Cursor · 26 ago 2026 noche*
+*Manel + Cursor · 26 ago 2026 noche · migración aplicada + UI v1*

@@ -1,13 +1,13 @@
--- Bloque 11 §6.5 — Detalle del día (orden fino por máquina/turno).
+-- Bloque 11 §6.5 / fase 3 — Detalle del día (orden fino por máquina/turno).
 -- Opción B: tabla ligera NUEVA. No reutiliza prod_mesa_planificacion_trabajos.
--- Spike 26 ago 2026: SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md
--- Aplicar en fase 3 (OK Manel); no forma parte del camino LEGACY Pool/Mesa.
+-- Sin columna `fecha`: la fecha se lee siempre vía join a prod_calendario_produccion_ot
+-- (mover pastilla = UPDATE id; CASCADE solo al DELETE de pastilla).
+-- Spike: SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md
 
 create table if not exists public.prod_calendario_detalle_dia (
   id uuid primary key default gen_random_uuid(),
   calendario_ot_id uuid not null
     references public.prod_calendario_produccion_ot (id) on delete cascade,
-  fecha date not null,
   ambito text not null,
   ot_numero text not null,
   maquina_id uuid null
@@ -32,13 +32,13 @@ create table if not exists public.prod_calendario_detalle_dia (
 );
 
 comment on table public.prod_calendario_detalle_dia is
-  'Orden fino del día (máquina/turno/slot/horas) para pastillas del calendario. No ejecuta. CASCADE al borrar pastilla.';
+  'Orden fino del día (máquina/turno/slot/horas) para pastillas del calendario. Fecha vía join a calendario_ot. No ejecuta. CASCADE al borrar pastilla.';
 
 comment on column public.prod_calendario_detalle_dia.calendario_ot_id is
-  'Pastilla origen. ON DELETE CASCADE = sin filas huérfanas al quitar del calendario.';
+  'Pastilla origen. ON DELETE CASCADE = sin filas huérfanas al quitar del calendario. Mover día = UPDATE pastilla (no dispara CASCADE).';
 
-create index if not exists idx_prod_calendario_detalle_dia_fecha_ambito
-  on public.prod_calendario_detalle_dia (fecha, ambito, maquina_id, turno, slot_orden);
+create index if not exists idx_prod_calendario_detalle_dia_ambito_maq
+  on public.prod_calendario_detalle_dia (ambito, maquina_id, turno, slot_orden);
 
 create index if not exists idx_prod_calendario_detalle_dia_ot
   on public.prod_calendario_detalle_dia (ot_numero);
@@ -64,9 +64,6 @@ create trigger prod_calendario_detalle_dia_set_updated_at
 alter table public.prod_calendario_detalle_dia enable row level security;
 
 grant select, insert, update, delete on public.prod_calendario_detalle_dia to authenticated;
-
--- Misma política amplia que el calendario (planta autenticada).
--- Afinar por rol en Bloque 12 si hace falta.
 
 drop policy if exists prod_calendario_detalle_dia_select on public.prod_calendario_detalle_dia;
 create policy prod_calendario_detalle_dia_select

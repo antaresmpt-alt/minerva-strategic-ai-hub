@@ -244,25 +244,24 @@ LEGACY (aislado): `prod_planificacion_pool` → `prod_mesa_planificacion_trabajo
 
 #### Modelo tabla ligera (fase 3)
 
-Nombre: `prod_calendario_detalle_dia`
+Nombre: `prod_calendario_detalle_dia` — **sin columna `fecha`** (siempre join a pastilla; mover día = UPDATE id → no pierde orden).
 
 | Columna | Tipo | Notas |
 |---------|------|--------|
 | `id` | uuid PK | |
 | `calendario_ot_id` | uuid FK → `prod_calendario_produccion_ot` **ON DELETE CASCADE** | Quitar pastilla = limpia slot |
-| `fecha` | date | Desnormalizada (query rápida) |
 | `ambito` | text | mismo check I/D/T/E |
 | `ot_numero` | text | |
-| `maquina_id` | uuid NULL → `prod_maquinas` | Piloto Carlos: 1 máquina offset |
+| `maquina_id` | uuid NULL → `prod_maquinas` | Piloto Carlos: SpeedMaster |
 | `turno` | text NULL | `manana` \| `tarde` |
 | `slot_orden` | int > 0 | Orden en columna |
 | `horas_planificadas_snapshot` | numeric NULL | |
 | `notas` | text NULL | |
 | `created_by` / `created_at` / `updated_at` | | |
 
-Unique sugerido: `(fecha, ambito, ot_numero)` en v1 (una fila fina por pastilla de día).  
-Índice: `(fecha, ambito, maquina_id, turno, slot_orden)`.
+Unique: `(calendario_ot_id)`. Índice: `(ambito, maquina_id, turno, slot_orden)`.
 
+**Planes atrasados (fase 3+):** vista mes/semana ya acota; «Solo pendientes» no limpia por fecha. Pendiente: cajón «Atrasadas» o filtro N días — no bloquea v1.
 #### Huérfanas / plan que no se cumple
 
 | Caso | Qué hacer |
@@ -407,7 +406,7 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 - [x] Spike troquel + claim (`contenedor-troquel.ts` · ver §18)
 - [x] Spike contenedores Guillotina/Desbroce/Manipulados + Engomado claim (`contenedor-seccion.ts` · ver §19)
 - [x] Spike Contenedor Impresión + Digital (ver §20)
-- [ ] Detalle del día (Carlos) — fase 3 (migración + UI; entrada desde calendario)
+- [ ] Detalle del día (Carlos) — fase 3 **UI v1 en calendario** (26 ago) · contenedor lee orden = siguiente
 - [ ] LEGACY tab — aislamiento por rol (valla §10); nombres/orden menú feliz → **Bloque 12**
 - [ ] Contenedor I/D: exponer estado Guillotina («¿cortado?») — backlog Rita/Ramón (no bloquea fase 3)
 
@@ -423,9 +422,10 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 | Espejo | `calendario-mesa-espejo.ts` | Lectura |
 | Pasar a mesa | `planificacion-pasar-a-mesa.ts` | LEGACY |
 | Mesa diaria LEGACY | `planificacion-mesa-diaria-tab.tsx` | No modificar camino feliz |
-| Detalle día (fase 3) | `planificacion-detalle-dia-tab.tsx` | Por crear · escribe `prod_calendario_detalle_dia` |
-| Tabla detalle | `prod_calendario_detalle_dia` | Migración borrador 20260826200000 (aplicar en fase 3) |
-| Helpers mesa | `planificacion-mesa-diaria.ts` | Reutilizar UI; no writes LEGACY |
+| Detalle día (fase 3) | `calendario-detalle-dia-dialog.tsx` | Entrada desde modal día · escribe `prod_calendario_detalle_dia` |
+| Lib detalle | `calendario-detalle-dia.ts` | CRUD + join por pastilla (sin fecha duplicada) |
+| Tabla detalle | `prod_calendario_detalle_dia` | Migración `20260826200000` **aplicada** 26 ago |
+| Helpers mesa | `planificacion-mesa-diaria.ts` | Reutilizar UI avanzada luego; no writes LEGACY |
 | Ejecución | `planificacion-ots-ejecucion-tab.tsx` | + contenedor CTP spike |
 | Contenedor CTP | `contenedor-ctp.ts` | Query + fila ligera |
 

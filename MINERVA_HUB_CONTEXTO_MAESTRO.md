@@ -327,11 +327,12 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [x] **Bloque 11 contenedor spike:** smoke planta OK (rama `feature/bloque11-contenedor-ctp-spike`) — merge `main` cuando diga Manel
 - [x] **Bloque 11 bandeja 1b:** smoke planta OK 23 ago — `SESION_23AGO2026_BLOQUE11_BANDEJA_SMOKE.md`
 - [x] **Bloque 11 spike §6.5:** persistencia detalle-día = **opción B** — `SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md`
-- [ ] **Bloque 11 siguiente:** fase 3 detalle-día Carlos · brief Jordi/Carlos · valla LEGACY · (Bloque 12: menú Planificador)
+- [ ] **Bloque 11 siguiente:** contenedor lee orden detalle «Hoy» · brief Jordi/Carlos · valla LEGACY · (Bloque 12: menú)
 - [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor; tableta = máquina — `MINERVA_BLOQUE12_…` (no abrir ya; default gestor = maestro OTs)
 - [ ] **Bloque 5 puente**: Rita lanza OTs a Hugo (no bloquea paralelo si Hugo sigue a mano)
 
 ### Hecho reciente (jul–ago)
+- [x] **26 ago noche:** Bloque 11 — **fase 3 v1** detalle-día UI + migración `prod_calendario_detalle_dia` (sin fecha) · spike §6.5 B
 - [x] **26 ago noche:** Bloque 11 — **spike §6.5 cerrado (B)** tabla `prod_calendario_detalle_dia` · semáforo material + 2 grupos ejecución · `SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md`
 - [x] **26 ago tarde:** Bloque 11 — hecho visual HR gris + Solo pendientes + altura bandeja = grid
 - [x] **23 ago mediodía:** Bloque 11 — **smoke bandeja + calendario OK** (I/D/T/E, cadena, 99910 Hecho HR, PDF) + pulidos UI — `SESION_23AGO2026_BLOQUE11_BANDEJA_SMOKE.md` · decisión §23
