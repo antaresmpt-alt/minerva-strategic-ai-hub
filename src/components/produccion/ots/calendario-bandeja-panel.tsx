@@ -137,10 +137,8 @@ export function CalendarioBandejaPanel({
     <aside
       className={cn(
         "flex w-[min(100%,17.5rem)] shrink-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm",
-        // Móvil: tope fijo. Desktop: altura vía matchHeightPx (+ sticky).
-        matchHeightPx == null
-          ? "max-h-[min(70vh,42rem)]"
-          : "lg:sticky lg:top-3 lg:max-h-none",
+        // Móvil: tope fijo. Desktop: altura = grid (matchHeightPx), sin sticky.
+        matchHeightPx == null ? "max-h-[min(70vh,42rem)]" : "lg:max-h-none",
         className,
       )}
       style={

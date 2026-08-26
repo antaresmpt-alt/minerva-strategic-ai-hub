@@ -47,6 +47,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   buildSemanaLaboral,
   buildSemanasLaboralesMes,
+  enrichEntradasHechoVisual,
   entradasPorDia,
   fechaDiaLabel,
   filtrarEntradasPorTexto,
@@ -238,6 +239,9 @@ function DiaCelda({
             const info = itinerarioByOt.get(l.otNumero);
             const semaforo = semaforoForAmbito(info?.pasos ?? [], l.ambito);
             const styles = SEMAFORO_PILL_STYLES[semaforo];
+            const hechoVisual =
+              l.hechoVisual ??
+              (l.marcadoHecho || semaforo === "hecho");
             const isDuplicada = duplicatedOtSet.has(`${l.ambito}:${l.otNumero}`);
             const isForeign = l.ambito !== ambitoActivo;
             const ambitoPill = CALENDARIO_AMBITO_PILL[l.ambito];
@@ -254,17 +258,25 @@ function DiaCelda({
                 key={l.id}
                 title={`${l.label} — ${labelCalendarioAmbito(l.ambito)}: ${styles.title}${
                   isForeign ? " · solo lectura" : ""
-                }${l.marcadoHecho ? " · Hecho (marca manual)" : ""}${
-                  espejo.title ? ` · ${espejo.title}` : ""
-                }${pasoLabel ? ` · Paso: ${pasoLabel}` : ""}`}
+                }${
+                  hechoVisual
+                    ? l.marcadoHecho && semaforo !== "hecho"
+                      ? " · Hecho (marca manual)"
+                      : semaforo === "hecho"
+                        ? " · Hecho (paso finalizado)"
+                        : " · Hecho"
+                    : ""
+                }${espejo.title ? ` · ${espejo.title}` : ""}${
+                  pasoLabel ? ` · Paso: ${pasoLabel}` : ""
+                }`}
                 className={cn(
                   "flex w-full items-center gap-1 rounded-md border border-slate-200/90 bg-white text-left shadow-xs",
                   "border-l-[3px] transition-colors",
-                  styles.border,
-                  ambitoPill.borderTint,
+                  hechoVisual ? "border-l-slate-400" : styles.border,
+                  !hechoVisual && ambitoPill.borderTint,
                   isForeign && "opacity-75",
-                  l.marcadoHecho && "bg-slate-50/90 opacity-60",
-                  espejo.fechaDifiere && "ring-1 ring-amber-400/70",
+                  hechoVisual && "bg-slate-50/90 opacity-60",
+                  espejo.fechaDifiere && !hechoVisual && "ring-1 ring-amber-400/70",
                   isSemana ? "px-1.5 py-1.5" : "px-1 py-1",
                 )}
               >
@@ -282,7 +294,7 @@ function DiaCelda({
                   <span
                     className={cn(
                       "size-1.5 shrink-0 rounded-full",
-                      styles.dot,
+                      hechoVisual ? "bg-slate-400" : styles.dot,
                     )}
                     aria-hidden
                   />
@@ -298,9 +310,13 @@ function DiaCelda({
                   <span
                     className={cn(
                       "shrink-0 rounded px-1.5 py-0.5 font-mono font-bold tabular-nums",
-                      isDuplicada ? "bg-pink-100 text-pink-900" : styles.otBadge,
+                      isDuplicada
+                        ? "bg-pink-100 text-pink-900"
+                        : hechoVisual
+                          ? "bg-slate-200 text-slate-600"
+                          : styles.otBadge,
                       isSemana ? "text-[13px]" : "text-[12px]",
-                      l.marcadoHecho && "line-through decoration-slate-400",
+                      hechoVisual && "line-through decoration-slate-400",
                     )}
                   >
                     {l.otNumero}
@@ -311,7 +327,7 @@ function DiaCelda({
                       isSemana
                         ? "text-[13px] leading-snug"
                         : "text-[11px] leading-tight",
-                      l.marcadoHecho && "text-slate-500",
+                      hechoVisual && "text-slate-500",
                     )}
                   >
                     {l.trabajo?.trim() || "—"}
@@ -321,7 +337,11 @@ function DiaCelda({
                       </span>
                     ) : null}
                   </span>
-                  {espejo.badge ? (
+                  {hechoVisual ? (
+                    <span className="shrink-0 rounded bg-slate-200 px-1 py-0.5 text-[9px] font-semibold leading-none text-slate-600">
+                      Hecha
+                    </span>
+                  ) : espejo.badge ? (
                     <span
                       className={cn(
                         "shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold leading-none",
@@ -341,7 +361,9 @@ function DiaCelda({
                     canToggle
                       ? l.marcadoHecho
                         ? "Quitar marca hecho (manual)"
-                        : "Marcar hecho (manual)"
+                        : semaforo === "hecho"
+                          ? "Ya cerrada en HR — marca manual opcional"
+                          : "Marcar hecho (manual)"
                       : "Solo lectura en este ámbito"
                   }
                   aria-label={
@@ -572,8 +594,17 @@ export function CalendarioProduccionPage() {
   const entradasByDay = useMemo(() => {
     const all = entradasPorDia(rowsVisibles, tituloByOt);
     const byTexto = filtrarEntradasPorTexto(all, filtro);
-    return filtrarEntradasSoloPendientes(byTexto, soloPendientes);
-  }, [rowsVisibles, tituloByOt, filtro, soloPendientes]);
+    const enriched = enrichEntradasHechoVisual(byTexto, (ot, ambito) =>
+      semaforoForAmbito(itinerarioByOt.get(ot)?.pasos ?? [], ambito),
+    );
+    return filtrarEntradasSoloPendientes(enriched, soloPendientes);
+  }, [
+    rowsVisibles,
+    tituloByOt,
+    filtro,
+    soloPendientes,
+    itinerarioByOt,
+  ]);
 
   const notasByDay = useMemo(() => {
     const map = new Map<string, ProdCalendarioProduccionNotaRow[]>();
@@ -718,7 +749,7 @@ export function CalendarioProduccionPage() {
     void load();
   }, [load]);
 
-  /** Desktop: bandeja = altura del grid (tope viewport). No hincha el calendario. */
+  /** Desktop: bandeja = misma altura que el grid (crece/encoge a la par). */
   useEffect(() => {
     if (!bandejaOpen || loading) {
       setBandejaMatchHeight(null);
@@ -734,14 +765,12 @@ export function CalendarioProduccionPage() {
         return;
       }
       const h = Math.round(grid.getBoundingClientRect().height);
-      const max = Math.max(280, window.innerHeight - 96);
-      setBandejaMatchHeight(h > 0 ? Math.min(h, max) : null);
+      setBandejaMatchHeight(h > 0 ? Math.max(h, 240) : null);
     };
 
     const ro = new ResizeObserver(() => sync());
     ro.observe(grid);
     window.addEventListener("resize", sync);
-    // Tras pintar el grid (loading → false).
     const t = window.setTimeout(sync, 0);
     return () => {
       window.clearTimeout(t);
@@ -1804,6 +1833,9 @@ export function CalendarioProduccionPage() {
             onChange={(e) => setSoloPendientes(e.target.checked)}
           />
           Solo pendientes
+          <span className="text-[10px] text-slate-400">
+            (oculta hechas HR o ✓)
+          </span>
         </label>
         <label
           className="flex cursor-pointer items-center gap-2 text-xs text-slate-600"
@@ -2155,6 +2187,9 @@ export function CalendarioProduccionPage() {
                     const editIdx = dayLineasEditables.findIndex(
                       (x) => x.id === l.id,
                     );
+                    const hechoVisual = Boolean(
+                      l.hechoVisual ?? l.marcadoHecho,
+                    );
                     return (
                     <li
                       key={l.id}
@@ -2164,7 +2199,7 @@ export function CalendarioProduccionPage() {
                           : l.ambito !== ambitoActivo
                             ? "border-slate-200 opacity-80"
                             : "border-slate-200"
-                      }`}
+                      }${hechoVisual ? " bg-slate-50/90 opacity-70" : ""}`}
                     >
                       <button
                         type="button"
@@ -2174,7 +2209,7 @@ export function CalendarioProduccionPage() {
                         <span
                           className={cn(
                             "font-semibold text-[#002147]",
-                            l.marcadoHecho && "text-slate-500 line-through",
+                            hechoVisual && "text-slate-500 line-through",
                           )}
                         >
                           <span

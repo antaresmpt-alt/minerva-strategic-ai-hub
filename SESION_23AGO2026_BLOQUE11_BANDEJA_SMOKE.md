@@ -33,9 +33,9 @@ Smoke planta Manel **23 ago mediodía** — I/D/T/E + loop ejecución↔calendar
 | Resumen rápido + HR desde bandeja | OK |
 | Semáforo: 35187 T verde; 35380 T amarillo (externo upstream) | OK |
 | Engomado E: manipulados cuentan como ámbito E (diseño) | OK — no bug |
-| 99910 Engomado cerrar → pastilla navy **Hecha** + fuera bandeja | OK |
+| 99910 Engomado cerrar → pastilla **Hecha** (gris HR) + fuera bandeja | OK (26 ago: gris = HR o ✓) |
 | PDF grid / PDF listado | OK — ver matices abajo |
-| Solo pendientes | Solo checkbox manual Carlos (no Hecho HR) — conocido |
+| Solo pendientes | OK 26 ago — oculta HR hecho **y** ✓ Carlos |
 
 ---
 
@@ -59,13 +59,19 @@ Smoke planta Manel **23 ago mediodía** — I/D/T/E + loop ejecución↔calendar
 - Toggle no desmonta el panel → **no recarga** al reabrir.
 - Subtítulo E: «Engomado + manipulados (ámbito E)».
 
+## Pulidos 26 ago (noche)
+
+- **Hecho visual:** pastilla gris «Hecha» si `marcado_hecho` **o** semáforo ámbito = hecho (HR). «Solo pendientes» filtra ambos. Checkbox Carlos = transición.
+- **Altura bandeja:** = altura del grid (sin tope viewport); crece/encoge a la par del calendario.
+- PDF (grid/listado/día): respetan `hechoVisual`.
+
 ---
 
 ## Matices producto (no bloquean 1b)
 
-1. **«Solo pendientes»** filtra `marcado_hecho` (checkbox Carlos), **no** el semáforo Hecho HR. Futuro: checkbox puede desaparecer; mientras tanto Carlos marca a mano. Opción futura: ampliar filtro o auto-marcar.
-2. **PDF grid/listado** usan checks **Ver I/D/T/E** (overlay). Título lleva ámbito activo; contenido = lo visible. Gemma = poner **Solo I** + PDF listado/semana.
-3. **PDF día** ya existe dentro del modal «OTs y notas del día» (no en toolbar principal).
+1. **PDF grid/listado** usan checks **Ver I/D/T/E** (overlay). Título lleva ámbito activo; contenido = lo visible. Gemma = poner **Solo I** + PDF listado/semana.
+2. **PDF día** ya existe dentro del modal «OTs y notas del día» (no en toolbar principal).
+3. Externos: no auto-gris de pastillas internas; siguen en módulo Externos.
 
 ---
 

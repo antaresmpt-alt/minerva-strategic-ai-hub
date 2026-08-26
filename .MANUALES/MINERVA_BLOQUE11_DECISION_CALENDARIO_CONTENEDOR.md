@@ -536,9 +536,15 @@ La UI `tiempoColaLabel` en filas `finalizada` usa `row.horasReales` → con el f
 
 Altura + scroll interno · icono mapa HR · toggle sin remount · subtítulo E = engomado+manipulados.
 
+### Pulidos 26 ago (noche)
+
+- **Hecho visual:** pastilla gris «Hecha» si checkbox Carlos **o** semáforo del ámbito = hecho (HR). «Solo pendientes» oculta ambos. Checkbox = transición.
+- **Altura bandeja:** = altura exacta del grid (sin tope viewport); crece/encoge a la par.
+- PDF grid/listado/día respetan `hechoVisual` (gris + ✓).
+
 ### No bloquean
 
-«Solo pendientes» = checkbox Carlos, no Hecho HR · PDF usa checks Ver (overlay) · PDF día solo en modal del día.
+PDF usa checks Ver (overlay) · PDF día solo en modal del día · externos siguen en módulo Externos (no auto-gris de pastillas I/D/T/E).
 
 ### Siguiente
 
@@ -546,4 +552,4 @@ Spike persistencia detalle del día (§6.5) → fase 3 detalle día Carlos.
 
 ---
 
-*Manel + Cursor · 22 ago noche contenedor · 23 ago mediodía bandeja 1b smoke OK*
+*Manel + Cursor · 22 ago noche contenedor · 23 ago mediodía bandeja 1b smoke OK · 26 ago hecho visual + altura bandeja*

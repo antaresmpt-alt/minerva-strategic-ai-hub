@@ -21,7 +21,12 @@ const COL_HEADER_H = 6;
 function otPdfLabel(l: CalendarioProduccionLinea): string {
   const letra = l.ambito ? CALENDARIO_AMBITO_LETRA[l.ambito] : "";
   const base = letra ? `${letra}·${l.otNumero}` : l.otNumero;
-  return l.marcadoHecho ? `✓ ${base}` : base;
+  const hecha = Boolean(l.hechoVisual ?? l.marcadoHecho);
+  return hecha ? `✓ ${base}` : base;
+}
+
+function lineaHechaPdf(l: CalendarioProduccionLinea): boolean {
+  return Boolean(l.hechoVisual ?? l.marcadoHecho);
 }
 
 function pageW(doc: jsPDF): number {
@@ -165,7 +170,7 @@ export function exportCalendarioProduccionMensualPdf(params: {
         doc.setFont("helvetica", "bold");
         doc.setTextColor(...NAVY);
         doc.setFontSize(otSize);
-        if (l.marcadoHecho) doc.setTextColor(100, 116, 139);
+        if (lineaHechaPdf(l)) doc.setTextColor(100, 116, 139);
         doc.text(otLabel, x + 1.5, ty + lineH * 0.75);
 
         doc.setFont("helvetica", "normal");
@@ -344,7 +349,7 @@ export function exportCalendarioProduccionSemanaPdf(params: {
     }
     for (const l of lines) {
       doc.setTextColor(...NAVY);
-      if (l.marcadoHecho) doc.setTextColor(100, 116, 139);
+      if (lineaHechaPdf(l)) doc.setTextColor(100, 116, 139);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(otSize);
       const otW = Math.min(18, colW * 0.28);
@@ -490,13 +495,17 @@ export function exportCalendarioProduccionListadoPdf(params: {
         y = 26;
       }
       doc.setDrawColor(...BORDER);
-      doc.setFillColor(l.marcadoHecho ? 241 : 248, l.marcadoHecho ? 245 : 250, l.marcadoHecho ? 249 : 252);
+      doc.setFillColor(
+        lineaHechaPdf(l) ? 241 : 248,
+        lineaHechaPdf(l) ? 245 : 250,
+        lineaHechaPdf(l) ? 249 : 252,
+      );
       doc.roundedRect(MARGIN, y - 3.5, usable, 6, 0.8, 0.8, "FD");
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
       doc.setTextColor(...NAVY);
-      if (l.marcadoHecho) doc.setTextColor(100, 116, 139);
+      if (lineaHechaPdf(l)) doc.setTextColor(100, 116, 139);
       doc.text(otPdfLabel(l), MARGIN + 2, y);
 
       doc.setFont("helvetica", "normal");

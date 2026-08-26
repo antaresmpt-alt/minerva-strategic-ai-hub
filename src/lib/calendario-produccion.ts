@@ -26,9 +26,23 @@ export type CalendarioProduccionLinea = {
   label: string;
   trabajo: string | null;
   orden: number;
-  /** Marca manual «hecho» (no depende del itinerario). */
+  /** Marca manual «hecho» (Carlos; transición). */
   marcadoHecho: boolean;
+  /**
+   * Visual / filtro «Solo pendientes»:
+   * marca manual **o** paso(s) del ámbito finalizados en HR.
+   * Se rellena con `enrichEntradasHechoVisual`.
+   */
+  hechoVisual?: boolean;
 };
+
+/** Hecho para UI/PDF/filtro: checkbox Carlos o semáforo HR «hecho». */
+export function pastillaHechaVisual(
+  marcadoHecho: boolean,
+  semaforo: string | null | undefined,
+): boolean {
+  return Boolean(marcadoHecho) || semaforo === "hecho";
+}
 
 function ymdKey(iso: string | null | undefined): string | null {
   if (iso == null || iso === "") return null;
@@ -111,7 +125,7 @@ export function filtrarEntradasPorTexto(
   return out;
 }
 
-/** Si `soloPendientes`, oculta pastillas con marcadoHecho. */
+/** Si `soloPendientes`, oculta pastillas hechas (manual o HR del ámbito). */
 export function filtrarEntradasSoloPendientes(
   byDay: Map<string, CalendarioProduccionLinea[]>,
   soloPendientes: boolean,
@@ -119,8 +133,32 @@ export function filtrarEntradasSoloPendientes(
   if (!soloPendientes) return byDay;
   const out = new Map<string, CalendarioProduccionLinea[]>();
   for (const [ymd, list] of byDay) {
-    const filtered = list.filter((l) => !l.marcadoHecho);
+    const filtered = list.filter((l) => !l.hechoVisual && !l.marcadoHecho);
     if (filtered.length > 0) out.set(ymd, filtered);
+  }
+  return out;
+}
+
+/**
+ * Rellena `hechoVisual` = marca manual **o** semáforo del ámbito = hecho (HR).
+ * Llamar antes de filtrar «Solo pendientes» y de pintar/exportar.
+ */
+export function enrichEntradasHechoVisual(
+  byDay: Map<string, CalendarioProduccionLinea[]>,
+  semaforoOf: (otNumero: string, ambito: CalendarioAmbito) => string,
+): Map<string, CalendarioProduccionLinea[]> {
+  const out = new Map<string, CalendarioProduccionLinea[]>();
+  for (const [ymd, list] of byDay) {
+    out.set(
+      ymd,
+      list.map((l) => ({
+        ...l,
+        hechoVisual: pastillaHechaVisual(
+          l.marcadoHecho,
+          semaforoOf(l.otNumero, l.ambito),
+        ),
+      })),
+    );
   }
   return out;
 }
