@@ -47,6 +47,7 @@ import {
 } from "@/lib/cartelas-ot-metadata";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { SANDBOX_ID_STOCK_MIN } from "@/lib/prod-stock-sandbox";
+import { repartirHojasEntrePalets } from "@/lib/cartela-wizard-reparto";
 import type {
   AlbaranPendienteGroup,
   AlbaranRecepcionLine,
@@ -91,13 +92,57 @@ const EMPTY_PALET: WizardPaletInput = {
   notas: "",
 };
 
-// Modelo ATP (Bloque 9.2): un palet físico = UNA cartela. Las reservas (dura/
-// blanda) son lógicas y viven en prod_stock_palet_ots.cantidad_reservada. NO se
-// crea una segunda cartela para separar reservado de libre (ej. 1.600 OT + 200
-// libres van en la MISMA cartela). Cartela nueva SOLO si el material se separa
-// físicamente (split de palet — fase 9.3, con movimiento de traspaso).
+/** Tope de palets auto-creados desde muelle (evita explosión por typo). */
+const MAX_PALETS_AUTO = 40;
 
-/** Reserva dura por OT del palet: solo valores numéricos > 0. NULL/vacío = blanda. */
+function hojasTotalesGrupo(g: AlbaranPendienteGroup): number {
+  if (g.hojas_recibidas_total > 0) return Math.trunc(g.hojas_recibidas_total);
+  const linesOc = g.recepciones.filter((r) => r.tipo_recepcion !== "stock_libre");
+  const first = linesOc[0] ?? g.recepciones[0];
+  const h =
+    first?.hojas_recibidas_muelle ?? first?.num_hojas_brutas ?? 0;
+  return Math.max(0, Math.trunc(Number(h) || 0));
+}
+
+function plantillaPaletDesdeGrupo(g: AlbaranPendienteGroup): WizardPaletInput {
+  const linesOc = g.recepciones.filter((r) => r.tipo_recepcion !== "stock_libre");
+  const firstLine = linesOc[0] ?? g.recepciones[0];
+  const esStock = firstLine?.tipo_recepcion === "stock_libre";
+  const allOts = [...new Set(linesOc.map((r) => r.ot_numero).filter(Boolean))];
+  const multiOtAlbaran = allOts.length > 1;
+  return {
+    ...EMPTY_PALET,
+    material_nombre: firstLine?.material ?? "",
+    gramaje: firstLine?.gramaje?.toString() ?? "",
+    formato: firstLine?.tamano_hoja ?? "",
+    ots_referencia: esStock
+      ? []
+      : multiOtAlbaran
+        ? allOts
+        : firstLine?.ot_numero
+          ? [firstLine.ot_numero]
+          : [],
+    stock_libre: esStock,
+    es_fsc: false,
+  };
+}
+
+function buildInitialPalets(g: AlbaranPendienteGroup | null): WizardPaletInput[] {
+  if (!g) return [{ ...EMPTY_PALET }];
+  const plantilla = plantillaPaletDesdeGrupo(g);
+  const totalHojas = hojasTotalesGrupo(g);
+  const nRaw = g.palets_recibidos ?? 1;
+  const nPalets = Math.min(
+    MAX_PALETS_AUTO,
+    Math.max(1, Math.trunc(Number(nRaw) || 1)),
+  );
+  const partes = repartirHojasEntrePalets(totalHojas, nPalets);
+  return partes.map((h) => ({
+    ...plantilla,
+    cantidad_inicial: h > 0 ? String(h) : "",
+    reservas: {},
+  }));
+}
 function parseReservaDura(raw: string | undefined): number | null {
   if (raw == null) return null;
   const t = raw.trim();
@@ -135,34 +180,11 @@ function atpDesglose(p: WizardPaletInput): {
   };
 }
 
-function buildInitialPalets(g: AlbaranPendienteGroup | null): WizardPaletInput[] {
-  if (!g) return [{ ...EMPTY_PALET }];
-  const linesOc = g.recepciones.filter((r) => r.tipo_recepcion !== "stock_libre");
-  const firstLine = linesOc[0] ?? g.recepciones[0];
-  const esStock = firstLine?.tipo_recepcion === "stock_libre";
-  const allOts = [...new Set(linesOc.map((r) => r.ot_numero).filter(Boolean))];
-  const multiOtAlbaran = allOts.length > 1;
-  const hojasLinea =
-    firstLine?.hojas_recibidas_muelle?.toString() ??
-    firstLine?.num_hojas_brutas?.toString() ??
-    "";
-  const hojasTotal =
-    multiOtAlbaran && g.hojas_recibidas_total > 0
-      ? String(g.hojas_recibidas_total)
-      : hojasLinea;
-  return [
-    {
-      ...EMPTY_PALET,
-      material_nombre: firstLine?.material ?? "",
-      gramaje: firstLine?.gramaje?.toString() ?? "",
-      formato: firstLine?.tamano_hoja ?? "",
-      cantidad_inicial: hojasTotal,
-      ots_referencia: esStock ? [] : multiOtAlbaran ? allOts : firstLine?.ot_numero ? [firstLine.ot_numero] : [],
-      stock_libre: esStock,
-      es_fsc: false,
-    },
-  ];
-}
+// Modelo ATP (Bloque 9.2): un palet físico = UNA cartela. Las reservas (dura/
+// blanda) son lógicas y viven en prod_stock_palet_ots.cantidad_reservada. NO se
+// crea una segunda cartela para separar reservado de libre (ej. 1.600 OT + 200
+// libres van en la MISMA cartela). Cartela nueva SOLO si el material se separa
+// físicamente (split de palet — fase 9.3, con movimiento de traspaso).
 
 export function CartelaWizardDialog({
   open,
@@ -354,10 +376,53 @@ export function CartelaWizardDialog({
   }
 
   function addPalet() {
-    setPalets((prev) => [...prev, { ...EMPTY_PALET }]);
+    setPalets((prev) => {
+      const last = prev[prev.length - 1] ?? EMPTY_PALET;
+      const totalAlbaran = grupo ? hojasTotalesGrupo(grupo) : 0;
+      const yaAsignadas = prev.reduce(
+        (acc, p) => acc + (parseInt(p.cantidad_inicial, 10) || 0),
+        0,
+      );
+      const resto =
+        totalAlbaran > 0 ? Math.max(0, totalAlbaran - yaAsignadas) : 0;
+      const nuevo: WizardPaletInput = {
+        ...EMPTY_PALET,
+        material_nombre: last.material_nombre,
+        gramaje: last.gramaje,
+        formato: last.formato,
+        codigo_articulo: last.codigo_articulo,
+        ots_referencia: [...last.ots_referencia],
+        reservas: {},
+        stock_libre: last.stock_libre,
+        coste: last.coste,
+        es_fsc: last.es_fsc,
+        es_pefc: last.es_pefc,
+        cantidad_inicial: resto > 0 ? String(resto) : "",
+      };
+      return [...prev, nuevo];
+    });
     setOtInput((prev) => [...prev, ""]);
     setActivePaletIdx(palets.length);
     setWizardTab("palet");
+  }
+
+  function repartirEquitativo() {
+    if (!grupo) return;
+    const total = hojasTotalesGrupo(grupo);
+    if (palets.length === 0 || total <= 0) {
+      toast.message("No hay hojas de albarán para repartir.");
+      return;
+    }
+    const partes = repartirHojasEntrePalets(total, palets.length);
+    setPalets((prev) =>
+      prev.map((p, i) => ({
+        ...p,
+        cantidad_inicial: partes[i]! > 0 ? String(partes[i]) : "",
+      })),
+    );
+    toast.success(
+      `Reparto: ${palets.length} palets · ${total.toLocaleString("es-ES")} h`,
+    );
   }
 
   function removePalet(idx: number) {
@@ -369,6 +434,14 @@ export function CartelaWizardDialog({
 
   async function handleSave() {
     if (!grupo) return;
+    if (repartoAlbaran && repartoAlbaran.total > 0 && repartoAlbaran.quedan !== 0) {
+      const ok = window.confirm(
+        repartoAlbaran.quedan > 0
+          ? `Las cartelas suman ${repartoAlbaran.asignadas.toLocaleString("es-ES")} h y el albarán tiene ${repartoAlbaran.total.toLocaleString("es-ES")} h (faltan ${repartoAlbaran.quedan.toLocaleString("es-ES")}). ¿Crear igual?`
+          : `Las cartelas suman ${repartoAlbaran.asignadas.toLocaleString("es-ES")} h y el albarán solo tiene ${repartoAlbaran.total.toLocaleString("es-ES")} h. ¿Crear igual?`,
+      );
+      if (!ok) return;
+    }
     setSaving(true);
     try {
       const {
@@ -513,6 +586,17 @@ export function CartelaWizardDialog({
     palets.every(
       (p) => p.cantidad_inicial !== "" && parseInt(p.cantidad_inicial) >= 0
     ) && savedPalets.length === 0;
+
+  const repartoAlbaran = useMemo(() => {
+    if (!grupo) return null;
+    const total = hojasTotalesGrupo(grupo);
+    const asignadas = palets.reduce(
+      (acc, p) => acc + (parseInt(p.cantidad_inicial, 10) || 0),
+      0,
+    );
+    const quedan = total - asignadas;
+    return { total, asignadas, quedan };
+  }, [grupo, palets]);
 
   const otsAlbaran = grupo
     ? [...new Set(grupo.recepciones.map((r) => r.ot_numero).filter(Boolean))]
@@ -708,10 +792,10 @@ export function CartelaWizardDialog({
                   <p
                     className={`text-xs ${d.excede ? "text-amber-600" : "text-slate-600"}`}
                   >
-                    {d.fisica.toLocaleString("es-ES")} h ·{" "}
+                    {d.fisica.toLocaleString("es-ES")} h en este palet ·{" "}
                     {d.reservada.toLocaleString("es-ES")} reservadas ·{" "}
                     <span className="font-semibold text-emerald-700">
-                      {d.libre.toLocaleString("es-ES")} libres
+                      {d.libre.toLocaleString("es-ES")} libres (ATP)
                     </span>
                     {d.excede && (
                       <span className="ml-1 font-medium">
@@ -978,6 +1062,67 @@ export function CartelaWizardDialog({
           >
             {savedPalets.length === 0 && (
               <div className="space-y-4">
+                {repartoAlbaran && repartoAlbaran.total > 0 ? (
+                  <div
+                    className={`rounded-md border px-3 py-2 text-xs ${
+                      repartoAlbaran.quedan === 0
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                        : repartoAlbaran.quedan > 0
+                          ? "border-amber-200 bg-amber-50 text-amber-950"
+                          : "border-red-200 bg-red-50 text-red-900"
+                    }`}
+                  >
+                    <p>
+                      <strong>Albarán:</strong>{" "}
+                      {repartoAlbaran.total.toLocaleString("es-ES")} h ·{" "}
+                      <strong>en palets:</strong>{" "}
+                      {repartoAlbaran.asignadas.toLocaleString("es-ES")} h
+                      {repartoAlbaran.quedan === 0 ? (
+                        <span> · cuadrado ✓</span>
+                      ) : repartoAlbaran.quedan > 0 ? (
+                        <span>
+                          {" "}
+                          · faltan{" "}
+                          <strong>
+                            {repartoAlbaran.quedan.toLocaleString("es-ES")} h
+                          </strong>{" "}
+                          por asignar
+                        </span>
+                      ) : (
+                        <span>
+                          {" "}
+                          · sobran{" "}
+                          <strong>
+                            {Math.abs(repartoAlbaran.quedan).toLocaleString(
+                              "es-ES",
+                            )}{" "}
+                            h
+                          </strong>{" "}
+                          (más que el albarán)
+                        </span>
+                      )}
+                    </p>
+                    <p className="mt-1 text-[11px] opacity-90">
+                      Cada palet = 1 cartela física. «Cantidad hojas» es de{" "}
+                      <em>ese</em> palet (no el total del albarán). Las «libres»
+                      de abajo son ATP del palet (hojas − reservas), no el resto
+                      del albarán.
+                    </p>
+                    {palets.length >= 1 ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="mt-2 h-7 text-[11px]"
+                        onClick={repartirEquitativo}
+                      >
+                        Repartir albarán a partes iguales (
+                        {palets.length} palet{palets.length !== 1 ? "s" : ""})
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
+
                 {palets.length > 1 && (
                   <div className="flex flex-wrap gap-2">
                     {palets.map((_, idx) => (
@@ -1023,6 +1168,9 @@ export function CartelaWizardDialog({
                 >
                   <Plus className="size-4 mr-2" />
                   Añadir otro palet
+                  {repartoAlbaran && repartoAlbaran.quedan > 0
+                    ? ` (sugerido: ${repartoAlbaran.quedan.toLocaleString("es-ES")} h)`
+                    : ""}
                 </Button>
               </div>
             )}
