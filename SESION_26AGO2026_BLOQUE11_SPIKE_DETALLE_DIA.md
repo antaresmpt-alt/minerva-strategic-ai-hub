@@ -168,14 +168,14 @@ Otros módulos siguen con `useReactToPrint` (externos, fichas técnicas, tablón
 
 ### Contenedor ejecución
 - Grupos visuales: **En ejecución** · **Hoy · planificado** · **Disponibles sin plan** · Otras.
-- `planSlotHoy` / `fechaEntregaCola` en filas virtuales I/D/E; `colaRows` respeta slot (ya no se pierde al reordenar por OT).
+- `planSlotHoy` / `fechaEntregaCola` en filas virtuales **I/D/E/T** (Troquel simétrico 27 ago tarde).
 - Badge `#n` + acento navy/oro en filas del plan de hoy.
 
-### Calendario pastillas
-- Icono `Package` con color Pool (gris/rojo/ámbar/verde).
-- Tooltip: cartelas / muelle / nº compra · **no bloquea** colocar.
+### Calendario pastillas — densificación (27 ago tarde)
+- **Antes:** semáforo + Package + letra + checkbox → demasiado ancho.
+- **Ahora (patrón Linear/GitHub):** pip de color en la esquina del badge I/D/T/E **solo si material ≠ gris**. Sin despachar / N/A = sin pip (cero chrome extra). Tooltip en la letra cuando hay alerta.
 - Lib: `src/lib/calendario-material-status.ts`.
 
 ---
 
-*Manel + Cursor · 26 ago — spike B + fase 3 v1/v2 + PDF rico + fix cierre impresión · 27 ago cabeceras + material*
+*Manel + Cursor · 26 ago — spike B + fase 3 · PDF · 27 ago cabeceras + material + T + pip*
