@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: **27 ago 2026** (**Bloque 11** — cabeceras Hoy/Disponibles + icono material · PDF/print OK · merge `main` pendiente).
+> Última actualización: **27 ago 2026 noche** (**Bloque 11** — §27 día completo: PDF cartelas · modal Atrasadas · tooltip Guillotina · valla LEGACY · merge `main` domingo noche).
 
 ---
 
@@ -18,7 +18,8 @@
    - `MINERVA_BLOQUE9_REASIGNACION_STOP.md` (9.8: liberar/reasignar/recomprar; OT **98019** + **98020** validadas)
    - `MINERVA_BLOQUE10_PRESUPUESTOS.md` (futuro)
    - `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` (brainstorming)
-   - `.MANUALES/MINERVA_BLOQUE11_DECISION_CALENDARIO_CONTENEDOR.md` (**diseño + contenedor + bandeja · §6.5 B · fase 3 v2 · §25 PDF/print**)
+   - `.MANUALES/MINERVA_BLOQUE11_DECISION_CALENDARIO_CONTENEDOR.md` (**diseño + contenedor + bandeja · §6.5 B · fase 3 v2 · §25 PDF/print · §27**)
+   - `SESION_27AGO2026_BLOQUE11_DIA_COMPLETO.md` (**27 ago día completo** — cartelas · PDF · Atrasadas · Guillotina · LEGACY)
    - `SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md` (persistencia B + UX v2 + PDF rico + fix cierre impresión)
    - `SESION_22AGO2026_BLOQUE11_CONTENEDOR_SMOKE.md` (celebración smoke + backlog mañana)
    - `.MANUALES/MINERVA_BLOQUE11_ANALISIS_CONTENEDOR_VS_MESA.md` (validación Odoo/industria)
@@ -324,18 +325,21 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 3. Manual usuario reservas/stock (inventario botones listo → Claude)
 4. **Bloque 11** (contenedor + bandeja OK · **spike detalle-día B** → fase 3) · **Bloque 12** (sept)
 
-- [x] **Bloque 11 contenedor spike:** smoke planta OK (rama `feature/bloque11-contenedor-ctp-spike`) — merge `main` cuando diga Manel
+- [x] **Bloque 11 contenedor spike:** smoke planta OK — merge `main` **domingo noche** (demo lunes)
 - [x] **Bloque 11 bandeja 1b:** smoke planta OK 23 ago — `SESION_23AGO2026_BLOQUE11_BANDEJA_SMOKE.md`
 - [x] **Bloque 11 spike §6.5:** persistencia detalle-día = **opción B** — `SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md`
 - [x] **Bloque 11 (27 ago):** cabeceras cola **Hoy / Disponibles** + icono material pastilla (Pool status)
-- [ ] **Bloque 11 siguiente:** smoke PDF Carlos (cartelas en detalle-día) · brief Jordi/Carlos · valla LEGACY · merge `main` cuando OK Manel · (Bloque 12: menú)
+- [ ] **Bloque 11 siguiente:** brief Jordi/Carlos · merge `main` **domingo noche** · Bloque 12 menú feliz
 - [x] **Plataforma — print Electron:** migrado `useReactToPrint` → `printElementInNewWindow` (externos, fichas, tablón semanal, ventas). Ya OK: detalle-día + mesa diaria.
 - [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor; tableta = máquina — `MINERVA_BLOQUE12_…` (no abrir ya; default gestor = maestro OTs)
 - [ ] **Bloque 5 puente**: Rita lanza OTs a Hugo (no bloquea paralelo si Hugo sigue a mano)
 
 ### Hecho reciente (jul–ago)
-- [x] **27 ago noche:** Bloque 11 — PDF detalle-día **cartelas + material** · chip **Guillotina** I/D · cajón **Atrasadas** · print Electron resto módulos
-- [x] **27 ago:** Bloque 11 — cabeceras ejecución Hoy/Disponibles + icono material calendario (Pool cartelas/muelle) — `SESION_26AGO…`
+- [x] **27 ago noche (pulido UX):** Bloque 11 — **modal Atrasadas** · Guillotina **tooltip** pastillas + chip ejecución · **valla LEGACY** — `7dc75cb` · decisión §27
+- [x] **27 ago tarde:** Bloque 11 — PDF detalle **cartelas + material** · Guillotina chip · `collectEntradasAtrasadas` · print Electron 5 módulos — `ace0409`
+- [x] **27 ago:** Bloque 11 — fix orden **Hoy planificado** mañana antes tarde (`rankPlanHoyByOt`) — `5675415`
+- [x] **27 ago:** Cartelas — reparto hojas albarán entre palets + reserva dura default 1 OT — `58ba4ed` · `d92cf41`
+- [x] **27 ago:** Bloque 11 — cabeceras ejecución Hoy/Disponibles + icono material calendario — `SESION_26AGO…` §5
 - [x] **26 ago noche:** Bloque 11 — **PDF rico detalle-día** + **fix cierre impresión** (ventana nueva; también mesa diaria LEGACY) — `SESION_26AGO…` §3 · decisión §25
 - [x] **26 ago noche:** Bloque 11 — **fase 3 v2** detalle-día (draft/Guardar/M·T/sync orden/pegar) + orden contenedor por `slot_orden`
 - [x] **26 ago noche:** Bloque 11 — **fase 3 v1** detalle-día UI + migración `prod_calendario_detalle_dia` (sin fecha) · spike §6.5 B
@@ -420,7 +424,7 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 
 19. **Cartelas impresión (18 jul 2026)**: **1 copia** por palet (antes 2). Confirmado Emma/Ramón.
 
-20. **Bloque 11 — Calendario + contenedor (28 jul · diseño 22 ago · smoke contenedor/bandeja ✅ · detalle-día B+v2+PDF 26 ago ✅):** **Despacho ≈ launch.** Contenedor + bandeja OK. **Detalle del día** = `prod_calendario_detalle_dia` (no mesa LEGACY) · PDF ventana nueva (§25). Doc: `.MANUALES/MINERVA_BLOQUE11_DECISION_…` §6.5/§17–25 · `SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md` · smokes 22–23 ago.
+20. **Bloque 11 — Calendario + contenedor (28 jul · diseño 22 ago · smoke contenedor/bandeja ✅ · detalle-día B+v2+PDF 26 ago ✅ · §27 27 ago ✅):** **Despacho ≈ launch.** Contenedor + bandeja OK. **Detalle del día** = `prod_calendario_detalle_dia` (no mesa LEGACY) · PDF ventana nueva + cartelas (§25–27). Doc: `.MANUALES/MINERVA_BLOQUE11_DECISION_…` §6.5/§17–27 · `SESION_27AGO2026_BLOQUE11_DIA_COMPLETO.md` · smokes 22–23 ago.
 
 21. **Paralelo septiembre (11 ago 2026)**: no smoke fijo 10–20; por tanda de despacho elegir **~3 OTs** y seguir E2E en Minerva. Cierre contenedor MVP: **barco listo cuando todas las hijas terminan** (8.4) ✅. Convergencia física = 8.5 documentada, sin código aún.
 

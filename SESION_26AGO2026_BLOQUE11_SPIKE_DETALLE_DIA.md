@@ -48,7 +48,7 @@ calendario (pastilla día) ──CASCADE──► detalle_dia (máquina/turno/sl
 
 1. **Ejecución:** 2 grupos visuales (Hoy / Disponibles) — orden «Hoy» por `slot_orden` + **cabeceras UI 27 ago** ✅.
 2. **Material en calendario:** icono no bloqueante ✅ 27 ago; color = Pool `materialStatus` + gris N/A; compra en tooltip. Verde = cartelado ≥ objetivo.
-3. **Nav:** no bautizar «Planificador» ahora (Bloque 12). Sí: entrada detalle desde calendario; valla LEGACY por rol cuando toque (§10).
+3. **Nav:** no bautizar «Planificador» ahora (Bloque 12). Sí: entrada detalle desde calendario; ~~valla LEGACY por rol~~ ✅ 27 ago (§10 · §27).
 4. **Backlog:** exponer «Guillotina cortado / pendiente» en contenedor I/D (dolor Rita/Ramón) — no bloquea fase 3.
 5. **Drag&drop** en detalle-día: diferido. Piloto Carlos con botones ↑↓ / →M / →T unos días.
 
@@ -80,10 +80,10 @@ calendario (pastilla día) ──CASCADE──► detalle_dia (máquina/turno/sl
 
 ### Pendiente UX (no bloquea piloto)
 
-- Cabeceras visuales «Hoy» / «Disponibles» en lista ejecución.
-- Icono material en pastilla calendario.
+- ~~Cabeceras visuales «Hoy» / «Disponibles» en lista ejecución~~ ✅ 27 ago
+- ~~Icono material en pastilla calendario~~ ✅ 27 ago
 - Drag&drop slots.
-- Cajón «Atrasadas».
+- ~~Atrasadas~~ ✅ 27 ago noche → botón + modal (§27 decisión · `7dc75cb`)
 - Semáforos M/T vivos en PDF (hoy: datos despacho + maestro; M/T omitidos si gris / sin informar).
 
 ---
@@ -134,9 +134,9 @@ Cableado:
 
 Si el bloqueador de popups impide `window.open`, toast pidiendo permitir ventanas emergentes.
 
-### Alcance consciente (no tocado hoy)
+### Alcance consciente (26 ago)
 
-Otros módulos siguen con `useReactToPrint` (externos, fichas técnicas, tablón semanal, ventas…). Mismo riesgo potencial en Electron. **Backlog:** migrar a `printHtmlInNewWindow` / `printElementInNewWindow` cuando toque; prioridad = lo que Carlos/Gemma usan a diario (detalle + mesa diaria) ✅.
+Otros módulos seguían con `useReactToPrint` — **migrados 27 ago** (`ace0409`). Ver `SESION_27AGO2026_BLOQUE11_DIA_COMPLETO.md` §3.
 
 ### Smoke recomendado (próxima sesión / piloto)
 
@@ -149,7 +149,7 @@ Otros módulos siguen con `useReactToPrint` (externos, fichas técnicas, tablón
 
 ## 4. Estado rama / merge
 
-- Rama spike sigue **sin merge a `main`** hasta OK Manel.
+- Rama spike **sin merge a `main`** hasta **domingo noche** (demo lunes).
 - No commitear: `.MANUALES/MINERVA_MANUAL_CARTELAS_*`, `MINERVA_MANUAL_RESERVAS_*`, `DISQUISICIONES VARIAS MANEL/`.
 
 ### Siguiente (mañana / piloto)
@@ -158,9 +158,11 @@ Otros módulos siguen con `useReactToPrint` (externos, fichas técnicas, tablón
 2. Piloto Carlos UX botones (sin DnD).
 3. ~~Cabeceras visuales Hoy/Disponibles en contenedor~~ ✅ 27 ago
 4. ~~Icono material pastilla~~ ✅ 27 ago (`calendario-material-status.ts`)
-5. Valla LEGACY por rol (§10) cuando toque.
+5. ~~Valla LEGACY por rol (§10)~~ ✅ 27 ago (`planificacion-legacy-access.ts` · §27).
 6. Bloque 12: nombres menú.
-7. Backlog print transversal → **maestro** (ítem plataforma abierto).
+7. ~~Backlog print transversal~~ ✅ 27 ago (`ace0409` — externos, fichas, tablón, ventas).
+
+Ver **día completo 27 ago:** `SESION_27AGO2026_BLOQUE11_DIA_COMPLETO.md`.
 
 ---
 
@@ -178,4 +180,14 @@ Otros módulos siguen con `useReactToPrint` (externos, fichas técnicas, tablón
 
 ---
 
-*Manel + Cursor · 26 ago — spike B + fase 3 · PDF · 27 ago cabeceras + material + T + pip*
+## 6. Continuación 27 ago — ver sesión dedicada
+
+Todo lo hecho el 27 (cartelas, PDF cartelas, orden Hoy, Atrasadas modal, Guillotina tooltip, LEGACY, smoke 98024, commits) está en:
+
+**`SESION_27AGO2026_BLOQUE11_DIA_COMPLETO.md`**
+
+Decisión Bloque 11: §27.
+
+---
+
+*Manel + Cursor · 26 ago — spike B + fase 3 · PDF · 27 ago §5–6 · día completo en SESION_27*

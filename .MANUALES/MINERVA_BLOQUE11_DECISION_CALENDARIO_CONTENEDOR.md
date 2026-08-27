@@ -261,7 +261,7 @@ Nombre: `prod_calendario_detalle_dia` — **sin columna `fecha`** (siempre join 
 
 Unique: `(calendario_ot_id)`. Índice: `(ambito, maquina_id, turno, slot_orden)`.
 
-**Planes atrasados (fase 3+):** vista mes/semana ya acota; «Solo pendientes» no limpia por fecha. Pendiente: cajón «Atrasadas» o filtro N días — no bloquea v1.
+**Planes atrasados (fase 3+):** vista mes/semana ya acota; «Solo pendientes» no limpia por fecha. **✅ 27 ago:** botón «Atrasadas (N)» + modal central (`collectEntradasAtrasadas` · §27). No auto-mueven. Backlog opcional: filtro N días.
 #### Huérfanas / plan que no se cumple
 
 | Caso | Qué hacer |
@@ -276,7 +276,7 @@ Unique: `(calendario_ot_id)`. Índice: `(ambito, maquina_id, turno, slot_orden)`
 - **Escribe** orden/máquina/turno/horas solo en `prod_calendario_detalle_dia`.
 - **Reutiliza** UI/libs de mesa (`planificacion-mesa-diaria.ts`, PDF, turnos) donde encaje — **sin** `launchExecution` ni writes a `prod_mesa_planificacion_trabajos`.
 - Entrada: botón calendario «Organizar detalle del día» (día + ámbito). Ruta/tab técnica OK; **no** bautizar menú «Planificador» ni orden definitivo de pestañas → **Bloque 12**.
-- LEGACY: aislamiento por rol (§10) = valla de seguridad; no rediseño de navegación feliz ahora.
+- LEGACY: aislamiento por rol (§10) = valla de seguridad **✅ 27 ago** (`planificacion-legacy-access.ts` · §27). Nombres/orden menú feliz → Bloque 12.
 
 #### Lista ejecución — 2 grupos visuales (diseño cerrado)
 
@@ -300,7 +300,7 @@ Regla: **calendario/detalle ordenan; itinerario autoriza.** Estar en «Hoy» ≠
 | **Ámbar** | Muelle o cartelado parcial (Pool amarillo) |
 | **Verde** | Cartelado ≥ objetivo (Pool verde) — **no** «solo recibido» |
 
-I/D: útil (Carlos/Rita). E/T: bajo ruido (aguas arriba suele bastar). Dolor Rita↔Ramón↔Miguel (estado «¿cortado?») = **exponer paso Guillotina en contenedor I/D** (backlog alto impacto; no bloquea fase 3).
+I/D: útil (Carlos/Rita). E/T: bajo ruido (aguas arriba suele bastar). Dolor Rita↔Ramón↔Miguel (estado «¿cortado?») = **✅ 27 ago:** Guillotina en contenedor I/D (chip ejecución) + **tooltip** en pastillas calendario (sin chip visible — §27).
 
 ---
 
@@ -408,8 +408,11 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 - [x] Spike contenedores Guillotina/Desbroce/Manipulados + Engomado claim (`contenedor-seccion.ts` · ver §19)
 - [x] Spike Contenedor Impresión + Digital (ver §20)
 - [x] Detalle del día (Carlos) — fase 3 **UI v2** (26 ago) · PDF rico + fix cierre print · orden «Hoy» por `slot_orden` · **cabeceras Hoy/Disponibles + icono material 27 ago**
-- [ ] LEGACY tab — aislamiento por rol (valla §10); nombres/orden menú feliz → **Bloque 12**
-- [ ] Contenedor I/D: exponer estado Guillotina («¿cortado?») — backlog Rita/Ramón (no bloquea fase 3)
+- [x] LEGACY tab — aislamiento por rol (valla §10 · `planificacion-legacy-access.ts` · badge LEGACY · 27 ago) — nombres/orden menú feliz → **Bloque 12**
+- [x] Contenedor I/D: estado Guillotina («¿cortado?») — chip ejecución + tooltip calendario (27 ago · §27)
+- [x] Atrasadas — botón + modal (sustituye cajón banner · `collectEntradasAtrasadas` · 27 ago · §27)
+- [x] PDF detalle-día cartelas + material + print Electron transversal (27 ago · `ace0409` · §27)
+- [x] Orden «Hoy planificado» mañana antes tarde (`rankPlanHoyByOt` · `5675415`)
 
 ---
 
@@ -429,8 +432,12 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 | Lib detalle | `calendario-detalle-dia.ts` | CRUD + join por pastilla (sin fecha duplicada) |
 | Tabla detalle | `prod_calendario_detalle_dia` | Migración `20260826200000` **aplicada** 26 ago |
 | Helpers mesa | `planificacion-mesa-diaria.ts` | Reutilizar UI avanzada luego; no writes LEGACY |
-| Ejecución | `planificacion-ots-ejecucion-tab.tsx` | + contenedor CTP spike |
+| Ejecución | `planificacion-ots-ejecucion-tab.tsx` | + contenedor CTP spike · chip Guillotina I/D |
 | Contenedor CTP | `contenedor-ctp.ts` | Query + fila ligera |
+| Atrasadas | `calendario-produccion.ts` · `calendario-produccion-page.tsx` | `collectEntradasAtrasadas` · modal §27 |
+| Guillotina UI | `calendario-produccion-progreso.ts` | `guillotinaStatusFromPasos` · tooltip pastilla · chip ejecución |
+| Valla LEGACY | `planificacion-legacy-access.ts` · `planificacion-ots-page.tsx` | Mesa diaria/semanal solo admin/gerencia |
+| Orden Hoy | `calendario-detalle-dia.ts` | `rankPlanHoyByOt` — mañana antes tarde |
 
 ---
 
@@ -638,7 +645,7 @@ PDF usa checks Ver (overlay) · PDF día solo en modal del día · externos sigu
 
 ### Siguiente
 
-Piloto Carlos detalle-día (botones; DnD diferido). Smoke PDF + cierre impresión. LEGACY: valla rol cuando toque. Bloque 12: nombres menú Planificador.
+Piloto Carlos detalle-día (botones; DnD diferido). ~~Smoke PDF + cierre impresión~~ ✅. ~~LEGACY valla rol~~ ✅ 27 ago. Bloque 12: nombres menú Planificador.
 
 ---
 
@@ -665,7 +672,7 @@ Además: en el shell Electron/webview de Minerva, **cerrar el diálogo nativo de
    - `printHtmlInNewWindow` — detalle-día.
    - `printElementInNewWindow` — mesa diaria (clona `MesaDiariaPrintTemplate` offscreen).
 3. Tras `afterprint`, solo se cierra el **popup**. La app Minerva permanece.
-4. Otros módulos con `useReactToPrint` (externos, fichas, tablón semanal…) = **backlog** mismo patrón; no bloquean piloto planning.
+4. Otros módulos con `useReactToPrint` — **✅ 27 ago** migrados (externos, fichas, tablón semanal, ventas · `ace0409`). Patrón unificado con §25.
 
 Detalle exhaustivo + smoke: `SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md` §3.
 
@@ -675,9 +682,59 @@ Detalle exhaustivo + smoke: `SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md` §3
 
 **UI contenedor:** grupos En ejecución / Hoy · planificado / Disponibles sin plan (**I/D/E/T**) con `planSlotHoy`.  
 **UI calendario:** pip de material en esquina del badge I/D/T/E (solo si no gris; patrón Linear/GitHub) — tooltip compra; no bloquea.  
-Ver sesión §5.
+Ver sesión §5 · `SESION_27AGO2026_BLOQUE11_DIA_COMPLETO.md` §2 (orden Hoy).
 
 ---
 
-*Manel + Cursor · 22 ago noche contenedor · 23 ago mediodía bandeja 1b smoke OK · 26 ago hecho visual + altura bandeja · 26 ago noche spike detalle-día B · fase 3 v2 · PDF rico + fix cierre print · 27 ago cabeceras + material + T + pip*
+## 27. Día completo 27 ago — PDF cartelas · Atrasadas modal · Guillotina · LEGACY
+
+**Sesión exhaustiva:** `SESION_27AGO2026_BLOQUE11_DIA_COMPLETO.md`  
+**Rama:** `feature/bloque11-contenedor-ctp-spike` · **sin merge `main`** (target: domingo noche · demo lunes).
+
+### Commits
+
+| Hash | Contenido |
+|------|-----------|
+| `58ba4ed` | Cartelas: repartir hojas albarán entre palets |
+| `d92cf41` | Cartelas: reserva dura por defecto con 1 OT |
+| `5675415` | `rankPlanHoyByOt` — mañana antes que tarde en «Hoy planificado» |
+| `ace0409` | PDF cartelas/material · Guillotina chip ejecución · atrasadas lib · print Electron |
+| `7dc75cb` | Modal Atrasadas · tooltip Guillotina pastillas · valla LEGACY |
+
+### PDF detalle-día ampliado (`ace0409`)
+
+`calendario-detalle-dia-print.ts`:
+
+- Cartelas por OT: palet, material, formato, gramaje, hojas, flag prueba.
+- Pills material (Pool status) + pie «Despacho X hj · cartelado Y hj».
+- Validado: `Plan-impresion-2026-08-27.pdf`.
+
+### Atrasadas (`ace0409` → `7dc75cb`)
+
+- `collectEntradasAtrasadas` — fecha &lt; hoy, no hechas, no auto-mueven.
+- UI final: botón «Atrasadas (N)» en filtros → modal central (no banner que comía grid).
+
+### Guillotina I/D
+
+- Ejecución: chip `G: hecha` / `G: cortar` / `G: espera`.
+- Calendario pastillas: **solo tooltip** (`guillotinaTooltipLine`) — chip visible se comía texto.
+- Gate: OT con G pendiente no en Impresión hasta cerrar Guillotina (smoke **98024**).
+
+### Valla LEGACY (`7dc75cb`)
+
+- `planificacion-legacy-access.ts` — admin/gerencia vía `hasFullAccess`.
+- Mesa diaria + Mesa semanal ocultas al resto; badge LEGACY; default Pool.
+
+### Smoke Manel (27 ago)
+
+- OTs 98023/98024/98025: CTP → Impresión → 98024 I cerrada gris → T verde planificable.
+- Movió 36019 (I) y 98024 (T) al **28** para test fin de semana «Hoy planificado».
+
+### Pendiente
+
+- Brief Jordi/Carlos · merge `main` domingo · Bloque 12 menú · DnD detalle-día · M/T en PDF.
+
+---
+
+*Manel + Cursor · 22 ago noche contenedor · 23 ago mediodía bandeja 1b smoke OK · 26 ago hecho visual + altura bandeja · 26 ago noche spike detalle-día B · fase 3 v2 · PDF rico + fix cierre print · 27 ago cabeceras + material + T + pip · 27 ago día completo §27*
 
