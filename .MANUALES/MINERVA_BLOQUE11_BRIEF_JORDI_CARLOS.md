@@ -1,7 +1,9 @@
 # Bloque 11 — Brief para Jordi y Carlos
 
-> **Fecha:** 22 ago 2026 · **Para:** conversación planta (Jordi / Carlos) · **Duración:** ~10 min
-> **Documentación completa:** `.MANUALES/MINERVA_BLOQUE11_DECISION_CALENDARIO_CONTENEDOR.md` · `.MANUALES/MINERVA_BLOQUE11_ANALISIS_CONTENEDOR_VS_MESA.md`
+> **Versión:** **v2 — 27 ago 2026 noche**  
+> **Leer antes del domingo** previo a demo lunes (merge `main` domingo noche)  
+> **Para:** Jordi / Carlos (+ Ramón / Juan si cartelas) · **Duración:** ~15 min  
+> **Documentación:** `.MANUALES/MINERVA_BLOQUE11_DECISION_CALENDARIO_CONTENEDOR.md` §27 · `SESION_27AGO2026_BLOQUE11_DIA_COMPLETO.md`
 
 ---
 
@@ -11,66 +13,121 @@
 
 ---
 
-## Nota para quien lleve la reunión (offset)
+## Qué hay nuevo desde el brief v1 (22 ago)
 
-Si Carlos pregunta *«¿en offset no cambia nada?»* — la respuesta honesta es:
+Si solo leíste la versión del 22 ago, esto es lo que **ya está en piloto** y veréis en la demo del lunes:
 
-- **Sí cambia** el circuito: Abraham/David verán la OT en el **contenedor** y trabajarán desde ahí (como el resto de secciones), **sin** pasar por Pool ni por «lanzar desde mesa».
-- **No pierde** lo que hoy le importa: el **detalle fino del día** (orden 1-2-3, turnos, horas, PDF) sigue existiendo — es la pantalla «Organizar detalle del día», no la mesa antigua como obligatorio previo.
-- En resumen: **le añadimos contenedor; no le quitamos la planificación fina.**
+### 1. Atrasadas (calendario)
+
+- Botón discreto **«Atrasadas (N)»** en la barra de filtros (solo si hay OTs vencidas).
+- Abre un **modal** con el listado: OTs con fecha **anterior a hoy**, no hechas, **no se mueven solas**.
+- Carlos debe mover la pastilla o marcar hecha — el sistema no auto-replanifica.
+
+### 2. Pip de material (pastillas calendario)
+
+- Punto de color en la esquina del badge I/D/T/E (patrón tipo Linear/GitHub).
+- **No ocupa texto** — el tooltip en la letra muestra estado de compra/cartelado.
+- Colores = mismo criterio que Pool (gris sin despacho, rojo/ámbar/verde según cartelas/muelle).
+- OT prueba (≥ 98.000): pip amarillo; no cuenta en ATP de planta.
+
+### 3. Valla LEGACY (Planificación OTs)
+
+- Pestañas **Mesa diaria** y **Mesa semanal** solo visibles para **admin / gerencia** (badge **LEGACY**).
+- Resto del equipo: **Pool de OTs** + **OTs en ejecución** + calendario — camino feliz sin mesa antigua.
+- No es «apagado» del sistema viejo: es transición controlada mientras planta usa calendario + contenedor.
+
+### 4. Otros (contexto demo)
+
+- **Detalle del día** + PDF con **cartelas** (palet, material, formato, hojas carteladas).
+- **Hoy planificado** en ejecución: orden del detalle; **mañana antes que tarde** en la lista.
+- **Guillotina:** chip en ejecución I/D; en calendario solo tooltip. **Gate:** sin Guillotina cerrada, la OT no sale en Impresión.
+- **Print:** PDF/imprimir en ventana nueva (no cierra Minerva al cancelar impresión).
+
+**Validación clave (27 ago):** OT **98024** — Guillotina → Impresión → al cerrar I pastilla gris «Hecha» → Troquelado verde para la misma OT. Prueba de **itinerario autoriza, calendario ordena**.
 
 ---
 
-## Por qué cambiamos de rumbo (sin drama)
+## ⚠️ Cambio de comportamiento — cartelas (Ramón / Juan)
 
-Probamos un atajo desde el calendario ("enviar a cola de Mesa" en cada paso). Funciona en pantalla, pero **obliga a alguien sentado en un PC** a pasar por Mesa antes de cada paso — CTP, guillotina, offset, troquel, desbroce, engomado. Antonio y Gabri **no están en un PC**; están en planta. Si el sistema les pide eso, o no lo usan o lo viven más lento que Optimus.
+**Desde 27 ago**, al **cartelar un palet con una sola OT** en el wizard:
 
-Eso no es un detalle de botones: es la diferencia entre sustituir Optimus o no. Por eso paramos **antes** del TEST, no después.
+| Antes (habitual) | Ahora (default automático) |
+|------------------|----------------------------|
+| Reserva blanda o vacía → badge **«disponible»** aunque la OT esté enlazada | Reserva **dura** = todas las hojas del palet → badge **«reservado»** |
 
-**Sobre el calendario del TEST:** esto puede mover la fecha del TEST unas semanas. Lo digo con claridad porque es la primera pregunta que haría cualquiera en vuestra situación. Preferimos eso a estrenar en septiembre un modelo que Antonio y Gabri, en la práctica, no van a usar — y volver al papel con la sensación de que Minerva es más lento que Optimus. El trabajo ya hecho no se pierde; el cambio es de arquitectura, no de empezar de cero.
+**Por qué lo hicimos:** si el palet se cartela para una OT, el ATP y el badge deben reflejar que ese material **ya está comprometido** — la reserva blanda dejaba «disponible» y otra OT podía intentar consumirlo.
 
-Lo que ya tenéis hecho (calendario, pastillas, ejecución, material) **no se tira**. Cambia **de dónde sale la lista del operario** y **para qué sirve el calendario**.
+**Qué puede sorprender:** Ramón o Juan intentan asignar ese palet a **otra OT** y encuentran el material **bloqueado** sin haber marcado reserva a mano.
+
+**Varias OTs en el mismo palet:** sin cambio — reparto manual de reservas (como antes).
+
+---
+
+## Pregunta abierta — necesitamos respuesta vuestra (no técnica)
+
+**Al cartelar con 1 sola OT, ¿queréis que el sistema reserve el palet en duro automáticamente (como está hoy), o preferís que quede «disponible» hasta que alguien marque la reserva explícitamente?**
+
+| Si respondéis… | Consecuencia en planta |
+|----------------|------------------------|
+| **A) Mantener dura automática (hoy)** | El estado **no miente**: reservado = otra OT no puede tocarlo. Menos flexibilidad accidental. Hay que **liberar/reasignar** (Bloque 9.8) para mover material. |
+| **B) Volver a blando por defecto** | Más flexibilidad al cartelar; el operario marca duro cuando quiera. Riesgo: badge «disponible» con OT ya enlazada; posible consumo cruzado si nadie revisa. |
+
+**No es retórica:** si el lunes Ramón cartela y luego Juan no puede mover el palet, o si esperaban flexibilidad y ahora no la tienen, es esta decisión. Decidid **A o B** (o «A pero avisar siempre a almacén») y lo dejamos fijado antes del merge.
+
+---
+
+## Nota offset (si Carlos pregunta)
+
+- **Sí cambia** el circuito: contenedor + detalle del día (no Pool/mesa como puerta).
+- **No pierde** secuencia fina: orden 1-2-3, M/T, horas, PDF con cartelas.
+
+---
+
+## Por qué cambiamos de rumbo (resumen v1)
+
+El atajo «enviar a cola de Mesa» obligaba a un PC antes de cada paso — Antonio y Gabri en planta no lo usarían. El botón **eliminado** (22 ago). El calendario y la ejecución **no se tiran**; cambia de dónde sale la lista del operario.
 
 ---
 
 ## Cómo funcionaría (3 capas)
 
-| Capa | Pregunta que responde | Quién la mueve |
-|------|----------------------|----------------|
-| **Calendario** | ¿En qué orden quiero el día? (opcional) | Carlos, Antonio, Gabri, Rita |
-| **Itinerario** | ¿Qué se puede hacer ahora? | El sistema (paso anterior hecho) |
-| **Contenedor** | ¿Qué ve el operario en su sección? | Automático al despachar |
+| Capa | Pregunta | Quién |
+|------|----------|-------|
+| **Calendario** | ¿En qué orden el día? | Carlos, Antonio, Gabri, Rita |
+| **Itinerario** | ¿Qué se puede hacer ahora? | Sistema |
+| **Contenedor** | ¿Qué ve el operario? | Automático al despachar |
 
-**Regla clave:** el calendario **ordena**. El itinerario **autoriza**. Si falta imprimir, no se troquela aunque la pastilla diga "hoy".
-
-**Bandeja lateral (próximo paso):** panel «Despachadas / sin planificar» sustituirá las hojas Optimus en la mesa de Carlos — filas compactas, sin botón «enviar a mesa».
-
-**Mesa:** en el modelo nuevo **no ejecuta** en ninguna sección (tampoco offset). Solo «organizar detalle del día» para secuencia fina donde haga falta (hoy offset: turnos/horas/PDF **encima** del contenedor).
+**Regla:** calendario **ordena**; itinerario **autoriza**.
 
 ---
 
-## Tres preguntas para vosotros
+## Preguntas para vosotros
 
-1. **¿Os vale que el calendario sea opcional?** — quien quiera ordena el día con pastillas; quien no, la cola sigue por fecha de entrega. Aplica a CTP igual que a troquel.
-
-2. **En troquelado y engomado, ¿preferís ver solo "hoy" o un listado de varios días?**
-
-3. **¿Hace falta asignar máquina concreta, o basta con ordenar la lista y que el operario coja?**
-
----
-
-## Qué NO os pedimos que validéis hoy
-
-- Fechas técnicas de implementación (piloto CTP + troquelado, fases internas).
-- Detalle de pantallas (filtro "solo lo que se puede hacer ya" vs "ver todo lo que viene"; bandeja lateral).
-- El botón "enviar a cola" del calendario: **eliminado** (22 ago); no era el modelo final.
+1. ¿Calendario opcional os vale? (quien quiere ordena; quien no, cola por fecha entrega)
+2. Troquelado/engomado: ¿solo «hoy» o varios días?
+3. ¿Máquina concreta o basta orden en lista?
+4. **Reserva dura con 1 OT:** **A o B** (tabla arriba) — **respuesta explícita pedida**
 
 ---
 
-## Lo que sí necesitamos oír
+## Qué NO validar en la reunión
 
-¿Este modelo **suena a cómo trabajáis** (lista + calendario para ordenar + offset con secuencia fina)? ¿Algo chirría antes de que lo construyamos?
+Fechas de merge, DnD en detalle-día, semáforos M/T en PDF (backlog).
 
 ---
 
-*Preparado por Manel + Cursor, 22 ago 2026.*
+## Lo que necesitamos oír
+
+¿El modelo suena a cómo trabajáis? ¿Algo chirría? **Y la respuesta A/B sobre reserva dura.**
+
+---
+
+## Checklist antes del lunes
+
+- [ ] Jordi y Carlos han leído **esta v2** (no solo brief 22 ago)
+- [ ] Ramón / Juan informados del cambio reserva dura
+- [ ] Respuesta **A o B** anotada en reunión o por email
+
+---
+
+*v1 22 ago 2026 · **v2 27 ago 2026** — Manel + Cursor*

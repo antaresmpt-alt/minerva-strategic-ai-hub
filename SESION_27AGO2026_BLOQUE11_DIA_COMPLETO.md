@@ -26,9 +26,9 @@ Al cartelar varios palets de un mismo albarán, las hojas brutas del albarán se
 
 ### Reserva dura por defecto (`d92cf41`)
 
-Con **una sola OT** en el wizard de cartela, el palet queda **reservado duro** por defecto (hojas del palet), no «disponible» blando. Evita que otro OT consuma material mientras Carlos planifica.
+Con **1 OT** en wizard → `defaultReservasDurasUnaOt` rellena reserva dura = hojas del palet (badge «reservado»). **Cambio de comportamiento** vs blando/vacío. Código: `cartela-wizard-reparto.ts`.
 
-**Smoke:** primer palet «reservado», resto «disponible» hasta asignar.
+**Comunicación planta:** `.MANUALES/MINERVA_BLOQUE11_BRIEF_JORDI_CARLOS.md` v2 — pregunta **A/B** explícita (mantener dura auto vs volver a blando). **Pendiente respuesta Jordi/Carlos antes del merge.**
 
 ---
 
@@ -176,7 +176,8 @@ Filtros ejecución: **SpeedMaster** + «Mostrar OTs prueba».
 
 | Ítem | Notas |
 |------|-------|
-| Brief Jordi/Carlos | Checklist §14 |
+| **Brief Jordi/Carlos v2** | Actualizado 27 ago noche — **leer antes del domingo**; pregunta A/B reserva dura |
+| Respuesta A/B reserva dura | Jordi/Carlos — ver brief v2 |
 | Merge `main` | **Domingo noche** |
 | Bloque 12 | Menú feliz / roles UI |
 | Drag&drop slots detalle-día | Diferido |

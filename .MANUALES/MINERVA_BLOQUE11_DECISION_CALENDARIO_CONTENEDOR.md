@@ -399,7 +399,7 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 
 - [x] Documentar modelo completo
 - [x] Retirar botón «Enviar a cola» del calendario
-- [ ] Validar brief Jordi/Carlos
+- [ ] Validar brief Jordi/Carlos — **v2** `.MANUALES/MINERVA_BLOQUE11_BRIEF_JORDI_CARLOS.md` (27 ago); leer **antes del domingo**; respuesta A/B reserva dura
 - [x] **Spike bandeja computada** (§5 · smoke planta 23 ago · ver §23)
 - [x] **Spike contenedor CTP** (`feature/bloque11-contenedor-ctp-spike`) — ver §17
 - [x] **Spike persistencia detalle del día (§6.5) — cerrado 26 ago opción B** · `SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md`
@@ -732,7 +732,8 @@ Ver sesión §5 · `SESION_27AGO2026_BLOQUE11_DIA_COMPLETO.md` §2 (orden Hoy).
 
 ### Pendiente
 
-- Brief Jordi/Carlos · merge `main` domingo · Bloque 12 menú · DnD detalle-día · M/T en PDF.
+- **Brief Jordi/Carlos v2** — entregar/leer **antes del domingo**; pregunta A/B reserva dura explícita.
+- Merge `main` domingo · Bloque 12 menú · DnD detalle-día · M/T en PDF.
 
 ---
 
