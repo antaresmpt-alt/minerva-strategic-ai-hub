@@ -36,7 +36,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { useReactToPrint } from "react-to-print";
 import { toast } from "sonner";
 
 import {
@@ -102,6 +101,7 @@ import {
   sortMaquinasPlanificacionUiOrder,
   type PlanificacionTipoMaquina,
 } from "@/lib/planificacion-ambito";
+import { printElementInNewWindow } from "@/lib/calendario-detalle-dia-print";
 import { reorderBoardWithIaRules } from "@/lib/planificacion-ia-reorder";
 import { mapRowsToIaSettings } from "@/lib/planificacion-ia-settings";
 import {
@@ -538,14 +538,17 @@ export function PlanificacionMesaSecuenciacionTab() {
   // el botón "PDF" de Gestión Externos. No usa `window.print()` sobre la UI viva.
   const printSemanalRef = useRef<HTMLDivElement>(null);
   const { umbrales: umbralesOtsCompras } = useSysParametrosOtsCompras();
-  const handlePrintTablonSemanal = useReactToPrint({
-    contentRef: printSemanalRef,
-    documentTitle: `Minerva-Tablon-Semanal-${weekStartKey}`,
-    pageStyle: `
-      @page { size: A4 landscape; margin: 10mm 10mm; }
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    `,
-  });
+  const handlePrintTablonSemanal = useCallback(() => {
+    const el = printSemanalRef.current;
+    if (!el) return;
+    const ok = printElementInNewWindow(
+      el,
+      `Minerva-Tablon-Semanal-${weekStartKey}`,
+      `@page { size: A4 landscape; margin: 10mm 10mm; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }`,
+    );
+    if (!ok) toast.error("No se pudo abrir la ventana de impresión.");
+  }, [weekStartKey]);
 
   // ---- Edición de capacidad
   const [capDialogOpen, setCapDialogOpen] = useState(false);

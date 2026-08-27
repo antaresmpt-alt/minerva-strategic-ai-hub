@@ -20,7 +20,6 @@ import {
   useState,
 } from "react";
 import ReactMarkdown from "react-markdown";
-import { useReactToPrint } from "react-to-print";
 import { toast } from "sonner";
 
 import {
@@ -63,6 +62,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { printElementInNewWindow } from "@/lib/calendario-detalle-dia-print";
 import {
   exportFichasTecnicasListadoPdf,
   exportFichasTecnicasToExcel,
@@ -300,11 +300,12 @@ export function FichasTecnicasPage() {
   const [asistenteText, setAsistenteText] = useState("");
   const abortAsistenteRef = useRef<AbortController | null>(null);
 
-  const handleBatchPrint = useReactToPrint({
-    contentRef: batchPrintRef,
-    documentTitle: "Fichas-tecnicas-lote",
-    pageStyle: FICHA_PRINT_PAGE_STYLE,
-  });
+  const handleBatchPrint = useCallback(() => {
+    const el = batchPrintRef.current;
+    if (!el) return;
+    const ok = printElementInNewWindow(el, "Fichas-tecnicas-lote", FICHA_PRINT_PAGE_STYLE);
+    if (!ok) toast.error("No se pudo abrir la ventana de impresión.");
+  }, []);
 
   const loadRows = useCallback(async () => {
     setLoading(true);

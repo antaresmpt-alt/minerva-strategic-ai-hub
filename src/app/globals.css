@@ -261,7 +261,8 @@
 
   /* ─────────────────────────────────────────────────────────────────────
    * Mesa diaria + Mesa semanal — Plantillas de impresión dedicadas.
-   * Se renderizan offscreen con `useReactToPrint` (ver
+   * Se renderizan offscreen e imprimen con `printElementInNewWindow` (ver
+   * `calendario-detalle-dia-print.ts`) para no tumbar Electron al cerrar el diálogo.
    *   mesa-diaria-print-template.tsx
    *   mesa-semanal-print-template.tsx
    * ) por lo que la UI viva no necesita reglas @media print.

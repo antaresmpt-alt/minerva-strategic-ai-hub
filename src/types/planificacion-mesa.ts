@@ -211,6 +211,10 @@ export interface MesaEjecucion {
   planSlotHoy?: number | null;
   /** Fecha entrega para ordenar «Disponibles sin plan» (virtuales). */
   fechaEntregaCola?: string | null;
+  /**
+   * Contenedor I/D: estado Guillotina del itinerario (Rita/Ramón «¿cortado?»).
+   */
+  guillotinaStatus?: "sin_paso" | "pendiente" | "listo" | "hecha" | null;
 }
 
 export interface MesaEjecucionPausa {

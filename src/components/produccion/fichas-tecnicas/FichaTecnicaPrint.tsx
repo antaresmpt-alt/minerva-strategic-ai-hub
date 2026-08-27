@@ -7,9 +7,10 @@ import {
   useImperativeHandle,
   useRef,
 } from "react";
-import { useReactToPrint } from "react-to-print";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { printElementInNewWindow } from "@/lib/calendario-detalle-dia-print";
 import { formatFechaEsLarga } from "@/lib/produccion-date-format";
 import { cn } from "@/lib/utils";
 
@@ -169,16 +170,12 @@ export const FichaTecnicaPrint = forwardRef<
   const printRef = useRef<HTMLDivElement>(null);
   const ot = normalizeOt(data?.ot);
 
-  const handlePrint = useReactToPrint({
-    contentRef: printRef,
-    documentTitle: `Ficha-OT-${ot || "sin-ot"}`,
-    pageStyle: FICHA_PRINT_PAGE_STYLE,
-  });
-
   const runPrint = useCallback(() => {
-    if (!printRef.current) return;
-    void handlePrint();
-  }, [handlePrint]);
+    const el = printRef.current;
+    if (!el) return;
+    const ok = printElementInNewWindow(el, `Ficha-OT-${ot || "sin-ot"}`, FICHA_PRINT_PAGE_STYLE);
+    if (!ok) toast.error("No se pudo abrir la ventana de impresión.");
+  }, [ot]);
 
   useImperativeHandle(
     ref,

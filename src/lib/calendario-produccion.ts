@@ -139,6 +139,33 @@ export function filtrarEntradasSoloPendientes(
   return out;
 }
 
+/** Pastillas con fecha &lt; hoy y no hechas (cajón Atrasadas). */
+export type CalendarioAtrasadaItem = CalendarioProduccionLinea & {
+  fechaYmd: string;
+};
+
+export function collectEntradasAtrasadas(
+  byDay: Map<string, CalendarioProduccionLinea[]>,
+  hoyYmd: string,
+): CalendarioAtrasadaItem[] {
+  const hoy = String(hoyYmd ?? "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(hoy)) return [];
+  const out: CalendarioAtrasadaItem[] = [];
+  for (const [ymd, list] of byDay) {
+    if (ymd >= hoy) continue;
+    for (const l of list) {
+      if (l.hechoVisual || l.marcadoHecho) continue;
+      out.push({ ...l, fechaYmd: ymd });
+    }
+  }
+  out.sort((a, b) => {
+    if (a.fechaYmd !== b.fechaYmd) return a.fechaYmd.localeCompare(b.fechaYmd);
+    if (a.ambito !== b.ambito) return a.ambito.localeCompare(b.ambito);
+    return a.otNumero.localeCompare(b.otNumero, "es", { numeric: true });
+  });
+  return out;
+}
+
 /**
  * Rellena `hechoVisual` = marca manual **o** semáforo del ámbito = hecho (HR).
  * Llamar antes de filtrar «Solo pendientes» y de pintar/exportar.

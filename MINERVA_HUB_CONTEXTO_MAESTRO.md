@@ -328,12 +328,13 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [x] **Bloque 11 bandeja 1b:** smoke planta OK 23 ago — `SESION_23AGO2026_BLOQUE11_BANDEJA_SMOKE.md`
 - [x] **Bloque 11 spike §6.5:** persistencia detalle-día = **opción B** — `SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md`
 - [x] **Bloque 11 (27 ago):** cabeceras cola **Hoy / Disponibles** + icono material pastilla (Pool status)
-- [ ] **Bloque 11 siguiente:** smoke PDF/cierre en planta · brief Jordi/Carlos · valla LEGACY · (Bloque 12: menú)
-- [ ] **Plataforma — print Electron:** migrar resto de `useReactToPrint` (externos, fichas técnicas, tablón semanal, ventas…) a `printHtmlInNewWindow` / `printElementInNewWindow` (`src/lib/calendario-detalle-dia-print.ts`). Causa: `print()` en la ventana host tumba el shell al cerrar el diálogo. Ya OK: detalle-día + mesa diaria. Si alguien reporta «se cerró la app al imprimir X» → este ítem.
+- [ ] **Bloque 11 siguiente:** smoke PDF Carlos (cartelas en detalle-día) · brief Jordi/Carlos · valla LEGACY · merge `main` cuando OK Manel · (Bloque 12: menú)
+- [x] **Plataforma — print Electron:** migrado `useReactToPrint` → `printElementInNewWindow` (externos, fichas, tablón semanal, ventas). Ya OK: detalle-día + mesa diaria.
 - [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor; tableta = máquina — `MINERVA_BLOQUE12_…` (no abrir ya; default gestor = maestro OTs)
 - [ ] **Bloque 5 puente**: Rita lanza OTs a Hugo (no bloquea paralelo si Hugo sigue a mano)
 
 ### Hecho reciente (jul–ago)
+- [x] **27 ago noche:** Bloque 11 — PDF detalle-día **cartelas + material** · chip **Guillotina** I/D · cajón **Atrasadas** · print Electron resto módulos
 - [x] **27 ago:** Bloque 11 — cabeceras ejecución Hoy/Disponibles + icono material calendario (Pool cartelas/muelle) — `SESION_26AGO…`
 - [x] **26 ago noche:** Bloque 11 — **PDF rico detalle-día** + **fix cierre impresión** (ventana nueva; también mesa diaria LEGACY) — `SESION_26AGO…` §3 · decisión §25
 - [x] **26 ago noche:** Bloque 11 — **fase 3 v2** detalle-día (draft/Guardar/M·T/sync orden/pegar) + orden contenedor por `slot_orden`

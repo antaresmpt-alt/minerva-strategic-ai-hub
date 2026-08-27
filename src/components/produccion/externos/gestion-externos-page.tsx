@@ -37,7 +37,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { useReactToPrint } from "react-to-print";
 import ReactMarkdown from "react-markdown";
 import { addDays, addWeeks, format, startOfDay, startOfWeek } from "date-fns";
 import { es as esLocale } from "date-fns/locale";
@@ -130,6 +129,7 @@ import {
   fetchEmailPlantillasProduccion,
   type EmailPlantillaBloques,
 } from "@/lib/email-plantillas-produccion";
+import { printElementInNewWindow } from "@/lib/calendario-detalle-dia-print";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import {
   ejecutarConsumoExternoEnviado,
@@ -1072,14 +1072,17 @@ export function GestionExternosPage() {
   }, []);
 
   const printListadoRef = useRef<HTMLDivElement>(null);
-  const handlePrintListado = useReactToPrint({
-    contentRef: printListadoRef,
-    documentTitle: `Minerva-Parte-Externos-${new Date().toISOString().slice(0, 10)}`,
-    pageStyle: `
-      @page { size: A4 landscape; margin: 10mm 12mm; }
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    `,
-  });
+  const handlePrintListado = useCallback(() => {
+    const el = printListadoRef.current;
+    if (!el) return;
+    const ok = printElementInNewWindow(
+      el,
+      `Minerva-Parte-Externos-${new Date().toISOString().slice(0, 10)}`,
+      `@page { size: A4 landscape; margin: 10mm 12mm; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }`,
+    );
+    if (!ok) toast.error("No se pudo abrir la ventana de impresión.");
+  }, []);
 
   const handlePrintPlanificacion = useCallback(() => {
     document.body.classList.add("print-externos-planificacion");

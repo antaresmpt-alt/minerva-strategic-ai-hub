@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { useReactToPrint } from "react-to-print";
+import { toast } from "sonner";
 import {
   AlertTriangle,
   Clock,
@@ -69,6 +69,7 @@ import {
   buildDelayReportXlsxBlob,
   isOrderActiveForDelivery,
 } from "@/lib/sales-delivery-timing";
+import { printElementInNewWindow } from "@/lib/calendario-detalle-dia-print";
 import { useHubStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import type { LeadRow } from "@/types/leads";
@@ -211,13 +212,16 @@ export function SalesIntelligenceDashboard() {
   const globalModel = useHubStore((s) => s.globalModel);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const salesPrintRef = useRef<HTMLDivElement>(null);
-  const handlePrint = useReactToPrint({
-    contentRef: salesPrintRef,
-    documentTitle: `Minerva-Ventas-${new Date().toISOString().slice(0, 10)}`,
-    pageStyle: `
-      @page { size: A4 landscape; margin: 12mm; }
-    `,
-  });
+  const handlePrint = useCallback(() => {
+    const el = salesPrintRef.current;
+    if (!el) return;
+    const ok = printElementInNewWindow(
+      el,
+      `Minerva-Ventas-${new Date().toISOString().slice(0, 10)}`,
+      `@page { size: A4 landscape; margin: 12mm; }`,
+    );
+    if (!ok) toast.error("No se pudo abrir la ventana de impresión.");
+  }, []);
   const {
     roleView,
     setRoleView,

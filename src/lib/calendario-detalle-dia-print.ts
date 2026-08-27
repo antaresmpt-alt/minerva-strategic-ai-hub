@@ -9,7 +9,21 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CalendarioAmbito } from "@/lib/calendario-produccion-ambito";
 import { labelCalendarioAmbito } from "@/lib/calendario-produccion-ambito";
 import type { DetalleDiaDraftSlot } from "@/lib/calendario-detalle-dia";
+import {
+  fetchCalendarioMaterialByOtNumeros,
+  labelCalendarioMaterialStatus,
+} from "@/lib/calendario-material-status";
 import { fetchAllInChunks } from "@/lib/supabase-query-chunks";
+
+/** Cartela física enlazada a la OT (para cruzar con el pasillo). */
+export type DetalleDiaPrintCartela = {
+  idStock: number;
+  material: string;
+  formato: string;
+  gramaje: number | null;
+  hojas: number;
+  esPrueba: boolean;
+};
 
 export type DetalleDiaPrintOtMeta = {
   otNumero: string;
@@ -19,11 +33,17 @@ export type DetalleDiaPrintOtMeta = {
   tintas: string;
   barniz: string;
   acabado: string;
+  /** Texto material despacho. */
   papel: string;
+  formatoDespacho: string;
+  gramajeDespacho: number | null;
   hojasBrutas: number;
+  hojasCarteladas: number;
   horasPlanificadas: number;
   materialStatus: string;
+  materialLabel: string;
   troquelStatus: string;
+  cartelas: DetalleDiaPrintCartela[];
 };
 
 function escapeHtml(value: unknown): string {
@@ -155,7 +175,7 @@ export async function fetchDetalleDiaPrintMetaByOts(
     const { data, error } = await supabase
       .from("produccion_ot_despachadas")
       .select(
-        "ot_numero, material, tintas, acabado_pral, troquel, num_hojas_brutas, horas_entrada, horas_tiraje",
+        "ot_numero, material, gramaje, tamano_hoja, tintas, acabado_pral, troquel, num_hojas_brutas, horas_entrada, horas_tiraje",
       )
       .in("ot_numero", chunk);
     if (error) throw error;
@@ -171,12 +191,38 @@ export async function fetchDetalleDiaPrintMetaByOts(
   type Desp = {
     ot_numero?: string | null;
     material?: string | null;
+    gramaje?: number | null;
+    tamano_hoja?: string | null;
     tintas?: string | null;
     acabado_pral?: string | null;
     troquel?: string | null;
     num_hojas_brutas?: number | null;
     horas_entrada?: number | null;
     horas_tiraje?: number | null;
+  };
+  type StockOtRow = {
+    ot_numero?: string | null;
+    cantidad_reservada?: number | null;
+    prod_stock_palets?:
+      | {
+          id_stock?: number | null;
+          material_nombre?: string | null;
+          descripcion_material?: string | null;
+          formato?: string | null;
+          gramaje?: number | null;
+          cantidad_actual?: number | null;
+          es_prueba?: boolean | null;
+        }
+      | {
+          id_stock?: number | null;
+          material_nombre?: string | null;
+          descripcion_material?: string | null;
+          formato?: string | null;
+          gramaje?: number | null;
+          cantidad_actual?: number | null;
+          es_prueba?: boolean | null;
+        }[]
+      | null;
   };
 
   const genByOt = new Map<string, Gen>();
@@ -190,6 +236,57 @@ export async function fetchDetalleDiaPrintMetaByOts(
     if (ot) despByOt.set(ot, d);
   }
 
+  const cartelasByOt = new Map<string, DetalleDiaPrintCartela[]>();
+  const stockOtData = await fetchAllInChunks(ots, 80, async (chunk) => {
+    const { data, error } = await supabase
+      .from("prod_stock_palet_ots")
+      .select(
+        "ot_numero, cantidad_reservada, prod_stock_palets!palet_id(id_stock, material_nombre, descripcion_material, formato, gramaje, cantidad_actual, es_prueba)",
+      )
+      .in("ot_numero", chunk);
+    if (error) throw error;
+    return (data ?? []) as unknown as StockOtRow[];
+  });
+  for (const r of stockOtData) {
+    const ot = String(r.ot_numero ?? "").trim();
+    if (!ot) continue;
+    const raw = r.prod_stock_palets;
+    const palet = Array.isArray(raw) ? raw[0] : raw;
+    if (!palet) continue;
+    const qty = Number(palet.cantidad_actual);
+    if (!Number.isFinite(qty) || qty <= 0) continue;
+    const idStock = Number(palet.id_stock);
+    if (!Number.isFinite(idStock)) continue;
+    const reservada =
+      r.cantidad_reservada != null ? Number(r.cantidad_reservada) : null;
+    const hojas =
+      reservada != null && Number.isFinite(reservada) && reservada > 0
+        ? reservada
+        : qty;
+    const material =
+      String(palet.material_nombre ?? "").trim() ||
+      String(palet.descripcion_material ?? "").trim() ||
+      "—";
+    const list = cartelasByOt.get(ot) ?? [];
+    list.push({
+      idStock,
+      material,
+      formato: String(palet.formato ?? "").trim() || "—",
+      gramaje:
+        typeof palet.gramaje === "number" && Number.isFinite(palet.gramaje)
+          ? palet.gramaje
+          : null,
+      hojas,
+      esPrueba: Boolean(palet.es_prueba),
+    });
+    cartelasByOt.set(ot, list);
+  }
+  for (const list of cartelasByOt.values()) {
+    list.sort((a, b) => a.idStock - b.idStock);
+  }
+
+  const materialByOt = await fetchCalendarioMaterialByOtNumeros(supabase, ots);
+
   for (const ot of ots) {
     const g = genByOt.get(ot);
     const d = despByOt.get(ot);
@@ -200,6 +297,14 @@ export async function fetchDetalleDiaPrintMetaByOts(
     const horas =
       (Number.isFinite(he) ? he : 0) + (Number.isFinite(ht) ? ht : 0);
     const troquel = String(d?.troquel ?? "").trim();
+    const matInfo = materialByOt.get(ot);
+    const cartelas = cartelasByOt.get(ot) ?? [];
+    const hojasCarteladas =
+      matInfo?.hojasCarteladas ??
+      cartelas
+        .filter((c) => !c.esPrueba)
+        .reduce((acc, c) => acc + c.hojas, 0);
+    const status = matInfo?.status ?? "gris";
     out.set(ot, {
       otNumero: ot,
       cliente: String(g?.cliente ?? "").trim() || "—",
@@ -209,13 +314,21 @@ export async function fetchDetalleDiaPrintMetaByOts(
       barniz: "",
       acabado: String(d?.acabado_pral ?? "").trim() || "—",
       papel: String(d?.material ?? "").trim() || "—",
+      formatoDespacho: String(d?.tamano_hoja ?? "").trim() || "—",
+      gramajeDespacho:
+        typeof d?.gramaje === "number" && Number.isFinite(d.gramaje)
+          ? d.gramaje
+          : null,
       hojasBrutas:
         typeof d?.num_hojas_brutas === "number"
           ? d.num_hojas_brutas
           : Number(d?.num_hojas_brutas) || 0,
+      hojasCarteladas,
       horasPlanificadas: horas,
-      materialStatus: "gris",
+      materialStatus: status,
+      materialLabel: labelCalendarioMaterialStatus(status),
       troquelStatus: troquel ? "ok" : "sin_informar",
+      cartelas,
     });
   }
   return out;
@@ -271,10 +384,44 @@ export function buildDetalleDiaPrintHtml(args: BuildDetalleDiaPrintHtmlArgs): st
     const barniz = m?.barniz ?? "";
     const acabado = m?.acabado ?? "—";
     const papel = m?.papel ?? "—";
+    const formato =
+      m?.cartelas[0]?.formato && m.cartelas[0].formato !== "—"
+        ? m.cartelas[0].formato
+        : (m?.formatoDespacho ?? "—");
+    const gramaje =
+      m?.cartelas[0]?.gramaje ?? m?.gramajeDespacho ?? null;
     const hojas = m?.hojasBrutas ?? 0;
+    const hojasCart = m?.hojasCarteladas ?? 0;
     const horas = m?.horasPlanificadas ?? 0;
     const mat = m?.materialStatus ?? "gris";
+    const matLabel = m?.materialLabel ?? mat;
     const troq = m?.troquelStatus ?? "sin_informar";
+    const cartelas = m?.cartelas ?? [];
+    const papelLine = [
+      papel !== "—" ? papel : null,
+      gramaje != null ? `${gramaje} g` : null,
+      formato !== "—" ? formato : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    const cartelaLines =
+      cartelas.length === 0
+        ? `<div class="cartelas empty-c">Sin cartelas enlazadas</div>`
+        : `<div class="cartelas">${cartelas
+            .map((c) => {
+              const bits = [
+                `#${c.idStock}`,
+                c.material !== "—" ? c.material : null,
+                c.formato !== "—" ? c.formato : null,
+                c.gramaje != null ? `${c.gramaje} g` : null,
+                `${formatHojas(c.hojas)} hj`,
+                c.esPrueba ? "prueba" : null,
+              ]
+                .filter(Boolean)
+                .join(" · ");
+              return `<div class="cartela${c.esPrueba ? " prueba" : ""}">${escapeHtml(bits)}</div>`;
+            })
+            .join("")}</div>`;
     return `<article class="card">
       <div class="card-top">
         <div>
@@ -288,12 +435,14 @@ export function buildDetalleDiaPrintHtml(args: BuildDetalleDiaPrintHtmlArgs): st
         ${tintas && tintas !== "—" ? `<span class="pill">${escapeHtml(tintas)}</span>` : ""}
         ${barniz ? `<span class="pill">${escapeHtml(barniz)}</span>` : ""}
         ${acabado && acabado !== "—" && acabado.toLowerCase() !== barniz.toLowerCase() ? `<span class="pill">${escapeHtml(acabado)}</span>` : ""}
-        ${mat && mat !== "gris" ? `<span class="pill mat-${escapeHtml(mat)}">M: ${escapeHtml(mat)}</span>` : ""}
+        ${mat && mat !== "gris" ? `<span class="pill mat-${escapeHtml(mat)}">M: ${escapeHtml(matLabel)}</span>` : ""}
         ${troq && troq !== "sin_informar" ? `<span class="pill troq">T: ${escapeHtml(troq)}</span>` : ""}
       </div>
+      <div class="card-mat">${escapeHtml(papelLine || "—")}</div>
+      ${cartelaLines}
       <div class="card-foot">
-        <span>📄 ${escapeHtml(papel)}</span>
-        <span class="num">${escapeHtml(formatHojas(hojas))} hj · ${escapeHtml(formatHoras(horas))}h</span>
+        <span>Despacho ${escapeHtml(formatHojas(hojas))} hj · cartelado ${escapeHtml(formatHojas(hojasCart))} hj</span>
+        <span class="num">${escapeHtml(formatHoras(horas))}h</span>
       </div>
     </article>`;
   };
@@ -357,6 +506,11 @@ export function buildDetalleDiaPrintHtml(args: BuildDetalleDiaPrintHtmlArgs): st
   .pill.mat-verde { background:#d1fae5; color:#065f46; border-color:#6ee7b7; }
   .pill.mat-amarillo { background:#fef3c7; color:#92400e; border-color:#fcd34d; }
   .pill.mat-rojo { background:#fee2e2; color:#991b1b; border-color:#fca5a5; }
+  .card-mat { margin-top:4px; font-size:8pt; color:#334155; font-weight:600; }
+  .cartelas { margin-top:4px; display:flex; flex-direction:column; gap:2px; }
+  .cartela { font-size:7.5pt; color:#0f172a; background:#f8fafc; border:1px solid #e2e8f0; border-radius:3px; padding:2px 5px; font-family: ui-monospace, Consolas, monospace; }
+  .cartela.prueba { background:#fef9c3; border-color:#fde047; color:#854d0e; }
+  .empty-c { font-size:7.5pt; color:#94a3b8; font-style:italic; }
   .card-foot { display:flex; justify-content:space-between; gap:8px; margin-top:6px; font-size:7.5pt; color:#64748b; }
   .num { font-variant-numeric: tabular-nums; }
   footer { margin-top:14px; border-top:1px solid #e2e8f0; padding-top:6px; font-size:7.5pt; color:#64748b; }

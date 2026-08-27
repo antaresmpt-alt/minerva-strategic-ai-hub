@@ -54,6 +54,7 @@ import {
 import {
   buildSemanaLaboral,
   buildSemanasLaboralesMes,
+  collectEntradasAtrasadas,
   enrichEntradasHechoVisual,
   entradasPorDia,
   fechaDiaLabel,
@@ -108,6 +109,8 @@ import {
 import {
   fetchItinerarioCalendarioByOtNumeros,
   fetchPasosResumenOt,
+  guillotinaStatusFromPasos,
+  labelGuillotinaStatus,
   SEMAFORO_PILL_STYLES,
   semaforoForAmbito,
   type CalendarioItinerarioOt,
@@ -334,6 +337,11 @@ function DiaCelda({
             });
             const material = materialByOt.get(l.otNumero);
             const ambitoPill = CALENDARIO_AMBITO_PILL[l.ambito];
+            const guilloStatus =
+              l.ambito === "impresion" || l.ambito === "digital"
+                ? guillotinaStatusFromPasos(info?.pasos ?? [])
+                : "sin_paso";
+            const guilloLabel = labelGuillotinaStatus(guilloStatus);
             return (
               <div
                 key={l.id}
@@ -384,6 +392,28 @@ function DiaCelda({
                     material={material}
                     compact={!isSemana}
                   />
+                  {guilloLabel ? (
+                    <span
+                      className={cn(
+                        "shrink-0 rounded px-1 py-0.5 font-semibold leading-none",
+                        isSemana ? "text-[10px]" : "text-[9px]",
+                        guilloStatus === "hecha"
+                          ? "bg-emerald-100 text-emerald-900"
+                          : guilloStatus === "listo"
+                            ? "bg-sky-100 text-sky-900"
+                            : "bg-amber-100 text-amber-950",
+                      )}
+                      title={
+                        guilloStatus === "hecha"
+                          ? "Guillotina finalizada"
+                          : guilloStatus === "listo"
+                            ? "Guillotina lista para cortar"
+                            : "Guillotina aún pendiente (upstream)"
+                      }
+                    >
+                      {guilloLabel}
+                    </span>
+                  ) : null}
                   <span
                     className={cn(
                       "shrink-0 rounded px-1.5 py-0.5 font-mono font-bold tabular-nums",
@@ -504,6 +534,7 @@ export function CalendarioProduccionPage() {
   );
   const [filtro, setFiltro] = useState("");
   const [soloPendientes, setSoloPendientes] = useState(false);
+  const [atrasadasOpen, setAtrasadasOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [portapapeles, setPortapapeles] = useState<PortapapelesOt | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -686,6 +717,16 @@ export function CalendarioProduccionPage() {
     soloPendientes,
     itinerarioByOt,
   ]);
+
+  const hoyYmdLocal = useMemo(() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+  }, []);
+
+  const atrasadas = useMemo(
+    () => collectEntradasAtrasadas(entradasByDay, hoyYmdLocal),
+    [entradasByDay, hoyYmdLocal],
+  );
 
   const notasByDay = useMemo(() => {
     const map = new Map<string, ProdCalendarioProduccionNotaRow[]>();
@@ -2049,6 +2090,56 @@ export function CalendarioProduccionPage() {
             <X className="mr-1 size-3.5" />
             Cancelar
           </Button>
+        </div>
+      ) : null}
+
+      {atrasadas.length > 0 ? (
+        <div className="rounded-md border border-amber-200 bg-amber-50/70">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-semibold text-amber-950"
+            onClick={() => setAtrasadasOpen((v) => !v)}
+          >
+            <span>
+              Atrasadas ({atrasadas.length})
+              <span className="ml-2 text-xs font-normal text-amber-800/80">
+                Fecha &lt; hoy · no hechas · no se auto-mueven
+              </span>
+            </span>
+            {atrasadasOpen ? (
+              <ChevronUp className="size-4 shrink-0" />
+            ) : (
+              <ChevronDown className="size-4 shrink-0" />
+            )}
+          </button>
+          {atrasadasOpen ? (
+            <ul className="max-h-40 space-y-1 overflow-y-auto border-t border-amber-200/80 px-2 py-2">
+              {atrasadas.map((a) => (
+                <li key={`${a.fechaYmd}:${a.id}`}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs hover:bg-amber-100/80"
+                    onClick={() => {
+                      void openDetalle(a.otNumero);
+                    }}
+                  >
+                    <span className="font-mono font-bold text-[#002147]">
+                      {a.otNumero}
+                    </span>
+                    <span className="rounded bg-white/80 px-1 font-semibold text-slate-600">
+                      {CALENDARIO_AMBITO_LETRA[a.ambito]}
+                    </span>
+                    <span className="truncate text-slate-700">
+                      {a.trabajo?.trim() || "—"}
+                    </span>
+                    <span className="ml-auto shrink-0 tabular-nums text-amber-900/80">
+                      {fechaDiaLabel(a.fechaYmd)}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : null}
 

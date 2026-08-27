@@ -85,7 +85,54 @@ export function semaforoForAmbito(
   return "esperando";
 }
 
-/** Estilos pastilla: badge del nº OT + borde izquierdo (progreso global). */
+/**
+ * Estado del paso Guillotina en el itinerario (útil en pastillas I/D).
+ * - sin_paso: no hay Guillotina en la ruta
+ * - hecha: finalizado
+ * - listo: disponible / en marcha / pausado
+ * - pendiente: aún no disponible
+ */
+export type GuillotinaItinerarioStatus =
+  | "sin_paso"
+  | "pendiente"
+  | "listo"
+  | "hecha";
+
+export function guillotinaStatusFromPasos(
+  pasos: readonly CalendarioPasoTipado[],
+): GuillotinaItinerarioStatus {
+  const guillos = pasos.filter((p) =>
+    /guillotin/i.test(String(p.nombre ?? "")),
+  );
+  if (guillos.length === 0) return "sin_paso";
+  const estados = guillos.map((p) =>
+    String(p.estado ?? "").trim().toLowerCase(),
+  );
+  if (estados.every((e) => e === "finalizado")) return "hecha";
+  if (
+    estados.some(
+      (e) => e === "disponible" || e === "en_marcha" || e === "pausado",
+    )
+  ) {
+    return "listo";
+  }
+  return "pendiente";
+}
+
+export function labelGuillotinaStatus(
+  status: GuillotinaItinerarioStatus,
+): string | null {
+  switch (status) {
+    case "hecha":
+      return "G: hecha";
+    case "listo":
+      return "G: cortar";
+    case "pendiente":
+      return "G: espera";
+    default:
+      return null;
+  }
+}
 export const PROGRESO_PILL_STYLES: Record<
   CalendarioOtProgreso,
   { otBadge: string; border: string; title: string }

@@ -71,6 +71,11 @@ import {
   fetchPlanHoySlotByOt,
 } from "@/lib/calendario-detalle-dia";
 import {
+  fetchItinerarioCalendarioByOtNumeros,
+  guillotinaStatusFromPasos,
+  labelGuillotinaStatus,
+} from "@/lib/calendario-produccion-progreso";
+import {
   contenedorCtpVirtualId,
   crearEjecucionLigeraCtp,
   fetchContenedorCtpPasosDisponibles,
@@ -2229,6 +2234,42 @@ export function PlanificacionOtsEjecucionTab({
         setMaquinasClaimSeccion({});
       }
 
+      // Contenedor I/D: ¿Guillotina hecha? (misma pregunta Rita/Ramón).
+      try {
+        const otsId = [
+          ...new Set(
+            contenedorRows
+              .filter(
+                (r) =>
+                  r.origenContenedorSeccion === "impresion" ||
+                  r.origenContenedorSeccion === "digital",
+              )
+              .map((r) => r.ot)
+              .filter(Boolean),
+          ),
+        ];
+        if (otsId.length > 0) {
+          const itin = await fetchItinerarioCalendarioByOtNumeros(
+            supabase,
+            otsId,
+          );
+          contenedorRows = contenedorRows.map((r) => {
+            if (
+              r.origenContenedorSeccion !== "impresion" &&
+              r.origenContenedorSeccion !== "digital"
+            ) {
+              return r;
+            }
+            const status = guillotinaStatusFromPasos(
+              itin.get(r.ot)?.pasos ?? [],
+            );
+            return { ...r, guillotinaStatus: status };
+          });
+        }
+      } catch (gErr) {
+        console.warn("[ejecucion] guillotina status I/D", gErr);
+      }
+
       const otsContenedor = [
         ...new Set(contenedorRows.map((c) => c.ot).filter(Boolean)),
       ].filter((ot) => !despachoMap[ot]);
@@ -3477,6 +3518,28 @@ export function PlanificacionOtsEjecucionTab({
                           {row.origenContenedorSeccion ? (
                             <span className="ml-1.5 rounded bg-violet-100 px-1.5 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wide text-violet-950">
                               {CONTENEDOR_SECCION_BADGE[row.origenContenedorSeccion]}
+                            </span>
+                          ) : null}
+                          {row.guillotinaStatus &&
+                          row.guillotinaStatus !== "sin_paso" &&
+                          labelGuillotinaStatus(row.guillotinaStatus) ? (
+                            <span
+                              className={
+                                row.guillotinaStatus === "hecha"
+                                  ? "ml-1.5 rounded bg-emerald-100 px-1.5 py-0.5 font-sans text-[10px] font-semibold text-emerald-900"
+                                  : row.guillotinaStatus === "listo"
+                                    ? "ml-1.5 rounded bg-sky-100 px-1.5 py-0.5 font-sans text-[10px] font-semibold text-sky-900"
+                                    : "ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 font-sans text-[10px] font-semibold text-amber-950"
+                              }
+                              title={
+                                row.guillotinaStatus === "hecha"
+                                  ? "Guillotina finalizada"
+                                  : row.guillotinaStatus === "listo"
+                                    ? "Guillotina lista para cortar"
+                                    : "Guillotina pendiente (upstream)"
+                              }
+                            >
+                              {labelGuillotinaStatus(row.guillotinaStatus)}
                             </span>
                           ) : null}
                           {otMetaByOt[row.ot]?.formaDescripcion ? (
