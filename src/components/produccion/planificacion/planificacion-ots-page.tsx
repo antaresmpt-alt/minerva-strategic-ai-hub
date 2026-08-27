@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/tabs";
 import { TabRouteLoading } from "@/components/ui/tab-route-loading";
 import { getPlanificacionLastTabStorageKey } from "@/lib/planificacion-mesa-diaria";
+import { canAccessPlanificacionLegacyMesa } from "@/lib/planificacion-legacy-access";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 const PlanificacionMesaDiariaTab = dynamic(
@@ -67,7 +68,7 @@ type SubtabId = (typeof VALID_SUBTABS)[number];
  * en la vista del día).
  */
 function readInitialSubtab(): SubtabId {
-  if (typeof window === "undefined") return "diaria";
+  if (typeof window === "undefined") return "pool";
   try {
     const raw = window.localStorage.getItem(getPlanificacionLastTabStorageKey(null));
     if (raw && (VALID_SUBTABS as readonly string[]).includes(raw)) {
@@ -76,13 +77,14 @@ function readInitialSubtab(): SubtabId {
   } catch {
     /* ignore */
   }
-  return "diaria";
+  return "pool";
 }
 
 export function PlanificacionOtsPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [subtab, setSubtab] = useState<SubtabId>(readInitialSubtab);
   const [showEjecucionTab, setShowEjecucionTab] = useState(true);
+  const [showLegacyMesaTabs, setShowLegacyMesaTabs] = useState(false);
 
   // Persistir pestaña actual.
   useEffect(() => {
@@ -121,13 +123,21 @@ export function PlanificacionOtsPage() {
       const enabledValue = Number(rows?.[0]?.valor_num ?? 0);
       const enabledForAll = Number.isFinite(enabledValue) && enabledValue > 0;
       const isAdmin = role === "admin";
+      const legacyMesa = canAccessPlanificacionLegacyMesa(role);
       if (!mounted) return;
+      setShowLegacyMesaTabs(legacyMesa);
       setShowEjecucionTab(enabledForAll || isAdmin);
       if (!(enabledForAll || isAdmin) && subtab === "ejecucion") {
-        setSubtab("diaria");
+        setSubtab("pool");
+      }
+      if (!legacyMesa && (subtab === "diaria" || subtab === "mesa")) {
+        setSubtab("pool");
       }
     })().catch(() => {
-      if (mounted) setShowEjecucionTab(true);
+      if (mounted) {
+        setShowEjecucionTab(true);
+        setShowLegacyMesaTabs(false);
+      }
     });
     return () => {
       mounted = false;
@@ -156,14 +166,24 @@ export function PlanificacionOtsPage() {
             <Table2 className="size-4 shrink-0 opacity-90" aria-hidden />
             Pool de OT&apos;s
           </TabsTrigger>
-          <TabsTrigger value="diaria" className={SUBTAB_TRIGGER_CLASS}>
-            <CalendarClock className="size-4 shrink-0 opacity-90" aria-hidden />
-            Mesa diaria
-          </TabsTrigger>
-          <TabsTrigger value="mesa" className={SUBTAB_TRIGGER_CLASS}>
-            <Rows3 className="size-4 shrink-0 opacity-90" aria-hidden />
-            Mesa semanal
-          </TabsTrigger>
+          {showLegacyMesaTabs ? (
+            <>
+              <TabsTrigger value="diaria" className={SUBTAB_TRIGGER_CLASS}>
+                <CalendarClock className="size-4 shrink-0 opacity-90" aria-hidden />
+                Mesa diaria
+                <span className="rounded bg-slate-200 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-600">
+                  LEGACY
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="mesa" className={SUBTAB_TRIGGER_CLASS}>
+                <Rows3 className="size-4 shrink-0 opacity-90" aria-hidden />
+                Mesa semanal
+                <span className="rounded bg-slate-200 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-600">
+                  LEGACY
+                </span>
+              </TabsTrigger>
+            </>
+          ) : null}
           <TabsTrigger
             value="ejecucion"
             className={SUBTAB_TRIGGER_CLASS}
@@ -188,11 +208,15 @@ export function PlanificacionOtsPage() {
         </TabsContent>
 
         <TabsContent value="diaria" className="mt-0 space-y-3 outline-none">
-          {subtab === "diaria" ? <PlanificacionMesaDiariaTab /> : null}
+          {subtab === "diaria" && showLegacyMesaTabs
+            ? <PlanificacionMesaDiariaTab />
+            : null}
         </TabsContent>
 
         <TabsContent value="mesa" className="mt-0 space-y-3 outline-none">
-          {subtab === "mesa" ? <PlanificacionMesaSecuenciacionTab /> : null}
+          {subtab === "mesa" && showLegacyMesaTabs
+            ? <PlanificacionMesaSecuenciacionTab />
+            : null}
         </TabsContent>
 
         <TabsContent value="ejecucion" className="mt-0 space-y-3 outline-none">

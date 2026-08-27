@@ -133,6 +133,22 @@ export function labelGuillotinaStatus(
       return null;
   }
 }
+
+/** Texto largo para tooltip de pastilla (no ocupa ancho en la fila). */
+export function guillotinaTooltipLine(
+  status: GuillotinaItinerarioStatus,
+): string | null {
+  switch (status) {
+    case "hecha":
+      return "Guillotina: finalizada";
+    case "listo":
+      return "Guillotina: lista para cortar";
+    case "pendiente":
+      return "Guillotina: pendiente (upstream)";
+    default:
+      return null;
+  }
+}
 export const PROGRESO_PILL_STYLES: Record<
   CalendarioOtProgreso,
   { otBadge: string; border: string; title: string }
