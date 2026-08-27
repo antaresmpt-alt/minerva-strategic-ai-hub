@@ -103,10 +103,49 @@ El atajo «enviar a cola de Mesa» obligaba a un PC antes de cada paso — Anton
 
 ## Preguntas para vosotros
 
-1. ¿Calendario opcional os vale? (quien quiere ordena; quien no, cola por fecha entrega)
-2. Troquelado/engomado: ¿solo «hoy» o varios días?
-3. ¿Máquina concreta o basta orden en lista?
-4. **Reserva dura con 1 OT:** **A o B** (tabla arriba) — **respuesta explícita pedida**
+Dos tipos: **confirmar** lo que el piloto ya hace (2 min) vs **decidir** algo con consecuencias distintas (como reserva dura).
+
+### Confirmar en 2 min — piloto ya funciona así
+
+**1. Calendario opcional**
+
+En estos días Carlos **ya usa** el calendario para ordenar; la bandeja sustituye las hojas Optimus; el contenedor **no exige** pastilla para que la OT aparezca en ejecución.
+
+**Pregunta:** ¿Confirmáis que el calendario sigue siendo **opcional** (quien quiere ordena; quien no, cola por fecha de entrega)? Si la respuesta es sí, no hay cambio — solo validación.
+
+**3. Offset — máquina y turno en detalle del día**
+
+En offset el piloto ya fija **máquina + mañana/tarde + orden** en «Organizar detalle del día» (SpeedMaster; `#1` mañana antes que `#2` tarde en ejecución).
+
+**Pregunta:** ¿Confirmáis este modelo para offset, o queréis cambiar algo antes del merge?
+
+---
+
+### Decidir — consecuencias reales (mismo peso que reserva dura)
+
+**2. Troquelado y engomado — ¿solo «hoy» o cola de varios días?**
+
+| Si respondéis… | Consecuencia en planta |
+|----------------|------------------------|
+| **Solo «hoy»** (lista acotada al día) | Gabri/Antonio ven menos ruido; lo que no es hoy se planifica en calendario o no aparece en cola larga. Más parecido a «¿qué toca ahora?». |
+| **Varios días en cola** | Visión de lo que viene (troquel/engomado); más contexto, más filas. Calendario sigue siendo quien **ordena** el día; la cola no sustituye el calendario. |
+
+**Pregunta:** ¿Qué preferís para troquelado y engomado en el contenedor?
+
+**3. Troquel — ¿máquina concreta o basta orden en lista?**
+
+Offset ya resuelto arriba (detalle del día + máquina). En **troquel multi-máquina** la duda sigue abierta:
+
+| Si respondéis… | Consecuencia en planta |
+|----------------|------------------------|
+| **Solo orden en lista** | Gabri ordena prioridad; el operario elige máquina al iniciar (como «coge la que puedas»). Menos planificación previa en pantalla. |
+| **Máquina asignada** (detalle del día o equivalente) | Máquina visible antes de ir a planta; requiere que alguien asigne (Carlos/Gabri). Más control, más paso de planificación. |
+
+**Pregunta:** ¿Para troquel queréis máquina fijada o solo orden?
+
+---
+
+**4. Reserva dura con 1 OT al cartelar** — ver sección ⚠️ y tabla **A / B** arriba. **Respuesta explícita pedida.**
 
 ---
 
@@ -118,7 +157,7 @@ Fechas de merge, DnD en detalle-día, semáforos M/T en PDF (backlog).
 
 ## Lo que necesitamos oír
 
-¿El modelo suena a cómo trabajáis? ¿Algo chirría? **Y la respuesta A/B sobre reserva dura.**
+¿El modelo suena a cómo trabajáis? **Confirmaciones rápidas** (calendario opcional, offset máquina/turno). **Decisiones:** troquel/engomado cola hoy vs varios días · troquel máquina vs solo orden · reserva dura **A o B**.
 
 ---
 
@@ -126,8 +165,10 @@ Fechas de merge, DnD en detalle-día, semáforos M/T en PDF (backlog).
 
 - [ ] Jordi y Carlos han leído **esta v2** (no solo brief 22 ago)
 - [ ] Ramón / Juan informados del cambio reserva dura
-- [ ] Respuesta **A o B** anotada en reunión o por email
+- [ ] Confirmado: calendario opcional + offset detalle del día (o anotado cambio)
+- [ ] Decidido: troquel/engomado hoy vs varios días · troquel máquina vs orden
+- [ ] Respuesta reserva dura **A o B** (o «A + avisar almacén») anotada
 
 ---
 
-*v1 22 ago 2026 · **v2 27 ago 2026** — Manel + Cursor*
+*v1 22 ago 2026 · **v2 27 ago 2026** · **v2.1** confirmar vs decidir en preguntas — Manel + Cursor*
