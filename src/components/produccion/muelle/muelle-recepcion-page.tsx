@@ -47,6 +47,8 @@ import {
 } from "@/components/ui/tabs";
 import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
 import { normalizeCompraEstado } from "@/lib/compras-material-estados";
+import { albaranParaRecepcion } from "@/lib/albaran-placeholders";
+import { errorMessageFromUnknown } from "@/lib/error-message";
 import { isCompraVisibleEnMuelle } from "@/lib/muelle-compras";
 import { mergeDatosProcesoExternoPaso } from "@/lib/externos-envio-brief";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
@@ -822,7 +824,7 @@ export function MuelleRecepcionPage() {
     fotos: File[];
   }) {
     const { row, modo } = params;
-    const alb = params.albaran.trim();
+    const alb = albaranParaRecepcion(params.albaran);
     const hojasInt = Math.trunc(Number(params.hojasRecibidas));
     const paletsInt = Math.max(0, Math.trunc(Number(params.paletsRecibidos)));
     const ahora = new Date().toISOString();
@@ -859,7 +861,7 @@ export function MuelleRecepcionPage() {
     const insertRow = {
       compra_id: row.id,
       fecha_recepcion: ahora,
-      albaran_proveedor: alb || null,
+      albaran_proveedor: alb,
       hojas_recibidas: hojasInt,
       palets_recibidos: paletsInt,
       estado_recepcion: estadoRecepcion,
@@ -881,7 +883,7 @@ export function MuelleRecepcionPage() {
         .from(TABLE_COMPRA)
         .update({
           estado: "Recibido",
-          albaran_proveedor: alb || null,
+          albaran_proveedor: alb,
           fecha_recepcion: ahora,
         })
         .eq("id", row.id);
@@ -891,7 +893,7 @@ export function MuelleRecepcionPage() {
         .from(TABLE_COMPRA)
         .update({
           estado: "Recibido Parcial",
-          albaran_proveedor: alb || null,
+          albaran_proveedor: alb,
         })
         .eq("id", row.id);
       if (upErr) throw upErr;
@@ -1216,7 +1218,7 @@ export function MuelleRecepcionPage() {
     } catch (e) {
       logGuardarRecepcionError("guardarRecepcionMulti", e);
       toast.error(
-        e instanceof Error ? e.message : "No se pudo guardar la recepción múltiple."
+        errorMessageFromUnknown(e, "No se pudo guardar la recepción múltiple."),
       );
     } finally {
       setMultiSaving(false);
@@ -1570,7 +1572,7 @@ export function MuelleRecepcionPage() {
               <Input
                 value={multiAlbaran}
                 onChange={(e) => setMultiAlbaran(e.target.value)}
-                placeholder="Ej: 410864843"
+                placeholder="Ej: 410864843 (opcional; si vacío → «-»)"
               />
             </div>
             <div className="space-y-1.5">
