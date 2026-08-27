@@ -204,6 +204,13 @@ export interface MesaEjecucion {
     | "engomado"
     | "impresion"
     | "digital";
+  /**
+   * Bloque 11: slot del detalle del día (Hoy planificado). Solo virtuales I/D/E.
+   * `null`/`undefined` = sin plan hoy → grupo «Disponibles sin plan».
+   */
+  planSlotHoy?: number | null;
+  /** Fecha entrega para ordenar «Disponibles sin plan» (virtuales). */
+  fechaEntregaCola?: string | null;
 }
 
 export interface MesaEjecucionPausa {

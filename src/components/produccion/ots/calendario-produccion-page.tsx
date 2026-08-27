@@ -10,6 +10,7 @@ import {
   FileDown,
   ListOrdered,
   Loader2,
+  Package,
   Plus,
   RefreshCw,
   Route,
@@ -47,6 +48,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   buildSemanaLaboral,
   buildSemanasLaboralesMes,
   enrichEntradasHechoVisual,
@@ -65,6 +71,11 @@ import {
 import {
   appendDetalleSlotAfterCalendarMove,
 } from "@/lib/calendario-detalle-dia";
+import {
+  calendarioMaterialDotClass,
+  fetchCalendarioMaterialByOtNumeros,
+  type CalendarioMaterialInfo,
+} from "@/lib/calendario-material-status";
 import {
   allCalendarioAmbitoVisibilityOn,
   CALENDARIO_AMBITOS,
@@ -157,6 +168,46 @@ type OtSearchHit = {
   cantidad: number | null;
 };
 
+/** Icono material (Pool status) — decorativo; no bloquea clics de la pastilla. */
+function PastillaMaterialIcon({
+  info,
+  compact,
+}: {
+  info: CalendarioMaterialInfo | undefined;
+  compact?: boolean;
+}) {
+  const status = info?.status ?? "gris";
+  const tip =
+    info?.tooltip ?? "Material N/A — sin datos (no bloquea calendario)";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          role="img"
+          aria-label={tip}
+          title={tip}
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          className={cn(
+            "inline-flex shrink-0 items-center justify-center rounded border",
+            calendarioMaterialDotClass(status),
+            compact ? "size-4" : "size-[1.125rem]",
+          )}
+        >
+          <Package
+            className={compact ? "size-2.5" : "size-3"}
+            strokeWidth={2.5}
+            aria-hidden
+          />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-[16rem] text-[11px] leading-snug">
+        {tip}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function DiaCelda({
   dayYmd,
   dayNum,
@@ -167,6 +218,7 @@ function DiaCelda({
   onToggleMarcadoHecho,
   itinerarioByOt,
   espejoByOt,
+  materialByOt,
   duplicatedOtSet,
   ambitoActivo,
   canEditActivo,
@@ -181,6 +233,7 @@ function DiaCelda({
   onToggleMarcadoHecho: (linea: CalendarioProduccionLinea) => void;
   itinerarioByOt: Map<string, CalendarioItinerarioOt>;
   espejoByOt: Map<string, CalendarioEspejoOt>;
+  materialByOt: Map<string, CalendarioMaterialInfo>;
   duplicatedOtSet: Set<string>;
   ambitoActivo: CalendarioAmbito;
   canEditActivo: boolean;
@@ -302,6 +355,10 @@ function DiaCelda({
                       hechoVisual ? "bg-slate-400" : styles.dot,
                     )}
                     aria-hidden
+                  />
+                  <PastillaMaterialIcon
+                    info={materialByOt.get(l.otNumero)}
+                    compact={!isSemana}
                   />
                   <span
                     className={cn(
@@ -460,6 +517,9 @@ export function CalendarioProduccionPage() {
   const [espejoByOt, setEspejoByOt] = useState<Map<string, CalendarioEspejoOt>>(
     () => new Map(),
   );
+  const [materialByOt, setMaterialByOt] = useState<
+    Map<string, CalendarioMaterialInfo>
+  >(() => new Map());
   const [hojaRutaOt, setHojaRutaOt] = useState<string | null>(null);
   const [hojaRutaOpen, setHojaRutaOpen] = useState(false);
   const [cafeOpen, setCafeOpen] = useState(false);
@@ -724,6 +784,7 @@ export function CalendarioProduccionPage() {
         setTituloByOt(new Map());
         setItinerarioByOt(new Map());
         setEspejoByOt(new Map());
+        setMaterialByOt(new Map());
         return;
       }
 
@@ -751,6 +812,14 @@ export function CalendarioProduccionPage() {
         console.warn("[calendario] itinerario / espejo mesa", progErr);
         setItinerarioByOt(new Map());
         setEspejoByOt(new Map());
+      }
+
+      try {
+        const material = await fetchCalendarioMaterialByOtNumeros(supabase, ots);
+        setMaterialByOt(material);
+      } catch (matErr) {
+        console.warn("[calendario] material status", matErr);
+        setMaterialByOt(new Map());
       }
     } catch (e) {
       toast.error(errorMessageFromUnknown(e, "No se pudo cargar el calendario."));
@@ -2012,6 +2081,7 @@ export function CalendarioProduccionPage() {
                           variant="semana"
                           itinerarioByOt={itinerarioByOt}
                           espejoByOt={espejoByOt}
+                          materialByOt={materialByOt}
                           duplicatedOtSet={duplicatedOtSet}
                           ambitoActivo={ambitoActivo}
                           canEditActivo={canEditActivo}
@@ -2038,6 +2108,7 @@ export function CalendarioProduccionPage() {
                             variant="mes"
                             itinerarioByOt={itinerarioByOt}
                             espejoByOt={espejoByOt}
+                            materialByOt={materialByOt}
                             duplicatedOtSet={duplicatedOtSet}
                             ambitoActivo={ambitoActivo}
                             canEditActivo={canEditActivo}
@@ -2262,6 +2333,12 @@ export function CalendarioProduccionPage() {
                             )}
                           >
                             {CALENDARIO_AMBITO_LETRA[l.ambito]}
+                          </span>
+                          <span className="mr-1 inline-flex align-middle">
+                            <PastillaMaterialIcon
+                              info={materialByOt.get(l.otNumero)}
+                              compact
+                            />
                           </span>
                           {l.otNumero}
                           {l.ambito !== ambitoActivo ? (

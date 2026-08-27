@@ -407,7 +407,7 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 - [x] Spike troquel + claim (`contenedor-troquel.ts` · ver §18)
 - [x] Spike contenedores Guillotina/Desbroce/Manipulados + Engomado claim (`contenedor-seccion.ts` · ver §19)
 - [x] Spike Contenedor Impresión + Digital (ver §20)
-- [x] Detalle del día (Carlos) — fase 3 **UI v2** (26 ago) · PDF rico + fix cierre print · orden «Hoy» por `slot_orden` · cabeceras visuales = siguiente
+- [x] Detalle del día (Carlos) — fase 3 **UI v2** (26 ago) · PDF rico + fix cierre print · orden «Hoy» por `slot_orden` · **cabeceras Hoy/Disponibles + icono material 27 ago**
 - [ ] LEGACY tab — aislamiento por rol (valla §10); nombres/orden menú feliz → **Bloque 12**
 - [ ] Contenedor I/D: exponer estado Guillotina («¿cortado?») — backlog Rita/Ramón (no bloquea fase 3)
 
@@ -425,6 +425,7 @@ La bandeja **no depende** del contenedor; solo de despacho + itinerario (operati
 | Mesa diaria LEGACY | `planificacion-mesa-diaria-tab.tsx` | No modificar camino feliz |
 | Detalle día (fase 3) | `calendario-detalle-dia-dialog.tsx` · `calendario-detalle-dia.ts` | Entrada desde modal día · escribe `prod_calendario_detalle_dia` |
 | PDF detalle + print seguro | `calendario-detalle-dia-print.ts` | HTML rico · `printHtmlInNewWindow` / `printElementInNewWindow` (§25) |
+| Material pastilla | `calendario-material-status.ts` | Pool cartelas/muelle + gris N/A · icono en calendario |
 | Lib detalle | `calendario-detalle-dia.ts` | CRUD + join por pastilla (sin fecha duplicada) |
 | Tabla detalle | `prod_calendario_detalle_dia` | Migración `20260826200000` **aplicada** 26 ago |
 | Helpers mesa | `planificacion-mesa-diaria.ts` | Reutilizar UI avanzada luego; no writes LEGACY |
@@ -670,5 +671,13 @@ Detalle exhaustivo + smoke: `SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md` §3
 
 ---
 
-*Manel + Cursor · 22 ago noche contenedor · 23 ago mediodía bandeja 1b smoke OK · 26 ago hecho visual + altura bandeja · 26 ago noche spike detalle-día B · fase 3 v2 · PDF rico + fix cierre print*
+## 26. Cabeceras cola + icono material — 27 ago
+
+**UI contenedor:** grupos En ejecución / Hoy · planificado / Disponibles sin plan (I/D/E) con `planSlotHoy`.  
+**UI calendario:** icono Package + tooltip compra/cartelas/muelle (`calendario-material-status.ts`) — no bloquea colocar.  
+Ver sesión §5.
+
+---
+
+*Manel + Cursor · 22 ago noche contenedor · 23 ago mediodía bandeja 1b smoke OK · 26 ago hecho visual + altura bandeja · 26 ago noche spike detalle-día B · fase 3 v2 · PDF rico + fix cierre print · 27 ago cabeceras + material*
 

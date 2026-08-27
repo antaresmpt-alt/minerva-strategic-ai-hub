@@ -4,10 +4,12 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
   AlertTriangle,
+  CalendarDays,
   CheckCircle2,
   ChevronDown,
   FileSpreadsheet,
   FileText,
+  Inbox,
   Loader2,
   Map as MapIcon,
   Pause,
@@ -338,7 +340,22 @@ function buildContenedorSeccionVirtualRow(
     createdAt: nowIso,
     updatedAt: nowIso,
     origenContenedorSeccion: paso.kind,
+    planSlotHoy: null,
+    fechaEntregaCola: paso.fechaEntrega ?? null,
   };
+}
+
+const PLAN_HOY_SECCIONES = new Set<ContenedorSeccionKind>([
+  "impresion",
+  "digital",
+  "engomado",
+]);
+
+function isContenedorPlanHoySeccion(row: MesaEjecucion): boolean {
+  return (
+    row.origenContenedorSeccion != null &&
+    PLAN_HOY_SECCIONES.has(row.origenContenedorSeccion)
+  );
 }
 
 const CONTENEDOR_SECCION_BADGE: Record<ContenedorSeccionKind, string> = {
@@ -2136,6 +2153,7 @@ export function PlanificacionOtsEjecucionTab({
               },
             );
             let pasosSec = candidatosSec;
+            let slotByOt = new Map<string, number>();
             if (
               def.kind === "impresion" ||
               def.kind === "digital" ||
@@ -2144,7 +2162,7 @@ export function PlanificacionOtsEjecucionTab({
               try {
                 const hoy = new Date();
                 const ymd = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
-                const slotByOt = await fetchPlanHoySlotByOt(
+                slotByOt = await fetchPlanHoySlotByOt(
                   supabase,
                   ymd,
                   def.kind,
@@ -2161,12 +2179,17 @@ export function PlanificacionOtsEjecucionTab({
             const fixedMaq = def.claim ? null : maqs[0] ?? null;
             contenedorRows = [
               ...contenedorRows,
-              ...pasosSec.map((p) =>
-                buildContenedorSeccionVirtualRow(p, fixedMaq, {
+              ...pasosSec.map((p) => {
+                const row = buildContenedorSeccionVirtualRow(p, fixedMaq, {
                   claim: def.claim,
                   labelBadge: def.labelBadge,
-                }),
-              ),
+                });
+                const slot = slotByOt.get(p.otNumero);
+                return {
+                  ...row,
+                  planSlotHoy: slot ?? null,
+                };
+              }),
             ];
           }
           setMaquinasClaimSeccion(claimMap);
@@ -2453,12 +2476,122 @@ export function PlanificacionOtsEjecucionTab({
         const dt = (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0);
         if (dt !== 0) return dt;
       }
+      // Contenedor I/D/E: respetar plan Hoy (slot) antes de máquina/OT.
+      if (isContenedorPlanHoySeccion(a) || isContenedorPlanHoySeccion(b)) {
+        const sa = a.planSlotHoy;
+        const sb = b.planSlotHoy;
+        const aPlan = sa != null;
+        const bPlan = sb != null;
+        if (aPlan && !bPlan) return -1;
+        if (!aPlan && bPlan) return 1;
+        if (aPlan && bPlan && sa !== sb) return sa! - sb!;
+        const fa =
+          a.fechaEntregaCola ??
+          despachoByOt[a.ot]?.fechaEntrega ??
+          "9999-12-31";
+        const fb =
+          b.fechaEntregaCola ??
+          despachoByOt[b.ot]?.fechaEntrega ??
+          "9999-12-31";
+        if (fa !== fb) return fa.localeCompare(fb);
+      }
       const maq = (a.maquinaNombre ?? "").localeCompare(b.maquinaNombre ?? "", "es");
       if (maq !== 0) return maq;
       return a.ot.localeCompare(b.ot, "es", { numeric: true });
     });
     return next;
-  }, [filtered]);
+  }, [filtered, despachoByOt]);
+
+  type ColaListItem =
+    | {
+        type: "header";
+        id: string;
+        label: string;
+        count: number;
+        tone: "live" | "hoy" | "cola" | "otros";
+        hint?: string;
+      }
+    | { type: "row"; row: MesaEjecucion };
+
+  const colaListItems = useMemo((): ColaListItem[] => {
+    const showGroups = colaRows.some(
+      (r) =>
+        isContenedorPlanHoySeccion(r) &&
+        (r.planSlotHoy != null || r.estadoEjecucion === "pendiente_inicio"),
+    );
+    if (!showGroups) {
+      return colaRows.map((row) => ({ type: "row" as const, row }));
+    }
+
+    const live: MesaEjecucion[] = [];
+    const hoy: MesaEjecucion[] = [];
+    const sinPlan: MesaEjecucion[] = [];
+    const otros: MesaEjecucion[] = [];
+
+    for (const row of colaRows) {
+      if (
+        row.estadoEjecucion === "en_curso" ||
+        row.estadoEjecucion === "pausada"
+      ) {
+        live.push(row);
+        continue;
+      }
+      if (row.estadoEjecucion === "finalizada") {
+        otros.push(row);
+        continue;
+      }
+      if (isContenedorPlanHoySeccion(row)) {
+        if (row.planSlotHoy != null) hoy.push(row);
+        else sinPlan.push(row);
+        continue;
+      }
+      otros.push(row);
+    }
+
+    const items: ColaListItem[] = [];
+    const pushHeader = (
+      id: string,
+      label: string,
+      count: number,
+      tone: "live" | "hoy" | "cola" | "otros",
+      hint?: string,
+    ) => {
+      if (count === 0) return;
+      items.push({ type: "header", id, label, count, tone, hint });
+    };
+
+    pushHeader(
+      "hdr-live",
+      "En ejecución",
+      live.length,
+      "live",
+      "En curso o pausada ahora",
+    );
+    for (const row of live) items.push({ type: "row", row });
+
+    pushHeader(
+      "hdr-hoy",
+      "Hoy · planificado",
+      hoy.length,
+      "hoy",
+      "Detalle del día · itinerario autoriza",
+    );
+    for (const row of hoy) items.push({ type: "row", row });
+
+    pushHeader(
+      "hdr-sin-plan",
+      "Disponibles sin plan",
+      sinPlan.length,
+      "cola",
+      "Listas por itinerario · sin secuencia de hoy",
+    );
+    for (const row of sinPlan) items.push({ type: "row", row });
+
+    pushHeader("hdr-otros", "Otras", otros.length, "otros");
+    for (const row of otros) items.push({ type: "row", row });
+
+    return items;
+  }, [colaRows]);
 
   useEffect(() => {
     const hasLive = rows.some(
@@ -3155,7 +3288,85 @@ export function PlanificacionOtsEjecucionTab({
 
         {colaRows.length > 0 ? (
           <ul className="space-y-2">
-            {colaRows.map((row) => {
+            {colaListItems.map((item) => {
+              if (item.type === "header") {
+                const Icon =
+                  item.tone === "hoy"
+                    ? CalendarDays
+                    : item.tone === "cola"
+                      ? Inbox
+                      : item.tone === "live"
+                        ? Play
+                        : FileText;
+                const toneClass =
+                  item.tone === "hoy"
+                    ? "border-[#C69C2B]/50 bg-gradient-to-r from-[#002147] to-[#003366] text-white shadow-sm"
+                    : item.tone === "cola"
+                      ? "border-slate-300 bg-slate-100 text-slate-700"
+                      : item.tone === "live"
+                        ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+                        : "border-slate-200 bg-white text-slate-600";
+                return (
+                  <li key={item.id} className="list-none pt-2 first:pt-0">
+                    <div className="flex items-center gap-2 px-0.5">
+                      <span
+                        className={cn(
+                          "h-px min-w-[1rem] flex-1",
+                          item.tone === "hoy"
+                            ? "bg-gradient-to-r from-[#002147]/40 to-transparent"
+                            : "bg-slate-200",
+                        )}
+                        aria-hidden
+                      />
+                      <div
+                        className={cn(
+                          "inline-flex max-w-[min(100%,22rem)] flex-col items-center gap-0.5 rounded-full border px-3 py-1",
+                          toneClass,
+                        )}
+                        title={item.hint}
+                      >
+                        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide">
+                          <Icon className="size-3.5 shrink-0" aria-hidden />
+                          {item.label}
+                          <span
+                            className={cn(
+                              "rounded-full px-1.5 py-px text-[10px] font-bold tabular-nums",
+                              item.tone === "hoy"
+                                ? "bg-white/20 text-[#C69C2B]"
+                                : "bg-white/80 text-slate-700",
+                            )}
+                          >
+                            {item.count}
+                          </span>
+                        </span>
+                        {item.hint ? (
+                          <span
+                            className={cn(
+                              "text-[9px] font-normal normal-case tracking-normal",
+                              item.tone === "hoy"
+                                ? "text-white/70"
+                                : "text-slate-500",
+                            )}
+                          >
+                            {item.hint}
+                          </span>
+                        ) : null}
+                      </div>
+                      <span
+                        className={cn(
+                          "h-px min-w-[1rem] flex-1",
+                          item.tone === "hoy"
+                            ? "bg-gradient-to-l from-[#002147]/40 to-transparent"
+                            : "bg-slate-200",
+                        )}
+                        aria-hidden
+                      />
+                    </div>
+                  </li>
+                );
+              }
+
+              const row = item.row;
               const pauses = pausesByExecutionId[row.id] ?? [];
               const despacho = despachoByOt[row.ot] ?? null;
               const procesoNombre =
@@ -3176,6 +3387,10 @@ export function PlanificacionOtsEjecucionTab({
                 setWorkScreenIntent(intent);
                 setWorkScreenId(row.id);
               };
+              const planSlot =
+                row.planSlotHoy != null && isContenedorPlanHoySeccion(row)
+                  ? row.planSlotHoy
+                  : null;
 
               return (
                 <li
@@ -3187,6 +3402,9 @@ export function PlanificacionOtsEjecucionTab({
                       "flex w-full min-h-16 flex-wrap items-center gap-2 border-l-4 px-3 py-2.5 sm:flex-nowrap sm:gap-3",
                       estadoColaRowClass(row.estadoEjecucion),
                       workScreenId === row.id && "ring-1 ring-inset ring-[#002147]/20",
+                      planSlot != null &&
+                        isPending &&
+                        "border-l-[#C69C2B] bg-gradient-to-r from-amber-50/40 to-white",
                     )}
                   >
                     <button
@@ -3205,6 +3423,14 @@ export function PlanificacionOtsEjecucionTab({
                       <div className="min-w-0 flex-1">
                         <p className="font-mono text-base font-bold tabular-nums text-[#002147]">
                           OT {row.ot}
+                          {planSlot != null ? (
+                            <span
+                              className="ml-1.5 rounded-md border border-[#C69C2B]/40 bg-[#002147] px-1.5 py-0.5 font-sans text-[10px] font-semibold tabular-nums text-[#C69C2B]"
+                              title={`Orden del día #${planSlot}`}
+                            >
+                              #{planSlot}
+                            </span>
+                          ) : null}
                           {row.origenContenedorCtp ? (
                             <span className="ml-1.5 rounded bg-sky-100 px-1.5 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wide text-sky-900">
                               Contenedor CTP

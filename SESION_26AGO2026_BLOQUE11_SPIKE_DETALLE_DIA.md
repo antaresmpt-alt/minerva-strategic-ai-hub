@@ -46,8 +46,8 @@ calendario (pastilla día) ──CASCADE──► detalle_dia (máquina/turno/sl
 
 ### Diseño cerrado junto al spike
 
-1. **Ejecución:** 2 grupos visuales (Hoy / Disponibles) — orden «Hoy» por `slot_orden` (I/D/E cableado; cabeceras visuales pendientes).
-2. **Material en calendario:** icono no bloqueante; color = Pool `materialStatus` + gris N/A; compra en tooltip. Verde = cartelado ≥ objetivo. (Backlog UI.)
+1. **Ejecución:** 2 grupos visuales (Hoy / Disponibles) — orden «Hoy» por `slot_orden` + **cabeceras UI 27 ago** ✅.
+2. **Material en calendario:** icono no bloqueante ✅ 27 ago; color = Pool `materialStatus` + gris N/A; compra en tooltip. Verde = cartelado ≥ objetivo.
 3. **Nav:** no bautizar «Planificador» ahora (Bloque 12). Sí: entrada detalle desde calendario; valla LEGACY por rol cuando toque (§10).
 4. **Backlog:** exponer «Guillotina cortado / pendiente» en contenedor I/D (dolor Rita/Ramón) — no bloquea fase 3.
 5. **Drag&drop** en detalle-día: diferido. Piloto Carlos con botones ↑↓ / →M / →T unos días.
@@ -156,11 +156,26 @@ Otros módulos siguen con `useReactToPrint` (externos, fichas técnicas, tablón
 
 1. Smoke PDF + bug cierre en planta / Electron.
 2. Piloto Carlos UX botones (sin DnD).
-3. Cabeceras visuales Hoy/Disponibles en contenedor.
-4. Icono material pastilla.
+3. ~~Cabeceras visuales Hoy/Disponibles en contenedor~~ ✅ 27 ago
+4. ~~Icono material pastilla~~ ✅ 27 ago (`calendario-material-status.ts`)
 5. Valla LEGACY por rol (§10) cuando toque.
 6. Bloque 12: nombres menú.
+7. Backlog print transversal → **maestro** (ítem plataforma abierto).
 
 ---
 
-*Manel + Cursor · 26 ago — spike B + fase 3 v1/v2 + PDF rico + fix cierre impresión*
+## 5. Cabeceras cola + icono material — 27 ago
+
+### Contenedor ejecución
+- Grupos visuales: **En ejecución** · **Hoy · planificado** · **Disponibles sin plan** · Otras.
+- `planSlotHoy` / `fechaEntregaCola` en filas virtuales I/D/E; `colaRows` respeta slot (ya no se pierde al reordenar por OT).
+- Badge `#n` + acento navy/oro en filas del plan de hoy.
+
+### Calendario pastillas
+- Icono `Package` con color Pool (gris/rojo/ámbar/verde).
+- Tooltip: cartelas / muelle / nº compra · **no bloquea** colocar.
+- Lib: `src/lib/calendario-material-status.ts`.
+
+---
+
+*Manel + Cursor · 26 ago — spike B + fase 3 v1/v2 + PDF rico + fix cierre impresión · 27 ago cabeceras + material*

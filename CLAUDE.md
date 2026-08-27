@@ -7,7 +7,7 @@ El maestro indexa sesiones y briefs. Abrir MINERVA_CONTEXTO_TECNICO.md o SESION_
 cuando el maestro lo cite; no hace falta pegarlos todos en cada chat.
 
 Sesión activa Bloque 11 → .MANUALES/MINERVA_BLOQUE11_DECISION_CALENDARIO_CONTENEDOR.md
-  (26 ago: §6.5 B + fase 3 v2 + PDF rico §25 · merge main pendiente).
+  (26–27 ago: §6.5 B + fase 3 v2 + PDF §25 + cabeceras/material · merge main pendiente).
 Spike/detalle/PDF → SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md
 Smoke bandeja → SESION_23AGO2026_BLOQUE11_BANDEJA_SMOKE.md
 Smoke contenedor → SESION_22AGO2026_BLOQUE11_CONTENEDOR_SMOKE.md
