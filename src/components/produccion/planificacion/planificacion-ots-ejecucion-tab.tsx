@@ -282,6 +282,8 @@ function buildContenedorTroquelVirtualRow(
     createdAt: nowIso,
     updatedAt: nowIso,
     origenContenedorTroquel: true,
+    planSlotHoy: null,
+    fechaEntregaCola: paso.fechaEntrega ?? null,
   };
 }
 
@@ -351,7 +353,9 @@ const PLAN_HOY_SECCIONES = new Set<ContenedorSeccionKind>([
   "engomado",
 ]);
 
-function isContenedorPlanHoySeccion(row: MesaEjecucion): boolean {
+/** I / D / E / T — detalle del día prioriza en la cola. */
+function isContenedorPlanHoyRow(row: MesaEjecucion): boolean {
+  if (row.origenContenedorTroquel) return true;
   return (
     row.origenContenedorSeccion != null &&
     PLAN_HOY_SECCIONES.has(row.origenContenedorSeccion)
@@ -2122,9 +2126,34 @@ export function PlanificacionOtsEjecucionTab({
                 otPasoIdsConEjecucionActiva: occupiedPasos,
               },
             );
+            let pasosTroq = candidatosTroq;
+            let slotByOt = new Map<string, number>();
+            try {
+              const hoy = new Date();
+              const ymd = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
+              slotByOt = await fetchPlanHoySlotByOt(
+                supabase,
+                ymd,
+                "troquelado",
+              );
+              if (slotByOt.size > 0) {
+                pasosTroq = [...candidatosTroq].sort((a, b) =>
+                  compareConPlanHoy(a, b, slotByOt),
+                );
+              }
+            } catch (planErr) {
+              console.warn("[ejecucion] plan hoy troquelado", planErr);
+            }
             contenedorRows = [
               ...contenedorRows,
-              ...candidatosTroq.map((p) => buildContenedorTroquelVirtualRow(p)),
+              ...pasosTroq.map((p) => {
+                const row = buildContenedorTroquelVirtualRow(p);
+                const slot = slotByOt.get(p.otNumero);
+                return {
+                  ...row,
+                  planSlotHoy: slot ?? null,
+                };
+              }),
             ];
           }
         } catch (troqErr) {
@@ -2477,7 +2506,7 @@ export function PlanificacionOtsEjecucionTab({
         if (dt !== 0) return dt;
       }
       // Contenedor I/D/E: respetar plan Hoy (slot) antes de máquina/OT.
-      if (isContenedorPlanHoySeccion(a) || isContenedorPlanHoySeccion(b)) {
+      if (isContenedorPlanHoyRow(a) || isContenedorPlanHoyRow(b)) {
         const sa = a.planSlotHoy;
         const sb = b.planSlotHoy;
         const aPlan = sa != null;
@@ -2516,7 +2545,7 @@ export function PlanificacionOtsEjecucionTab({
   const colaListItems = useMemo((): ColaListItem[] => {
     const showGroups = colaRows.some(
       (r) =>
-        isContenedorPlanHoySeccion(r) &&
+        isContenedorPlanHoyRow(r) &&
         (r.planSlotHoy != null || r.estadoEjecucion === "pendiente_inicio"),
     );
     if (!showGroups) {
@@ -2540,7 +2569,7 @@ export function PlanificacionOtsEjecucionTab({
         otros.push(row);
         continue;
       }
-      if (isContenedorPlanHoySeccion(row)) {
+      if (isContenedorPlanHoyRow(row)) {
         if (row.planSlotHoy != null) hoy.push(row);
         else sinPlan.push(row);
         continue;
@@ -3388,7 +3417,7 @@ export function PlanificacionOtsEjecucionTab({
                 setWorkScreenId(row.id);
               };
               const planSlot =
-                row.planSlotHoy != null && isContenedorPlanHoySeccion(row)
+                row.planSlotHoy != null && isContenedorPlanHoyRow(row)
                   ? row.planSlotHoy
                   : null;
 

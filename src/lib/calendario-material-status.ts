@@ -121,6 +121,20 @@ export function calendarioMaterialDotClass(
   }
 }
 
+/** Pip compacto (esquina badge) — Linear/GitHub style; no se usa en gris. */
+export function calendarioMaterialPipClass(
+  status: Exclude<CalendarioMaterialStatus, "gris">,
+): string {
+  switch (status) {
+    case "verde":
+      return "bg-emerald-500";
+    case "amarillo":
+      return "bg-amber-500";
+    case "rojo":
+      return "bg-red-500";
+  }
+}
+
 export function buildCalendarioMaterialTooltip(
   info: Pick<
     CalendarioMaterialInfo,

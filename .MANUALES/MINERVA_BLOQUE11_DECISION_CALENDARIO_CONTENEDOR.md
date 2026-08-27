@@ -646,7 +646,7 @@ Piloto Carlos detalle-día (botones; DnD diferido). Smoke PDF + cierre impresió
 
 **Decisión B** — ver §6.5 completo + `SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md`.
 
-Migración aplicada · UI v2 (draft / Guardar / mañana·tarde / sync orden / pegar al final) · contenedor ordena «Hoy» por `slot_orden`.
+Migración aplicada · UI v2 (draft / Guardar / mañana·tarde / sync orden / pegar al final) · contenedor ordena «Hoy» por `slot_orden` (**I/D/E/T**).
 
 ---
 
@@ -673,11 +673,11 @@ Detalle exhaustivo + smoke: `SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md` §3
 
 ## 26. Cabeceras cola + icono material — 27 ago
 
-**UI contenedor:** grupos En ejecución / Hoy · planificado / Disponibles sin plan (I/D/E) con `planSlotHoy`.  
-**UI calendario:** icono Package + tooltip compra/cartelas/muelle (`calendario-material-status.ts`) — no bloquea colocar.  
+**UI contenedor:** grupos En ejecución / Hoy · planificado / Disponibles sin plan (**I/D/E/T**) con `planSlotHoy`.  
+**UI calendario:** pip de material en esquina del badge I/D/T/E (solo si no gris; patrón Linear/GitHub) — tooltip compra; no bloquea.  
 Ver sesión §5.
 
 ---
 
-*Manel + Cursor · 22 ago noche contenedor · 23 ago mediodía bandeja 1b smoke OK · 26 ago hecho visual + altura bandeja · 26 ago noche spike detalle-día B · fase 3 v2 · PDF rico + fix cierre print · 27 ago cabeceras + material*
+*Manel + Cursor · 22 ago noche contenedor · 23 ago mediodía bandeja 1b smoke OK · 26 ago hecho visual + altura bandeja · 26 ago noche spike detalle-día B · fase 3 v2 · PDF rico + fix cierre print · 27 ago cabeceras + material + T + pip*
 

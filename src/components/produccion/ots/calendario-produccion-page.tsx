@@ -10,7 +10,6 @@ import {
   FileDown,
   ListOrdered,
   Loader2,
-  Package,
   Plus,
   RefreshCw,
   Route,
@@ -72,7 +71,7 @@ import {
   appendDetalleSlotAfterCalendarMove,
 } from "@/lib/calendario-detalle-dia";
 import {
-  calendarioMaterialDotClass,
+  calendarioMaterialPipClass,
   fetchCalendarioMaterialByOtNumeros,
   type CalendarioMaterialInfo,
 } from "@/lib/calendario-material-status";
@@ -168,37 +167,60 @@ type OtSearchHit = {
   cantidad: number | null;
 };
 
-/** Icono material (Pool status) — decorativo; no bloquea clics de la pastilla. */
-function PastillaMaterialIcon({
-  info,
+/**
+ * Badge ámbito I/D/T/E con pip de material (patrón Linear/GitHub):
+ * - Gris / N/A → sin pip (no ocupa ancho).
+ * - Rojo/ámbar/verde → punto en esquina del badge + tooltip compra.
+ * No bloquea clics de la pastilla.
+ */
+function AmbitoBadgeWithMaterial({
+  ambito,
+  material,
   compact,
 }: {
-  info: CalendarioMaterialInfo | undefined;
+  ambito: CalendarioAmbito;
+  material: CalendarioMaterialInfo | undefined;
   compact?: boolean;
 }) {
-  const status = info?.status ?? "gris";
-  const tip =
-    info?.tooltip ?? "Material N/A — sin datos (no bloquea calendario)";
+  const ambitoPill = CALENDARIO_AMBITO_PILL[ambito];
+  const status = material?.status ?? "gris";
+  const showPip = status === "verde" || status === "amarillo" || status === "rojo";
+  const tip = material?.tooltip;
+
+  const badge = (
+    <span
+      className={cn(
+        "relative inline-flex shrink-0 items-center justify-center rounded font-bold leading-none",
+        ambitoPill.letraBadge,
+        compact ? "px-1 py-0.5 text-[10px]" : "px-1.5 py-0.5 text-[11px]",
+      )}
+      aria-label={labelCalendarioAmbito(ambito)}
+    >
+      {CALENDARIO_AMBITO_LETRA[ambito]}
+      {showPip ? (
+        <span
+          className={cn(
+            "absolute -bottom-0.5 -right-0.5 size-1.5 rounded-full ring-1 ring-white",
+            calendarioMaterialPipClass(status),
+          )}
+          aria-hidden
+        />
+      ) : null}
+    </span>
+  );
+
+  if (!showPip || !tip) return badge;
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <span
-          role="img"
-          aria-label={tip}
-          title={tip}
+          className="inline-flex shrink-0"
           onClick={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
-          className={cn(
-            "inline-flex shrink-0 items-center justify-center rounded border",
-            calendarioMaterialDotClass(status),
-            compact ? "size-4" : "size-[1.125rem]",
-          )}
+          title={tip}
         >
-          <Package
-            className={compact ? "size-2.5" : "size-3"}
-            strokeWidth={2.5}
-            aria-hidden
-          />
+          {badge}
         </span>
       </TooltipTrigger>
       <TooltipContent side="top" className="max-w-[16rem] text-[11px] leading-snug">
@@ -302,7 +324,6 @@ function DiaCelda({
               (l.marcadoHecho || semaforo === "hecho");
             const isDuplicada = duplicatedOtSet.has(`${l.ambito}:${l.otNumero}`);
             const isForeign = l.ambito !== ambitoActivo;
-            const ambitoPill = CALENDARIO_AMBITO_PILL[l.ambito];
             const canToggle = canEditActivo && !isForeign;
             const pasoLabel = labelPasoDisponible(info?.pasos ?? []);
             const espejo = derivePastillaEspejo({
@@ -311,6 +332,8 @@ function DiaCelda({
               itinerario: info,
               espejo: espejoByOt.get(l.otNumero),
             });
+            const material = materialByOt.get(l.otNumero);
+            const ambitoPill = CALENDARIO_AMBITO_PILL[l.ambito];
             return (
               <div
                 key={l.id}
@@ -326,7 +349,7 @@ function DiaCelda({
                     : ""
                 }${espejo.title ? ` · ${espejo.title}` : ""}${
                   pasoLabel ? ` · Paso: ${pasoLabel}` : ""
-                }`}
+                }${material?.tooltip ? ` · ${material.tooltip}` : ""}`}
                 className={cn(
                   "flex w-full items-center gap-1 rounded-md border border-slate-200/90 bg-white text-left shadow-xs",
                   "border-l-[3px] transition-colors",
@@ -356,19 +379,11 @@ function DiaCelda({
                     )}
                     aria-hidden
                   />
-                  <PastillaMaterialIcon
-                    info={materialByOt.get(l.otNumero)}
+                  <AmbitoBadgeWithMaterial
+                    ambito={l.ambito}
+                    material={material}
                     compact={!isSemana}
                   />
-                  <span
-                    className={cn(
-                      "shrink-0 rounded px-1 py-0.5 text-[10px] font-bold leading-none",
-                      ambitoPill.letraBadge,
-                    )}
-                    aria-label={labelCalendarioAmbito(l.ambito)}
-                  >
-                    {CALENDARIO_AMBITO_LETRA[l.ambito]}
-                  </span>
                   <span
                     className={cn(
                       "shrink-0 rounded px-1.5 py-0.5 font-mono font-bold tabular-nums",
@@ -2004,6 +2019,16 @@ export function CalendarioProduccionPage() {
             </span>
             Hecho manual
           </span>
+          <span
+            className="inline-flex items-center gap-1 border-l border-slate-200 pl-2"
+            title="Pip en la letra I/D/T/E = material Pool. Sin pip = N/A / sin despachar (no bloquea)."
+          >
+            <span className="relative inline-flex size-3.5 items-center justify-center rounded bg-sky-600 text-[8px] font-bold text-white">
+              I
+              <span className="absolute -bottom-0.5 -right-0.5 size-1.5 rounded-full bg-amber-500 ring-1 ring-white" />
+            </span>
+            Material
+          </span>
         </div>
       </div>
 
@@ -2326,21 +2351,12 @@ export function CalendarioProduccionPage() {
                             hechoVisual && "text-slate-500 line-through",
                           )}
                         >
-                          <span
-                            className={cn(
-                              "mr-1 inline-block rounded px-1 py-0.5 text-[10px] font-bold text-white",
-                              CALENDARIO_AMBITO_PILL[l.ambito].letraBadge,
-                            )}
-                          >
-                            {CALENDARIO_AMBITO_LETRA[l.ambito]}
-                          </span>
-                          <span className="mr-1 inline-flex align-middle">
-                            <PastillaMaterialIcon
-                              info={materialByOt.get(l.otNumero)}
-                              compact
-                            />
-                          </span>
-                          {l.otNumero}
+                          <AmbitoBadgeWithMaterial
+                            ambito={l.ambito}
+                            material={materialByOt.get(l.otNumero)}
+                            compact
+                          />
+                          <span className="ml-1">{l.otNumero}</span>
                           {l.ambito !== ambitoActivo ? (
                             <span className="ml-1 text-[10px] font-normal text-slate-500">
                               (ref.)
