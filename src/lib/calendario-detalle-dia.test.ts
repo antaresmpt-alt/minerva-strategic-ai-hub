@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   compareConPlanHoy,
+  rankPlanHoyByOt,
   renumberDraftTurno,
   seedDraftFromCalendarioLineas,
   sortDetalleBySlot,
@@ -87,11 +88,30 @@ describe("calendario-detalle-dia", () => {
   });
 
   it("compareConPlanHoy prioriza plan", () => {
-    const slots = new Map([["10", 2], ["20", 1]]);
+    const slots = new Map([
+      ["10", 2],
+      ["20", 1],
+    ]);
     const a = { otNumero: "30", fechaEntrega: "2026-01-01" };
     const b = { otNumero: "20", fechaEntrega: "2026-12-01" };
     const c = { otNumero: "10", fechaEntrega: "2026-12-01" };
     expect(compareConPlanHoy(b, a, slots)).toBeLessThan(0);
     expect(compareConPlanHoy(b, c, slots)).toBeLessThan(0);
+  });
+
+  it("rankPlanHoyByOt: mañana antes que tarde aunque slot tarde=1", () => {
+    const ranks = rankPlanHoyByOt([
+      row({ ot_numero: "36019", slot_orden: 1, turno: "manana" }),
+      row({ ot_numero: "98025", slot_orden: 2, turno: "manana" }),
+      row({ ot_numero: "98024", slot_orden: 3, turno: "manana" }),
+      row({ ot_numero: "98023", slot_orden: 1, turno: "tarde" }),
+    ]);
+    expect(
+      [...ranks.entries()]
+        .sort((a, b) => a[1] - b[1])
+        .map(([ot]) => ot),
+    ).toEqual(["36019", "98025", "98024", "98023"]);
+    expect(ranks.get("98023")).toBe(4);
+    expect(ranks.get("98025")).toBe(2);
   });
 });

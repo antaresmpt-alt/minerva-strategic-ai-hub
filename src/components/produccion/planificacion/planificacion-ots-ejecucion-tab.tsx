@@ -2540,7 +2540,7 @@ export function PlanificacionOtsEjecucionTab({
         tone: "live" | "hoy" | "cola" | "otros";
         hint?: string;
       }
-    | { type: "row"; row: MesaEjecucion };
+    | { type: "row"; row: MesaEjecucion; planBadge?: number };
 
   const colaListItems = useMemo((): ColaListItem[] => {
     const showGroups = colaRows.some(
@@ -2605,7 +2605,9 @@ export function PlanificacionOtsEjecucionTab({
       "hoy",
       "Detalle del día · itinerario autoriza",
     );
-    for (const row of hoy) items.push({ type: "row", row });
+    hoy.forEach((row, i) => {
+      items.push({ type: "row", row, planBadge: i + 1 });
+    });
 
     pushHeader(
       "hdr-sin-plan",
@@ -3417,9 +3419,11 @@ export function PlanificacionOtsEjecucionTab({
                 setWorkScreenId(row.id);
               };
               const planSlot =
-                row.planSlotHoy != null && isContenedorPlanHoyRow(row)
-                  ? row.planSlotHoy
-                  : null;
+                item.planBadge != null
+                  ? item.planBadge
+                  : row.planSlotHoy != null && isContenedorPlanHoyRow(row)
+                    ? row.planSlotHoy
+                    : null;
 
               return (
                 <li

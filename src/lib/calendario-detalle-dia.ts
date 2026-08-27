@@ -98,21 +98,48 @@ export async function fetchDetalleDiaByFechaAmbito(
   return fetchDetalleDiaByCalendarioOtIds(supabase, ids);
 }
 
-/** OT → menor slot_orden del plan de ese día/ámbito (cualquier máquina/turno). */
+/**
+ * Orden global del día para la cola de ejecución: mañana (por slot) y luego tarde.
+ * `slot_orden` en BD se renumera por turno (ambos empiezan en 1); sin esto la tarde
+ * saltaría arriba al ordenar solo por slot.
+ * Devuelve OT → rank denso 1..n (badge #N en ejecución).
+ */
+export function rankPlanHoyByOt(
+  rows: readonly Pick<
+    ProdCalendarioDetalleDiaRow,
+    "ot_numero" | "turno" | "slot_orden"
+  >[],
+): Map<string, number> {
+  const sorted = [...rows].sort((a, b) => {
+    const ta = a.turno === "tarde" ? 1 : 0;
+    const tb = b.turno === "tarde" ? 1 : 0;
+    if (ta !== tb) return ta - tb;
+    if (a.slot_orden !== b.slot_orden) return a.slot_orden - b.slot_orden;
+    return String(a.ot_numero ?? "").localeCompare(
+      String(b.ot_numero ?? ""),
+      "es",
+      { numeric: true },
+    );
+  });
+  const map = new Map<string, number>();
+  let rank = 0;
+  for (const r of sorted) {
+    const ot = String(r.ot_numero ?? "").trim();
+    if (!ot || map.has(ot)) continue;
+    rank += 1;
+    map.set(ot, rank);
+  }
+  return map;
+}
+
+/** OT → rank global del plan de ese día/ámbito (mañana → tarde). */
 export async function fetchPlanHoySlotByOt(
   supabase: SupabaseClient,
   fechaYmd: string,
   ambito: CalendarioAmbito,
 ): Promise<Map<string, number>> {
   const rows = await fetchDetalleDiaByFechaAmbito(supabase, fechaYmd, ambito);
-  const map = new Map<string, number>();
-  for (const r of rows) {
-    const ot = String(r.ot_numero ?? "").trim();
-    if (!ot) continue;
-    const prev = map.get(ot);
-    if (prev == null || r.slot_orden < prev) map.set(ot, r.slot_orden);
-  }
-  return map;
+  return rankPlanHoyByOt(rows);
 }
 
 /**
