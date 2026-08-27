@@ -47,7 +47,11 @@ import {
 } from "@/lib/cartelas-ot-metadata";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { SANDBOX_ID_STOCK_MIN } from "@/lib/prod-stock-sandbox";
-import { repartirHojasEntrePalets } from "@/lib/cartela-wizard-reparto";
+import {
+  defaultReservasDurasUnaOt,
+  repartirHojasEntrePalets,
+  syncReservaDuraConCantidad,
+} from "@/lib/cartela-wizard-reparto";
 import type {
   AlbaranPendienteGroup,
   AlbaranRecepcionLine,
@@ -140,7 +144,12 @@ function buildInitialPalets(g: AlbaranPendienteGroup | null): WizardPaletInput[]
   return partes.map((h) => ({
     ...plantilla,
     cantidad_inicial: h > 0 ? String(h) : "",
-    reservas: {},
+    // 1 OT → dura = hojas del palet (ATP/badge coherentes). Multi-OT → blanda.
+    reservas: defaultReservasDurasUnaOt(
+      plantilla.ots_referencia,
+      h,
+      plantilla.stock_libre,
+    ),
   }));
 }
 function parseReservaDura(raw: string | undefined): number | null {
@@ -284,7 +293,24 @@ export function CartelaWizardDialog({
   function updatePalet(idx: number, field: keyof WizardPaletInput, value: unknown) {
     setPalets((prev) => {
       const next = [...prev];
-      next[idx] = { ...next[idx], [field]: value };
+      const cur = next[idx];
+      if (field === "cantidad_inicial") {
+        const cantidadNueva = parseInt(String(value), 10) || 0;
+        const cantidadAnterior = parseInt(cur.cantidad_inicial, 10) || 0;
+        next[idx] = {
+          ...cur,
+          cantidad_inicial: String(value),
+          reservas: syncReservaDuraConCantidad({
+            ots: cur.ots_referencia,
+            reservas: cur.reservas,
+            cantidadAnterior,
+            cantidadNueva,
+            stockLibre: cur.stock_libre,
+          }),
+        };
+        return next;
+      }
+      next[idx] = { ...cur, [field]: value };
       return next;
     });
   }
@@ -304,16 +330,30 @@ export function CartelaWizardDialog({
   }
 
   function toggleOt(paletIdx: number, ot: string) {
-    const current = palets[paletIdx].ots_referencia;
-    const isRemoving = current.includes(ot);
-    const next = isRemoving
-      ? current.filter((o) => o !== ot)
-      : [...current, ot];
     setPalets((prev) => {
       const arr = [...prev];
-      const reservas = { ...arr[paletIdx].reservas };
+      const cur = arr[paletIdx];
+      const isRemoving = cur.ots_referencia.includes(ot);
+      const nextOts = isRemoving
+        ? cur.ots_referencia.filter((o) => o !== ot)
+        : [...cur.ots_referencia, ot];
+      let reservas = { ...cur.reservas };
       if (isRemoving) delete reservas[ot];
-      arr[paletIdx] = { ...arr[paletIdx], ots_referencia: next, reservas };
+      // Al quedar exactamente 1 OT: si no hay dura (o se acaba de añadir), default = hojas.
+      if (!cur.stock_libre && nextOts.length === 1) {
+        const only = nextOts[0]!;
+        const raw = (reservas[only] ?? "").trim();
+        const sinDura =
+          raw === "" || /^(todas?|all|\*)$/i.test(raw);
+        if (sinDura) {
+          reservas = defaultReservasDurasUnaOt(
+            nextOts,
+            parseInt(cur.cantidad_inicial, 10) || 0,
+            cur.stock_libre,
+          );
+        }
+      }
+      arr[paletIdx] = { ...cur, ots_referencia: nextOts, reservas };
       return arr;
     });
   }
@@ -321,12 +361,22 @@ export function CartelaWizardDialog({
   function addOtManual(paletIdx: number) {
     const raw = (otInput[paletIdx] ?? "").trim();
     if (!raw) return;
-    if (!palets[paletIdx].ots_referencia.includes(raw)) {
-      updatePalet(paletIdx, "ots_referencia", [
-        ...palets[paletIdx].ots_referencia,
-        raw,
-      ]);
-    }
+    setPalets((prev) => {
+      const arr = [...prev];
+      const cur = arr[paletIdx];
+      if (cur.ots_referencia.includes(raw)) return prev;
+      const nextOts = [...cur.ots_referencia, raw];
+      let reservas = { ...cur.reservas };
+      if (!cur.stock_libre && nextOts.length === 1) {
+        reservas = defaultReservasDurasUnaOt(
+          nextOts,
+          parseInt(cur.cantidad_inicial, 10) || 0,
+          cur.stock_libre,
+        );
+      }
+      arr[paletIdx] = { ...cur, ots_referencia: nextOts, reservas };
+      return arr;
+    });
     setOtInput((prev) => {
       const n = [...prev];
       n[paletIdx] = "";
@@ -337,13 +387,22 @@ export function CartelaWizardDialog({
   function removeOt(paletIdx: number, ot: string) {
     setPalets((prev) => {
       const next = [...prev];
-      const reservas = { ...next[paletIdx].reservas };
+      const cur = next[paletIdx];
+      const nextOts = cur.ots_referencia.filter((o) => o !== ot);
+      let reservas = { ...cur.reservas };
       delete reservas[ot];
-      next[paletIdx] = {
-        ...next[paletIdx],
-        ots_referencia: next[paletIdx].ots_referencia.filter((o) => o !== ot),
-        reservas,
-      };
+      if (!cur.stock_libre && nextOts.length === 1) {
+        const only = nextOts[0]!;
+        const raw = (reservas[only] ?? "").trim();
+        if (raw === "" || /^(todas?|all|\*)$/i.test(raw)) {
+          reservas = defaultReservasDurasUnaOt(
+            nextOts,
+            parseInt(cur.cantidad_inicial, 10) || 0,
+            cur.stock_libre,
+          );
+        }
+      }
+      next[paletIdx] = { ...cur, ots_referencia: nextOts, reservas };
       return next;
     });
   }
@@ -356,18 +415,26 @@ export function CartelaWizardDialog({
       "";
     setPalets((prev) => {
       const next = [...prev];
+      const cur = next[paletIdx];
+      const cantidad = hojas || cur.cantidad_inicial;
+      const ots = esStock
+        ? []
+        : line.ot_numero
+          ? [line.ot_numero]
+          : [];
       next[paletIdx] = {
-        ...next[paletIdx],
-        material_nombre: line.material ?? next[paletIdx].material_nombre,
-        gramaje: line.gramaje?.toString() ?? next[paletIdx].gramaje,
-        formato: line.tamano_hoja ?? next[paletIdx].formato,
-        cantidad_inicial: hojas || next[paletIdx].cantidad_inicial,
-        ots_referencia: esStock
-          ? []
-          : line.ot_numero
-            ? [line.ot_numero]
-            : [],
+        ...cur,
+        material_nombre: line.material ?? cur.material_nombre,
+        gramaje: line.gramaje?.toString() ?? cur.gramaje,
+        formato: line.tamano_hoja ?? cur.formato,
+        cantidad_inicial: cantidad,
+        ots_referencia: ots,
         stock_libre: esStock,
+        reservas: defaultReservasDurasUnaOt(
+          ots,
+          parseInt(cantidad, 10) || 0,
+          esStock,
+        ),
       };
       return next;
     });
@@ -385,14 +452,15 @@ export function CartelaWizardDialog({
       );
       const resto =
         totalAlbaran > 0 ? Math.max(0, totalAlbaran - yaAsignadas) : 0;
+      const ots = [...last.ots_referencia];
       const nuevo: WizardPaletInput = {
         ...EMPTY_PALET,
         material_nombre: last.material_nombre,
         gramaje: last.gramaje,
         formato: last.formato,
         codigo_articulo: last.codigo_articulo,
-        ots_referencia: [...last.ots_referencia],
-        reservas: {},
+        ots_referencia: ots,
+        reservas: defaultReservasDurasUnaOt(ots, resto, last.stock_libre),
         stock_libre: last.stock_libre,
         coste: last.coste,
         es_fsc: last.es_fsc,
@@ -415,10 +483,18 @@ export function CartelaWizardDialog({
     }
     const partes = repartirHojasEntrePalets(total, palets.length);
     setPalets((prev) =>
-      prev.map((p, i) => ({
-        ...p,
-        cantidad_inicial: partes[i]! > 0 ? String(partes[i]) : "",
-      })),
+      prev.map((p, i) => {
+        const h = partes[i]! > 0 ? partes[i]! : 0;
+        return {
+          ...p,
+          cantidad_inicial: h > 0 ? String(h) : "",
+          // Tras repartir equitativo: 1 OT → dura alineada; multi-OT no se inventa split.
+          reservas:
+            p.ots_referencia.length === 1 && !p.stock_libre
+              ? defaultReservasDurasUnaOt(p.ots_referencia, h, p.stock_libre)
+              : p.reservas,
+        };
+      }),
     );
     toast.success(
       `Reparto: ${palets.length} palets · ${total.toLocaleString("es-ES")} h`,
@@ -755,14 +831,16 @@ export function CartelaWizardDialog({
                 {grupo.hojas_recibidas_total.toLocaleString("es-ES")} h
               </strong>{" "}
               (suma muelle). Si es <strong>1 palet físico</strong> compartido, deja
-              esa cantidad total y marca las OTs; reservas vacías = blandas.
+              esa cantidad total y marca las OTs; con varias OTs las reservas
+              empiezan blandas — reparte a mano si hace falta.
             </p>
           )}
 
           {p.ots_referencia.length > 0 && !p.stock_libre && (
             <div className="space-y-1.5 mb-2">
               <p className="text-[11px] text-slate-400">
-                Hojas reservadas por OT (vacío o «todas» = reserva blanda)
+                Hojas reservadas por OT. Con 1 OT se rellena sola (dura = todo el
+                palet → «reservado»). Vacío o «todas» = blanda (badge «disponible»).
               </p>
               {p.ots_referencia.map((ot) => (
                 <div key={ot} className="flex items-center gap-2">
@@ -855,7 +933,25 @@ export function CartelaWizardDialog({
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <Checkbox
               checked={p.stock_libre}
-              onCheckedChange={(v) => updatePalet(idx, "stock_libre", !!v)}
+              onCheckedChange={(v) => {
+                const libre = !!v;
+                setPalets((prev) => {
+                  const next = [...prev];
+                  const cur = next[idx];
+                  next[idx] = {
+                    ...cur,
+                    stock_libre: libre,
+                    reservas: libre
+                      ? {}
+                      : defaultReservasDurasUnaOt(
+                          cur.ots_referencia,
+                          parseInt(cur.cantidad_inicial, 10) || 0,
+                          false,
+                        ),
+                  };
+                  return next;
+                });
+              }}
             />
             Stock libre (sin OT)
           </label>
