@@ -329,7 +329,8 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [x] **Bloque 11 bandeja 1b:** smoke planta OK 23 ago — `SESION_23AGO2026_BLOQUE11_BANDEJA_SMOKE.md`
 - [x] **Bloque 11 spike §6.5:** persistencia detalle-día = **opción B** — `SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md`
 - [x] **Bloque 11 (27 ago):** cabeceras cola **Hoy / Disponibles** + icono material pastilla (Pool status)
-- [ ] **Bloque 11 siguiente:** brief Jordi/Carlos **v2** leído en planta **antes del domingo** (reserva dura A/B) · merge `main` **domingo noche** · Bloque 12 menú feliz
+- [x] **Bloque 11:** merge `main` **29 ago** (rama `feature/bloque11-contenedor-ctp-spike`)
+- [ ] **Bloque 11 siguiente:** brief Jordi/Carlos **v2** leído en planta (reserva dura A/B) · **B5 pool etiquetas** (Rita lunes) · Bloque 12 menú feliz
 - [x] **Plataforma — print Electron:** migrado `useReactToPrint` → `printElementInNewWindow` (externos, fichas, tablón semanal, ventas). Ya OK: detalle-día + mesa diaria.
 - [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor; tableta = máquina — `MINERVA_BLOQUE12_…` (no abrir ya; default gestor = maestro OTs)
 - [ ] **Bloque 5 puente**: Rita lanza OTs a Hugo (no bloquea paralelo si Hugo sigue a mano)

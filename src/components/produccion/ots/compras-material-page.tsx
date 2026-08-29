@@ -316,6 +316,19 @@ export function ComprasMaterialPage() {
   const [filtroAlbaran, setFiltroAlbaran] = useState("");
   /** `false`: ocultar compras en estado «Recibido» (vista limpia). `true`: ver todo el histórico. */
   const [verHistorial, setVerHistorial] = useState(false);
+  const [filtroAlbaranDebounced, setFiltroAlbaranDebounced] = useState("");
+
+  useEffect(() => {
+    const t = window.setTimeout(
+      () => setFiltroAlbaranDebounced(filtroAlbaran.trim()),
+      350,
+    );
+    return () => window.clearTimeout(t);
+  }, [filtroAlbaran]);
+
+  /** Cargar «Recibido» solo si histórico activo o búsqueda por albarán (§18.8b). */
+  const incluirRecibidosEnCarga =
+    verHistorial || filtroAlbaranDebounced.length > 0;
 
   const [viewMode, setViewMode] = useState<"lista" | "semanal" | "diaria">(
     "lista"
@@ -436,11 +449,17 @@ export function ComprasMaterialPage() {
   const loadRows = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: compras, error: cErr } = await supabase
+      let comprasQuery = supabase
         .from(TABLE_COMPRA)
         .select("*")
-        .order("created_at", { ascending: false })
-        .range(0, PAGE_SIZE - 1);
+        .order("created_at", { ascending: false });
+      if (!incluirRecibidosEnCarga) {
+        comprasQuery = comprasQuery.neq("estado", "Recibido");
+      }
+      const { data: compras, error: cErr } = await comprasQuery.range(
+        0,
+        PAGE_SIZE - 1,
+      );
       if (cErr) throw cErr;
       const list = compras ?? [];
 
@@ -708,7 +727,7 @@ export function ComprasMaterialPage() {
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, [supabase, incluirRecibidosEnCarga]);
 
   useEffect(() => {
     void loadRows();
@@ -1731,8 +1750,9 @@ export function ComprasMaterialPage() {
           Peticiones en{" "}
           <span className="font-mono text-[11px]">{TABLE_COMPRA}</span> con datos
           de despacho, maestro y proveedor. Proveedores en línea: tipo «Papel/Cartón».
-          Hasta {PAGE_SIZE} registros recientes. Los totales y exportaciones usan
-          la vista filtrada.
+          Hasta {PAGE_SIZE} registros recientes. Por defecto se excluyen «Recibido»
+          (más rápido); active «Ver Histórico» o busque por albarán para incluirlos.
+          Los totales y exportaciones usan la vista filtrada.
         </p>
       </div>
 
