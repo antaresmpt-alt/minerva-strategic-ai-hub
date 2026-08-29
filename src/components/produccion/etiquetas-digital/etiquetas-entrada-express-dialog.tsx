@@ -146,6 +146,8 @@ type Props = {
   catalog: ProdEtiquetasCatalogRow[];
   troqueles: ProdEtiquetasTroquelRow[];
   onSaved: () => void;
+  /** Si se abre desde el pool, precarga esta OT al abrir. */
+  prefillOtNumero?: string | null;
   /**
    * Si se detecta un duplicado (OT ya presente en hoja de ruta), se ofrece al
    * usuario "Abrir" para editar la fila existente en vez de crear un nuevo
@@ -161,6 +163,7 @@ export function EtiquetasEntradaExpressDialog({
   catalog,
   troqueles,
   onSaved,
+  prefillOtNumero = null,
   onAbrirExistente,
 }: Props) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
@@ -182,28 +185,15 @@ export function EtiquetasEntradaExpressDialog({
     rows: ProdEtiquetasHojaRutaRow[];
   } | null>(null);
 
-  useEffect(() => {
-    if (!open) {
-      setOtInput("");
-      setForm(emptyForm());
-      setTroquelQuery("");
-      setEntradaMultiple(false);
-      setLoadingOt(false);
-      setSaving(false);
-      setDuplicadosState(null);
-      return;
-    }
-    window.setTimeout(() => otInputRef.current?.focus(), 50);
-  }, [open]);
-
-  const hydrate = useCallback(async () => {
-    const ot = otInput.trim();
-    if (!ot) {
-      toast.error("Indica un número de OT.");
-      return;
-    }
-    setLoadingOt(true);
-    try {
+  const hydrateFromOt = useCallback(
+    async (otRaw: string) => {
+      const ot = otRaw.trim();
+      if (!ot) {
+        toast.error("Indica un número de OT.");
+        return;
+      }
+      setLoadingOt(true);
+      try {
       const numFicticia = normalizaOtNumero(ot);
       if (isOtFicticia(numFicticia)) {
         const existentes = await findHojaRutaPorOtNumero(supabase, numFicticia);
@@ -286,7 +276,33 @@ export function EtiquetasEntradaExpressDialog({
     } finally {
       setLoadingOt(false);
     }
-  }, [otInput, supabase]);
+  },
+    [supabase],
+  );
+
+  const hydrate = useCallback(() => {
+    void hydrateFromOt(otInput);
+  }, [hydrateFromOt, otInput]);
+
+  useEffect(() => {
+    if (!open) {
+      setOtInput("");
+      setForm(emptyForm());
+      setTroquelQuery("");
+      setEntradaMultiple(false);
+      setLoadingOt(false);
+      setSaving(false);
+      setDuplicadosState(null);
+      return;
+    }
+    if (prefillOtNumero?.trim()) {
+      const ot = prefillOtNumero.trim();
+      setOtInput(ot);
+      void hydrateFromOt(ot);
+      return;
+    }
+    window.setTimeout(() => otInputRef.current?.focus(), 50);
+  }, [open, prefillOtNumero, hydrateFromOt]);
 
   const troquelOptions = useMemo(
     () => buildTroquelOptions(troqueles, troquelQuery),
@@ -446,7 +462,7 @@ export function EtiquetasEntradaExpressDialog({
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
-                    void hydrate();
+                    hydrate();
                   }
                 }}
                 placeholder="Nº OT o FICT-... y Enter"
@@ -457,7 +473,7 @@ export function EtiquetasEntradaExpressDialog({
                 size="sm"
                 variant="outline"
                 disabled={loadingOt || !otInput.trim()}
-                onClick={() => void hydrate()}
+                onClick={() => hydrate()}
               >
                 {loadingOt ? (
                   <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -805,6 +821,7 @@ export function EtiquetasEntradaExpressDialog({
               type="checkbox"
               className="size-4 rounded border-slate-300"
               checked={entradaMultiple}
+              disabled={Boolean(prefillOtNumero?.trim())}
               onChange={(e) => setEntradaMultiple(e.target.checked)}
             />
             Entrada múltiple (tras guardar se limpia el formulario y el foco vuelve al nº OT)

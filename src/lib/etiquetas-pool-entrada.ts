@@ -1,13 +1,10 @@
 /**
  * Pool entrada etiquetas digital (Bloque 5 v1).
- * Bandeja: OTs etiqueta en maestro no presentes en hoja de ruta ni en el plan del día.
+ * Bandeja: OTs etiqueta en maestro no presentes en hoja de ruta ni en la cola.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import {
-  findHojaRutaPorOtNumero,
-  normalizaOtNumero,
-} from "@/lib/etiquetas-hoja-ruta-duplicados";
+import { normalizaOtNumero } from "@/lib/etiquetas-hoja-ruta-duplicados";
 import { PROCESOS_ETIQUETA_DIGITAL_IDS } from "@/lib/hoja-ruta-campos-config";
 import { fetchAllInChunks } from "@/lib/supabase-query-chunks";
 import type { ProdEtiquetasHojaRutaRow } from "@/types/prod-etiquetas-hoja-ruta";
@@ -22,6 +19,9 @@ const TABLE_DESPACHADAS = "produccion_ot_despachadas";
 const PROCESO_KONICA = 18;
 const PROCESO_TROQ_ETIQUETA = 19;
 const PROCESO_NUM_ETIQUETA = 20;
+
+/** Máximo de OTs etiqueta recientes a evaluar en maestro (sin itinerario). */
+const MAESTRO_ETIQUETA_SCAN_LIMIT = 800;
 
 export type EtiquetasMaquinaFlags = {
   konica: boolean;
@@ -39,12 +39,23 @@ export type EtiquetasPoolCandidata = {
   despachada: boolean;
   despachadoAt: string | null;
   materialDespacho: string | null;
-  maquinas: EtiquetasMaquinaFlags;
+  /** Pasos previstos en itinerario (I/T/N) — no confundir con ejecución en HR. */
+  itinerario: EtiquetasMaquinaFlags;
 };
 
 export type EtiquetasPoolPlanItem = EtiquetasPoolCandidata & {
   id: string;
   orden: number;
+};
+
+export type EtiquetasPoolEnCursoItem = {
+  hrId: string;
+  otNumero: string;
+  cliente: string | null;
+  trabajo: string | null;
+  fechaEntrega: string | null;
+  itinerario: EtiquetasMaquinaFlags;
+  hecho: EtiquetasMaquinaFlags;
 };
 
 export function maquinaFlagsFromProcesoIds(
@@ -81,17 +92,33 @@ export function isOtMaestroAbierta(estadoDesc: string | null | undefined): boole
   return true;
 }
 
+/** OT identificada como etiqueta en maestro (sin exigir itinerario). */
+export function isOtMaestroEtiquetaDigital(row: {
+  tipo_pedido?: string | null;
+  familia?: string | null;
+  titulo?: string | null;
+}): boolean {
+  const tipo = String(row.tipo_pedido ?? "")
+    .trim()
+    .toLowerCase();
+  if (tipo.includes("etiquet")) return true;
+  const familia = String(row.familia ?? "")
+    .trim()
+    .toLowerCase();
+  if (familia.includes("etiquet")) return true;
+  const titulo = String(row.titulo ?? "")
+    .trim()
+    .toLowerCase();
+  if (titulo.includes("etiqueta")) return true;
+  return false;
+}
+
 function fechaMaestroToYmd(raw: string | null | undefined): string | null {
   const s = String(raw ?? "").trim();
   if (!s) return null;
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return null;
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function todayYmd(): string {
-  const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
@@ -104,6 +131,8 @@ type MaestroRow = {
   fecha_entrega: string | null;
   estado_desc: string | null;
   despachado: boolean | null;
+  tipo_pedido?: string | null;
+  familia?: string | null;
 };
 
 type PasoRow = {
@@ -117,7 +146,37 @@ type DespRow = {
   despachado_at?: string | null;
 };
 
+function buildCandidataFromMaestro(
+  m: MaestroRow,
+  procesoIdsByOtId: ReadonlyMap<string, number[]>,
+  despachoByOt: ReadonlyMap<string, DespRow>,
+): EtiquetasPoolCandidata | null {
+  if (!isOtMaestroAbierta(m.estado_desc)) return null;
+  const otNumero = normalizaOtNumero(m.num_pedido);
+  if (!otNumero) return null;
+
+  const desp = despachoByOt.get(otNumero);
+  const despachada =
+    Boolean(m.despachado) ||
+    Boolean(desp?.despachado_at) ||
+    Boolean(desp?.material?.trim());
+
+  return {
+    otGeneralId: m.id,
+    otNumero,
+    cliente: m.cliente,
+    trabajo: m.titulo,
+    cantidad: m.cantidad,
+    fechaEntrega: fechaMaestroToYmd(m.fecha_entrega),
+    despachada,
+    despachadoAt: desp?.despachado_at ?? null,
+    materialDespacho: desp?.material?.trim() || null,
+    itinerario: maquinaFlagsFromProcesoIds(procesoIdsByOtId.get(m.id) ?? []),
+  };
+}
+
 export function filterCandidatasBandeja(input: {
+  candidatoOtIds: readonly string[];
   maestroByOtId: ReadonlyMap<string, MaestroRow>;
   procesoIdsByOtId: ReadonlyMap<string, number[]>;
   enHojaRuta: ReadonlySet<string>;
@@ -127,42 +186,31 @@ export function filterCandidatasBandeja(input: {
 }): EtiquetasPoolCandidata[] {
   const needle = input.filtroTexto.trim().toLowerCase();
   const out: EtiquetasPoolCandidata[] = [];
+  const seen = new Set<string>();
 
-  for (const [otId, procesoIds] of input.procesoIdsByOtId) {
+  for (const otId of input.candidatoOtIds) {
     const m = input.maestroByOtId.get(otId);
     if (!m) continue;
-    if (!isOtMaestroAbierta(m.estado_desc)) continue;
 
-    const otNumero = normalizaOtNumero(m.num_pedido);
-    if (!otNumero) continue;
-    if (input.enHojaRuta.has(otNumero)) continue;
-    if (input.enPool.has(otNumero)) continue;
+    const candidata = buildCandidataFromMaestro(
+      m,
+      input.procesoIdsByOtId,
+      input.despachoByOt,
+    );
+    if (!candidata) continue;
+    if (seen.has(candidata.otNumero)) continue;
+    if (input.enHojaRuta.has(candidata.otNumero)) continue;
+    if (input.enPool.has(candidata.otNumero)) continue;
 
     if (needle) {
-      const hay = [otNumero, m.cliente, m.titulo]
+      const hay = [candidata.otNumero, candidata.cliente, candidata.trabajo]
         .map((x) => String(x ?? "").toLowerCase())
         .some((x) => x.includes(needle));
       if (!hay) continue;
     }
 
-    const desp = input.despachoByOt.get(otNumero);
-    const despachada =
-      Boolean(m.despachado) ||
-      Boolean(desp?.despachado_at) ||
-      Boolean(desp?.material?.trim());
-
-    out.push({
-      otGeneralId: m.id,
-      otNumero,
-      cliente: m.cliente,
-      trabajo: m.titulo,
-      cantidad: m.cantidad,
-      fechaEntrega: fechaMaestroToYmd(m.fecha_entrega),
-      despachada,
-      despachadoAt: desp?.despachado_at ?? null,
-      materialDespacho: desp?.material?.trim() || null,
-      maquinas: maquinaFlagsFromProcesoIds(procesoIds),
-    });
+    seen.add(candidata.otNumero);
+    out.push(candidata);
   }
 
   out.sort((a, b) => {
@@ -179,7 +227,9 @@ export function mergePlanConCandidatas(
   planRows: ProdEtiquetasPoolPlanRow[],
   candidataByOt: ReadonlyMap<string, EtiquetasPoolCandidata>,
 ): EtiquetasPoolPlanItem[] {
-  const sorted = [...planRows].sort((a, b) => a.orden - b.orden || a.created_at.localeCompare(b.created_at));
+  const sorted = [...planRows].sort(
+    (a, b) => a.orden - b.orden || a.created_at.localeCompare(b.created_at),
+  );
   const out: EtiquetasPoolPlanItem[] = [];
 
   for (const p of sorted) {
@@ -199,11 +249,68 @@ export function mergePlanConCandidatas(
       despachada: false,
       despachadoAt: null,
       materialDespacho: null,
-      maquinas: { konica: false, troqueladora: false, numeradora: false },
+      itinerario: { konica: false, troqueladora: false, numeradora: false },
       id: p.id,
       orden: p.orden,
     });
   }
+
+  return out;
+}
+
+export function buildEnCursoItems(
+  hrRows: ProdEtiquetasHojaRutaRow[],
+  procesoIdsByOtId: ReadonlyMap<string, number[]>,
+  maestroByOtId: ReadonlyMap<string, MaestroRow>,
+): EtiquetasPoolEnCursoItem[] {
+  const activas = hrRows.filter((r) => !r.finalizado);
+  const out: EtiquetasPoolEnCursoItem[] = [];
+
+  for (const r of activas) {
+    const otNumero = normalizaOtNumero(r.ot_numero);
+    if (!otNumero) continue;
+
+    let itinerario: EtiquetasMaquinaFlags = {
+      konica: false,
+      troqueladora: false,
+      numeradora: false,
+    };
+    if (r.ot_general_id) {
+      itinerario = maquinaFlagsFromProcesoIds(
+        procesoIdsByOtId.get(r.ot_general_id) ?? [],
+      );
+    } else {
+      const m = [...maestroByOtId.values()].find(
+        (row) => normalizaOtNumero(row.num_pedido) === otNumero,
+      );
+      if (m) {
+        itinerario = maquinaFlagsFromProcesoIds(
+          procesoIdsByOtId.get(m.id) ?? [],
+        );
+      }
+    }
+
+    out.push({
+      hrId: r.id,
+      otNumero,
+      cliente: r.cliente,
+      trabajo: r.trabajo,
+      fechaEntrega: r.fecha_entrega_ot,
+      itinerario,
+      hecho: {
+        konica: r.konica,
+        troqueladora: r.troqueladora,
+        numeradora: r.numeradora,
+      },
+    });
+  }
+
+  out.sort((a, b) => {
+    const fa = a.fechaEntrega ?? "9999-99-99";
+    const fb = b.fechaEntrega ?? "9999-99-99";
+    if (fa !== fb) return fa.localeCompare(fb);
+    return a.otNumero.localeCompare(b.otNumero);
+  });
 
   return out;
 }
@@ -229,47 +336,73 @@ async function fetchProcesoIdsByOtId(
   return map;
 }
 
+async function fetchMaestroEtiquetaRows(
+  supabase: SupabaseClient,
+): Promise<MaestroRow[]> {
+  const { data, error } = await supabase
+    .from(TABLE_MAESTRO)
+    .select(
+      "id, num_pedido, cliente, titulo, cantidad, fecha_entrega, estado_desc, despachado, tipo_pedido, familia",
+    )
+    .or(
+      "tipo_pedido.ilike.%etiquet%,familia.ilike.%etiquet%,titulo.ilike.%ETIQUETA%",
+    )
+    .order("fecha_entrega", { ascending: true, nullsFirst: false })
+    .limit(MAESTRO_ETIQUETA_SCAN_LIMIT);
+  if (error) throw error;
+  return (data ?? []) as MaestroRow[];
+}
+
 export async function fetchEtiquetasPoolSnapshot(
   supabase: SupabaseClient,
   filtroTexto = "",
 ): Promise<{
   candidatas: EtiquetasPoolCandidata[];
   plan: EtiquetasPoolPlanItem[];
+  enCurso: EtiquetasPoolEnCursoItem[];
   candidataByOt: Map<string, EtiquetasPoolCandidata>;
 }> {
   const procesoIdsByOtId = await fetchProcesoIdsByOtId(supabase);
-  const otIds = [...procesoIdsByOtId.keys()];
-  if (otIds.length === 0) {
-    return { candidatas: [], plan: [], candidataByOt: new Map() };
-  }
+  const maestroEtiquetaRows = await fetchMaestroEtiquetaRows(supabase);
 
-  const maestroRows = await fetchAllInChunks(otIds, 100, async (chunk) => {
-    const { data, error } = await supabase
-      .from(TABLE_MAESTRO)
-      .select(
-        "id, num_pedido, cliente, titulo, cantidad, fecha_entrega, estado_desc, despachado",
-      )
-      .in("id", chunk);
-    if (error) throw error;
-    return (data ?? []) as MaestroRow[];
-  });
+  const pasoOtIds = [...procesoIdsByOtId.keys()];
+  const maestroFromPasos =
+    pasoOtIds.length > 0
+      ? await fetchAllInChunks(pasoOtIds, 100, async (chunk) => {
+          const { data, error } = await supabase
+            .from(TABLE_MAESTRO)
+            .select(
+              "id, num_pedido, cliente, titulo, cantidad, fecha_entrega, estado_desc, despachado, tipo_pedido, familia",
+            )
+            .in("id", chunk);
+          if (error) throw error;
+          return (data ?? []) as MaestroRow[];
+        })
+      : [];
 
   const maestroByOtId = new Map<string, MaestroRow>();
-  const otNumeros: string[] = [];
-  for (const m of maestroRows) {
+  for (const m of [...maestroEtiquetaRows, ...maestroFromPasos]) {
+    if (!isOtMaestroEtiquetaDigital(m) && !procesoIdsByOtId.has(m.id)) continue;
     maestroByOtId.set(m.id, m);
-    const num = normalizaOtNumero(m.num_pedido);
-    if (num) otNumeros.push(num);
   }
+
+  const candidatoOtIds = [...maestroByOtId.keys()];
+  const otNumeros = [
+    ...new Set(
+      [...maestroByOtId.values()]
+        .map((m) => normalizaOtNumero(m.num_pedido))
+        .filter(Boolean),
+    ),
+  ];
 
   const { data: hrData, error: hrErr } = await supabase
     .from(TABLE_HR)
-    .select("ot_numero");
+    .select("*")
+    .order("fecha_entrada_depto", { ascending: false });
   if (hrErr) throw hrErr;
+  const hrRows = (hrData ?? []) as ProdEtiquetasHojaRutaRow[];
   const enHojaRuta = new Set(
-    ((hrData ?? []) as { ot_numero: string }[]).map((r) =>
-      normalizaOtNumero(r.ot_numero),
-    ),
+    hrRows.map((r) => normalizaOtNumero(r.ot_numero)).filter(Boolean),
   );
 
   const { data: poolData, error: poolErr } = await supabase
@@ -289,14 +422,17 @@ export async function fetchEtiquetasPoolSnapshot(
   const planRows = (poolData ?? []) as ProdEtiquetasPoolPlanRow[];
   const enPool = new Set(planRows.map((p) => normalizaOtNumero(p.ot_numero)));
 
-  const despachoRows = await fetchAllInChunks(otNumeros, 100, async (chunk) => {
-    const { data, error } = await supabase
-      .from(TABLE_DESPACHADAS)
-      .select("ot_numero, material, despachado_at")
-      .in("ot_numero", chunk);
-    if (error) throw error;
-    return (data ?? []) as DespRow[];
-  });
+  const despachoRows =
+    otNumeros.length > 0
+      ? await fetchAllInChunks(otNumeros, 100, async (chunk) => {
+          const { data, error } = await supabase
+            .from(TABLE_DESPACHADAS)
+            .select("ot_numero, material, despachado_at")
+            .in("ot_numero", chunk);
+          if (error) throw error;
+          return (data ?? []) as DespRow[];
+        })
+      : [];
   const despachoByOt = new Map<string, DespRow>();
   for (const d of despachoRows) {
     const ot = normalizaOtNumero(d.ot_numero);
@@ -304,6 +440,7 @@ export async function fetchEtiquetasPoolSnapshot(
   }
 
   const candidatas = filterCandidatasBandeja({
+    candidatoOtIds,
     maestroByOtId,
     procesoIdsByOtId,
     enHojaRuta,
@@ -315,33 +452,19 @@ export async function fetchEtiquetasPoolSnapshot(
   const candidataByOt = new Map(candidatas.map((c) => [c.otNumero, c]));
   for (const p of planRows) {
     const ot = normalizaOtNumero(p.ot_numero);
-    if (!candidataByOt.has(ot)) {
-      const m = [...maestroByOtId.values()].find(
-        (row) => normalizaOtNumero(row.num_pedido) === ot,
-      );
-      if (m) {
-        const desp = despachoByOt.get(ot);
-        candidataByOt.set(ot, {
-          otGeneralId: m.id,
-          otNumero: ot,
-          cliente: m.cliente,
-          trabajo: m.titulo,
-          cantidad: m.cantidad,
-          fechaEntrega: fechaMaestroToYmd(m.fecha_entrega),
-          despachada:
-            Boolean(m.despachado) ||
-            Boolean(desp?.despachado_at) ||
-            Boolean(desp?.material?.trim()),
-          despachadoAt: desp?.despachado_at ?? null,
-          materialDespacho: desp?.material?.trim() || null,
-          maquinas: maquinaFlagsFromProcesoIds(procesoIdsByOtId.get(m.id) ?? []),
-        });
-      }
-    }
+    if (candidataByOt.has(ot)) continue;
+    const m = [...maestroByOtId.values()].find(
+      (row) => normalizaOtNumero(row.num_pedido) === ot,
+    );
+    if (!m) continue;
+    const built = buildCandidataFromMaestro(m, procesoIdsByOtId, despachoByOt);
+    if (built) candidataByOt.set(ot, built);
   }
 
   const plan = mergePlanConCandidatas(planRows, candidataByOt);
-  return { candidatas, plan, candidataByOt };
+  const enCurso = buildEnCursoItems(hrRows, procesoIdsByOtId, maestroByOtId);
+
+  return { candidatas, plan, enCurso, candidataByOt };
 }
 
 export async function addOtToPoolPlan(
@@ -384,6 +507,16 @@ export async function removeOtFromPoolPlan(
   if (error) throw error;
 }
 
+export async function removeOtFromPoolPlanByOtNumero(
+  supabase: SupabaseClient,
+  otNumero: string,
+): Promise<void> {
+  const ot = normalizaOtNumero(otNumero);
+  if (!ot) return;
+  const { error } = await supabase.from(TABLE_POOL).delete().eq("ot_numero", ot);
+  if (error) throw error;
+}
+
 export async function movePoolPlanItem(
   supabase: SupabaseClient,
   poolId: string,
@@ -407,61 +540,4 @@ export async function movePoolPlanItem(
     .update({ orden: a.orden } as never)
     .eq("id", b.id);
   if (errB) throw errB;
-}
-
-export async function iniciarOtEnHojaRutaDesdePool(
-  supabase: SupabaseClient,
-  item: Pick<
-    EtiquetasPoolCandidata,
-    | "otNumero"
-    | "otGeneralId"
-    | "cliente"
-    | "trabajo"
-    | "cantidad"
-    | "fechaEntrega"
-    | "materialDespacho"
-    | "maquinas"
-  >,
-): Promise<ProdEtiquetasHojaRutaRow> {
-  const ot = normalizaOtNumero(item.otNumero);
-  if (!ot) throw new Error("OT no válida.");
-
-  const existentes = await findHojaRutaPorOtNumero(supabase, ot);
-  if (existentes.length > 0) {
-    const err = new Error("DUPLICADO_HR") as Error & {
-      existentes: ProdEtiquetasHojaRutaRow[];
-    };
-    err.existentes = existentes;
-    throw err;
-  }
-
-  const row: Record<string, unknown> = {
-    ot_numero: ot,
-    ot_general_id: item.otGeneralId || null,
-    cliente: item.cliente?.trim() || null,
-    trabajo: item.trabajo?.trim() || null,
-    papel: item.materialDespacho?.trim() || null,
-    cantidad: item.cantidad,
-    fecha_entrega_ot: item.fechaEntrega,
-    fecha_entrada_depto: todayYmd(),
-    urgencia: "normal",
-    konica: item.maquinas.konica,
-    troqueladora: item.maquinas.troqueladora,
-    numeradora: item.maquinas.numeradora,
-    fecha_fin_konica: null,
-    fecha_fin_troqueladora: null,
-    fecha_fin_numeradora: null,
-    finalizado: false,
-  };
-
-  const { data, error } = await supabase
-    .from(TABLE_HR)
-    .insert(row as never)
-    .select("*")
-    .single();
-  if (error) throw error;
-
-  const inserted = data as ProdEtiquetasHojaRutaRow;
-  await supabase.from(TABLE_POOL).delete().eq("ot_numero", ot);
-  return inserted;
 }

@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildEnCursoItems,
   filterCandidatasBandeja,
   isOtMaestroAbierta,
+  isOtMaestroEtiquetaDigital,
   labelItinerarioEtiquetas,
   maquinaFlagsFromProcesoIds,
   mergePlanConCandidatas,
 } from "@/lib/etiquetas-pool-entrada";
+import type { ProdEtiquetasHojaRutaRow } from "@/types/prod-etiquetas-hoja-ruta";
 
 describe("etiquetas-pool-entrada", () => {
   it("maquinaFlagsFromProcesoIds", () => {
@@ -33,6 +36,12 @@ describe("etiquetas-pool-entrada", () => {
     expect(isOtMaestroAbierta("Producida")).toBe(false);
   });
 
+  it("isOtMaestroEtiquetaDigital", () => {
+    expect(isOtMaestroEtiquetaDigital({ tipo_pedido: "Etiqueta" })).toBe(true);
+    expect(isOtMaestroEtiquetaDigital({ titulo: "ETIQUETA VINO" })).toBe(true);
+    expect(isOtMaestroEtiquetaDigital({ tipo_pedido: "Offset" })).toBe(false);
+  });
+
   it("filterCandidatasBandeja excluye HR y pool", () => {
     const maestroByOtId = new Map([
       [
@@ -46,6 +55,7 @@ describe("etiquetas-pool-entrada", () => {
           fecha_entrega: "2026-09-01",
           estado_desc: "En curso",
           despachado: false,
+          tipo_pedido: "Etiqueta",
         },
       ],
       [
@@ -59,11 +69,13 @@ describe("etiquetas-pool-entrada", () => {
           fecha_entrega: "2026-09-05",
           estado_desc: "En curso",
           despachado: true,
+          tipo_pedido: "Etiqueta",
         },
       ],
     ]);
 
     const candidatas = filterCandidatasBandeja({
+      candidatoOtIds: ["id-1", "id-2"],
       maestroByOtId,
       procesoIdsByOtId: new Map([
         ["id-1", [18]],
@@ -72,7 +84,14 @@ describe("etiquetas-pool-entrada", () => {
       enHojaRuta: new Set(["36002"]),
       enPool: new Set(),
       despachoByOt: new Map([
-        ["36002", { ot_numero: "36002", material: "FEDRIGONI", despachado_at: "2026-08-20" }],
+        [
+          "36002",
+          {
+            ot_numero: "36002",
+            material: "FEDRIGONI",
+            despachado_at: "2026-08-20",
+          },
+        ],
       ]),
       filtroTexto: "",
     });
@@ -96,7 +115,7 @@ describe("etiquetas-pool-entrada", () => {
           despachada: true,
           despachadoAt: null,
           materialDespacho: "PAPEL",
-          maquinas: maquinaFlagsFromProcesoIds([18]),
+          itinerario: maquinaFlagsFromProcesoIds([18]),
         },
       ],
     ]);
@@ -117,5 +136,55 @@ describe("etiquetas-pool-entrada", () => {
     expect(plan).toHaveLength(1);
     expect(plan[0]?.cliente).toBe("A");
     expect(plan[0]?.id).toBe("p1");
+  });
+
+  it("buildEnCursoItems separa itinerario de hecho", () => {
+    const hr: ProdEtiquetasHojaRutaRow = {
+      id: "hr-1",
+      ot_numero: "98030",
+      ot_general_id: "id-1",
+      cliente: "C",
+      trabajo: "T",
+      papel: null,
+      cantidad: 100,
+      fecha_entrega_ot: "2026-08-07",
+      fecha_entrada_depto: "2026-08-29",
+      urgencia: "normal",
+      observacion: null,
+      konica: false,
+      troqueladora: false,
+      numeradora: false,
+      fecha_fin_konica: null,
+      fecha_fin_troqueladora: null,
+      fecha_fin_numeradora: null,
+      pdf_ok: false,
+      fecha_pdf_ok: null,
+      metros_impresion: null,
+      troquel_id: null,
+      troquel_utillaje: null,
+      fecha_inicio_produccion: null,
+      fecha_fin_produccion: null,
+      cajas: null,
+      bobinas: null,
+      etiquetas: null,
+      cajas_restantes: null,
+      finalizado: false,
+      created_at: "",
+      updated_at: "",
+    };
+
+    const items = buildEnCursoItems(
+      [hr],
+      new Map([["id-1", [18, 19]]]),
+      new Map(),
+    );
+
+    expect(items).toHaveLength(1);
+    expect(items[0]?.itinerario).toEqual({
+      konica: true,
+      troqueladora: true,
+      numeradora: false,
+    });
+    expect(items[0]?.hecho.konica).toBe(false);
   });
 });

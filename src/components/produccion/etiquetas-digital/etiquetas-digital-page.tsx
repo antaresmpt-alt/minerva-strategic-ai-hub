@@ -80,9 +80,7 @@ export function EtiquetasDigitalPage() {
         </div>
 
         <TabsContent value="pool-entrada" className="mt-0 outline-none">
-          <EtiquetasPoolEntradaTab
-            onOtIniciada={() => setTab("hoja-de-ruta")}
-          />
+          <EtiquetasPoolEntradaTab />
         </TabsContent>
 
         <TabsContent value="hoja-de-ruta" className="mt-0 outline-none">
