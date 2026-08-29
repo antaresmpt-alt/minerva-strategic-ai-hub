@@ -116,6 +116,6 @@ describe("etiquetas-pool-entrada", () => {
 
     expect(plan).toHaveLength(1);
     expect(plan[0]?.cliente).toBe("A");
-    expect(plan[0]?.poolId).toBe("p1");
+    expect(plan[0]?.id).toBe("p1");
   });
 });

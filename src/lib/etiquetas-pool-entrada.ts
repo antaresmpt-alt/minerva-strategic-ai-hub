@@ -43,7 +43,7 @@ export type EtiquetasPoolCandidata = {
 };
 
 export type EtiquetasPoolPlanItem = EtiquetasPoolCandidata & {
-  poolId: string;
+  id: string;
   orden: number;
 };
 
@@ -186,7 +186,7 @@ export function mergePlanConCandidatas(
     const ot = normalizaOtNumero(p.ot_numero);
     const base = candidataByOt.get(ot);
     if (base) {
-      out.push({ ...base, poolId: p.id, orden: p.orden });
+      out.push({ ...base, id: p.id, orden: p.orden });
       continue;
     }
     out.push({
@@ -200,7 +200,7 @@ export function mergePlanConCandidatas(
       despachadoAt: null,
       materialDespacho: null,
       maquinas: { konica: false, troqueladora: false, numeradora: false },
-      poolId: p.id,
+      id: p.id,
       orden: p.orden,
     });
   }

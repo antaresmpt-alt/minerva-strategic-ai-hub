@@ -325,9 +325,9 @@ export function EtiquetasPoolEntradaTab({ onOtIniciada }: Props) {
   };
 
   const handleRemove = async (item: EtiquetasPoolPlanItem) => {
-    setRemovingId(item.poolId);
+    setRemovingId(item.id);
     try {
-      await removeOtFromPoolPlan(supabase, item.poolId);
+      await removeOtFromPoolPlan(supabase, item.id);
       toast.success(`OT ${item.otNumero} quitada del plan.`);
       if (selectedOt === item.otNumero) setSelectedOt(null);
       await load();
@@ -343,7 +343,7 @@ export function EtiquetasPoolEntradaTab({ onOtIniciada }: Props) {
     direction: "up" | "down",
   ) => {
     try {
-      await movePoolPlanItem(supabase, item.poolId, direction, plan);
+      await movePoolPlanItem(supabase, item.id, direction, plan);
       await load();
     } catch (e) {
       toast.error(errorMessageFromUnknown(e, "No se pudo reordenar."));
@@ -512,7 +512,7 @@ export function EtiquetasPoolEntradaTab({ onOtIniciada }: Props) {
               ) : (
                 plan.map((row, idx) => (
                   <PlanCard
-                    key={row.poolId}
+                    key={row.id}
                     row={row}
                     selected={selectedOt === row.otNumero}
                     onSelect={() => setSelectedOt(row.otNumero)}
@@ -521,7 +521,7 @@ export function EtiquetasPoolEntradaTab({ onOtIniciada }: Props) {
                     onMoveDown={() => void handleMove(row, "down")}
                     canMoveUp={idx > 0}
                     canMoveDown={idx < plan.length - 1}
-                    removing={removingId === row.poolId}
+                    removing={removingId === row.id}
                   />
                 ))
               )}
