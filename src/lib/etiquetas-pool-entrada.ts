@@ -47,6 +47,7 @@ export type EtiquetasPoolCandidata = {
   trabajo: string | null;
   cantidad: number | null;
   fechaEntrega: string | null;
+  fechaApertura: string | null;
   despachada: boolean;
   despachadoAt: string | null;
   materialDespacho: string | null;
@@ -236,6 +237,7 @@ function buildCandidataFromMaestro(
     trabajo: m.titulo,
     cantidad: m.cantidad,
     fechaEntrega: fechaMaestroToYmd(m.fecha_entrega),
+    fechaApertura: fechaMaestroToYmd(m.fecha_apertura),
     despachada,
     despachadoAt: desp?.despachado_at ?? null,
     materialDespacho: desp?.material?.trim() || null,
@@ -282,10 +284,10 @@ export function filterCandidatasBandeja(input: {
   }
 
   out.sort((a, b) => {
-    const fa = a.fechaEntrega ?? "9999-99-99";
-    const fb = b.fechaEntrega ?? "9999-99-99";
-    if (fa !== fb) return fa.localeCompare(fb);
-    return a.otNumero.localeCompare(b.otNumero);
+    const fa = a.fechaApertura ?? a.fechaEntrega ?? "";
+    const fb = b.fechaApertura ?? b.fechaEntrega ?? "";
+    if (fa !== fb) return fb.localeCompare(fa);
+    return b.otNumero.localeCompare(a.otNumero);
   });
 
   return out;
@@ -314,6 +316,7 @@ export function mergePlanConCandidatas(
       trabajo: null,
       cantidad: null,
       fechaEntrega: null,
+      fechaApertura: null,
       despachada: false,
       despachadoAt: null,
       materialDespacho: null,
@@ -419,7 +422,8 @@ async function fetchMaestroEtiquetaRows(
     .or(
       `fecha_entrega.gte.${POOL_BANDEJA_FECHA_MINIMA},fecha_apertura.gte.${POOL_BANDEJA_FECHA_MINIMA}`,
     )
-    .order("fecha_entrega", { ascending: true, nullsFirst: false })
+    .order("fecha_apertura", { ascending: false, nullsFirst: false })
+    .order("num_pedido", { ascending: false })
     .limit(MAESTRO_ETIQUETA_SCAN_LIMIT);
   if (error) throw error;
   return (data ?? []) as MaestroRow[];

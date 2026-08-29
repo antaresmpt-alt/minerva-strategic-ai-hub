@@ -84,8 +84,8 @@ describe("etiquetas-pool-entrada", () => {
           cliente: "Cliente A",
           titulo: "Etiquetas vino",
           cantidad: 1000,
-          fecha_entrega: "2026-09-01",
-          fecha_apertura: "2026-01-15",
+          fechaEntrega: "2026-09-01",
+          fecha_apertura: "2026-08-28",
           estado_desc: "En producción",
           despachado: false,
           tipo_pedido: "Etiqueta",
@@ -100,7 +100,7 @@ describe("etiquetas-pool-entrada", () => {
           titulo: "Otra",
           cantidad: 500,
           fecha_entrega: "2026-09-05",
-          fecha_apertura: "2026-02-01",
+          fecha_apertura: "2026-08-20",
           estado_desc: "En producción",
           despachado: true,
           tipo_pedido: "Etiqueta",
@@ -135,6 +135,53 @@ describe("etiquetas-pool-entrada", () => {
     expect(candidatas[0]?.despachada).toBe(false);
   });
 
+  it("filterCandidatasBandeja ordena por apertura más reciente primero", () => {
+    const maestroByOtId = new Map([
+      [
+        "id-a",
+        {
+          id: "id-a",
+          num_pedido: "98030",
+          cliente: "A",
+          titulo: "T",
+          cantidad: 1,
+          fecha_entrega: "2026-08-07",
+          fecha_apertura: "2026-08-01",
+          estado_desc: "En producción",
+          despachado: false,
+          tipo_pedido: "Etiqueta",
+        },
+      ],
+      [
+        "id-b",
+        {
+          id: "id-b",
+          num_pedido: "98043",
+          cliente: "B",
+          titulo: "T",
+          cantidad: 1,
+          fecha_entrega: "2026-08-04",
+          fecha_apertura: "2026-08-28",
+          estado_desc: "No empezado",
+          despachado: false,
+          tipo_pedido: "Etiqueta",
+        },
+      ],
+    ]);
+
+    const candidatas = filterCandidatasBandeja({
+      candidatoOtIds: ["id-a", "id-b"],
+      maestroByOtId,
+      procesoIdsByOtId: new Map(),
+      enHojaRuta: new Set(),
+      enPool: new Set(),
+      despachoByOt: new Map(),
+      filtroTexto: "",
+    });
+
+    expect(candidatas.map((c) => c.otNumero)).toEqual(["98043", "98030"]);
+  });
+
   it("mergePlanConCandidatas mantiene orden", () => {
     const candidataByOt = new Map([
       [
@@ -146,6 +193,7 @@ describe("etiquetas-pool-entrada", () => {
           trabajo: "T",
           cantidad: 1,
           fechaEntrega: "2026-09-01",
+          fechaApertura: "2026-08-01",
           despachada: true,
           despachadoAt: null,
           materialDespacho: "PAPEL",

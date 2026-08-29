@@ -333,25 +333,24 @@ function EnCursoCard({
             Entrega {fmtEntrega(row.fechaEntrega)}
           </p>
         </div>
-        <SemaforoItn itinerario={row.itinerario} hecho={row.hecho} />
-      </div>
-      <div className="mt-2 flex justify-end border-t border-sky-100 pt-2">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-7 gap-1 text-[11px]"
-          disabled={devolviendo}
-          onClick={onDevolver}
-          title="Quita la OT de hoja de ruta y la devuelve a la cola"
-        >
-          {devolviendo ? (
-            <Loader2 className="size-3 animate-spin" aria-hidden />
-          ) : (
-            <RotateCcw className="size-3" aria-hidden />
-          )}
-          Devolver a cola
-        </Button>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <SemaforoItn itinerario={row.itinerario} hecho={row.hecho} />
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-6 text-slate-500 hover:text-sky-800"
+            disabled={devolviendo}
+            onClick={onDevolver}
+            title="Devolver a cola (borra hoja de ruta)"
+          >
+            {devolviendo ? (
+              <Loader2 className="size-3.5 animate-spin" aria-hidden />
+            ) : (
+              <RotateCcw className="size-3.5" aria-hidden />
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );
