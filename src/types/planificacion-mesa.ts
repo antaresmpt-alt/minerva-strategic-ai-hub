@@ -205,10 +205,13 @@ export interface MesaEjecucion {
     | "impresion"
     | "digital";
   /**
-   * Bloque 11: slot del detalle del día (Hoy planificado). Solo virtuales I/D/E.
+   * Bloque 11: slot del detalle del día (Hoy planificado). Solo virtuales I/D/E/T.
    * `null`/`undefined` = sin plan hoy → grupo «Disponibles sin plan».
    */
   planSlotHoy?: number | null;
+  /** Máquina planificada en detalle del día (prefill claim; aún sin ejecutar). */
+  planMaquinaId?: string | null;
+  planTurnoHoy?: TurnoKey | null;
   /** Fecha entrega para ordenar «Disponibles sin plan» (virtuales). */
   fechaEntregaCola?: string | null;
   /**

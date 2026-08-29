@@ -29,6 +29,8 @@ export type CalendarioDetalleMaquina = {
   id: string;
   nombre: string;
   tipo_maquina: string;
+  capacidad_horas_default_manana?: number;
+  capacidad_horas_default_tarde?: number;
 };
 
 /** Slot en borrador local (antes de Guardar). */
@@ -39,6 +41,35 @@ export type DetalleDiaDraftSlot = {
   slotOrden: number;
 };
 
+/** Fuera del detalle calendario: no son recursos de planificación fina. */
+const DETALLE_DIA_EXCLUDE_MAQUINA_NOMBRES: Partial<
+  Record<CalendarioAmbito, readonly string[]>
+> = {
+  digital: ["etiqueta digital"],
+  engomado: ["manipulados mnrv", "desbroce"],
+};
+
+/** Ámbitos con máquina/turno en detalle del día (botón rápido en pastilla). */
+export function ambitoPermiteAsignacionRapidaMaquina(
+  ambito: CalendarioAmbito,
+): boolean {
+  return (
+    ambito === "impresion" ||
+    ambito === "digital" ||
+    ambito === "troquelado" ||
+    ambito === "engomado"
+  );
+}
+
+function maquinaExcludedFromDetalleDia(
+  ambito: CalendarioAmbito,
+  nombre: string,
+): boolean {
+  const exclude = DETALLE_DIA_EXCLUDE_MAQUINA_NOMBRES[ambito] ?? [];
+  const n = nombre.trim().toLowerCase();
+  return exclude.some((x) => n.includes(x.trim().toLowerCase()));
+}
+
 export async function fetchMaquinasForAmbito(
   supabase: SupabaseClient,
   ambito: CalendarioAmbito,
@@ -46,16 +77,27 @@ export async function fetchMaquinasForAmbito(
   const tipo = tipoMaquinaForCalendarioAmbito(ambito);
   const { data, error } = await supabase
     .from("prod_maquinas")
-    .select("id, nombre, tipo_maquina")
+    .select(
+      "id, nombre, tipo_maquina, capacidad_horas_default_manana, capacidad_horas_default_tarde, orden_visual",
+    )
     .eq("tipo_maquina", tipo)
     .eq("activa", true)
+    .order("orden_visual", { ascending: true })
     .order("nombre", { ascending: true });
   if (error) throw error;
-  return (data ?? []).map((r) => ({
-    id: String(r.id),
-    nombre: String(r.nombre ?? "").trim() || "—",
-    tipo_maquina: String(r.tipo_maquina ?? "").trim(),
-  }));
+  return (data ?? [])
+    .map((r) => ({
+      id: String(r.id),
+      nombre: String(r.nombre ?? "").trim() || "—",
+      tipo_maquina: String(r.tipo_maquina ?? "").trim(),
+      capacidad_horas_default_manana: Number(
+        r.capacidad_horas_default_manana ?? 8,
+      ),
+      capacidad_horas_default_tarde: Number(
+        r.capacidad_horas_default_tarde ?? 8,
+      ),
+    }))
+    .filter((m) => !maquinaExcludedFromDetalleDia(ambito, m.nombre));
 }
 
 export async function fetchDetalleDiaByCalendarioOtIds(
@@ -132,14 +174,76 @@ export function rankPlanHoyByOt(
   return map;
 }
 
+/** Detalle del plan de hoy por OT (rank + máquina/turno del detalle del día). */
+export type PlanHoyDetallePorOt = {
+  rank: number;
+  maquinaId: string | null;
+  turno: CalendarioDetalleDiaTurno | null;
+};
+
+export function planHoyDetalleByOtFromRows(
+  rows: readonly ProdCalendarioDetalleDiaRow[],
+): Map<string, PlanHoyDetallePorOt> {
+  const ranks = rankPlanHoyByOt(rows);
+  const out = new Map<string, PlanHoyDetallePorOt>();
+  for (const r of rows) {
+    const ot = String(r.ot_numero ?? "").trim();
+    if (!ot) continue;
+    const rank = ranks.get(ot);
+    if (rank == null) continue;
+    out.set(ot, {
+      rank,
+      maquinaId: r.maquina_id ? String(r.maquina_id).trim() || null : null,
+      turno:
+        r.turno === "tarde"
+          ? "tarde"
+          : r.turno === "manana"
+            ? "manana"
+            : null,
+    });
+  }
+  return out;
+}
+
+export function labelPlanTurnoDetalle(
+  turno: CalendarioDetalleDiaTurno | null,
+): string {
+  if (turno === "tarde") return "tarde";
+  if (turno === "manana") return "mañana";
+  return "";
+}
+
+/** Nombre de máquina para lista/claim cuando hay detalle del día guardado. */
+export function maquinaNombreConPlanDetalle(
+  claimFallback: string,
+  maquinaNombre: string | null | undefined,
+  turno: CalendarioDetalleDiaTurno | null,
+): string {
+  const name = String(maquinaNombre ?? "").trim();
+  if (!name) return claimFallback;
+  const t = labelPlanTurnoDetalle(turno);
+  return t ? `${name} · ${t}` : name;
+}
+
+export async function fetchPlanHoyDetalleByOt(
+  supabase: SupabaseClient,
+  fechaYmd: string,
+  ambito: CalendarioAmbito,
+): Promise<Map<string, PlanHoyDetallePorOt>> {
+  const rows = await fetchDetalleDiaByFechaAmbito(supabase, fechaYmd, ambito);
+  return planHoyDetalleByOtFromRows(rows);
+}
+
 /** OT → rank global del plan de ese día/ámbito (mañana → tarde). */
 export async function fetchPlanHoySlotByOt(
   supabase: SupabaseClient,
   fechaYmd: string,
   ambito: CalendarioAmbito,
 ): Promise<Map<string, number>> {
-  const rows = await fetchDetalleDiaByFechaAmbito(supabase, fechaYmd, ambito);
-  return rankPlanHoyByOt(rows);
+  const detalle = await fetchPlanHoyDetalleByOt(supabase, fechaYmd, ambito);
+  const out = new Map<string, number>();
+  for (const [ot, plan] of detalle) out.set(ot, plan.rank);
+  return out;
 }
 
 /**
@@ -195,6 +299,45 @@ export async function upsertDetalleDiaSlot(
     .single();
   if (error) throw error;
   return data as ProdCalendarioDetalleDiaRow;
+}
+
+/** Asignación rápida desde pastilla del calendario (sin abrir vista mesa). */
+export async function quickAssignDetalleDiaMaquina(
+  supabase: SupabaseClient,
+  args: {
+    fechaYmd: string;
+    calendarioOtId: string;
+    otNumero: string;
+    ambito: CalendarioAmbito;
+    maquinaId: string;
+    turno: CalendarioDetalleDiaTurno;
+    createdBy?: string | null;
+  },
+): Promise<ProdCalendarioDetalleDiaRow> {
+  const rows = await fetchDetalleDiaByFechaAmbito(
+    supabase,
+    args.fechaYmd,
+    args.ambito,
+  );
+  const sameSlot = rows.filter(
+    (r) =>
+      r.maquina_id === args.maquinaId &&
+      r.turno === args.turno &&
+      r.calendario_ot_id !== args.calendarioOtId,
+  );
+  const maxSlot = sameSlot.reduce(
+    (m, r) => Math.max(m, Math.trunc(r.slot_orden)),
+    0,
+  );
+  return upsertDetalleDiaSlot(supabase, {
+    calendarioOtId: args.calendarioOtId,
+    ambito: args.ambito,
+    otNumero: args.otNumero,
+    maquinaId: args.maquinaId,
+    turno: args.turno,
+    slotOrden: maxSlot + 1,
+    createdBy: args.createdBy,
+  });
 }
 
 export async function deleteDetalleDiaByCalendarioOtId(
@@ -284,6 +427,51 @@ export async function saveDetalleDiaDraftForMaquina(
       turno: "tarde" as const,
     })),
     args.createdBy,
+  );
+}
+
+/**
+ * Guarda el tablero completo (todas las máquinas visibles).
+ * Borra detalle de OTs devueltas al pool.
+ */
+export async function saveDetalleDiaBoard(
+  supabase: SupabaseClient,
+  args: {
+    ambito: CalendarioAmbito;
+    maquinaIds: readonly string[];
+    draftByMaquina: ReadonlyMap<string, readonly DetalleDiaDraftSlot[]>;
+    savedRows: readonly ProdCalendarioDetalleDiaRow[];
+    unsequencedCalendarioOtIds: readonly string[];
+    createdBy?: string | null;
+  },
+): Promise<void> {
+  const keep = new Set<string>();
+  for (const draft of args.draftByMaquina.values()) {
+    for (const d of draft) keep.add(d.calendarioOtId);
+  }
+  for (const row of args.savedRows) {
+    if (!keep.has(row.calendario_ot_id)) {
+      await deleteDetalleDiaByCalendarioOtId(supabase, row.calendario_ot_id);
+    }
+  }
+  for (const maquinaId of args.maquinaIds) {
+    const draft = [...(args.draftByMaquina.get(maquinaId) ?? [])];
+    const prevForMaq = args.savedRows.filter(
+      (r) => (r.maquina_id ?? "") === maquinaId,
+    );
+    await saveDetalleDiaDraftForMaquina(supabase, {
+      ambito: args.ambito,
+      maquinaId,
+      draft,
+      previousRowsForMaquina: prevForMaq,
+      createdBy: args.createdBy,
+    });
+  }
+  const mergedDraft = [...args.draftByMaquina.values()].flat();
+  await syncCalendarioOrdenFromDraft(
+    supabase,
+    mergedDraft,
+    args.unsequencedCalendarioOtIds,
   );
 }
 

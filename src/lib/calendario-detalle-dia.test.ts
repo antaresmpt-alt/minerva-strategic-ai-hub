@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   compareConPlanHoy,
+  maquinaNombreConPlanDetalle,
+  planHoyDetalleByOtFromRows,
   rankPlanHoyByOt,
   renumberDraftTurno,
   seedDraftFromCalendarioLineas,
@@ -113,5 +115,39 @@ describe("calendario-detalle-dia", () => {
     ).toEqual(["36019", "98025", "98024", "98023"]);
     expect(ranks.get("98023")).toBe(4);
     expect(ranks.get("98025")).toBe(2);
+  });
+
+  it("planHoyDetalleByOtFromRows incluye máquina y turno", () => {
+    const detalle = planHoyDetalleByOtFromRows([
+      row({
+        ot_numero: "98002",
+        slot_orden: 1,
+        turno: "tarde",
+        maquina_id: "maq-dayuan",
+      }),
+      row({
+        ot_numero: "98024",
+        slot_orden: 1,
+        turno: "manana",
+        maquina_id: "maq-jr",
+      }),
+    ]);
+    expect(detalle.get("98002")).toMatchObject({
+      rank: 2,
+      maquinaId: "maq-dayuan",
+      turno: "tarde",
+    });
+    expect(detalle.get("98024")).toMatchObject({
+      rank: 1,
+      maquinaId: "maq-jr",
+      turno: "manana",
+    });
+    expect(
+      maquinaNombreConPlanDetalle(
+        "Troquelado (elegir al iniciar)",
+        "Dayuan",
+        "tarde",
+      ),
+    ).toBe("Dayuan · tarde");
   });
 });

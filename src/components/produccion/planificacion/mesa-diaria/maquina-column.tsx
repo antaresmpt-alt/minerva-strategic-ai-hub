@@ -70,13 +70,9 @@ interface MaquinaColumnProps {
   onHideColumn?: () => void;
   /** Exportar la hoja operativa PDF de esta máquina para el día actual. */
   onExportPdf?: () => void;
-  /**
-   * Si la máquina es la única visible de su tipo en el día, la columna se
-   * ensancha y los turnos se colocan lado a lado (mañana | tarde) para
-   * aprovechar mejor el espacio horizontal. En modo compacto (varias
-   * máquinas del mismo tipo) se apilan verticalmente como hasta ahora.
-   */
   wide?: boolean;
+  /** Bloque 12: detalle calendario sin confirmar día ni acciones mesa. */
+  planningOnly?: boolean;
 }
 
 /**
@@ -127,7 +123,9 @@ function statusBadgeClasses(
 
 function statusLabel(
   status: ReturnType<typeof aggregateColumnStatus>,
+  planningOnly?: boolean,
 ): string {
+  if (planningOnly && status === "confirmado") return "Planificado";
   switch (status) {
     case "en_ejecucion":
       return "En ejecución";
@@ -200,12 +198,18 @@ export function MaquinaColumn({
   onHideColumn,
   onExportPdf,
   wide = false,
+  planningOnly = false,
 }: MaquinaColumnProps) {
   const allItems = useMemo(
     () => [...itemsManana, ...itemsTarde],
     [itemsManana, itemsTarde],
   );
-  const status = useMemo(() => aggregateColumnStatus(allItems), [allItems]);
+  const status = useMemo(() => {
+    if (planningOnly) {
+      return allItems.length === 0 ? ("vacio" as const) : ("confirmado" as const);
+    }
+    return aggregateColumnStatus(allItems);
+  }, [allItems, planningOnly]);
   const totalHoras = useMemo(
     () =>
       allItems.reduce(
@@ -257,7 +261,7 @@ export function MaquinaColumn({
                   statusBadgeClasses(status),
                 )}
               >
-                {statusLabel(status)}
+                {statusLabel(status, planningOnly)}
               </span>
               <span
                 className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] tabular-nums text-slate-600"
@@ -314,7 +318,7 @@ export function MaquinaColumn({
             ) : null}
           </div>
         </div>
-        {onConfirmColumn ? (
+        {onConfirmColumn && !planningOnly ? (
           <Button
             type="button"
             size="sm"
@@ -362,6 +366,7 @@ export function MaquinaColumn({
           actionLoadingId={actionLoadingId}
           disabled={disabled}
           containerIdOverride={dailyContainerId(maquina.id, "manana")}
+          planningOnly={planningOnly}
         />
         <TurnoColumn
           day={dayKey}
@@ -374,6 +379,7 @@ export function MaquinaColumn({
           actionLoadingId={actionLoadingId}
           disabled={disabled}
           containerIdOverride={dailyContainerId(maquina.id, "tarde")}
+          planningOnly={planningOnly}
         />
       </div>
     </div>

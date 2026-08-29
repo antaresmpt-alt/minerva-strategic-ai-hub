@@ -68,7 +68,9 @@ import {
 } from "@/lib/planificacion-ambito";
 import {
   compareConPlanHoy,
-  fetchPlanHoySlotByOt,
+  fetchPlanHoyDetalleByOt,
+  maquinaNombreConPlanDetalle,
+  type PlanHoyDetallePorOt,
 } from "@/lib/calendario-detalle-dia";
 import {
   fetchItinerarioCalendarioByOtNumeros,
@@ -357,6 +359,36 @@ const PLAN_HOY_SECCIONES = new Set<ContenedorSeccionKind>([
   "digital",
   "engomado",
 ]);
+
+function localTodayYmd(): string {
+  const hoy = new Date();
+  return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
+}
+
+function enrichContenedorRowPlanHoy(
+  row: MesaEjecucion,
+  planByOt: Map<string, PlanHoyDetallePorOt>,
+  maquinaNombreById: Map<string, string>,
+  claimFallback: string,
+): MesaEjecucion {
+  const plan = planByOt.get(row.ot);
+  if (!plan) return row;
+  const maqNombre = plan.maquinaId
+    ? maquinaNombreById.get(plan.maquinaId)
+    : undefined;
+  return {
+    ...row,
+    planSlotHoy: plan.rank,
+    planMaquinaId: plan.maquinaId,
+    planTurnoHoy: plan.turno,
+    turno: plan.turno ?? row.turno,
+    maquinaNombre: maquinaNombreConPlanDetalle(
+      claimFallback,
+      maqNombre,
+      plan.turno,
+    ),
+  };
+}
 
 /** I / D / E / T — detalle del día prioriza en la cola. */
 function isContenedorPlanHoyRow(row: MesaEjecucion): boolean {
@@ -2132,14 +2164,15 @@ export function PlanificacionOtsEjecucionTab({
               },
             );
             let pasosTroq = candidatosTroq;
-            let slotByOt = new Map<string, number>();
+            let planByOt = new Map<string, PlanHoyDetallePorOt>();
             try {
-              const hoy = new Date();
-              const ymd = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
-              slotByOt = await fetchPlanHoySlotByOt(
+              planByOt = await fetchPlanHoyDetalleByOt(
                 supabase,
-                ymd,
+                localTodayYmd(),
                 "troquelado",
+              );
+              const slotByOt = new Map(
+                [...planByOt.entries()].map(([ot, p]) => [ot, p.rank]),
               );
               if (slotByOt.size > 0) {
                 pasosTroq = [...candidatosTroq].sort((a, b) =>
@@ -2149,15 +2182,19 @@ export function PlanificacionOtsEjecucionTab({
             } catch (planErr) {
               console.warn("[ejecucion] plan hoy troquelado", planErr);
             }
+            const troquelNombreById = new Map(
+              troquelMaqs.map((m) => [m.id, m.nombre]),
+            );
             contenedorRows = [
               ...contenedorRows,
               ...pasosTroq.map((p) => {
                 const row = buildContenedorTroquelVirtualRow(p);
-                const slot = slotByOt.get(p.otNumero);
-                return {
-                  ...row,
-                  planSlotHoy: slot ?? null,
-                };
+                return enrichContenedorRowPlanHoy(
+                  row,
+                  planByOt,
+                  troquelNombreById,
+                  "Troquelado (elegir al iniciar)",
+                );
               }),
             ];
           }
@@ -2187,19 +2224,20 @@ export function PlanificacionOtsEjecucionTab({
               },
             );
             let pasosSec = candidatosSec;
-            let slotByOt = new Map<string, number>();
+            let planByOt = new Map<string, PlanHoyDetallePorOt>();
             if (
               def.kind === "impresion" ||
               def.kind === "digital" ||
               def.kind === "engomado"
             ) {
               try {
-                const hoy = new Date();
-                const ymd = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
-                slotByOt = await fetchPlanHoySlotByOt(
+                planByOt = await fetchPlanHoyDetalleByOt(
                   supabase,
-                  ymd,
+                  localTodayYmd(),
                   def.kind,
+                );
+                const slotByOt = new Map(
+                  [...planByOt.entries()].map(([ot, p]) => [ot, p.rank]),
                 );
                 if (slotByOt.size > 0) {
                   pasosSec = [...candidatosSec].sort((a, b) =>
@@ -2211,6 +2249,8 @@ export function PlanificacionOtsEjecucionTab({
               }
             }
             const fixedMaq = def.claim ? null : maqs[0] ?? null;
+            const seccionNombreById = new Map(maqs.map((m) => [m.id, m.nombre]));
+            const claimFallback = `${def.labelBadge.replace(/^Contenedor\s+/i, "")} (elegir al iniciar)`;
             contenedorRows = [
               ...contenedorRows,
               ...pasosSec.map((p) => {
@@ -2218,11 +2258,12 @@ export function PlanificacionOtsEjecucionTab({
                   claim: def.claim,
                   labelBadge: def.labelBadge,
                 });
-                const slot = slotByOt.get(p.otNumero);
-                return {
-                  ...row,
-                  planSlotHoy: slot ?? null,
-                };
+                return enrichContenedorRowPlanHoy(
+                  row,
+                  planByOt,
+                  seccionNombreById,
+                  claimFallback,
+                );
               }),
             ];
           }
@@ -2472,10 +2513,14 @@ export function PlanificacionOtsEjecucionTab({
         const seccionDef = seccionKind ? defContenedorSeccion(seccionKind) : null;
         if (isTroquelVirtual) {
           if (!maquinasTroquelIds.has(selectedMaquina)) return false;
+          const planned = String(r.planMaquinaId ?? "").trim();
+          if (planned && planned !== selectedMaquina) return false;
         } else if (seccionDef?.claim && seccionKind) {
           if (!maquinasClaimSeccionIds.get(seccionKind)?.has(selectedMaquina)) {
             return false;
           }
+          const planned = String(r.planMaquinaId ?? "").trim();
+          if (planned && planned !== selectedMaquina) return false;
         } else if (r.maquinaId !== selectedMaquina) {
           return false;
         }
@@ -3861,9 +3906,13 @@ function ExecutionCard({
     : (seccionDefClaim?.claimSelectLabel ?? "Máquina");
   const isEjecucionLigeraSinMesa =
     !isContenedorVirtual && !row.mesaTrabajoId;
-  /** Solo preseleccionar si el filtro de lista ya es una máquina concreta del claim. */
+  /** Prefill claim: detalle del día → filtro de lista (solo si no hay plan). */
   const [claimMaquinaId, setClaimMaquinaId] = useState(() => {
     if (!needsClaim) return "";
+    const planned = String(row.planMaquinaId ?? "").trim();
+    if (planned && maquinasClaim.some((m) => m.id === planned)) {
+      return planned;
+    }
     if (
       selectedMaquinaFilter !== "all" &&
       maquinasClaim.some((m) => m.id === selectedMaquinaFilter)
@@ -3874,13 +3923,29 @@ function ExecutionCard({
   });
   useEffect(() => {
     if (!needsClaim || claimMaquinaId) return;
+    const planned = String(row.planMaquinaId ?? "").trim();
+    if (planned && maquinasClaim.some((m) => m.id === planned)) {
+      setClaimMaquinaId(planned);
+      return;
+    }
     if (
       selectedMaquinaFilter !== "all" &&
       maquinasClaim.some((m) => m.id === selectedMaquinaFilter)
     ) {
       setClaimMaquinaId(selectedMaquinaFilter);
     }
-  }, [needsClaim, claimMaquinaId, maquinasClaim, selectedMaquinaFilter]);
+  }, [
+    needsClaim,
+    claimMaquinaId,
+    maquinasClaim,
+    selectedMaquinaFilter,
+    row.planMaquinaId,
+  ]);
+  const plannedMaquinaNombre = useMemo(() => {
+    const planned = String(row.planMaquinaId ?? "").trim();
+    if (!planned) return null;
+    return maquinasClaim.find((m) => m.id === planned)?.nombre ?? null;
+  }, [row.planMaquinaId, maquinasClaim]);
   const [incidencia, setIncidencia] = useState(row.incidencia ?? "");
   const [accion, setAccion] = useState(row.accionCorrectiva ?? "");
   const [maquinista, setMaquinista] = useState(row.maquinista ?? "");
@@ -4300,8 +4365,9 @@ function ExecutionCard({
         <div className="mt-3 rounded-md border-2 border-amber-400 bg-amber-50 px-3 py-2.5 shadow-sm">
           <p className="text-sm font-bold text-amber-950">{claimTitulo}</p>
           <p className="mt-0.5 text-[11px] text-amber-900/80">
-            Sin Mesa: la máquina se elige aquí. No hay default (evita la primera
-            alfabética).
+            {plannedMaquinaNombre
+              ? `Planificado en detalle del día: ${row.maquinaNombre}. Confirma o cambia antes de Iniciar.`
+              : "Sin Mesa: la máquina se elige aquí. No hay default (evita la primera alfabética)."}
           </p>
           <label className="mt-2 flex flex-col gap-1 text-xs font-semibold text-amber-950">
             {claimSelectLabel}

@@ -79,6 +79,8 @@ interface TurnoColumnProps {
     },
   ) => void;
   actionLoadingId: string | null;
+  /** Bloque 12 detalle calendario: solo ordenar, sin acciones de mesa/ejecución. */
+  planningOnly?: boolean;
   disabled?: boolean;
   /**
    * Si se proporciona, sobreescribe el container id por defecto
@@ -147,6 +149,7 @@ function SortableMesaCard({
   onAction,
   actionLoadingId,
   disabled,
+  planningOnly,
 }: {
   trabajo: MesaTrabajo;
   linkedToNext: boolean;
@@ -154,6 +157,7 @@ function SortableMesaCard({
   onAction: TurnoColumnProps["onAction"];
   actionLoadingId: string | null;
   disabled?: boolean;
+  planningOnly?: boolean;
 }) {
   const sortableId = itemIdForMesa(trabajo.id);
   const isRunning = trabajo.estadoMesa === "en_ejecucion";
@@ -215,6 +219,7 @@ function SortableMesaCard({
   });
 
   const availableActions = useMemo((): MesaOperacionAccion[] => {
+    if (planningOnly) return [];
     const extraFuera: MesaOperacionAccion[] = showImprimirFuera ? ["imprimir_fuera"] : [];
     if (trabajo.estadoMesa === "confirmado" && !trabajo.estadoEjecucionActual) {
       return ["lanzar", "iniciar", ...extraFuera, "cancelar"];
@@ -230,6 +235,7 @@ function SortableMesaCard({
     showImprimirFuera,
     trabajo.estadoEjecucionActual,
     trabajo.estadoMesa,
+    planningOnly,
   ]);
 
   const isPreLaunchChoice =
@@ -276,6 +282,13 @@ function SortableMesaCard({
           </span>
         }
         footerSlot={
+          planningOnly ? (
+            <div className="mt-1">
+              <span className="inline-flex items-center rounded-full bg-[#002147]/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#002147]">
+                Planificado
+              </span>
+            </div>
+          ) : (
           <div className="mt-1 flex items-center justify-between gap-2">
             <div className="flex min-w-0 flex-wrap items-center gap-1">
             {isRunning ? (
@@ -350,8 +363,10 @@ function SortableMesaCard({
               </button>
             ) : null}
           </div>
+          )
         }
       />
+      {!planningOnly ? (
       <Dialog
         open={actionOpen}
         onOpenChange={(open) => {
@@ -594,6 +609,7 @@ function SortableMesaCard({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      ) : null}
     </div>
   );
 }
@@ -608,6 +624,7 @@ export function TurnoColumn({
   onAction,
   actionLoadingId,
   disabled,
+  planningOnly,
   containerIdOverride,
 }: TurnoColumnProps) {
   const containerId = containerIdOverride ?? containerIdForSlot(day, turno);
@@ -700,6 +717,7 @@ export function TurnoColumn({
                 onAction={onAction}
                 actionLoadingId={actionLoadingId}
                 disabled={disabled}
+                planningOnly={planningOnly}
               />
             ))
           )}
