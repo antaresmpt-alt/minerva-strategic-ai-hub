@@ -11,10 +11,11 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import { Eye, FileDown, ListOrdered, Loader2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Eye, ListOrdered, Loader2, Printer } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { MesaDiariaPrintTemplate } from "@/components/produccion/planificacion/mesa-diaria/mesa-diaria-print-template";
 import { EditCapacidadDialog } from "@/components/produccion/planificacion/mesa/edit-capacidad-dialog";
 import {
   PlanificacionCard,
@@ -60,8 +61,10 @@ import {
 import {
   buildDetalleDiaPrintHtml,
   fetchDetalleDiaPrintMetaByOts,
+  printElementInNewWindow,
   printHtmlInNewWindow,
 } from "@/lib/calendario-detalle-dia-print";
+import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
 import {
   labelCalendarioAmbito,
   type CalendarioAmbito,
@@ -163,7 +166,14 @@ export function CalendarioDetalleDiaMesaDialog({
   const [capTurno, setCapTurno] = useState<TurnoKey | null>(null);
   const [capSaving, setCapSaving] = useState(false);
 
+  const printDiariaRef = useRef<HTMLDivElement>(null);
+  const { umbrales: umbralesOtsCompras } = useSysParametrosOtsCompras();
+
   const dayKey = dayYmd as DayKey;
+  const currentDay = useMemo(() => {
+    const [y, mo, d] = dayYmd.split("-").map(Number);
+    return new Date(y, (mo ?? 1) - 1, d ?? 1, 0, 0, 0, 0);
+  }, [dayYmd]);
   const pendingLineas = useMemo(
     () => lineas.filter((l) => !isLineaHecha(l)),
     [lineas],
@@ -220,6 +230,30 @@ export function CalendarioDetalleDiaMesaDialog({
     for (const l of lineas) m.set(l.otNumero, l.id);
     return m;
   }, [lineas]);
+
+  const trabajoByOt = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const p of poolAll) {
+      const t = (p.trabajo ?? "").trim();
+      if (t) out[p.ot] = t;
+    }
+    for (const it of mesaItems) {
+      const t = (it.trabajoTitulo ?? "").trim();
+      if (t) out[it.ot] = t;
+    }
+    return out;
+  }, [poolAll, mesaItems]);
+
+  const printCapacidades = useMemo(
+    () =>
+      capacidades.map((c) => ({
+        maquina_id: c.maquina_id,
+        fecha: c.fecha as DayKey,
+        turno: c.turno,
+        capacidadHoras: c.capacidadHoras,
+      })),
+    [capacidades],
+  );
 
   const poolOtSet = useMemo(
     () => new Set(poolForSidebar.map((p) => p.ot)),
@@ -538,6 +572,25 @@ export function CalendarioDetalleDiaMesaDialog({
     }
   };
 
+  const handlePrintPlanDiario = useCallback(() => {
+    const el = printDiariaRef.current;
+    if (!el) {
+      toast.error("No hay contenido listo para imprimir.");
+      return;
+    }
+    const ok = printElementInNewWindow(
+      el,
+      `Minerva-Detalle-Dia-${dayYmd}`,
+      `@page { size: A4 landscape; margin: 10mm; }
+       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }`,
+    );
+    if (!ok) {
+      toast.error(
+        "No se pudo abrir la ventana de impresión. Revisa el bloqueador de ventanas emergentes.",
+      );
+    }
+  }, [dayYmd]);
+
   const handlePrintMaquina = async (maquinaId: string) => {
     if (printingMaquinaId) return;
     setPrintingMaquinaId(maquinaId);
@@ -574,6 +627,8 @@ export function CalendarioDetalleDiaMesaDialog({
         draft,
         metaByOt: metaPrint,
         generadoPor: userEmail,
+        capManana: capacityFor(maquinaId, "manana"),
+        capTarde: capacityFor(maquinaId, "tarde"),
       });
       printHtmlInNewWindow(html, `Plan-${ambito}-${dayYmd}-${maquinaId}`);
     } catch (e) {
@@ -798,14 +853,26 @@ export function CalendarioDetalleDiaMesaDialog({
           </div>
 
           <DialogFooter className="shrink-0 gap-2 border-t border-slate-200 px-4 py-3 sm:justify-between">
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={saving}
-              onClick={() => tryClose(false)}
-            >
-              Atrás
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={saving}
+                onClick={() => tryClose(false)}
+              >
+                Atrás
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={loading || visibleMaquinas.length === 0}
+                onClick={handlePrintPlanDiario}
+                title="Imprimir / Guardar como PDF el plan visual del día (estilo mesa diaria LEGACY — ventana nueva)"
+              >
+                <Printer className="mr-1.5 size-4" aria-hidden />
+                Imprimir plan del día
+              </Button>
+            </div>
             {canEdit ? (
               <Button
                 type="button"
@@ -837,6 +904,19 @@ export function CalendarioDetalleDiaMesaDialog({
         saving={capSaving}
         onSave={saveCapacity}
         key={`${capMaquinaId}-${capTurno}-${capDialogOpen}`}
+      />
+
+      <MesaDiariaPrintTemplate
+        ref={printDiariaRef}
+        ambitoLabel={labelCalendarioAmbito(ambito)}
+        dayKey={dayKey}
+        currentDay={currentDay}
+        maquinas={visibleMaquinas}
+        mesaItems={mesaItems}
+        capacidades={printCapacidades}
+        trabajoByOt={trabajoByOt}
+        umbrales={umbralesOtsCompras}
+        generadoPor={userEmail}
       />
     </>
   );

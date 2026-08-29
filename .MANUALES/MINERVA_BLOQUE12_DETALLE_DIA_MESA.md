@@ -69,7 +69,8 @@ Ahora:
 
 - Ancho: `detalleDiaDialogMaxWidth(n)` — crece con máquinas visibles (3+ casi pantalla completa).
 - Chips máquinas: mostrar/ocultar columnas (persist `localStorage` por usuario).
-- PDF por máquina (reutiliza `calendario-detalle-dia-print`).
+- **PDF plan del día** (footer): `MesaDiariaPrintTemplate` + `printElementInNewWindow` — mismo estilo visual que mesa diaria LEGACY (A4 landscape, todas las máquinas visibles).
+- **PDF por máquina** (icono impresora en columna): `buildDetalleDiaPrintHtml` — hoja operario rica (cartelas, material, M/T).
 - Capacidad turno: `EditCapacidadDialog` → `prod_mesa_capacidad_turnos`.
 
 ---

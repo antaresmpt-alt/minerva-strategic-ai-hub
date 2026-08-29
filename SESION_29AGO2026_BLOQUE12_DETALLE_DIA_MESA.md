@@ -65,6 +65,7 @@ Guillotina / desbroce / manipulados / CTP → **fuera** del detalle calendario (
 
 1. **Toast «No se pudo cargar detalle»** — query despacho pedía columnas inexistentes (`cliente`, `titulo` en `produccion_ot_despachadas`). Corregido: `prod_ots_general` + despacho (como PDF).
 2. **Claim copiaba filtro JR/Dayuan** — solo leía `selectedMaquinaFilter`. Corregido: `planMaquinaId` desde detalle_dia.
+3. **PDF perdido al migrar a vista mesa** — el dialog v2 tenía botón «PDF» en footer; la vista mesa solo dejaba icono por columna. Restaurado **«Imprimir plan del día»** con `MesaDiariaPrintTemplate` (estilo LEGACY) + se mantiene PDF rico por máquina.
 
 ---
 

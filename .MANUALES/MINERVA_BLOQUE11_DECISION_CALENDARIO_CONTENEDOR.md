@@ -761,6 +761,11 @@ Ver sesión §5 · `SESION_27AGO2026_BLOQUE11_DIA_COMPLETO.md` §2 (orden Hoy).
 
 - **Botón asignar máquina en pastilla** — desincronizaba BD vs tablero; fuente única = «Organizar detalle del día».
 
+### PDF (29 ago noche — restaurado)
+
+- Footer **«Imprimir plan del día»** → `MesaDiariaPrintTemplate` (mismo estilo mesa diaria LEGACY, ventana nueva).
+- Icono impresora por columna → `buildDetalleDiaPrintHtml` (hoja operario 1 máquina, cartelas/material).
+
 ### Exclusiones columnas detalle E
 
 Manipulados MNRV · Desbroce · (digital: etiqueta digital).
