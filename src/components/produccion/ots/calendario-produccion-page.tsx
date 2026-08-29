@@ -7,7 +7,6 @@ import {
   ChevronRight,
   ChevronUp,
   ClipboardPaste,
-  Cpu,
   FileDown,
   ListOrdered,
   Loader2,
@@ -28,7 +27,6 @@ import {
   CalendarioBandejaPanel,
   CalendarioBandejaToggle,
 } from "@/components/produccion/ots/calendario-bandeja-panel";
-import { CalendarioAsignarMaquinaDialog } from "@/components/produccion/ots/calendario-asignar-maquina-dialog";
 import { CalendarioDetalleDiaDialog } from "@/components/produccion/ots/calendario-detalle-dia-mesa-dialog";
 import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
 import { STEP_BADGE_STYLES } from "@/components/produccion/hoja-ruta/hoja-ruta-step-styles";
@@ -70,10 +68,7 @@ import {
   weekRangeYmd,
   type CalendarioProduccionLinea,
 } from "@/lib/calendario-produccion";
-import {
-  ambitoPermiteAsignacionRapidaMaquina,
-  appendDetalleSlotAfterCalendarMove,
-} from "@/lib/calendario-detalle-dia";
+import { appendDetalleSlotAfterCalendarMove } from "@/lib/calendario-detalle-dia";
 import {
   calendarioMaterialPipClass,
   fetchCalendarioMaterialByOtNumeros,
@@ -244,7 +239,6 @@ function DiaCelda({
   onEditDay,
   onOpenOt,
   onToggleMarcadoHecho,
-  onAssignMaquina,
   itinerarioByOt,
   espejoByOt,
   materialByOt,
@@ -260,7 +254,6 @@ function DiaCelda({
   onEditDay: () => void;
   onOpenOt: (otNumero: string) => void;
   onToggleMarcadoHecho: (linea: CalendarioProduccionLinea) => void;
-  onAssignMaquina?: (linea: CalendarioProduccionLinea, dayYmd: string) => void;
   itinerarioByOt: Map<string, CalendarioItinerarioOt>;
   espejoByOt: Map<string, CalendarioEspejoOt>;
   materialByOt: Map<string, CalendarioMaterialInfo>;
@@ -347,10 +340,6 @@ function DiaCelda({
                 ? guillotinaStatusFromPasos(info?.pasos ?? [])
                 : "sin_paso";
             const guilloTip = guillotinaTooltipLine(guilloStatus);
-            const canAssignMaquina =
-              canToggle &&
-              ambitoPermiteAsignacionRapidaMaquina(l.ambito) &&
-              Boolean(onAssignMaquina);
             return (
               <div
                 key={l.id}
@@ -450,20 +439,6 @@ function DiaCelda({
                     </span>
                   ) : null}
                 </button>
-                {canAssignMaquina ? (
-                  <button
-                    type="button"
-                    title="Asignar máquina y turno"
-                    aria-label={`Asignar máquina OT ${l.otNumero}`}
-                    className="flex size-5 shrink-0 items-center justify-center rounded border border-slate-200 bg-white text-[#002147] transition-colors hover:border-[#002147]/40 hover:bg-slate-50"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onAssignMaquina?.(l, dayYmd);
-                    }}
-                  >
-                    <Cpu className="size-3" aria-hidden />
-                  </button>
-                ) : null}
                 <button
                   type="button"
                   disabled={!canToggle}
@@ -550,10 +525,6 @@ export function CalendarioProduccionPage() {
   const [dayOpen, setDayOpen] = useState(false);
   const [dayYmd, setDayYmd] = useState<string | null>(null);
   const [detalleDiaOpen, setDetalleDiaOpen] = useState(false);
-  const [assignMaquinaTarget, setAssignMaquinaTarget] = useState<{
-    linea: CalendarioProduccionLinea;
-    dayYmd: string;
-  } | null>(null);
   const [otQuery, setOtQuery] = useState("");
   const [notaTexto, setNotaTexto] = useState("");
   const [otHits, setOtHits] = useState<OtSearchHit[]>([]);
@@ -2203,9 +2174,6 @@ export function CalendarioProduccionPage() {
                           onEditDay={() => openDay(celda.ymd)}
                           onOpenOt={(ot) => void openDetalle(ot)}
                           onToggleMarcadoHecho={(l) => void toggleMarcadoHecho(l)}
-                          onAssignMaquina={(l, ymd) =>
-                            setAssignMaquinaTarget({ linea: l, dayYmd: ymd })
-                          }
                           variant="semana"
                           itinerarioByOt={itinerarioByOt}
                           espejoByOt={espejoByOt}
@@ -2233,9 +2201,6 @@ export function CalendarioProduccionPage() {
                             onEditDay={() => openDay(celda.ymd)}
                             onOpenOt={(ot) => void openDetalle(ot)}
                             onToggleMarcadoHecho={(l) => void toggleMarcadoHecho(l)}
-                            onAssignMaquina={(l, ymd) =>
-                              setAssignMaquinaTarget({ linea: l, dayYmd: ymd })
-                            }
                             variant="mes"
                             itinerarioByOt={itinerarioByOt}
                             espejoByOt={espejoByOt}
@@ -2752,16 +2717,6 @@ export function CalendarioProduccionPage() {
           onSaved={() => void load()}
         />
       ) : null}
-
-      <CalendarioAsignarMaquinaDialog
-        open={assignMaquinaTarget != null}
-        onOpenChange={(open) => {
-          if (!open) setAssignMaquinaTarget(null);
-        }}
-        linea={assignMaquinaTarget?.linea ?? null}
-        dayYmd={assignMaquinaTarget?.dayYmd ?? null}
-        onSaved={() => void load()}
-      />
     </div>
   );
 }

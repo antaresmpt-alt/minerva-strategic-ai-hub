@@ -49,18 +49,6 @@ const DETALLE_DIA_EXCLUDE_MAQUINA_NOMBRES: Partial<
   engomado: ["manipulados mnrv", "desbroce"],
 };
 
-/** Ámbitos con máquina/turno en detalle del día (botón rápido en pastilla). */
-export function ambitoPermiteAsignacionRapidaMaquina(
-  ambito: CalendarioAmbito,
-): boolean {
-  return (
-    ambito === "impresion" ||
-    ambito === "digital" ||
-    ambito === "troquelado" ||
-    ambito === "engomado"
-  );
-}
-
 function maquinaExcludedFromDetalleDia(
   ambito: CalendarioAmbito,
   nombre: string,
@@ -299,45 +287,6 @@ export async function upsertDetalleDiaSlot(
     .single();
   if (error) throw error;
   return data as ProdCalendarioDetalleDiaRow;
-}
-
-/** Asignación rápida desde pastilla del calendario (sin abrir vista mesa). */
-export async function quickAssignDetalleDiaMaquina(
-  supabase: SupabaseClient,
-  args: {
-    fechaYmd: string;
-    calendarioOtId: string;
-    otNumero: string;
-    ambito: CalendarioAmbito;
-    maquinaId: string;
-    turno: CalendarioDetalleDiaTurno;
-    createdBy?: string | null;
-  },
-): Promise<ProdCalendarioDetalleDiaRow> {
-  const rows = await fetchDetalleDiaByFechaAmbito(
-    supabase,
-    args.fechaYmd,
-    args.ambito,
-  );
-  const sameSlot = rows.filter(
-    (r) =>
-      r.maquina_id === args.maquinaId &&
-      r.turno === args.turno &&
-      r.calendario_ot_id !== args.calendarioOtId,
-  );
-  const maxSlot = sameSlot.reduce(
-    (m, r) => Math.max(m, Math.trunc(r.slot_orden)),
-    0,
-  );
-  return upsertDetalleDiaSlot(supabase, {
-    calendarioOtId: args.calendarioOtId,
-    ambito: args.ambito,
-    otNumero: args.otNumero,
-    maquinaId: args.maquinaId,
-    turno: args.turno,
-    slotOrden: maxSlot + 1,
-    createdBy: args.createdBy,
-  });
 }
 
 export async function deleteDetalleDiaByCalendarioOtId(
