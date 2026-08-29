@@ -25,6 +25,7 @@
    - `.MANUALES/MINERVA_BLOQUE11_ANALISIS_CONTENEDOR_VS_MESA.md` (validación Odoo/industria)
    - `.MANUALES/MINERVA_BLOQUE11_BRIEF_JORDI_CARLOS.md` (media página planta)
    - `MINERVA_BLOQUE12_ROLES_PERMISOS_NAVEGACION.md` (landing por perfil — sept)
+   - `.MANUALES/MINERVA_BLOQUE12_DETALLE_DIA_MESA.md` (vista mesa detalle del día — 29 ago)
 4. Añadir `MINERVA_CONTEXTO_TECNICO.md` solo si la IA necesita detalles técnicos del repo.
 5. Si el tema es mesa / externos / itinerario post-despacho: `SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`.
 6. Si el tema es Manipulados / Encajar / entrada a Producción: `SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`.
@@ -42,6 +43,7 @@
 | `MINERVA_BLOQUE*_*.md` | Brief específico de una fase activa o futura. |
 | `MINERVA_ROLES_Y_NAVEGACION.md` | Diseño fino permisos/navegación (complementa Bloque 12). |
 | `MINERVA_BLOQUE12_ROLES_PERMISOS_NAVEGACION.md` | Brief implementación: landing operario vs gestor. |
+| `.MANUALES/MINERVA_BLOQUE12_DETALLE_DIA_MESA.md` | Vista mesa detalle del día + claim ejecución (29 ago). |
 | `MINERVA_BLOQUE10_PRESUPUESTOS.md` | Bloque futuro: presupuestos, formas, versión real al copiar. |
 | `MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` | Brainstorming Bloque 11 (calendario master). |
 | `.MANUALES/MINERVA_BLOQUE11_DECISION_CALENDARIO_CONTENEDOR.md` | Diseño cerrado + contenedor/bandeja smoke · **§6.5 B** · fase 3 detalle-día. |
@@ -330,12 +332,15 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 - [x] **Bloque 11 spike §6.5:** persistencia detalle-día = **opción B** — `SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md`
 - [x] **Bloque 11 (27 ago):** cabeceras cola **Hoy / Disponibles** + icono material pastilla (Pool status)
 - [x] **Bloque 11:** merge `main` **29 ago** (rama `feature/bloque11-contenedor-ctp-spike`)
+- [x] **Bloque 12 UI (29 ago):** detalle del día **vista mesa** + claim — rama `feature/bloque12-detalle-dia-mesa-ui` · `SESION_29AGO2026_BLOQUE12_DETALLE_DIA_MESA.md`
+- [ ] **Bloque 12 UI:** merge `main` + smoke lunes planta
 - [ ] **Bloque 11 siguiente:** brief Jordi/Carlos **v2** leído en planta (reserva dura A/B) · **B5 pool etiquetas** (Rita lunes) · Bloque 12 menú feliz
 - [x] **Plataforma — print Electron:** migrado `useReactToPrint` → `printElementInNewWindow` (externos, fichas, tablón semanal, ventas). Ya OK: detalle-día + mesa diaria.
 - [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor; tableta = máquina — `MINERVA_BLOQUE12_…` (no abrir ya; default gestor = maestro OTs)
 - [ ] **Bloque 5 puente**: Rita lanza OTs a Hugo (no bloquea paralelo si Hugo sigue a mano)
 
 ### Hecho reciente (jul–ago)
+- [x] **29 ago noche (impro):** Bloque 12 UI — **vista mesa** detalle del día (pool+columnas+DnD) · claim ejecución desde plan · exclusiones E (MNRV/desbroce) · sin botón pastilla — `SESION_29AGO2026_BLOQUE12_DETALLE_DIA_MESA.md` · `.MANUALES/MINERVA_BLOQUE12_DETALLE_DIA_MESA.md` · decisión §28
 - [x] **27 ago noche (pulido UX):** Bloque 11 — **modal Atrasadas** · Guillotina **tooltip** pastillas + chip ejecución · **valla LEGACY** — `7dc75cb` · decisión §27
 - [x] **27 ago tarde:** Bloque 11 — PDF detalle **cartelas + material** · Guillotina chip · `collectEntradasAtrasadas` · print Electron 5 módulos — `ace0409`
 - [x] **27 ago:** Bloque 11 — fix orden **Hoy planificado** mañana antes tarde (`rankPlanHoyByOt`) — `5675415`
@@ -425,7 +430,7 @@ Detalle 1–3.x histórico: ver commits jun / `FASES_HOJA_RUTA_DIGITAL.md`.
 
 19. **Cartelas impresión (18 jul 2026)**: **1 copia** por palet (antes 2). Confirmado Emma/Ramón.
 
-20. **Bloque 11 — Calendario + contenedor (28 jul · diseño 22 ago · smoke contenedor/bandeja ✅ · detalle-día B+v2+PDF 26 ago ✅ · §27 27 ago ✅):** **Despacho ≈ launch.** Contenedor + bandeja OK. **Detalle del día** = `prod_calendario_detalle_dia` (no mesa LEGACY) · PDF ventana nueva + cartelas (§25–27). Doc: `.MANUALES/MINERVA_BLOQUE11_DECISION_…` §6.5/§17–27 · `SESION_27AGO2026_BLOQUE11_DIA_COMPLETO.md` · smokes 22–23 ago.
+20. **Bloque 11 — Calendario + contenedor (28 jul · diseño 22 ago · smoke contenedor/bandeja ✅ · detalle-día B+v2+PDF 26 ago ✅ · §27 27 ago ✅ · §28 vista mesa 29 ago ✅):** **Despacho ≈ launch.** Contenedor + bandeja OK. **Detalle del día** = `prod_calendario_detalle_dia` · UI **vista mesa** (Bloque 12, rama `feature/bloque12-detalle-dia-mesa-ui`). Claim ejecución lee `maquina_id` del plan. Doc: `.MANUALES/MINERVA_BLOQUE12_DETALLE_DIA_MESA.md` · `SESION_29AGO2026_BLOQUE12_DETALLE_DIA_MESA.md`.
 
 21. **Paralelo septiembre (11 ago 2026)**: no smoke fijo 10–20; por tanda de despacho elegir **~3 OTs** y seguir E2E en Minerva. Cierre contenedor MVP: **barco listo cuando todas las hijas terminan** (8.4) ✅. Convergencia física = 8.5 documentada, sin código aún.
 

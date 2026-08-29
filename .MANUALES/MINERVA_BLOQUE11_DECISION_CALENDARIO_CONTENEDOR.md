@@ -737,5 +737,35 @@ Ver sesión §5 · `SESION_27AGO2026_BLOQUE11_DIA_COMPLETO.md` §2 (orden Hoy).
 
 ---
 
-*Manel + Cursor · 22 ago noche contenedor · 23 ago mediodía bandeja 1b smoke OK · 26 ago hecho visual + altura bandeja · 26 ago noche spike detalle-día B · fase 3 v2 · PDF rico + fix cierre print · 27 ago cabeceras + material + T + pip · 27 ago día completo §27*
+## 28. Vista mesa detalle del día + claim — 29 ago (Bloque 12 UI)
+
+**Rama:** `feature/bloque12-detalle-dia-mesa-ui` · push origin ✅ · commits `3242b31` + `57e4e3e`.
+
+**Doc:** `.MANUALES/MINERVA_BLOQUE12_DETALLE_DIA_MESA.md` · sesión `SESION_29AGO2026_BLOQUE12_DETALLE_DIA_MESA.md`.
+
+### Qué cambia respecto fase 3 v2 (26–27 ago)
+
+| Antes (v2) | Ahora (vista mesa) |
+|------------|-------------------|
+| Selector una máquina + lista vertical | Pool + columnas máquina × M/T + DnD |
+| Guardar por máquina | `saveDetalleDiaBoard` (ámbito completo) |
+| Claim ejecución no leía `maquina_id` | `fetchPlanHoyDetalleByOt` + prefill claim + filtro por plan |
+
+### Smoke validado (29 ago)
+
+- Troquel **98002/98024** → Dayuan/JR en lista, filtros y claim.
+- Engomado: ordenar con semáforo amarillo OK; **98015** tras desbroce → engomadora 65 tarde en Hoy planificado.
+- OTs en troquel **no** en Hoy engomado hasta paso disponible.
+
+### Retirado
+
+- **Botón asignar máquina en pastilla** — desincronizaba BD vs tablero; fuente única = «Organizar detalle del día».
+
+### Exclusiones columnas detalle E
+
+Manipulados MNRV · Desbroce · (digital: etiqueta digital).
+
+---
+
+*Manel + Cursor · 22 ago noche contenedor · 23 ago mediodía bandeja 1b smoke OK · 26 ago hecho visual + altura bandeja · 26 ago noche spike detalle-día B · fase 3 v2 · PDF rico + fix cierre print · 27 ago cabeceras + material + T + pip · 27 ago día completo §27 · **29 ago vista mesa detalle + claim §28***
 

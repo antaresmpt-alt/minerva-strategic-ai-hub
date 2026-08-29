@@ -6,8 +6,9 @@ Fuente de verdad = este repo (Git), no copias subidas a un Project de claude.ai.
 El maestro indexa sesiones y briefs. Abrir MINERVA_CONTEXTO_TECNICO.md o SESION_*.md
 cuando el maestro lo cite; no hace falta pegarlos todos en cada chat.
 
-Sesión activa Bloque 11 → .MANUALES/MINERVA_BLOQUE11_DECISION_CALENDARIO_CONTENEDOR.md
-  (26–27 ago: §6.5 B + fase 3 v2 + PDF §25 + §27 día completo · merge main domingo noche).
+Sesión activa Bloque 12 UI → `.MANUALES/MINERVA_BLOQUE12_DETALLE_DIA_MESA.md` + `SESION_29AGO2026_BLOQUE12_DETALLE_DIA_MESA.md`
+  (29 ago: vista mesa detalle + claim · rama feature/bloque12-detalle-dia-mesa-ui · push OK).
+Decisión calendario §28 → .MANUALES/MINERVA_BLOQUE11_DECISION_CALENDARIO_CONTENEDOR.md
 Spike/detalle/PDF → SESION_26AGO2026_BLOQUE11_SPIKE_DETALLE_DIA.md
 Día completo 27 ago → SESION_27AGO2026_BLOQUE11_DIA_COMPLETO.md
 Smoke bandeja → SESION_23AGO2026_BLOQUE11_BANDEJA_SMOKE.md
