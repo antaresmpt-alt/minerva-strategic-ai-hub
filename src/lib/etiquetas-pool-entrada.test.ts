@@ -3,11 +3,14 @@ import { describe, expect, it } from "vitest";
 import {
   buildEnCursoItems,
   filterCandidatasBandeja,
+  isOtEstadoOptimusElegibleBandeja,
+  isOtFechaMinimaBandeja,
   isOtMaestroAbierta,
   isOtMaestroEtiquetaDigital,
   labelItinerarioEtiquetas,
   maquinaFlagsFromProcesoIds,
   mergePlanConCandidatas,
+  resolveSemaforoItinerario,
 } from "@/lib/etiquetas-pool-entrada";
 import type { ProdEtiquetasHojaRutaRow } from "@/types/prod-etiquetas-hoja-ruta";
 
@@ -42,6 +45,35 @@ describe("etiquetas-pool-entrada", () => {
     expect(isOtMaestroEtiquetaDigital({ tipo_pedido: "Offset" })).toBe(false);
   });
 
+  it("isOtEstadoOptimusElegibleBandeja", () => {
+    expect(isOtEstadoOptimusElegibleBandeja("En producción")).toBe(true);
+    expect(isOtEstadoOptimusElegibleBandeja("Terminado")).toBe(false);
+    expect(isOtEstadoOptimusElegibleBandeja("Cancelado")).toBe(false);
+    expect(isOtEstadoOptimusElegibleBandeja("En curso")).toBe(true);
+  });
+
+  it("isOtFechaMinimaBandeja", () => {
+    expect(
+      isOtFechaMinimaBandeja({ fecha_entrega: "2025-12-31", fecha_apertura: null }),
+    ).toBe(false);
+    expect(
+      isOtFechaMinimaBandeja({ fecha_entrega: "2026-03-01", fecha_apertura: null }),
+    ).toBe(true);
+    expect(
+      isOtFechaMinimaBandeja({ fecha_entrega: null, fecha_apertura: "2026-02-01" }),
+    ).toBe(true);
+  });
+
+  it("resolveSemaforoItinerario asume I+T+N sin itinerario", () => {
+    expect(
+      resolveSemaforoItinerario({
+        konica: false,
+        troqueladora: false,
+        numeradora: false,
+      }),
+    ).toEqual({ konica: true, troqueladora: true, numeradora: true });
+  });
+
   it("filterCandidatasBandeja excluye HR y pool", () => {
     const maestroByOtId = new Map([
       [
@@ -53,7 +85,8 @@ describe("etiquetas-pool-entrada", () => {
           titulo: "Etiquetas vino",
           cantidad: 1000,
           fecha_entrega: "2026-09-01",
-          estado_desc: "En curso",
+          fecha_apertura: "2026-01-15",
+          estado_desc: "En producción",
           despachado: false,
           tipo_pedido: "Etiqueta",
         },
@@ -67,7 +100,8 @@ describe("etiquetas-pool-entrada", () => {
           titulo: "Otra",
           cantidad: 500,
           fecha_entrega: "2026-09-05",
-          estado_desc: "En curso",
+          fecha_apertura: "2026-02-01",
+          estado_desc: "En producción",
           despachado: true,
           tipo_pedido: "Etiqueta",
         },

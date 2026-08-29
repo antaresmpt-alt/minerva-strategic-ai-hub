@@ -4,9 +4,11 @@ import {
   ArrowDown,
   ArrowUp,
   ChevronRight,
+  FileDown,
   Loader2,
   Play,
   RefreshCw,
+  RotateCcw,
   Search,
   X,
 } from "lucide-react";
@@ -15,6 +17,7 @@ import { toast } from "sonner";
 
 import { EtiquetasEntradaExpressDialog } from "@/components/produccion/etiquetas-digital/etiquetas-entrada-express-dialog";
 import { EtiquetasHojaRutaDuplicadoDialog } from "@/components/produccion/etiquetas-digital/etiquetas-hoja-ruta-duplicado-dialog";
+import { EtiquetasPoolOtDetailDialog } from "@/components/produccion/etiquetas-digital/etiquetas-pool-ot-detail-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,13 +29,17 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { errorMessageFromUnknown } from "@/lib/error-message";
+import { exportEtiquetasPoolColaPdf } from "@/lib/etiquetas-pool-export";
 import {
   addOtToPoolPlan,
+  devolverEnCursoACola,
   fetchEtiquetasPoolSnapshot,
   labelItinerarioEtiquetas,
   movePoolPlanItem,
+  POOL_BANDEJA_FECHA_MINIMA,
   removeOtFromPoolPlan,
   removeOtFromPoolPlanByOtNumero,
+  resolveSemaforoItinerario,
   type EtiquetasMaquinaFlags,
   type EtiquetasPoolCandidata,
   type EtiquetasPoolEnCursoItem,
@@ -53,6 +60,28 @@ function fmtEntrega(ymd: string | null): string {
   return formatFechaEsCorta(ymd);
 }
 
+function OtNumeroButton({
+  otNumero,
+  onClick,
+}: {
+  otNumero: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="font-mono text-sm font-semibold text-[#002147] underline-offset-2 hover:underline"
+      title="Ver datos maestro"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+    >
+      {otNumero}
+    </button>
+  );
+}
+
 function SemaforoItn({
   itinerario,
   hecho,
@@ -62,29 +91,22 @@ function SemaforoItn({
   hecho: EtiquetasMaquinaFlags;
   size?: "sm" | "xs";
 }) {
+  const itn = resolveSemaforoItinerario(itinerario);
   const pills = [
-    { key: "I", applies: itinerario.konica, done: hecho.konica, title: "Impresión Konica" },
+    { key: "I", applies: itn.konica, done: hecho.konica, title: "Impresión Konica" },
     {
       key: "T",
-      applies: itinerario.troqueladora,
+      applies: itn.troqueladora,
       done: hecho.troqueladora,
       title: "Troquelado",
     },
     {
       key: "N",
-      applies: itinerario.numeradora,
+      applies: itn.numeradora,
       done: hecho.numeradora,
       title: "Numeración",
     },
   ].filter((p) => p.applies);
-
-  if (pills.length === 0) {
-    return (
-      <span className="text-[10px] text-slate-400" title="Sin itinerario I/T/N">
-        —
-      </span>
-    );
-  }
 
   return (
     <span className="inline-flex gap-0.5">
@@ -110,11 +132,13 @@ function SemaforoItn({
 function CandidataCard({
   row,
   onAdd,
+  onOtClick,
   adding,
   disabled,
 }: {
   row: EtiquetasPoolCandidata;
   onAdd: () => void;
+  onOtClick: () => void;
   adding: boolean;
   disabled?: boolean;
 }) {
@@ -123,15 +147,15 @@ function CandidataCard({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="font-mono text-sm font-semibold text-[#002147]">
-              {row.otNumero}
-            </span>
+            <OtNumeroButton otNumero={row.otNumero} onClick={onOtClick} />
             <Badge
               variant="outline"
               className="h-5 px-1.5 text-[10px] font-semibold"
               title="Itinerario previsto (I/T/N)"
             >
-              {labelItinerarioEtiquetas(row.itinerario)}
+              {labelItinerarioEtiquetas(
+                resolveSemaforoItinerario(row.itinerario),
+              )}
             </Badge>
             {row.despachada ? (
               <Badge className="h-5 bg-emerald-600/90 px-1.5 text-[10px] hover:bg-emerald-600/90">
@@ -192,6 +216,7 @@ function PlanCard({
   row,
   selected,
   onSelect,
+  onOtClick,
   onRemove,
   onMoveUp,
   onMoveDown,
@@ -202,6 +227,7 @@ function PlanCard({
   row: EtiquetasPoolPlanItem;
   selected: boolean;
   onSelect: () => void;
+  onOtClick: () => void;
   onRemove: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
@@ -220,11 +246,11 @@ function PlanCard({
     >
       <button type="button" className="w-full text-left" onClick={onSelect}>
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="font-mono text-sm font-semibold text-[#002147]">
-            {row.otNumero}
-          </span>
+          <OtNumeroButton otNumero={row.otNumero} onClick={onOtClick} />
           <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-semibold">
-            {labelItinerarioEtiquetas(row.itinerario)}
+            {labelItinerarioEtiquetas(
+              resolveSemaforoItinerario(row.itinerario),
+            )}
           </Badge>
         </div>
         <p className="mt-0.5 truncate text-xs text-slate-700">
@@ -278,15 +304,23 @@ function PlanCard({
   );
 }
 
-function EnCursoCard({ row }: { row: EtiquetasPoolEnCursoItem }) {
+function EnCursoCard({
+  row,
+  onOtClick,
+  onDevolver,
+  devolviendo,
+}: {
+  row: EtiquetasPoolEnCursoItem;
+  onOtClick: () => void;
+  onDevolver: () => void;
+  devolviendo: boolean;
+}) {
   return (
     <div className="rounded-lg border border-sky-200/80 bg-sky-50/40 p-2.5">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="font-mono text-sm font-semibold text-[#002147]">
-              {row.otNumero}
-            </span>
+            <OtNumeroButton otNumero={row.otNumero} onClick={onOtClick} />
             <Badge className="h-5 bg-sky-700/90 px-1.5 text-[10px] hover:bg-sky-700/90">
               En curso
             </Badge>
@@ -300,6 +334,24 @@ function EnCursoCard({ row }: { row: EtiquetasPoolEnCursoItem }) {
           </p>
         </div>
         <SemaforoItn itinerario={row.itinerario} hecho={row.hecho} />
+      </div>
+      <div className="mt-2 flex justify-end border-t border-sky-100 pt-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-7 gap-1 text-[11px]"
+          disabled={devolviendo}
+          onClick={onDevolver}
+          title="Quita la OT de hoja de ruta y la devuelve a la cola"
+        >
+          {devolviendo ? (
+            <Loader2 className="size-3 animate-spin" aria-hidden />
+          ) : (
+            <RotateCcw className="size-3" aria-hidden />
+          )}
+          Devolver a cola
+        </Button>
       </div>
     </div>
   );
@@ -324,6 +376,8 @@ export function EtiquetasPoolEntradaTab() {
     rows: ProdEtiquetasHojaRutaRow[];
   } | null>(null);
   const [poolTableMissing, setPoolTableMissing] = useState(false);
+  const [detailOt, setDetailOt] = useState<string | null>(null);
+  const [devolviendoHrId, setDevolviendoHrId] = useState<string | null>(null);
 
   const loadCatalog = useCallback(async () => {
     const [{ data: cat }, { data: troq }] = await Promise.all([
@@ -437,6 +491,34 @@ export function EtiquetasPoolEntradaTab() {
     setExpressOpen(true);
   };
 
+  const handleDevolverACola = async (row: EtiquetasPoolEnCursoItem) => {
+    const ok = window.confirm(
+      `¿Devolver la OT ${row.otNumero} a la cola?\n\nSe borrará su fila en hoja de ruta (Kon/Troq/Num, metros, troquel…). Esta acción no se puede deshacer.`,
+    );
+    if (!ok) return;
+
+    setDevolviendoHrId(row.hrId);
+    try {
+      await devolverEnCursoACola(supabase, row.hrId, row.otNumero);
+      toast.success(`OT ${row.otNumero} devuelta a la cola.`);
+      setSelectedOt(row.otNumero);
+      await load();
+    } catch (e) {
+      toast.error(errorMessageFromUnknown(e, "No se pudo devolver a la cola."));
+    } finally {
+      setDevolviendoHrId(null);
+    }
+  };
+
+  const handleExportColaPdf = () => {
+    if (plan.length === 0) {
+      toast.error("La cola está vacía.");
+      return;
+    }
+    exportEtiquetasPoolColaPdf(plan);
+    toast.success("PDF de la cola descargado.");
+  };
+
   const handleExpressSaved = async () => {
     const ot = expressPrefillOt;
     setExpressOpen(false);
@@ -470,6 +552,14 @@ export function EtiquetasPoolEntradaTab() {
         onCancelar={() => setDuplicadosState(null)}
       />
 
+      <EtiquetasPoolOtDetailDialog
+        open={detailOt != null}
+        onOpenChange={(o) => {
+          if (!o) setDetailOt(null);
+        }}
+        otNumero={detailOt}
+      />
+
       <EtiquetasEntradaExpressDialog
         open={expressOpen}
         onOpenChange={(o) => {
@@ -496,8 +586,11 @@ export function EtiquetasPoolEntradaTab() {
                   1 · Entrada OTs
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Etiquetas en maestro (tipo Etiqueta o título) que Hugo aún no
-                  tiene en hoja de ruta. Sin filtro de despacho.
+                  Etiquetas en maestro activas en Optimus, entrega o apertura
+                  desde {POOL_BANDEJA_FECHA_MINIMA.slice(8, 10)}/
+                  {POOL_BANDEJA_FECHA_MINIMA.slice(5, 7)}/
+                  {POOL_BANDEJA_FECHA_MINIMA.slice(0, 4)}, que Hugo aún no
+                  tiene en hoja de ruta.
                 </CardDescription>
               </div>
               <Button
@@ -548,6 +641,7 @@ export function EtiquetasPoolEntradaTab() {
                   key={row.otNumero}
                   row={row}
                   onAdd={() => void handleAdd(row)}
+                  onOtClick={() => setDetailOt(row.otNumero)}
                   adding={addingOt === row.otNumero}
                   disabled={poolTableMissing}
                 />
@@ -558,15 +652,31 @@ export function EtiquetasPoolEntradaTab() {
 
         <Card className="min-w-0 border-slate-200/80 bg-white/90 shadow-sm">
           <CardHeader className="space-y-1 pb-2">
-            <CardTitle className="text-base text-[#002147]">
-              2 · Cola de ejecución
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Rita ordena el backlog. Hugo selecciona una OT y pulsa{" "}
-              <strong>Iniciar</strong> → se abre la{" "}
-              <strong>entrada express</strong> con los datos cargados (Kon/Troq/Num
-              sin marcar).
-            </CardDescription>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <CardTitle className="text-base text-[#002147]">
+                  2 · Cola de ejecución
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Rita ordena el backlog. Hugo selecciona una OT y pulsa{" "}
+                  <strong>Iniciar</strong> → se abre la{" "}
+                  <strong>entrada express</strong> con los datos cargados
+                  (Kon/Troq/Num sin marcar).
+                </CardDescription>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 shrink-0 gap-1 text-[11px]"
+                disabled={loading || plan.length === 0}
+                onClick={handleExportColaPdf}
+                title="Descargar PDF de la cola"
+              >
+                <FileDown className="size-3.5" aria-hidden />
+                PDF
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="flex max-h-[min(70vh,36rem)] flex-col gap-3 overflow-hidden pt-0">
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
@@ -585,6 +695,7 @@ export function EtiquetasPoolEntradaTab() {
                     row={row}
                     selected={selectedOt === row.otNumero}
                     onSelect={() => setSelectedOt(row.otNumero)}
+                    onOtClick={() => setDetailOt(row.otNumero)}
                     onRemove={() => void handleRemove(row)}
                     onMoveUp={() => void handleMove(row, "up")}
                     onMoveDown={() => void handleMove(row, "down")}
@@ -639,7 +750,15 @@ export function EtiquetasPoolEntradaTab() {
                 Ninguna OT en curso. Hugo las inicia desde la cola.
               </p>
             ) : (
-              enCurso.map((row) => <EnCursoCard key={row.hrId} row={row} />)
+              enCurso.map((row) => (
+                <EnCursoCard
+                  key={row.hrId}
+                  row={row}
+                  onOtClick={() => setDetailOt(row.otNumero)}
+                  onDevolver={() => void handleDevolverACola(row)}
+                  devolviendo={devolviendoHrId === row.hrId}
+                />
+              ))
             )}
           </CardContent>
         </Card>

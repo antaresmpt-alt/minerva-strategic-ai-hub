@@ -6,6 +6,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { normalizaOtNumero } from "@/lib/etiquetas-hoja-ruta-duplicados";
 import { PROCESOS_ETIQUETA_DIGITAL_IDS } from "@/lib/hoja-ruta-campos-config";
+import {
+  buildOptimusImportAllowedKeysFromChecks,
+  createDefaultOptimusImportEstadoChecks,
+  normalizeOptimusEstadoLabelKey,
+} from "@/lib/prod-ots-optimus-import";
 import { fetchAllInChunks } from "@/lib/supabase-query-chunks";
 import type { ProdEtiquetasHojaRutaRow } from "@/types/prod-etiquetas-hoja-ruta";
 import type { ProdEtiquetasPoolPlanRow } from "@/types/prod-etiquetas-pool-plan";
@@ -22,6 +27,12 @@ const PROCESO_NUM_ETIQUETA = 20;
 
 /** Máximo de OTs etiqueta recientes a evaluar en maestro (sin itinerario). */
 const MAESTRO_ETIQUETA_SCAN_LIMIT = 800;
+
+/** OTs anteriores a esta fecha se excluyen de la bandeja (pre-Minerva). */
+export const POOL_BANDEJA_FECHA_MINIMA = "2026-01-01";
+
+const POOL_BANDEJA_ESTADOS_OPTIMUS_PERMITIDOS =
+  buildOptimusImportAllowedKeysFromChecks(createDefaultOptimusImportEstadoChecks());
 
 export type EtiquetasMaquinaFlags = {
   konica: boolean;
@@ -58,6 +69,23 @@ export type EtiquetasPoolEnCursoItem = {
   hecho: EtiquetasMaquinaFlags;
 };
 
+export type EtiquetasPoolOtDetalle = {
+  otNumero: string;
+  cliente: string | null;
+  trabajo: string | null;
+  cantidad: number | null;
+  fechaEntrega: string | null;
+  fechaApertura: string | null;
+  estadoDesc: string | null;
+  tipoPedido: string | null;
+  familia: string | null;
+  vendedor: string | null;
+  pedidoCliente: string | null;
+  despachada: boolean;
+  materialDespacho: string | null;
+  itinerario: EtiquetasMaquinaFlags;
+};
+
 export function maquinaFlagsFromProcesoIds(
   procesoIds: Iterable<number>,
 ): EtiquetasMaquinaFlags {
@@ -90,6 +118,42 @@ export function isOtMaestroAbierta(estadoDesc: string | null | undefined): boole
     return false;
   }
   return true;
+}
+
+/** Estados Optimus activos para bandeja (En producción, No empezado, Actualmente activo). */
+export function isOtEstadoOptimusElegibleBandeja(
+  estadoDesc: string | null | undefined,
+): boolean {
+  const s = String(estadoDesc ?? "").trim();
+  if (!s) return true;
+
+  const key = normalizeOptimusEstadoLabelKey(s);
+  if (key === normalizeOptimusEstadoLabelKey("Terminado")) return false;
+  if (key === normalizeOptimusEstadoLabelKey("Suspendido")) return false;
+  if (key === normalizeOptimusEstadoLabelKey("Cancelado")) return false;
+  if (POOL_BANDEJA_ESTADOS_OPTIMUS_PERMITIDOS.has(key)) return true;
+
+  return isOtMaestroAbierta(s);
+}
+
+export function isOtFechaMinimaBandeja(row: {
+  fecha_entrega?: string | null;
+  fecha_apertura?: string | null;
+}): boolean {
+  const ymd =
+    fechaMaestroToYmd(row.fecha_entrega) ?? fechaMaestroToYmd(row.fecha_apertura);
+  if (!ymd) return false;
+  return ymd >= POOL_BANDEJA_FECHA_MINIMA;
+}
+
+/** Itinerario I/T/N para semáforo: si no hay pasos en maestro, asume I+T+N (etiqueta digital). */
+export function resolveSemaforoItinerario(
+  itinerario: EtiquetasMaquinaFlags,
+): EtiquetasMaquinaFlags {
+  if (itinerario.konica || itinerario.troqueladora || itinerario.numeradora) {
+    return itinerario;
+  }
+  return { konica: true, troqueladora: true, numeradora: true };
 }
 
 /** OT identificada como etiqueta en maestro (sin exigir itinerario). */
@@ -129,10 +193,13 @@ type MaestroRow = {
   titulo: string | null;
   cantidad: number | null;
   fecha_entrega: string | null;
+  fecha_apertura?: string | null;
   estado_desc: string | null;
   despachado: boolean | null;
   tipo_pedido?: string | null;
   familia?: string | null;
+  vendedor?: string | null;
+  pedido_cliente?: string | null;
 };
 
 type PasoRow = {
@@ -151,7 +218,8 @@ function buildCandidataFromMaestro(
   procesoIdsByOtId: ReadonlyMap<string, number[]>,
   despachoByOt: ReadonlyMap<string, DespRow>,
 ): EtiquetasPoolCandidata | null {
-  if (!isOtMaestroAbierta(m.estado_desc)) return null;
+  if (!isOtEstadoOptimusElegibleBandeja(m.estado_desc)) return null;
+  if (!isOtFechaMinimaBandeja(m)) return null;
   const otNumero = normalizaOtNumero(m.num_pedido);
   if (!otNumero) return null;
 
@@ -336,16 +404,20 @@ async function fetchProcesoIdsByOtId(
   return map;
 }
 
+const MAESTRO_SELECT_FIELDS =
+  "id, num_pedido, cliente, titulo, cantidad, fecha_entrega, fecha_apertura, estado_desc, despachado, tipo_pedido, familia, vendedor, pedido_cliente";
+
 async function fetchMaestroEtiquetaRows(
   supabase: SupabaseClient,
 ): Promise<MaestroRow[]> {
   const { data, error } = await supabase
     .from(TABLE_MAESTRO)
-    .select(
-      "id, num_pedido, cliente, titulo, cantidad, fecha_entrega, estado_desc, despachado, tipo_pedido, familia",
-    )
+    .select(MAESTRO_SELECT_FIELDS)
     .or(
       "tipo_pedido.ilike.%etiquet%,familia.ilike.%etiquet%,titulo.ilike.%ETIQUETA%",
+    )
+    .or(
+      `fecha_entrega.gte.${POOL_BANDEJA_FECHA_MINIMA},fecha_apertura.gte.${POOL_BANDEJA_FECHA_MINIMA}`,
     )
     .order("fecha_entrega", { ascending: true, nullsFirst: false })
     .limit(MAESTRO_ETIQUETA_SCAN_LIMIT);
@@ -371,9 +443,7 @@ export async function fetchEtiquetasPoolSnapshot(
       ? await fetchAllInChunks(pasoOtIds, 100, async (chunk) => {
           const { data, error } = await supabase
             .from(TABLE_MAESTRO)
-            .select(
-              "id, num_pedido, cliente, titulo, cantidad, fecha_entrega, estado_desc, despachado, tipo_pedido, familia",
-            )
+            .select(MAESTRO_SELECT_FIELDS)
             .in("id", chunk);
           if (error) throw error;
           return (data ?? []) as MaestroRow[];
@@ -515,6 +585,70 @@ export async function removeOtFromPoolPlanByOtNumero(
   if (!ot) return;
   const { error } = await supabase.from(TABLE_POOL).delete().eq("ot_numero", ot);
   if (error) throw error;
+}
+
+export async function fetchMaestroOtDetalle(
+  supabase: SupabaseClient,
+  otNumero: string,
+): Promise<EtiquetasPoolOtDetalle | null> {
+  const ot = normalizaOtNumero(otNumero);
+  if (!ot) return null;
+
+  const { data, error } = await supabase
+    .from(TABLE_MAESTRO)
+    .select(MAESTRO_SELECT_FIELDS)
+    .eq("num_pedido", ot)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+
+  const m = data as MaestroRow;
+  const procesoIdsByOtId = await fetchProcesoIdsByOtId(supabase);
+  const itinerario = maquinaFlagsFromProcesoIds(procesoIdsByOtId.get(m.id) ?? []);
+
+  const { data: despData } = await supabase
+    .from(TABLE_DESPACHADAS)
+    .select("ot_numero, material, despachado_at")
+    .eq("ot_numero", ot)
+    .maybeSingle();
+  const desp = despData as DespRow | null;
+
+  return {
+    otNumero: ot,
+    cliente: m.cliente,
+    trabajo: m.titulo,
+    cantidad: m.cantidad,
+    fechaEntrega: fechaMaestroToYmd(m.fecha_entrega),
+    fechaApertura: fechaMaestroToYmd(m.fecha_apertura),
+    estadoDesc: m.estado_desc,
+    tipoPedido: m.tipo_pedido ?? null,
+    familia: m.familia ?? null,
+    vendedor: m.vendedor ?? null,
+    pedidoCliente: m.pedido_cliente ?? null,
+    despachada:
+      Boolean(m.despachado) ||
+      Boolean(desp?.despachado_at) ||
+      Boolean(desp?.material?.trim()),
+    materialDespacho: desp?.material?.trim() || null,
+    itinerario,
+  };
+}
+
+/** Devuelve una OT de hoja de ruta a la cola (borra fila HR y la reinserta en pool). */
+export async function devolverEnCursoACola(
+  supabase: SupabaseClient,
+  hrId: string,
+  otNumero: string,
+): Promise<void> {
+  const { error: delErr } = await supabase.from(TABLE_HR).delete().eq("id", hrId);
+  if (delErr) throw delErr;
+
+  try {
+    await addOtToPoolPlan(supabase, otNumero);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!msg.includes("ya está en el plan")) throw e;
+  }
 }
 
 export async function movePoolPlanItem(
