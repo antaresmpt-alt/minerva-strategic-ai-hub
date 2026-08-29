@@ -14,16 +14,10 @@ import { useState } from "react";
 import { EtiquetasComprasTab } from "@/components/produccion/etiquetas-digital/etiquetas-compras-tab";
 import { EtiquetasConsultaMaterialTab } from "@/components/produccion/etiquetas-digital/etiquetas-consulta-material-tab";
 import { EtiquetasHojaRutaTab } from "@/components/produccion/etiquetas-digital/etiquetas-hoja-ruta-tab";
+import { EtiquetasPoolEntradaTab } from "@/components/produccion/etiquetas-digital/etiquetas-pool-entrada-tab";
 import { EtiquetasCalendarioMensualTab } from "@/components/produccion/etiquetas-digital/etiquetas-calendario-mensual-tab";
 import { EtiquetasStockBobinasTab } from "@/components/produccion/etiquetas-digital/etiquetas-stock-bobinas-tab";
 import { EtiquetasTroquelesTab } from "@/components/produccion/etiquetas-digital/etiquetas-troqueles-tab";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const tabTriggerClass =
@@ -86,23 +80,9 @@ export function EtiquetasDigitalPage() {
         </div>
 
         <TabsContent value="pool-entrada" className="mt-0 outline-none">
-          <Card
-            size="sm"
-            className="max-w-full min-w-0 overflow-x-hidden border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm"
-          >
-            <CardHeader className="space-y-1 pb-2">
-              <CardTitle className="text-base text-[#002147]">
-                Pool entrada
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Aquí aparecerán las OT enviadas desde mesa de planificación para
-                que el departamento las seleccione y pase a la hoja de ruta.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="text-sm text-slate-600">
-              Contenido en construcción.
-            </CardContent>
-          </Card>
+          <EtiquetasPoolEntradaTab
+            onOtIniciada={() => setTab("hoja-de-ruta")}
+          />
         </TabsContent>
 
         <TabsContent value="hoja-de-ruta" className="mt-0 outline-none">

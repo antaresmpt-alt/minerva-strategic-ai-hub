@@ -1,6 +1,6 @@
 # Bloque 5 — Pool entrada etiquetas (spike diseño · 29 ago 2026)
 
-> **Estado:** diseño acordado · **implementación pendiente** (tras merge Bloque 11)  
+> **Estado:** implementado v1 (29 ago 2026) · migración `prod_etiquetas_pool_plan`  
 > **Objetivo lunes:** Rita puede probar bandeja + lista; Hugo sigue entrada manual + hoja de ruta igual.
 
 ---
