@@ -18,7 +18,7 @@ import {
   Truck,
   Undo2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useDeferredValue, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Json } from "@/types/database";
 
@@ -1316,6 +1316,30 @@ function ejecucionNeedsClaim(row: MesaEjecucion): boolean {
   return Boolean(defContenedorSeccion(seccionKind)?.claim);
 }
 
+/** Buscador local: no re-renderiza la lista de 100+ filas en cada tecla. */
+function EjecucionBuscarInput({
+  className,
+  onDebouncedSearch,
+}: {
+  className?: string;
+  onDebouncedSearch: (q: string) => void;
+}) {
+  const [value, setValue] = useState("");
+  useEffect(() => {
+    const t = window.setTimeout(() => onDebouncedSearch(value.trim()), 250);
+    return () => window.clearTimeout(t);
+  }, [value, onDebouncedSearch]);
+  return (
+    <Input
+      className={className}
+      placeholder="Buscar OT, cliente, trabajo…"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      aria-label="Buscar OTs en ejecución"
+    />
+  );
+}
+
 export function PlanificacionOtsEjecucionTab({
   tabletMode = false,
 }: {
@@ -1341,14 +1365,16 @@ export function PlanificacionOtsEjecucionTab({
   >({});
   const [selectedMaquina, setSelectedMaquina] = useState<string>("all");
   const [estado, setEstado] = useState<FiltroEstadoEjecucion>("activas");
-  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
   const [mostrarPruebas, setMostrarPruebas] = useState(() =>
     readLocalFlag(STORAGE_EJECUCION_MOSTRAR_PRUEBAS, false),
   );
   const [soloEjecutableCtp, setSoloEjecutableCtp] = useState(() =>
     readLocalFlag(STORAGE_EJECUCION_SOLO_EJECUTABLE_CTP, true),
   );
+  const [sinPlanExpanded, setSinPlanExpanded] = useState(false);
+  const SIN_PLAN_LIST_CAP = 50;
   const [workScreenId, setWorkScreenId] = useState<string | null>(null);
   const [workScreenIntent, setWorkScreenIntent] = useState<
     null | "pause" | "cerrar"
@@ -2117,6 +2143,24 @@ export function PlanificacionOtsEjecucionTab({
         (estado === "activas" ||
           estado === "pendiente_inicio" ||
           estado === "all");
+      const planHoyCache = new Map<
+        string,
+        Map<string, PlanHoyDetallePorOt>
+      >();
+      const loadPlanHoy = async (
+        ambito: Parameters<typeof fetchPlanHoyDetalleByOt>[2],
+      ): Promise<Map<string, PlanHoyDetallePorOt>> => {
+        const key = String(ambito);
+        const cached = planHoyCache.get(key);
+        if (cached) return cached;
+        const plan = await fetchPlanHoyDetalleByOt(
+          supabase,
+          localTodayYmd(),
+          ambito,
+        );
+        planHoyCache.set(key, plan);
+        return plan;
+      };
       if (showContenedorCtp || showContenedorTroquel || showContenedorSecciones) {
         const { data: activasPaso } = await supabase
           .from(TABLE_EJECUCIONES)
@@ -2166,11 +2210,7 @@ export function PlanificacionOtsEjecucionTab({
             let pasosTroq = candidatosTroq;
             let planByOt = new Map<string, PlanHoyDetallePorOt>();
             try {
-              planByOt = await fetchPlanHoyDetalleByOt(
-                supabase,
-                localTodayYmd(),
-                "troquelado",
-              );
+              planByOt = await loadPlanHoy("troquelado");
               const slotByOt = new Map(
                 [...planByOt.entries()].map(([ot, p]) => [ot, p.rank]),
               );
@@ -2231,11 +2271,7 @@ export function PlanificacionOtsEjecucionTab({
               def.kind === "engomado"
             ) {
               try {
-                planByOt = await fetchPlanHoyDetalleByOt(
-                  supabase,
-                  localTodayYmd(),
-                  def.kind,
-                );
+                planByOt = await loadPlanHoy(def.kind);
                 const slotByOt = new Map(
                   [...planByOt.entries()].map(([ot, p]) => [ot, p.rank]),
                 );
@@ -2471,10 +2507,9 @@ export function PlanificacionOtsEjecucionTab({
     void loadData();
   }, [loadData]);
 
-  useEffect(() => {
-    const t = window.setTimeout(() => setSearch(searchInput.trim()), 250);
-    return () => window.clearTimeout(t);
-  }, [searchInput]);
+  const handleDebouncedSearch = useCallback((q: string) => {
+    setSearch(q);
+  }, []);
 
   const maquinasTroquelIds = useMemo(
     () => new Set(maquinasTroquel.map((m) => m.id)),
@@ -2491,7 +2526,7 @@ export function PlanificacionOtsEjecucionTab({
   }, [maquinasClaimSeccion]);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = deferredSearch.trim().toLowerCase();
     const now = new Date();
     return rows.filter((r) => {
       if (!mostrarPruebas && isOtNumeroPrueba(r.ot)) return false;
@@ -2571,7 +2606,7 @@ export function PlanificacionOtsEjecucionTab({
     rows,
     selectedMaquina,
     estado,
-    search,
+    deferredSearch,
     despachoByOt,
     otMetaByOt,
     mostrarPruebas,
@@ -2626,6 +2661,7 @@ export function PlanificacionOtsEjecucionTab({
         tone: "live" | "hoy" | "cola" | "otros";
         hint?: string;
       }
+    | { type: "expand"; id: string; hiddenCount: number }
     | { type: "row"; row: MesaEjecucion; planBadge?: number };
 
   const colaListItems = useMemo((): ColaListItem[] => {
@@ -2702,13 +2738,30 @@ export function PlanificacionOtsEjecucionTab({
       "cola",
       "Listas por itinerario · sin secuencia de hoy",
     );
-    for (const row of sinPlan) items.push({ type: "row", row });
+    const sinPlanVisible = sinPlanExpanded
+      ? sinPlan
+      : sinPlan.slice(0, SIN_PLAN_LIST_CAP);
+    for (const row of sinPlanVisible) items.push({ type: "row", row });
+    if (!sinPlanExpanded && sinPlan.length > SIN_PLAN_LIST_CAP) {
+      items.push({
+        type: "expand",
+        id: "expand-sin-plan",
+        hiddenCount: sinPlan.length - SIN_PLAN_LIST_CAP,
+      });
+    }
 
     pushHeader("hdr-otros", "Otras", otros.length, "otros");
     for (const row of otros) items.push({ type: "row", row });
 
     return items;
-  }, [colaRows]);
+  }, [colaRows, sinPlanExpanded]);
+
+  const deferredColaListItems = useDeferredValue(colaListItems);
+  const colaListStale = deferredColaListItems !== colaListItems;
+
+  useEffect(() => {
+    setSinPlanExpanded(false);
+  }, [deferredSearch, selectedMaquina, estado]);
 
   useEffect(() => {
     const hasLive = rows.some(
@@ -3302,15 +3355,12 @@ export function PlanificacionOtsEjecucionTab({
           <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700">
             Ámbito: {etiquetaAmbitoEjecucion}
           </span>
-          <Input
+          <EjecucionBuscarInput
             className={cn(
               "w-full min-w-[10rem] max-w-xs sm:w-56",
               tabletMode ? "h-11 text-sm" : "h-8 text-xs",
             )}
-            placeholder="Buscar OT, cliente, trabajo…"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            aria-label="Buscar OTs en ejecución"
+            onDebouncedSearch={handleDebouncedSearch}
           />
           <select
             className={cn(
@@ -3404,8 +3454,11 @@ export function PlanificacionOtsEjecucionTab({
         ) : null}
 
         {colaRows.length > 0 ? (
-          <ul className="space-y-2">
-            {colaListItems.map((item) => {
+          <ul
+            className={cn("space-y-2", colaListStale && "opacity-80")}
+            aria-busy={colaListStale}
+          >
+            {deferredColaListItems.map((item) => {
               if (item.type === "header") {
                 const Icon =
                   item.tone === "hoy"
@@ -3483,6 +3536,22 @@ export function PlanificacionOtsEjecucionTab({
                 );
               }
 
+              if (item.type === "expand") {
+                return (
+                  <li key={item.id} className="list-none py-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-xs"
+                      onClick={() => setSinPlanExpanded(true)}
+                    >
+                      Ver {item.hiddenCount} OTs más sin plan
+                    </Button>
+                  </li>
+                );
+              }
+
               const row = item.row;
               const pauses = pausesByExecutionId[row.id] ?? [];
               const despacho = despachoByOt[row.ot] ?? null;
@@ -3514,7 +3583,7 @@ export function PlanificacionOtsEjecucionTab({
               return (
                 <li
                   key={row.id}
-                  className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xs"
+                  className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xs [content-visibility:auto] [contain-intrinsic-size:auto_4.5rem]"
                 >
                   <div
                     className={cn(
