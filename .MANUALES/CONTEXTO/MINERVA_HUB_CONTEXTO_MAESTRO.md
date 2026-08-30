@@ -333,6 +333,8 @@ Detalle 1–3.x histórico: ver commits jun / `.MANUALES/CONTEXTO/FASES_HOJA_RUT
 - [x] **Bloque 11 (27 ago):** cabeceras cola **Hoy / Disponibles** + icono material pastilla (Pool status)
 - [x] **Bloque 11:** merge `main` **29 ago** (rama `feature/bloque11-contenedor-ctp-spike`)
 - [x] **Bloque 12 UI (29 ago):** detalle del día **vista mesa** + claim — rama `feature/bloque12-detalle-dia-mesa-ui` · `.MANUALES/SESIONES/SESION_29AGO2026_BLOQUE12_DETALLE_DIA_MESA.md`
+- [x] **Calendario perf (30 ago):** 3 PRs bandeja + guardar detalle-día + render — `.MANUALES/SESIONES/SESION_30AGO2026_CALENDARIO_PERF.md` · `8357edf`/`a37f759`/`28f8a72`
+- [x] **Ejecución perf (30 ago):** filtros/lista sin plan — `4413fa5`
 - [ ] **Bloque 12 UI:** merge `main` + smoke lunes planta
 - [ ] **Bloque 11 siguiente:** brief Jordi/Carlos **v2** leído en planta (reserva dura A/B) · **B5 pool etiquetas** (Rita lunes) · Bloque 12 menú feliz
 - [x] **Plataforma — print Electron:** migrado `useReactToPrint` → `printElementInNewWindow` (externos, fichas, tablón semanal, ventas). Ya OK: detalle-día + mesa diaria.
@@ -340,6 +342,7 @@ Detalle 1–3.x histórico: ver commits jun / `.MANUALES/CONTEXTO/FASES_HOJA_RUT
 - [ ] **Bloque 5 puente**: Rita lanza OTs a Hugo (no bloquea paralelo si Hugo sigue a mano)
 
 ### Hecho reciente (jul–ago)
+- [x] **30 ago:** Calendario **perf 3 PRs** (bandeja fantasma, batch guardar detalle-día, inputs/memo) + ejecución filtros — `.MANUALES/SESIONES/SESION_30AGO2026_CALENDARIO_PERF.md` · patrón «módulo fantasma» (ver también Compras `20a06a5`)
 - [x] **29 ago noche (impro):** Bloque 12 UI — **vista mesa** detalle del día (pool+columnas+DnD) · claim ejecución desde plan · exclusiones E (MNRV/desbroce) · sin botón pastilla — `.MANUALES/SESIONES/SESION_29AGO2026_BLOQUE12_DETALLE_DIA_MESA.md` · `.MANUALES/BLOQUES/MINERVA_BLOQUE12_DETALLE_DIA_MESA.md` · decisión §28
 - [x] **27 ago noche (pulido UX):** Bloque 11 — **modal Atrasadas** · Guillotina **tooltip** pastillas + chip ejecución · **valla LEGACY** — `7dc75cb` · decisión §27
 - [x] **27 ago tarde:** Bloque 11 — PDF detalle **cartelas + material** · Guillotina chip · `collectEntradasAtrasadas` · print Electron 5 módulos — `ace0409`
@@ -430,7 +433,7 @@ Detalle 1–3.x histórico: ver commits jun / `.MANUALES/CONTEXTO/FASES_HOJA_RUT
 
 19. **Cartelas impresión (18 jul 2026)**: **1 copia** por palet (antes 2). Confirmado Emma/Ramón.
 
-20. **Bloque 11 — Calendario + contenedor (28 jul · diseño 22 ago · smoke contenedor/bandeja ✅ · detalle-día B+v2+PDF 26 ago ✅ · §27 27 ago ✅ · §28 vista mesa 29 ago ✅):** **Despacho ≈ launch.** Contenedor + bandeja OK. **Detalle del día** = `prod_calendario_detalle_dia` · UI **vista mesa** (Bloque 12, rama `feature/bloque12-detalle-dia-mesa-ui`). Claim ejecución lee `maquina_id` del plan. Doc: `.MANUALES/BLOQUES/MINERVA_BLOQUE12_DETALLE_DIA_MESA.md` · `.MANUALES/SESIONES/SESION_29AGO2026_BLOQUE12_DETALLE_DIA_MESA.md`.
+20. **Bloque 11 — Calendario + contenedor (28 jul · diseño 22 ago · smoke contenedor/bandeja ✅ · detalle-día B+v2+PDF 26 ago ✅ · §27 27 ago ✅ · §28 vista mesa 29 ago ✅ · perf 30 ago ✅):** **Despacho ≈ launch.** Contenedor + bandeja OK. **Detalle del día** = `prod_calendario_detalle_dia` · UI **vista mesa** (Bloque 12). **Perf 30 ago:** bandeja no fantasma + batch guardar + inputs memo — `.MANUALES/SESIONES/SESION_30AGO2026_CALENDARIO_PERF.md` (patrón «módulo fantasma»; ver Compras `20a06a5`). Claim ejecución lee `maquina_id` del plan.
 
 21. **Paralelo septiembre (11 ago 2026)**: no smoke fijo 10–20; por tanda de despacho elegir **~3 OTs** y seguir E2E en Minerva. Cierre contenedor MVP: **barco listo cuando todas las hijas terminan** (8.4) ✅. Convergencia física = 8.5 documentada, sin código aún.
 

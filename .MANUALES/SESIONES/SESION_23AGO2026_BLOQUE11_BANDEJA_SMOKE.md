@@ -56,7 +56,7 @@ Smoke planta Manel **23 ago mediodía** — I/D/T/E + loop ejecución↔calendar
 
 - Altura bandeja acotada al viewport + **scroll interno** (no desborda el calendario).
 - Icono bandeja HR: **mapa** (`Map`), coherente con hoja de ruta.
-- Toggle no desmonta el panel → **no recarga** al reabrir.
+- Toggle no desmonta el panel → **obsoleto 30 ago** (PR1 perf: bandeja se desmonta al cerrar; ver `.MANUALES/SESIONES/SESION_30AGO2026_CALENDARIO_PERF.md`).
 - Subtítulo E: «Engomado + manipulados (ámbito E)».
 
 ## Pulidos 26 ago (noche)
