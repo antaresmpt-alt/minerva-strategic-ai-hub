@@ -19,7 +19,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useDeferredValue, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
@@ -118,6 +118,7 @@ import { resolveEstadoOtLabel } from "@/lib/hoja-ruta/hoja-ruta-query";
 import { isOtNumeroPrueba } from "@/lib/ot-prueba";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { fetchAllInChunks } from "@/lib/supabase-query-chunks";
 import { cn } from "@/lib/utils";
 import type {
   CalendarioProduccionOtDetalle,
@@ -167,6 +168,184 @@ type OtSearchHit = {
   titulo: string | null;
   cantidad: number | null;
 };
+
+const EMPTY_CALENDARIO_LINEAS: CalendarioProduccionLinea[] = [];
+const EMPTY_CALENDARIO_NOTAS: ProdCalendarioProduccionNotaRow[] = [];
+
+/** Filtro local: no re-renderiza el grid en cada tecla. */
+function CalendarioFiltroInput({
+  className,
+  onDebouncedChange,
+}: {
+  className?: string;
+  onDebouncedChange: (q: string) => void;
+}) {
+  const [value, setValue] = useState("");
+  useEffect(() => {
+    const t = window.setTimeout(() => onDebouncedChange(value.trim()), 250);
+    return () => window.clearTimeout(t);
+  }, [value, onDebouncedChange]);
+  return (
+    <Input
+      className={className}
+      placeholder="Filtrar OT / trabajo / cliente…"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      aria-label="Filtrar calendario"
+    />
+  );
+}
+
+/** Búsqueda OT del modal día — estado local, no re-renderiza el mes. */
+function CalendarioDiaOtBuscar({
+  supabase,
+  canEdit,
+  ambitoLabel,
+  saving,
+  onSelect,
+}: {
+  supabase: ReturnType<typeof createSupabaseBrowserClient>;
+  canEdit: boolean;
+  ambitoLabel: string;
+  saving: boolean;
+  onSelect: (hit: OtSearchHit) => void | Promise<void>;
+}) {
+  const [otQuery, setOtQuery] = useState("");
+  const [otHits, setOtHits] = useState<OtSearchHit[]>([]);
+  const [searchingOt, setSearchingOt] = useState(false);
+
+  useEffect(() => {
+    const needle = otQuery.trim().replace(/[%_,]/g, " ").trim();
+    if (needle.length < 2) {
+      setOtHits([]);
+      return;
+    }
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      void (async () => {
+        setSearchingOt(true);
+        try {
+          const { data, error } = await supabase
+            .from(TABLE_MAESTRO)
+            .select("num_pedido, cliente, titulo, cantidad")
+            .or(
+              `num_pedido.ilike.%${needle}%,titulo.ilike.%${needle}%,cliente.ilike.%${needle}%`,
+            )
+            .order("num_pedido", { ascending: false })
+            .limit(12);
+          if (error) throw error;
+          if (!cancelled) {
+            setOtHits(
+              ((data ?? []) as OtSearchHit[]).filter((h) =>
+                String(h.num_pedido ?? "").trim(),
+              ),
+            );
+          }
+        } catch (e) {
+          if (!cancelled) {
+            toast.error(errorMessageFromUnknown(e, "No se pudo buscar la OT."));
+            setOtHits([]);
+          }
+        } finally {
+          if (!cancelled) setSearchingOt(false);
+        }
+      })();
+    }, 280);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [otQuery, supabase]);
+
+  return (
+    <div>
+      <Label className="text-xs">Añadir OT ({ambitoLabel})</Label>
+      <Input
+        className="mt-1"
+        placeholder="Buscar nº OT, cliente o trabajo…"
+        value={otQuery}
+        onChange={(e) => setOtQuery(e.target.value)}
+        disabled={!canEdit}
+      />
+      {!canEdit ? (
+        <p className="mt-1 text-xs text-amber-800">
+          No puedes añadir OTs en este ámbito. Cambia el desplegable o pide a
+          admin/gerencia.
+        </p>
+      ) : null}
+      {searchingOt ? (
+        <p className="mt-1 flex items-center gap-1 text-xs text-slate-500">
+          <Loader2 className="size-3 animate-spin" /> Buscando…
+        </p>
+      ) : null}
+      {otHits.length > 0 && canEdit ? (
+        <ul className="mt-2 max-h-40 overflow-y-auto rounded-md border border-slate-200">
+          {otHits.map((h) => (
+            <li key={h.num_pedido}>
+              <button
+                type="button"
+                className="flex w-full flex-col gap-0.5 border-b border-slate-100 px-3 py-2 text-left text-sm last:border-0 hover:bg-slate-50"
+                disabled={saving}
+                onClick={() => {
+                  void (async () => {
+                    await onSelect(h);
+                    setOtQuery("");
+                    setOtHits([]);
+                  })();
+                }}
+              >
+                <span className="font-semibold text-[#002147]">
+                  {h.num_pedido}
+                </span>
+                <span className="line-clamp-1 text-xs text-slate-600">
+                  {h.cliente ?? "—"} · {h.titulo ?? "—"}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function CalendarioDiaNotaInput({
+  saving,
+  onAdd,
+}: {
+  saving: boolean;
+  onAdd: (texto: string) => void | Promise<void>;
+}) {
+  const [notaTexto, setNotaTexto] = useState("");
+  return (
+    <div>
+      <Label className="text-xs">Añadir nota libre</Label>
+      <div className="mt-1 flex items-start gap-2">
+        <Textarea
+          className="min-h-[2.5rem] text-sm"
+          placeholder="Ej: Priorizar cambios de troquel, reunión cliente, etc."
+          value={notaTexto}
+          onChange={(e) => setNotaTexto(e.target.value)}
+        />
+        <Button
+          type="button"
+          size="sm"
+          disabled={saving || notaTexto.trim().length === 0}
+          onClick={() => {
+            const texto = notaTexto.trim();
+            if (!texto) return;
+            void (async () => {
+              await onAdd(texto);
+              setNotaTexto("");
+            })();
+          }}
+        >
+          Añadir
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Badge ámbito I/D/T/E con pip de material (patrón Linear/GitHub):
@@ -251,7 +430,7 @@ function DiaCelda({
   dayNum: number;
   lineas: CalendarioProduccionLinea[];
   notas: ProdCalendarioProduccionNotaRow[];
-  onEditDay: () => void;
+  onEditDay: (ymd: string) => void;
   onOpenOt: (otNumero: string) => void;
   onToggleMarcadoHecho: (linea: CalendarioProduccionLinea) => void;
   itinerarioByOt: Map<string, CalendarioItinerarioOt>;
@@ -278,7 +457,7 @@ function DiaCelda({
         <button
           type="button"
           className="rounded px-1 text-[10px] font-medium text-white/80 opacity-0 transition group-hover:opacity-100 hover:bg-white/10"
-          onClick={onEditDay}
+          onClick={() => onEditDay(dayYmd)}
           title="Añadir / editar OTs del día"
         >
           <Plus className="size-3.5" />
@@ -290,7 +469,7 @@ function DiaCelda({
               ? "shrink-0 text-base font-bold tabular-nums text-white hover:underline"
               : "shrink-0 text-sm font-bold tabular-nums text-white hover:underline"
           }
-          onClick={onEditDay}
+          onClick={() => onEditDay(dayYmd)}
           title="Editar día"
         >
           {dayNum}
@@ -304,7 +483,7 @@ function DiaCelda({
               ? "min-h-[3rem] flex-1 p-2.5 text-left text-sm text-slate-400 hover:bg-slate-50"
               : "min-h-[2rem] flex-1 p-1.5 text-left text-[10px] text-slate-400 hover:bg-slate-50"
           }
-          onClick={onEditDay}
+          onClick={() => onEditDay(dayYmd)}
         >
           {canEditActivo ? "+ OT" : "Ver día"}
         </button>
@@ -491,6 +670,8 @@ function DiaCelda({
   );
 }
 
+const DiaCeldaMemo = memo(DiaCelda);
+
 export function CalendarioProduccionPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const router = useRouter();
@@ -506,11 +687,17 @@ export function CalendarioProduccionPage() {
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [rows, setRows] = useState<ProdCalendarioProduccionOtRow[]>([]);
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
   const [notasRows, setNotasRows] = useState<ProdCalendarioProduccionNotaRow[]>([]);
   const [tituloByOt, setTituloByOt] = useState<Map<string, string | null>>(
     () => new Map(),
   );
   const [filtro, setFiltro] = useState("");
+  const deferredFiltro = useDeferredValue(filtro);
+  const handleFiltroDebounced = useCallback((q: string) => {
+    setFiltro(q);
+  }, []);
   const [soloPendientes, setSoloPendientes] = useState(false);
   const [atrasadasModalOpen, setAtrasadasModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -525,10 +712,6 @@ export function CalendarioProduccionPage() {
   const [dayOpen, setDayOpen] = useState(false);
   const [dayYmd, setDayYmd] = useState<string | null>(null);
   const [detalleDiaOpen, setDetalleDiaOpen] = useState(false);
-  const [otQuery, setOtQuery] = useState("");
-  const [notaTexto, setNotaTexto] = useState("");
-  const [otHits, setOtHits] = useState<OtSearchHit[]>([]);
-  const [searchingOt, setSearchingOt] = useState(false);
 
   const [detalleOpen, setDetalleOpen] = useState(false);
   const [detalleLoading, setDetalleLoading] = useState(false);
@@ -557,6 +740,7 @@ export function CalendarioProduccionPage() {
     null,
   );
   const calendarGridRef = useRef<HTMLDivElement>(null);
+  const openDetalleRef = useRef<(otNumero: string) => Promise<void>>(async () => {});
 
   const canEditActivo = canEditCalendarioAmbito(userRole, ambitoActivo);
 
@@ -683,7 +867,7 @@ export function CalendarioProduccionPage() {
 
   const entradasByDay = useMemo(() => {
     const all = entradasPorDia(rowsVisibles, tituloByOt);
-    const byTexto = filtrarEntradasPorTexto(all, filtro);
+    const byTexto = filtrarEntradasPorTexto(all, deferredFiltro);
     const enriched = enrichEntradasHechoVisual(byTexto, (ot, ambito) =>
       semaforoForAmbito(itinerarioByOt.get(ot)?.pasos ?? [], ambito),
     );
@@ -691,7 +875,7 @@ export function CalendarioProduccionPage() {
   }, [
     rowsVisibles,
     tituloByOt,
-    filtro,
+    deferredFiltro,
     soloPendientes,
     itinerarioByOt,
   ]);
@@ -822,16 +1006,22 @@ export function CalendarioProduccionPage() {
         return;
       }
 
-      const { data: maestros, error: mErr } = await supabase
-        .from(TABLE_MAESTRO)
-        .select("num_pedido, titulo")
-        .in("num_pedido", ots);
-      if (mErr) throw mErr;
+      const maestroRows = await fetchAllInChunks(ots, 100, async (chunk) => {
+        const { data, error } = await supabase
+          .from(TABLE_MAESTRO)
+          .select("num_pedido, titulo")
+          .in("num_pedido", chunk);
+        if (error) throw error;
+        return (data ?? []) as Array<{
+          num_pedido?: string;
+          titulo?: string | null;
+        }>;
+      });
 
       const map = new Map<string, string | null>();
-      for (const m of maestros ?? []) {
-        const n = String((m as { num_pedido?: string }).num_pedido ?? "").trim();
-        if (n) map.set(n, (m as { titulo?: string | null }).titulo ?? null);
+      for (const m of maestroRows) {
+        const n = String(m.num_pedido ?? "").trim();
+        if (n) map.set(n, m.titulo ?? null);
       }
       setTituloByOt(map);
 
@@ -896,7 +1086,7 @@ export function CalendarioProduccionPage() {
       ro.disconnect();
       window.removeEventListener("resize", sync);
     };
-  }, [bandejaOpen, loading, vista, showSaturday, entradasByDay, notasByDay, cols]);
+  }, [bandejaOpen, loading]);
 
   const setVistaPersist = (v: VistaCalendario) => {
     setVista(v);
@@ -996,52 +1186,10 @@ export function CalendarioProduccionPage() {
     }
   };
 
-  const openDay = (ymd: string) => {
+  const openDay = useCallback((ymd: string) => {
     setDayYmd(ymd);
-    setOtQuery("");
-    setNotaTexto("");
-    setOtHits([]);
     setDayOpen(true);
-  };
-
-  const searchOts = useCallback(
-    async (q: string) => {
-      const needle = q.trim().replace(/[%_,]/g, " ").trim();
-      if (needle.length < 2) {
-        setOtHits([]);
-        return;
-      }
-      setSearchingOt(true);
-      try {
-        const { data, error } = await supabase
-          .from(TABLE_MAESTRO)
-          .select("num_pedido, cliente, titulo, cantidad")
-          .or(
-            `num_pedido.ilike.%${needle}%,titulo.ilike.%${needle}%,cliente.ilike.%${needle}%`,
-          )
-          .order("num_pedido", { ascending: false })
-          .limit(12);
-        if (error) throw error;
-        setOtHits(
-          ((data ?? []) as OtSearchHit[]).filter((h) =>
-            String(h.num_pedido ?? "").trim(),
-          ),
-        );
-      } catch (e) {
-        toast.error(errorMessageFromUnknown(e, "No se pudo buscar la OT."));
-        setOtHits([]);
-      } finally {
-        setSearchingOt(false);
-      }
-    },
-    [supabase],
-  );
-
-  useEffect(() => {
-    if (!dayOpen) return;
-    const t = window.setTimeout(() => void searchOts(otQuery), 280);
-    return () => window.clearTimeout(t);
-  }, [otQuery, dayOpen, searchOts]);
+  }, []);
 
   const insertOtToDay = useCallback(
     async (hit: OtSearchHit) => {
@@ -1056,7 +1204,7 @@ export function CalendarioProduccionPage() {
       if (!ot) return;
       setSaving(true);
       try {
-        const existing = rows.filter(
+        const existing = rowsRef.current.filter(
           (r) =>
             r.fecha.slice(0, 10) === dayYmd &&
             (isCalendarioAmbito(r.ambito) ? r.ambito : "impresion") ===
@@ -1099,8 +1247,6 @@ export function CalendarioProduccionPage() {
             `OT ${ot} es de prueba (≥98000). Activa «Mostrar OTs prueba» si no la ves.`,
           );
         }
-        setOtQuery("");
-        setOtHits([]);
         await load();
       } catch (e) {
         toast.error(errorMessageFromUnknown(e, "No se pudo añadir la OT."));
@@ -1108,7 +1254,7 @@ export function CalendarioProduccionPage() {
         setSaving(false);
       }
     },
-    [ambitoActivo, dayYmd, load, mostrarPruebas, rows, supabase, userRole],
+    [ambitoActivo, dayYmd, load, mostrarPruebas, supabase, userRole],
   );
 
   const addOtToDay = async (hit: OtSearchHit) => {
@@ -1123,7 +1269,7 @@ export function CalendarioProduccionPage() {
     if (!ot) return;
 
     if (
-      rows.some(
+      rowsRef.current.some(
         (r) =>
           r.fecha.slice(0, 10) === dayYmd &&
           String(r.ot_numero ?? "").trim() === ot &&
@@ -1137,7 +1283,7 @@ export function CalendarioProduccionPage() {
       return;
     }
 
-    const otherRow = rows.find(
+    const otherRow = rowsRef.current.find(
       (r) =>
         String(r.ot_numero ?? "").trim() === ot &&
         r.fecha.slice(0, 10) !== dayYmd &&
@@ -1178,7 +1324,7 @@ export function CalendarioProduccionPage() {
         return false;
       }
 
-      const yaEnDia = rows.some(
+      const yaEnDia = rowsRef.current.some(
         (r) =>
           r.fecha.slice(0, 10) === ymd &&
           String(r.ot_numero ?? "").trim() === ot &&
@@ -1191,7 +1337,7 @@ export function CalendarioProduccionPage() {
         return false;
       }
 
-      const otraFecha = rows.find(
+      const otraFecha = rowsRef.current.find(
         (r) =>
           String(r.ot_numero ?? "").trim() === ot &&
           r.fecha.slice(0, 10) !== ymd &&
@@ -1206,7 +1352,7 @@ export function CalendarioProduccionPage() {
 
       setSaving(true);
       try {
-        const existing = rows.filter(
+        const existing = rowsRef.current.filter(
           (r) =>
             r.fecha.slice(0, 10) === ymd &&
             (isCalendarioAmbito(r.ambito) ? r.ambito : "impresion") === ambitoActivo,
@@ -1264,13 +1410,13 @@ export function CalendarioProduccionPage() {
         setSaving(false);
       }
     },
-    [ambitoActivo, load, mostrarPruebas, rows, supabase, userRole],
+    [ambitoActivo, load, mostrarPruebas, supabase, userRole],
   );
 
-  const addNotaToDay = async () => {
+  const addNotaToDay = async (texto: string) => {
     if (!dayYmd) return;
-    const texto = notaTexto.trim();
-    if (!texto) return;
+    const t = texto.trim();
+    if (!t) return;
     setSaving(true);
     try {
       const existing = notasRows.filter((n) => n.fecha.slice(0, 10) === dayYmd);
@@ -1281,12 +1427,11 @@ export function CalendarioProduccionPage() {
       } = await supabase.auth.getUser();
       const { error } = await supabase.from(TABLE_NOTAS).insert({
         fecha: dayYmd,
-        texto,
+        texto: t,
         orden: nextOrden,
         created_by: user?.id ?? null,
       });
       if (error) throw error;
-      setNotaTexto("");
       toast.success("Nota añadida al día.");
       await load();
     } catch (e) {
@@ -1510,7 +1655,7 @@ export function CalendarioProduccionPage() {
     }
     setSaving(true);
     try {
-      const existing = rows.filter(
+      const existing = rowsRef.current.filter(
         (r) =>
           r.fecha.slice(0, 10) === dayYmd &&
           (isCalendarioAmbito(r.ambito) ? r.ambito : "impresion") ===
@@ -1636,6 +1781,11 @@ export function CalendarioProduccionPage() {
       setDetalleLoading(false);
     }
   };
+  openDetalleRef.current = openDetalle;
+
+  const handleOpenOtFromGrid = useCallback((otNumero: string) => {
+    void openDetalleRef.current(otNumero);
+  }, []);
 
   const exportMes = () => {
     exportCalendarioProduccionMensualPdf({
@@ -1951,11 +2101,9 @@ export function CalendarioProduccionPage() {
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-[12rem] flex-1 max-w-sm">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
-          <Input
+          <CalendarioFiltroInput
             className="h-8 pl-8 text-sm"
-            placeholder="Filtrar OT / trabajo / cliente…"
-            value={filtro}
-            onChange={(e) => setFiltro(e.target.value)}
+            onDebouncedChange={handleFiltroDebounced}
           />
         </div>
         <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
@@ -2166,15 +2314,20 @@ export function CalendarioProduccionPage() {
                 {vista === "semana"
                   ? semanaActual.map((celda, ci) =>
                       celda ? (
-                        <DiaCelda
+                        <DiaCeldaMemo
                           key={celda.ymd}
                           dayYmd={celda.ymd}
                           dayNum={celda.dayNum}
-                          lineas={entradasByDay.get(celda.ymd) ?? []}
-                          notas={notasByDay.get(celda.ymd) ?? []}
-                          onEditDay={() => openDay(celda.ymd)}
-                          onOpenOt={(ot) => void openDetalle(ot)}
-                          onToggleMarcadoHecho={(l) => void toggleMarcadoHecho(l)}
+                          lineas={
+                            entradasByDay.get(celda.ymd) ??
+                            EMPTY_CALENDARIO_LINEAS
+                          }
+                          notas={
+                            notasByDay.get(celda.ymd) ?? EMPTY_CALENDARIO_NOTAS
+                          }
+                          onEditDay={openDay}
+                          onOpenOt={handleOpenOtFromGrid}
+                          onToggleMarcadoHecho={toggleMarcadoHecho}
                           variant="semana"
                           itinerarioByOt={itinerarioByOt}
                           espejoByOt={espejoByOt}
@@ -2193,15 +2346,21 @@ export function CalendarioProduccionPage() {
                   : semanasMes.map((semana, si) =>
                       semana.map((celda, ci) =>
                         celda ? (
-                          <DiaCelda
+                          <DiaCeldaMemo
                             key={celda.ymd}
                             dayYmd={celda.ymd}
                             dayNum={celda.dayNum}
-                            lineas={entradasByDay.get(celda.ymd) ?? []}
-                            notas={notasByDay.get(celda.ymd) ?? []}
-                            onEditDay={() => openDay(celda.ymd)}
-                            onOpenOt={(ot) => void openDetalle(ot)}
-                            onToggleMarcadoHecho={(l) => void toggleMarcadoHecho(l)}
+                            lineas={
+                              entradasByDay.get(celda.ymd) ??
+                              EMPTY_CALENDARIO_LINEAS
+                            }
+                            notas={
+                              notasByDay.get(celda.ymd) ??
+                              EMPTY_CALENDARIO_NOTAS
+                            }
+                            onEditDay={openDay}
+                            onOpenOt={handleOpenOtFromGrid}
+                            onToggleMarcadoHecho={toggleMarcadoHecho}
                             variant="mes"
                             itinerarioByOt={itinerarioByOt}
                             espejoByOt={espejoByOt}
@@ -2267,70 +2426,19 @@ export function CalendarioProduccionPage() {
               {!canEditActivo ? " (ver)" : ""}
             </Button>
 
-            <div>
-              <Label className="text-xs">
-                Añadir OT ({labelCalendarioAmbito(ambitoActivo)})
-              </Label>
-              <Input
-                className="mt-1"
-                placeholder="Buscar nº OT, cliente o trabajo…"
-                value={otQuery}
-                onChange={(e) => setOtQuery(e.target.value)}
-                disabled={!canEditActivo}
-              />
-              {!canEditActivo ? (
-                <p className="mt-1 text-xs text-amber-800">
-                  No puedes añadir OTs en este ámbito. Cambia el desplegable o
-                  pide a admin/gerencia.
-                </p>
-              ) : null}
-              {searchingOt ? (
-                <p className="mt-1 flex items-center gap-1 text-xs text-slate-500">
-                  <Loader2 className="size-3 animate-spin" /> Buscando…
-                </p>
-              ) : null}
-              {otHits.length > 0 && canEditActivo ? (
-                <ul className="mt-2 max-h-40 overflow-y-auto rounded-md border border-slate-200">
-                  {otHits.map((h) => (
-                    <li key={h.num_pedido}>
-                      <button
-                        type="button"
-                        className="flex w-full flex-col gap-0.5 border-b border-slate-100 px-3 py-2 text-left text-sm last:border-0 hover:bg-slate-50"
-                        disabled={saving}
-                        onClick={() => void addOtToDay(h)}
-                      >
-                        <span className="font-semibold text-[#002147]">
-                          {h.num_pedido}
-                        </span>
-                        <span className="line-clamp-1 text-xs text-slate-600">
-                          {h.cliente ?? "—"} · {h.titulo ?? "—"}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
+            <CalendarioDiaOtBuscar
+              key={dayYmd ?? "day"}
+              supabase={supabase}
+              canEdit={canEditActivo}
+              ambitoLabel={labelCalendarioAmbito(ambitoActivo)}
+              saving={saving}
+              onSelect={addOtToDay}
+            />
 
-            <div>
-              <Label className="text-xs">Añadir nota libre</Label>
-              <div className="mt-1 flex items-start gap-2">
-                <Textarea
-                  className="min-h-[2.5rem] text-sm"
-                  placeholder="Ej: Priorizar cambios de troquel, reunión cliente, etc."
-                  value={notaTexto}
-                  onChange={(e) => setNotaTexto(e.target.value)}
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={saving || notaTexto.trim().length === 0}
-                  onClick={() => void addNotaToDay()}
-                >
-                  Añadir
-                </Button>
-              </div>
-            </div>
+            <CalendarioDiaNotaInput
+              saving={saving}
+              onAdd={addNotaToDay}
+            />
 
             <div>
               <p className="mb-1 text-xs font-medium text-slate-600">

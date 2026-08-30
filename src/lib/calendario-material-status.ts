@@ -185,14 +185,34 @@ export async function fetchCalendarioMaterialByOtNumeros(
   const out = new Map<string, CalendarioMaterialInfo>();
   if (ots.length === 0) return out;
 
-  const despRows = await fetchAllInChunks(ots, 80, async (chunk) => {
-    const { data, error } = await supabase
-      .from("produccion_ot_despachadas")
-      .select("ot_numero, num_hojas_brutas")
-      .in("ot_numero", chunk);
-    if (error) throw error;
-    return (data ?? []) as DespachoRow[];
-  });
+  const [despRows, stockOtData, compraData] = await Promise.all([
+    fetchAllInChunks(ots, 80, async (chunk) => {
+      const { data, error } = await supabase
+        .from("produccion_ot_despachadas")
+        .select("ot_numero, num_hojas_brutas")
+        .in("ot_numero", chunk);
+      if (error) throw error;
+      return (data ?? []) as DespachoRow[];
+    }),
+    fetchAllInChunks(ots, 80, async (chunk) => {
+      const { data, error } = await supabase
+        .from("prod_stock_palet_ots")
+        .select(
+          "ot_numero, cantidad_reservada, prod_stock_palets!palet_id(cantidad_actual, es_prueba)",
+        )
+        .in("ot_numero", chunk);
+      if (error) throw error;
+      return (data ?? []) as unknown as StockOtRow[];
+    }),
+    fetchAllInChunks(ots, 80, async (chunk) => {
+      const { data, error } = await supabase
+        .from("prod_compra_material")
+        .select("id, ot_numero, num_compra, estado")
+        .in("ot_numero", chunk);
+      if (error) throw error;
+      return (data ?? []) as CompraRow[];
+    }),
+  ]);
 
   const objetivoByOt = new Map<string, number>();
   const despachadas = new Set<string>();
@@ -204,16 +224,6 @@ export async function fetchCalendarioMaterialByOtNumeros(
   }
 
   const stockCarteladoByOt = new Map<string, number>();
-  const stockOtData = await fetchAllInChunks(ots, 80, async (chunk) => {
-    const { data, error } = await supabase
-      .from("prod_stock_palet_ots")
-      .select(
-        "ot_numero, cantidad_reservada, prod_stock_palets!palet_id(cantidad_actual, es_prueba)",
-      )
-      .in("ot_numero", chunk);
-    if (error) throw error;
-    return (data ?? []) as unknown as StockOtRow[];
-  });
   for (const r of stockOtData) {
     const ot = String(r.ot_numero ?? "").trim();
     if (!ot) continue;
@@ -228,15 +238,6 @@ export async function fetchCalendarioMaterialByOtNumeros(
       stockCarteladoByOt.set(ot, (stockCarteladoByOt.get(ot) ?? 0) + hojas);
     }
   }
-
-  const compraData = await fetchAllInChunks(ots, 80, async (chunk) => {
-    const { data, error } = await supabase
-      .from("prod_compra_material")
-      .select("id, ot_numero, num_compra, estado")
-      .in("ot_numero", chunk);
-    if (error) throw error;
-    return (data ?? []) as CompraRow[];
-  });
 
   const compraIdsByOt = new Map<string, string[]>();
   const compraNumByOt = new Map<string, string>();
