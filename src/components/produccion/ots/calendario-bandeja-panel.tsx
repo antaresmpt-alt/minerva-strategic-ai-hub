@@ -24,9 +24,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  fetchCalendarioBandeja,
+  fetchCalendarioBandejaRaw,
+  filterBandejaRows,
   type CalendarioBandejaRow,
 } from "@/lib/calendario-bandeja";
+import type { CalendarioItinerarioOt } from "@/lib/calendario-produccion-progreso";
 import {
   labelCalendarioAmbito,
   type CalendarioAmbito,
@@ -68,6 +70,12 @@ function ymdHoyLocal(): string {
   return `${y}-${m}-${day}`;
 }
 
+type BandejaRawData = {
+  candidatos: Awaited<ReturnType<typeof fetchCalendarioBandejaRaw>>["candidatos"];
+  pills: Awaited<ReturnType<typeof fetchCalendarioBandejaRaw>>["pills"];
+  itinerarioByOt: Map<string, CalendarioItinerarioOt>;
+};
+
 export function CalendarioBandejaPanel({
   ambito,
   canEdit,
@@ -82,35 +90,42 @@ export function CalendarioBandejaPanel({
 }: CalendarioBandejaPanelProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [loading, setLoading] = useState(true);
-  const [rows, setRows] = useState<CalendarioBandejaRow[]>([]);
+  const [raw, setRaw] = useState<BandejaRawData | null>(null);
   const [filtro, setFiltro] = useState("");
   const [verTodas, setVerTodas] = useState(false);
   const [colocarOt, setColocarOt] = useState<string | null>(null);
   const [colocarFecha, setColocarFecha] = useState(ymdHoyLocal());
   const [colocando, setColocando] = useState(false);
 
-  const load = useCallback(async () => {
+  const loadRaw = useCallback(async () => {
     setLoading(true);
     try {
-      const list = await fetchCalendarioBandeja(supabase, {
-        ambito,
-        verTodas,
-        mostrarPruebas,
-        filtroTexto: filtro,
-      });
-      setRows(list);
+      const data = await fetchCalendarioBandejaRaw(supabase);
+      setRaw(data);
     } catch (e) {
       toast.error(errorMessageFromUnknown(e, "No se pudo cargar la bandeja."));
-      setRows([]);
+      setRaw(null);
     } finally {
       setLoading(false);
     }
-  }, [supabase, ambito, verTodas, mostrarPruebas, filtro]);
+  }, [supabase]);
 
   useEffect(() => {
-    const t = window.setTimeout(() => void load(), filtro ? 280 : 0);
-    return () => window.clearTimeout(t);
-  }, [load, refreshKey]);
+    void loadRaw();
+  }, [loadRaw, refreshKey]);
+
+  const rows = useMemo((): CalendarioBandejaRow[] => {
+    if (!raw) return [];
+    return filterBandejaRows({
+      ambito,
+      verTodas,
+      mostrarPruebas,
+      filtroTexto: filtro,
+      pills: raw.pills,
+      itinerarioByOt: raw.itinerarioByOt,
+      candidatos: raw.candidatos,
+    });
+  }, [raw, ambito, verTodas, mostrarPruebas, filtro]);
 
   const openColocar = (ot: string) => {
     setColocarOt(ot);
@@ -126,7 +141,6 @@ export function CalendarioBandejaPanel({
         toast.success(`OT ${colocarOt} colocada en ${formatFechaEsCorta(colocarFecha)}.`);
         setColocarOt(null);
         onColocada?.();
-        await load();
       }
     } finally {
       setColocando(false);
@@ -183,7 +197,7 @@ export function CalendarioBandejaPanel({
             size="sm"
             className="h-6 px-1.5"
             disabled={loading}
-            onClick={() => void load()}
+            onClick={() => void loadRaw()}
             title="Recargar bandeja"
           >
             <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
