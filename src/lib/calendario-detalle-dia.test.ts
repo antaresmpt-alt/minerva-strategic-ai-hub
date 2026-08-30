@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildCalendarioOrdenUpdates,
+  buildDetalleDiaBoardSavePlan,
   compareConPlanHoy,
   maquinaNombreConPlanDetalle,
   planHoyDetalleByOtFromRows,
@@ -149,5 +151,124 @@ describe("calendario-detalle-dia", () => {
         "tarde",
       ),
     ).toBe("Dayuan · tarde");
+  });
+
+  it("buildCalendarioOrdenUpdates: mañana, tarde, sin secuencia", () => {
+    const updates = buildCalendarioOrdenUpdates(
+      [
+        { calendarioOtId: "c-tarde", otNumero: "2", turno: "tarde", slotOrden: 1 },
+        { calendarioOtId: "c-man", otNumero: "1", turno: "manana", slotOrden: 2 },
+        { calendarioOtId: "c-man2", otNumero: "3", turno: "manana", slotOrden: 1 },
+      ],
+      ["c-pool"],
+    );
+    expect(updates).toEqual([
+      { calendarioOtId: "c-man2", orden: 0 },
+      { calendarioOtId: "c-man", orden: 1 },
+      { calendarioOtId: "c-tarde", orden: 2 },
+      { calendarioOtId: "c-pool", orden: 3 },
+    ]);
+  });
+
+  it("buildDetalleDiaBoardSavePlan: borra fuera del tablero y renumerar slots", () => {
+    const plan = buildDetalleDiaBoardSavePlan({
+      ambito: "impresion",
+      maquinaIds: ["maq-a"],
+      draftByMaquina: new Map([
+        [
+          "maq-a",
+          [
+            {
+              calendarioOtId: "cal-1",
+              otNumero: "100",
+              turno: "manana",
+              slotOrden: 9,
+            },
+            {
+              calendarioOtId: "cal-2",
+              otNumero: "200",
+              turno: "tarde",
+              slotOrden: 3,
+            },
+          ],
+        ],
+      ]),
+      savedRows: [
+        row({
+          calendario_ot_id: "cal-1",
+          ot_numero: "100",
+          slot_orden: 1,
+          maquina_id: "maq-a",
+        }),
+        row({
+          calendario_ot_id: "cal-old",
+          ot_numero: "999",
+          slot_orden: 1,
+          maquina_id: "maq-a",
+        }),
+      ],
+      unsequencedCalendarioOtIds: ["cal-pool"],
+      createdBy: "user-1",
+    });
+
+    expect(plan.deleteIds).toEqual(["cal-old"]);
+    expect(plan.upserts).toEqual([
+      expect.objectContaining({
+        calendarioOtId: "cal-1",
+        maquinaId: "maq-a",
+        turno: "manana",
+        slotOrden: 1,
+        createdBy: "user-1",
+      }),
+      expect.objectContaining({
+        calendarioOtId: "cal-2",
+        maquinaId: "maq-a",
+        turno: "tarde",
+        slotOrden: 1,
+      }),
+    ]);
+    expect(plan.ordenUpdates).toEqual([
+      { calendarioOtId: "cal-1", orden: 0 },
+      { calendarioOtId: "cal-2", orden: 1 },
+      { calendarioOtId: "cal-pool", orden: 2 },
+    ]);
+  });
+
+  it("buildDetalleDiaBoardSavePlan: mover OT entre máquinas", () => {
+    const plan = buildDetalleDiaBoardSavePlan({
+      ambito: "impresion",
+      maquinaIds: ["maq-a", "maq-b"],
+      draftByMaquina: new Map([
+        [
+          "maq-b",
+          [
+            {
+              calendarioOtId: "cal-move",
+              otNumero: "50",
+              turno: "manana",
+              slotOrden: 1,
+            },
+          ],
+        ],
+      ]),
+      savedRows: [
+        row({
+          calendario_ot_id: "cal-move",
+          ot_numero: "50",
+          slot_orden: 1,
+          maquina_id: "maq-a",
+        }),
+      ],
+      unsequencedCalendarioOtIds: [],
+    });
+
+    expect(plan.deleteIds).toContain("cal-move");
+    expect(plan.upserts).toEqual([
+      expect.objectContaining({
+        calendarioOtId: "cal-move",
+        maquinaId: "maq-b",
+        slotOrden: 1,
+      }),
+    ]);
   });
 });

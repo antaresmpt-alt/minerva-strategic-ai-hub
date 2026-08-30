@@ -7,6 +7,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { CalendarioAmbito } from "@/lib/calendario-produccion-ambito";
 import type { CalendarioProduccionLinea } from "@/lib/calendario-produccion";
+import {
+  fetchAllInChunks,
+  mapPool,
+  SUPABASE_IN_FILTER_CHUNK_SIZE,
+} from "@/lib/supabase-query-chunks";
 import type {
   CalendarioDetalleDiaTurno,
   ProdCalendarioDetalleDiaRow,
@@ -265,11 +270,8 @@ export type UpsertDetalleDiaInput = {
   createdBy?: string | null;
 };
 
-export async function upsertDetalleDiaSlot(
-  supabase: SupabaseClient,
-  input: UpsertDetalleDiaInput,
-): Promise<ProdCalendarioDetalleDiaRow> {
-  const row = {
+function detalleDiaRowFromInput(input: UpsertDetalleDiaInput) {
+  return {
     calendario_ot_id: input.calendarioOtId,
     ambito: input.ambito,
     ot_numero: String(input.otNumero).trim(),
@@ -280,10 +282,199 @@ export async function upsertDetalleDiaSlot(
     notas: input.notas ?? null,
     created_by: input.createdBy ?? null,
   };
+}
+
+/** Borra detalle de varias pastillas en una o pocas queries. */
+export async function batchDeleteDetalleDiaByCalendarioOtIds(
+  supabase: SupabaseClient,
+  calendarioOtIds: readonly string[],
+): Promise<void> {
+  const ids = [
+    ...new Set(
+      calendarioOtIds.map((x) => String(x ?? "").trim()).filter(Boolean),
+    ),
+  ];
+  if (ids.length === 0) return;
+  await fetchAllInChunks(ids, SUPABASE_IN_FILTER_CHUNK_SIZE, async (chunk) => {
+    const { error } = await supabase
+      .from(TABLE_CALENDARIO_DETALLE_DIA)
+      .delete()
+      .in("calendario_ot_id", chunk);
+    if (error) throw error;
+    return [];
+  });
+}
+
+/** Upsert de muchos slots (chunked). */
+export async function batchUpsertDetalleDiaSlots(
+  supabase: SupabaseClient,
+  inputs: readonly UpsertDetalleDiaInput[],
+): Promise<void> {
+  if (inputs.length === 0) return;
+  const rows = inputs.map(detalleDiaRowFromInput);
+  await fetchAllInChunks(rows, SUPABASE_IN_FILTER_CHUNK_SIZE, async (chunk) => {
+    const { error } = await supabase
+      .from(TABLE_CALENDARIO_DETALLE_DIA)
+      .upsert(chunk, { onConflict: "calendario_ot_id" });
+    if (error) throw error;
+    return [];
+  });
+}
+
+/** Actualiza `orden` de pastillas en paralelo (antes: N round-trips en serie). */
+export async function batchUpdateCalendarioOrden(
+  supabase: SupabaseClient,
+  updates: readonly { calendarioOtId: string; orden: number }[],
+): Promise<void> {
+  if (updates.length === 0) return;
+  await mapPool(updates, 10, async ({ calendarioOtId, orden }) => {
+    const { error } = await supabase
+      .from(TABLE_CALENDARIO_OT)
+      .update({ orden })
+      .eq("id", calendarioOtId);
+    if (error) throw error;
+  });
+}
+
+export function buildCalendarioOrdenUpdates(
+  draft: readonly DetalleDiaDraftSlot[],
+  unsequencedIds: readonly string[],
+): Array<{ calendarioOtId: string; orden: number }> {
+  const ordered = [
+    ...draft
+      .filter((d) => d.turno === "manana")
+      .sort((a, b) => a.slotOrden - b.slotOrden),
+    ...draft
+      .filter((d) => d.turno === "tarde")
+      .sort((a, b) => a.slotOrden - b.slotOrden),
+  ];
+  const out: Array<{ calendarioOtId: string; orden: number }> = [];
+  let i = 0;
+  for (const d of ordered) {
+    out.push({ calendarioOtId: d.calendarioOtId, orden: i });
+    i += 1;
+  }
+  for (const id of unsequencedIds) {
+    const calendarioOtId = String(id ?? "").trim();
+    if (!calendarioOtId) continue;
+    out.push({ calendarioOtId, orden: i });
+    i += 1;
+  }
+  return out;
+}
+
+function draftSlotsToUpserts(
+  ambito: CalendarioAmbito,
+  maquinaId: string,
+  draft: readonly DetalleDiaDraftSlot[],
+  createdBy?: string | null,
+): UpsertDetalleDiaInput[] {
+  const manana = draft
+    .filter((d) => d.turno === "manana")
+    .sort((a, b) => a.slotOrden - b.slotOrden);
+  const tarde = draft
+    .filter((d) => d.turno === "tarde")
+    .sort((a, b) => a.slotOrden - b.slotOrden);
+  const out: UpsertDetalleDiaInput[] = [];
+  for (let i = 0; i < manana.length; i++) {
+    const d = manana[i]!;
+    out.push({
+      calendarioOtId: d.calendarioOtId,
+      ambito,
+      otNumero: d.otNumero,
+      maquinaId,
+      turno: "manana",
+      slotOrden: i + 1,
+      createdBy,
+    });
+  }
+  for (let i = 0; i < tarde.length; i++) {
+    const d = tarde[i]!;
+    out.push({
+      calendarioOtId: d.calendarioOtId,
+      ambito,
+      otNumero: d.otNumero,
+      maquinaId,
+      turno: "tarde",
+      slotOrden: i + 1,
+      createdBy,
+    });
+  }
+  return out;
+}
+
+export type DetalleDiaBoardSavePlan = {
+  deleteIds: string[];
+  upserts: UpsertDetalleDiaInput[];
+  ordenUpdates: Array<{ calendarioOtId: string; orden: number }>;
+};
+
+/** Plan puro para guardar el tablero (testeable, sin I/O). */
+export function buildDetalleDiaBoardSavePlan(args: {
+  ambito: CalendarioAmbito;
+  maquinaIds: readonly string[];
+  draftByMaquina: ReadonlyMap<string, readonly DetalleDiaDraftSlot[]>;
+  savedRows: readonly ProdCalendarioDetalleDiaRow[];
+  unsequencedCalendarioOtIds: readonly string[];
+  createdBy?: string | null;
+}): DetalleDiaBoardSavePlan {
+  const globalKeep = new Set<string>();
+  for (const draft of args.draftByMaquina.values()) {
+    for (const d of draft) globalKeep.add(d.calendarioOtId);
+  }
+
+  const deleteIds = new Set<string>();
+  for (const row of args.savedRows) {
+    if (!globalKeep.has(row.calendario_ot_id)) {
+      deleteIds.add(row.calendario_ot_id);
+    }
+  }
+  for (const maquinaId of args.maquinaIds) {
+    const draft = args.draftByMaquina.get(maquinaId) ?? [];
+    const machineKeep = new Set(draft.map((d) => d.calendarioOtId));
+    for (const prev of args.savedRows) {
+      if ((prev.maquina_id ?? "") !== maquinaId) continue;
+      if (!machineKeep.has(prev.calendario_ot_id)) {
+        deleteIds.add(prev.calendario_ot_id);
+      }
+    }
+  }
+
+  const upserts: UpsertDetalleDiaInput[] = [];
+  for (const maquinaId of args.maquinaIds) {
+    const draft = [...(args.draftByMaquina.get(maquinaId) ?? [])];
+    upserts.push(
+      ...draftSlotsToUpserts(
+        args.ambito,
+        maquinaId,
+        draft,
+        args.createdBy,
+      ),
+    );
+  }
+
+  const mergedDraft = [...args.draftByMaquina.values()].flat();
+  const ordenUpdates = buildCalendarioOrdenUpdates(
+    mergedDraft,
+    args.unsequencedCalendarioOtIds,
+  );
+
+  return {
+    deleteIds: [...deleteIds],
+    upserts,
+    ordenUpdates,
+  };
+}
+
+export async function upsertDetalleDiaSlot(
+  supabase: SupabaseClient,
+  input: UpsertDetalleDiaInput,
+): Promise<ProdCalendarioDetalleDiaRow> {
+  await batchUpsertDetalleDiaSlots(supabase, [input]);
   const { data, error } = await supabase
     .from(TABLE_CALENDARIO_DETALLE_DIA)
-    .upsert(row, { onConflict: "calendario_ot_id" })
     .select(SELECT_DETALLE)
+    .eq("calendario_ot_id", input.calendarioOtId)
     .single();
   if (error) throw error;
   return data as ProdCalendarioDetalleDiaRow;
@@ -293,13 +484,7 @@ export async function deleteDetalleDiaByCalendarioOtId(
   supabase: SupabaseClient,
   calendarioOtId: string,
 ): Promise<void> {
-  const id = String(calendarioOtId ?? "").trim();
-  if (!id) return;
-  const { error } = await supabase
-    .from(TABLE_CALENDARIO_DETALLE_DIA)
-    .delete()
-    .eq("calendario_ot_id", id);
-  if (error) throw error;
+  await batchDeleteDetalleDiaByCalendarioOtIds(supabase, [calendarioOtId]);
 }
 
 /** Reasigna slot_orden 1..n y persiste (misma máquina/turno). */
@@ -314,18 +499,16 @@ export async function persistDetalleDiaOrden(
   }[],
   createdBy?: string | null,
 ): Promise<void> {
-  for (let i = 0; i < ordered.length; i++) {
-    const it = ordered[i]!;
-    await upsertDetalleDiaSlot(supabase, {
-      calendarioOtId: it.calendarioOtId,
-      ambito: it.ambito,
-      otNumero: it.otNumero,
-      maquinaId: it.maquinaId,
-      turno: it.turno,
-      slotOrden: i + 1,
-      createdBy,
-    });
-  }
+  const inputs: UpsertDetalleDiaInput[] = ordered.map((it, i) => ({
+    calendarioOtId: it.calendarioOtId,
+    ambito: it.ambito,
+    otNumero: it.otNumero,
+    maquinaId: it.maquinaId,
+    turno: it.turno,
+    slotOrden: i + 1,
+    createdBy,
+  }));
+  await batchUpsertDetalleDiaSlots(supabase, inputs);
 }
 
 /**
@@ -343,39 +526,22 @@ export async function saveDetalleDiaDraftForMaquina(
   },
 ): Promise<void> {
   const keep = new Set(args.draft.map((d) => d.calendarioOtId));
+  const deleteIds: string[] = [];
   for (const prev of args.previousRowsForMaquina) {
     if ((prev.maquina_id ?? "") !== args.maquinaId) continue;
     if (!keep.has(prev.calendario_ot_id)) {
-      await deleteDetalleDiaByCalendarioOtId(supabase, prev.calendario_ot_id);
+      deleteIds.push(prev.calendario_ot_id);
     }
   }
-  const manana = args.draft
-    .filter((d) => d.turno === "manana")
-    .sort((a, b) => a.slotOrden - b.slotOrden);
-  const tarde = args.draft
-    .filter((d) => d.turno === "tarde")
-    .sort((a, b) => a.slotOrden - b.slotOrden);
-  await persistDetalleDiaOrden(
+  await batchDeleteDetalleDiaByCalendarioOtIds(supabase, deleteIds);
+  await batchUpsertDetalleDiaSlots(
     supabase,
-    manana.map((d) => ({
-      calendarioOtId: d.calendarioOtId,
-      ambito: args.ambito,
-      otNumero: d.otNumero,
-      maquinaId: args.maquinaId,
-      turno: "manana" as const,
-    })),
-    args.createdBy,
-  );
-  await persistDetalleDiaOrden(
-    supabase,
-    tarde.map((d) => ({
-      calendarioOtId: d.calendarioOtId,
-      ambito: args.ambito,
-      otNumero: d.otNumero,
-      maquinaId: args.maquinaId,
-      turno: "tarde" as const,
-    })),
-    args.createdBy,
+    draftSlotsToUpserts(
+      args.ambito,
+      args.maquinaId,
+      args.draft,
+      args.createdBy,
+    ),
   );
 }
 
@@ -394,34 +560,12 @@ export async function saveDetalleDiaBoard(
     createdBy?: string | null;
   },
 ): Promise<void> {
-  const keep = new Set<string>();
-  for (const draft of args.draftByMaquina.values()) {
-    for (const d of draft) keep.add(d.calendarioOtId);
-  }
-  for (const row of args.savedRows) {
-    if (!keep.has(row.calendario_ot_id)) {
-      await deleteDetalleDiaByCalendarioOtId(supabase, row.calendario_ot_id);
-    }
-  }
-  for (const maquinaId of args.maquinaIds) {
-    const draft = [...(args.draftByMaquina.get(maquinaId) ?? [])];
-    const prevForMaq = args.savedRows.filter(
-      (r) => (r.maquina_id ?? "") === maquinaId,
-    );
-    await saveDetalleDiaDraftForMaquina(supabase, {
-      ambito: args.ambito,
-      maquinaId,
-      draft,
-      previousRowsForMaquina: prevForMaq,
-      createdBy: args.createdBy,
-    });
-  }
-  const mergedDraft = [...args.draftByMaquina.values()].flat();
-  await syncCalendarioOrdenFromDraft(
-    supabase,
-    mergedDraft,
-    args.unsequencedCalendarioOtIds,
-  );
+  const plan = buildDetalleDiaBoardSavePlan(args);
+  await batchDeleteDetalleDiaByCalendarioOtIds(supabase, plan.deleteIds);
+  await Promise.all([
+    batchUpsertDetalleDiaSlots(supabase, plan.upserts),
+    batchUpdateCalendarioOrden(supabase, plan.ordenUpdates),
+  ]);
 }
 
 /** Sincroniza `orden` de pastillas del día con la secuencia (mañana luego tarde). */
@@ -430,31 +574,8 @@ export async function syncCalendarioOrdenFromDraft(
   draft: readonly DetalleDiaDraftSlot[],
   unsequencedIds: readonly string[],
 ): Promise<void> {
-  const ordered = [
-    ...draft
-      .filter((d) => d.turno === "manana")
-      .sort((a, b) => a.slotOrden - b.slotOrden),
-    ...draft
-      .filter((d) => d.turno === "tarde")
-      .sort((a, b) => a.slotOrden - b.slotOrden),
-  ];
-  let i = 0;
-  for (const d of ordered) {
-    const { error } = await supabase
-      .from(TABLE_CALENDARIO_OT)
-      .update({ orden: i })
-      .eq("id", d.calendarioOtId);
-    if (error) throw error;
-    i += 1;
-  }
-  for (const id of unsequencedIds) {
-    const { error } = await supabase
-      .from(TABLE_CALENDARIO_OT)
-      .update({ orden: i })
-      .eq("id", id);
-    if (error) throw error;
-    i += 1;
-  }
+  const updates = buildCalendarioOrdenUpdates(draft, unsequencedIds);
+  await batchUpdateCalendarioOrden(supabase, updates);
 }
 
 /**
