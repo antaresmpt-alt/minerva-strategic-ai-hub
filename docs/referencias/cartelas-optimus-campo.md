@@ -1,7 +1,7 @@
 # Referencia campo — Cartelas Optimus vs Minerva
 
 > Recopilación de ejemplos reales (jun 2026): cartelas impresas, albaranes anotados por Emma,
-> consumo en planta (David, Speedmaster CD 102). Complementa `MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §3.
+> consumo en planta (David, Speedmaster CD 102). Complementa `.MANUALES/BLOQUES/MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §3.
 >
 > PDF de ejemplo en esta carpeta: `cartela-optimus-ejemplo.pdf`
 

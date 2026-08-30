@@ -34,6 +34,12 @@ Abre [http://localhost:3000](http://localhost:3000).
 3. En **Settings → Environment Variables** añade `GEMINI_API_KEY` (y `GEMINI_MODEL` si lo usas).
 4. Despliega (**Deploy**). Vercel detecta Next.js automáticamente.
 
+## Documentación del proyecto
+
+Toda la documentación de producto (bloques, sesiones, briefs, manuales) está en **[`.MANUALES/`](.MANUALES/README.md)**.
+
+- Entrada IA: [`CLAUDE.md`](CLAUDE.md) → [maestro global](.MANUALES/CONTEXTO/MINERVA_HUB_CONTEXTO_MAESTRO.md)
+
 ## Git y GitHub
 
 Clonar el proyecto:

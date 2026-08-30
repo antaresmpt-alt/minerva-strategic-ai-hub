@@ -142,6 +142,6 @@ Definidas en `src/lib/ctp-despacho.ts` y `CTP_PREIMPRESION_CAMPOS` (`hoja-ruta-c
 
 ## Relacionado
 
-- `GUIA_MAÑANA.md` — demo OT 98010, piloto CTP  
-- `FASES_HOJA_RUTA_DIGITAL.md` — Bloque 4 (PDF) + sesión 30 jun  
+- `.MANUALES/BRIEFS/GUIA_MAÑANA.md` — demo OT 98010, piloto CTP  
+- `.MANUALES/CONTEXTO/FASES_HOJA_RUTA_DIGITAL.md` — Bloque 4 (PDF) + sesión 30 jun  
 - `src/lib/hoja-ruta-campos-config.ts` — `CTP_PREIMPRESION_CAMPOS`, `PROCESO_CTP_ID = 16`
