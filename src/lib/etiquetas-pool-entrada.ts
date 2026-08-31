@@ -418,7 +418,10 @@ export function buildEnCursoItems(
 async function fetchProcesoIdsByOtId(
   supabase: SupabaseClient,
 ): Promise<Map<string, number[]>> {
-  const procesoIds = [...PROCESOS_ETIQUETA_DIGITAL_IDS];
+  const procesoIds = [
+    ...PROCESOS_ETIQUETA_DIGITAL_IDS,
+    PROCESO_IMPRESION_DIGITAL_PLANO,
+  ];
   const { data, error } = await supabase
     .from(TABLE_PASOS)
     .select("ot_id, proceso_id")

@@ -296,6 +296,39 @@ describe("etiquetas-pool-entrada", () => {
     expect(candidatas.map((c) => c.otNumero)).toEqual(["36101"]);
   });
 
+  it("filterCandidatasBandeja excluye OT 35109 (etiqueta solo impresión digital plana)", () => {
+    const maestroByOtId = new Map([
+      [
+        "id-35109",
+        {
+          id: "id-35109",
+          num_pedido: "35109",
+          cliente: "TEXIA FINISHING, S.A.",
+          titulo: "ETIQUETA ZARA HOME - 19X20 FSC",
+          cantidad: 4100,
+          fecha_entrega: "2026-04-09",
+          fecha_apertura: "2026-03-17",
+          estado_desc: "En producción",
+          despachado: true,
+          tipo_pedido: "Etiqueta",
+          familia: "Etiqueta",
+        },
+      ],
+    ]);
+
+    const candidatas = filterCandidatasBandeja({
+      candidatoOtIds: ["id-35109"],
+      maestroByOtId,
+      procesoIdsByOtId: new Map([["id-35109", [2]]]),
+      enHojaRuta: new Set(),
+      enPool: new Set(),
+      despachoByOt: new Map(),
+      filtroTexto: "",
+    });
+
+    expect(candidatas).toHaveLength(0);
+  });
+
   it("filterCandidatasBandeja omite OTs prueba por defecto", () => {
     const maestroByOtId = new Map([
       [
