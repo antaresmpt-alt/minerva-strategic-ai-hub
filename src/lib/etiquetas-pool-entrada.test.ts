@@ -9,6 +9,7 @@ import {
   isOtMaestroEtiquetaDigital,
   labelItinerarioEtiquetas,
   maquinaFlagsFromProcesoIds,
+  tieneItinerarioEtiquetasHugo,
   mergePlanConCandidatas,
   resolveSemaforoItinerario,
 } from "@/lib/etiquetas-pool-entrada";
@@ -54,14 +55,31 @@ describe("etiquetas-pool-entrada", () => {
 
   it("isOtFechaMinimaBandeja", () => {
     expect(
-      isOtFechaMinimaBandeja({ fecha_entrega: "2025-12-31", fecha_apertura: null }),
+      isOtFechaMinimaBandeja({ fecha_entrega: "2025-12-14", fecha_apertura: null }),
     ).toBe(false);
+    expect(
+      isOtFechaMinimaBandeja({ fecha_entrega: "2025-12-15", fecha_apertura: null }),
+    ).toBe(true);
     expect(
       isOtFechaMinimaBandeja({ fecha_entrega: "2026-03-01", fecha_apertura: null }),
     ).toBe(true);
     expect(
       isOtFechaMinimaBandeja({ fecha_entrega: null, fecha_apertura: "2026-02-01" }),
     ).toBe(true);
+  });
+
+  it("tieneItinerarioEtiquetasHugo exige paso Konica/Troq/Num", () => {
+    expect(
+      tieneItinerarioEtiquetasHugo(maquinaFlagsFromProcesoIds([18])),
+    ).toBe(true);
+    expect(
+      tieneItinerarioEtiquetasHugo(maquinaFlagsFromProcesoIds([19, 20])),
+    ).toBe(true);
+    expect(
+      tieneItinerarioEtiquetasHugo(
+        maquinaFlagsFromProcesoIds([]),
+      ),
+    ).toBe(false);
   });
 
   it("resolveSemaforoItinerario asume I+T+N sin itinerario", () => {
@@ -172,14 +190,113 @@ describe("etiquetas-pool-entrada", () => {
     const candidatas = filterCandidatasBandeja({
       candidatoOtIds: ["id-a", "id-b"],
       maestroByOtId,
-      procesoIdsByOtId: new Map(),
+      procesoIdsByOtId: new Map([
+        ["id-a", [18]],
+        ["id-b", [18]],
+      ]),
+      enHojaRuta: new Set(),
+      enPool: new Set(),
+      despachoByOt: new Map(),
+      filtroTexto: "",
+      omitirPruebas: false,
+    });
+
+    expect(candidatas.map((c) => c.otNumero)).toEqual(["98043", "98030"]);
+  });
+
+  it("filterCandidatasBandeja excluye etiqueta Xerox sin pasos Konica/Troq/Num", () => {
+    const maestroByOtId = new Map([
+      [
+        "id-xerox",
+        {
+          id: "id-xerox",
+          num_pedido: "36100",
+          cliente: "Cliente Xerox",
+          titulo: "ETIQUETAS offset digital",
+          cantidad: 500,
+          fecha_entrega: "2026-06-01",
+          fecha_apertura: "2026-05-20",
+          estado_desc: "En producción",
+          despachado: false,
+          tipo_pedido: "Etiqueta",
+        },
+      ],
+      [
+        "id-hugo",
+        {
+          id: "id-hugo",
+          num_pedido: "36101",
+          cliente: "Cliente Hugo",
+          titulo: "Etiquetas vino",
+          cantidad: 1000,
+          fecha_entrega: "2026-06-01",
+          fecha_apertura: "2026-05-20",
+          estado_desc: "En producción",
+          despachado: false,
+          tipo_pedido: "Etiqueta",
+        },
+      ],
+    ]);
+
+    const candidatas = filterCandidatasBandeja({
+      candidatoOtIds: ["id-xerox", "id-hugo"],
+      maestroByOtId,
+      procesoIdsByOtId: new Map([["id-hugo", [18, 19]]]),
       enHojaRuta: new Set(),
       enPool: new Set(),
       despachoByOt: new Map(),
       filtroTexto: "",
     });
 
-    expect(candidatas.map((c) => c.otNumero)).toEqual(["98043", "98030"]);
+    expect(candidatas.map((c) => c.otNumero)).toEqual(["36101"]);
+  });
+
+  it("filterCandidatasBandeja omite OTs prueba por defecto", () => {
+    const maestroByOtId = new Map([
+      [
+        "id-a",
+        {
+          id: "id-a",
+          num_pedido: "36001",
+          cliente: "A",
+          titulo: "T",
+          cantidad: 1,
+          fecha_entrega: "2026-08-07",
+          fecha_apertura: "2026-08-01",
+          estado_desc: "En producción",
+          despachado: false,
+          tipo_pedido: "Etiqueta",
+        },
+      ],
+      [
+        "id-b",
+        {
+          id: "id-b",
+          num_pedido: "98043",
+          cliente: "B",
+          titulo: "T",
+          cantidad: 1,
+          fecha_entrega: "2026-08-04",
+          fecha_apertura: "2026-08-28",
+          estado_desc: "No empezado",
+          despachado: false,
+          tipo_pedido: "Etiqueta",
+        },
+      ],
+    ]);
+
+    const candidatas = filterCandidatasBandeja({
+      candidatoOtIds: ["id-a", "id-b"],
+      maestroByOtId,
+      procesoIdsByOtId: new Map([["id-a", [18]]]),
+      enHojaRuta: new Set(),
+      enPool: new Set(),
+      despachoByOt: new Map(),
+      filtroTexto: "",
+      omitirPruebas: true,
+    });
+
+    expect(candidatas.map((c) => c.otNumero)).toEqual(["36001"]);
   });
 
   it("mergePlanConCandidatas mantiene orden", () => {

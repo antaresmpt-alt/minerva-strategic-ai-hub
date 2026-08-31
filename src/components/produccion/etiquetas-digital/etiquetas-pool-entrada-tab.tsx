@@ -54,6 +54,7 @@ import { cn } from "@/lib/utils";
 
 const CATALOG_TABLE = "prod_etiquetas_catalogo";
 const TROQUELES_TABLE = "prod_etiquetas_troqueles";
+const STORAGE_POOL_OMITIR_PRUEBAS = "minerva.etiquetas-pool.omitirPruebas";
 
 function fmtEntrega(ymd: string | null): string {
   if (!ymd) return "—";
@@ -360,6 +361,15 @@ export function EtiquetasPoolEntradaTab() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [loading, setLoading] = useState(true);
   const [filtro, setFiltro] = useState("");
+  const [omitirPruebas, setOmitirPruebas] = useState(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_POOL_OMITIR_PRUEBAS);
+      if (raw === "0") return false;
+      return true;
+    } catch {
+      return true;
+    }
+  });
   const [candidatas, setCandidatas] = useState<EtiquetasPoolCandidata[]>([]);
   const [plan, setPlan] = useState<EtiquetasPoolPlanItem[]>([]);
   const [enCurso, setEnCurso] = useState<EtiquetasPoolEnCursoItem[]>([]);
@@ -396,7 +406,10 @@ export function EtiquetasPoolEntradaTab() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const snap = await fetchEtiquetasPoolSnapshot(supabase, filtro);
+      const snap = await fetchEtiquetasPoolSnapshot(supabase, {
+        filtroTexto: filtro,
+        omitirPruebas,
+      });
       setCandidatas(snap.candidatas);
       setPlan(snap.plan);
       setEnCurso(snap.enCurso);
@@ -418,7 +431,7 @@ export function EtiquetasPoolEntradaTab() {
     } finally {
       setLoading(false);
     }
-  }, [filtro, supabase]);
+  }, [filtro, omitirPruebas, supabase]);
 
   useEffect(() => {
     setSelectedOt((prev) => {
@@ -585,8 +598,9 @@ export function EtiquetasPoolEntradaTab() {
                   1 · Entrada OTs
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Etiquetas en maestro activas en Optimus, entrega o apertura
-                  desde {POOL_BANDEJA_FECHA_MINIMA.slice(8, 10)}/
+                  OTs con itinerario Konica / Troq / Num etiqueta en Optimus,
+                  activas, entrega o apertura desde{" "}
+                  {POOL_BANDEJA_FECHA_MINIMA.slice(8, 10)}/
                   {POOL_BANDEJA_FECHA_MINIMA.slice(5, 7)}/
                   {POOL_BANDEJA_FECHA_MINIMA.slice(0, 4)}, que Hugo aún no
                   tiene en hoja de ruta.
@@ -615,6 +629,26 @@ export function EtiquetasPoolEntradaTab() {
                 onChange={(e) => setFiltro(e.target.value)}
               />
             </div>
+            <label
+              className="flex cursor-pointer items-center gap-1.5 pt-1 text-[11px] text-slate-600"
+              title="OTs de laboratorio Minerva (número ≥ 98.000). Por defecto ocultas."
+            >
+              <input
+                type="checkbox"
+                className="size-3.5 rounded border-slate-300"
+                checked={omitirPruebas}
+                onChange={(e) => {
+                  const v = e.target.checked;
+                  setOmitirPruebas(v);
+                  try {
+                    localStorage.setItem(STORAGE_POOL_OMITIR_PRUEBAS, v ? "1" : "0");
+                  } catch {
+                    /* ignore */
+                  }
+                }}
+              />
+              Omitir OTs de prueba (≥98.000)
+            </label>
           </CardHeader>
           <CardContent className="max-h-[min(70vh,36rem)] space-y-2 overflow-y-auto pt-0">
             {poolTableMissing ? (

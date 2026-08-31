@@ -6,6 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { normalizaOtNumero } from "@/lib/etiquetas-hoja-ruta-duplicados";
 import { PROCESOS_ETIQUETA_DIGITAL_IDS } from "@/lib/hoja-ruta-campos-config";
+import { isOtNumeroPrueba } from "@/lib/ot-prueba";
 import {
   buildOptimusImportAllowedKeysFromChecks,
   createDefaultOptimusImportEstadoChecks,
@@ -28,8 +29,8 @@ const PROCESO_NUM_ETIQUETA = 20;
 /** Máximo de OTs etiqueta recientes a evaluar en maestro (sin itinerario). */
 const MAESTRO_ETIQUETA_SCAN_LIMIT = 800;
 
-/** OTs anteriores a esta fecha se excluyen de la bandeja (pre-Minerva). */
-export const POOL_BANDEJA_FECHA_MINIMA = "2026-01-01";
+/** OTs anteriores a esta fecha se excluyen de la bandeja (pre-import Hugo dic 2025). */
+export const POOL_BANDEJA_FECHA_MINIMA = "2025-12-15";
 
 const POOL_BANDEJA_ESTADOS_OPTIMUS_PERMITIDOS =
   buildOptimusImportAllowedKeysFromChecks(createDefaultOptimusImportEstadoChecks());
@@ -147,6 +148,17 @@ export function isOtFechaMinimaBandeja(row: {
   return ymd >= POOL_BANDEJA_FECHA_MINIMA;
 }
 
+/**
+ * Bandeja pool: exige al menos un paso de etiquetas Hugo en itinerario Optimus
+ * (Impresión Konica 18, Troq etiqueta 19, Num etiqueta 20).
+ * Excluye etiquetas Xerox/offset que solo coinciden por tipo/título en maestro.
+ */
+export function tieneItinerarioEtiquetasHugo(
+  itinerario: EtiquetasMaquinaFlags,
+): boolean {
+  return itinerario.konica || itinerario.troqueladora || itinerario.numeradora;
+}
+
 /** Itinerario I/T/N para semáforo: si no hay pasos en maestro, asume I+T+N (etiqueta digital). */
 export function resolveSemaforoItinerario(
   itinerario: EtiquetasMaquinaFlags,
@@ -253,6 +265,8 @@ export function filterCandidatasBandeja(input: {
   enPool: ReadonlySet<string>;
   despachoByOt: ReadonlyMap<string, DespRow>;
   filtroTexto: string;
+  /** Si true, excluye OTs de laboratorio (número ≥ 98.000). */
+  omitirPruebas?: boolean;
 }): EtiquetasPoolCandidata[] {
   const needle = input.filtroTexto.trim().toLowerCase();
   const out: EtiquetasPoolCandidata[] = [];
@@ -271,6 +285,8 @@ export function filterCandidatasBandeja(input: {
     if (seen.has(candidata.otNumero)) continue;
     if (input.enHojaRuta.has(candidata.otNumero)) continue;
     if (input.enPool.has(candidata.otNumero)) continue;
+    if (input.omitirPruebas && isOtNumeroPrueba(candidata.otNumero)) continue;
+    if (!tieneItinerarioEtiquetasHugo(candidata.itinerario)) continue;
 
     if (needle) {
       const hay = [candidata.otNumero, candidata.cliente, candidata.trabajo]
@@ -429,15 +445,26 @@ async function fetchMaestroEtiquetaRows(
   return (data ?? []) as MaestroRow[];
 }
 
+export type EtiquetasPoolSnapshotOptions = {
+  filtroTexto?: string;
+  /** Por defecto true: oculta OTs ≥ 98.000 en bandeja. */
+  omitirPruebas?: boolean;
+};
+
 export async function fetchEtiquetasPoolSnapshot(
   supabase: SupabaseClient,
-  filtroTexto = "",
+  options: EtiquetasPoolSnapshotOptions | string = "",
 ): Promise<{
   candidatas: EtiquetasPoolCandidata[];
   plan: EtiquetasPoolPlanItem[];
   enCurso: EtiquetasPoolEnCursoItem[];
   candidataByOt: Map<string, EtiquetasPoolCandidata>;
 }> {
+  const filtroTexto =
+    typeof options === "string" ? options : (options.filtroTexto ?? "");
+  const omitirPruebas =
+    typeof options === "string" ? true : (options.omitirPruebas ?? true);
+
   const procesoIdsByOtId = await fetchProcesoIdsByOtId(supabase);
   const maestroEtiquetaRows = await fetchMaestroEtiquetaRows(supabase);
 
@@ -521,6 +548,7 @@ export async function fetchEtiquetasPoolSnapshot(
     enPool,
     despachoByOt,
     filtroTexto,
+    omitirPruebas,
   });
 
   const candidataByOt = new Map(candidatas.map((c) => [c.otNumero, c]));
