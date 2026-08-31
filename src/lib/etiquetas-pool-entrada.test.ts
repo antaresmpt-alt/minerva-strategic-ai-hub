@@ -10,6 +10,7 @@ import {
   labelItinerarioEtiquetas,
   maquinaFlagsFromProcesoIds,
   tieneItinerarioEtiquetasHugo,
+  isOtExcluidaBandejaXerox,
   mergePlanConCandidatas,
   resolveSemaforoItinerario,
 } from "@/lib/etiquetas-pool-entrada";
@@ -66,6 +67,14 @@ describe("etiquetas-pool-entrada", () => {
     expect(
       isOtFechaMinimaBandeja({ fecha_entrega: null, fecha_apertura: "2026-02-01" }),
     ).toBe(true);
+  });
+
+  it("isOtExcluidaBandejaXerox excluye solo impresión digital plana sin Hugo", () => {
+    expect(isOtExcluidaBandejaXerox([2])).toBe(true);
+    expect(isOtExcluidaBandejaXerox([2, 17])).toBe(true);
+    expect(isOtExcluidaBandejaXerox([18])).toBe(false);
+    expect(isOtExcluidaBandejaXerox([2, 18])).toBe(false);
+    expect(isOtExcluidaBandejaXerox([])).toBe(false);
   });
 
   it("tieneItinerarioEtiquetasHugo exige paso Konica/Troq/Num", () => {
@@ -204,7 +213,40 @@ describe("etiquetas-pool-entrada", () => {
     expect(candidatas.map((c) => c.otNumero)).toEqual(["98043", "98030"]);
   });
 
-  it("filterCandidatasBandeja excluye etiqueta Xerox sin pasos Konica/Troq/Num", () => {
+  it("filterCandidatasBandeja incluye etiqueta Hugo sin pasos importados en Hub", () => {
+    const maestroByOtId = new Map([
+      [
+        "id-konica",
+        {
+          id: "id-konica",
+          num_pedido: "36629",
+          cliente: "Cliente",
+          titulo: "Etiquetas Konica",
+          cantidad: 1000,
+          fecha_entrega: "2026-06-01",
+          fecha_apertura: "2026-05-20",
+          estado_desc: "En producción",
+          despachado: false,
+          tipo_pedido: "Etiqueta",
+        },
+      ],
+    ]);
+
+    const candidatas = filterCandidatasBandeja({
+      candidatoOtIds: ["id-konica"],
+      maestroByOtId,
+      procesoIdsByOtId: new Map(),
+      enHojaRuta: new Set(),
+      enPool: new Set(),
+      despachoByOt: new Map(),
+      filtroTexto: "",
+    });
+
+    expect(candidatas.map((c) => c.otNumero)).toEqual(["36629"]);
+    expect(candidatas[0]?.despachada).toBe(false);
+  });
+
+  it("filterCandidatasBandeja excluye etiqueta Xerox con impresión digital plana", () => {
     const maestroByOtId = new Map([
       [
         "id-xerox",
@@ -241,7 +283,10 @@ describe("etiquetas-pool-entrada", () => {
     const candidatas = filterCandidatasBandeja({
       candidatoOtIds: ["id-xerox", "id-hugo"],
       maestroByOtId,
-      procesoIdsByOtId: new Map([["id-hugo", [18, 19]]]),
+      procesoIdsByOtId: new Map([
+        ["id-xerox", [2]],
+        ["id-hugo", [18, 19]],
+      ]),
       enHojaRuta: new Set(),
       enPool: new Set(),
       despachoByOt: new Map(),

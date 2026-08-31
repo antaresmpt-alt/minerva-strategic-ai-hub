@@ -598,12 +598,13 @@ export function EtiquetasPoolEntradaTab() {
                   1 · Entrada OTs
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  OTs con itinerario Konica / Troq / Num etiqueta en Optimus,
-                  activas, entrega o apertura desde{" "}
+                  Etiquetas en maestro activas en Optimus, entrega o apertura
+                  desde{" "}
                   {POOL_BANDEJA_FECHA_MINIMA.slice(8, 10)}/
                   {POOL_BANDEJA_FECHA_MINIMA.slice(5, 7)}/
                   {POOL_BANDEJA_FECHA_MINIMA.slice(0, 4)}, que Hugo aún no
-                  tiene en hoja de ruta.
+                  tiene en hoja de ruta. Se excluyen Xerox (impresión digital
+                  plana sin Konica/Troq/Num).
                 </CardDescription>
               </div>
               <Button

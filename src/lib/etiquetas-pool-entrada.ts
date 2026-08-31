@@ -25,6 +25,8 @@ const TABLE_DESPACHADAS = "produccion_ot_despachadas";
 const PROCESO_KONICA = 18;
 const PROCESO_TROQ_ETIQUETA = 19;
 const PROCESO_NUM_ETIQUETA = 20;
+/** Impresión digital plana (Xerox Paula/Patricia) — no pool Hugo. */
+const PROCESO_IMPRESION_DIGITAL_PLANO = 2;
 
 /** Máximo de OTs etiqueta recientes a evaluar en maestro (sin itinerario). */
 const MAESTRO_ETIQUETA_SCAN_LIMIT = 800;
@@ -149,14 +151,24 @@ export function isOtFechaMinimaBandeja(row: {
 }
 
 /**
- * Bandeja pool: exige al menos un paso de etiquetas Hugo en itinerario Optimus
+ * Bandeja pool: al menos un paso de etiquetas Hugo en itinerario Hub
  * (Impresión Konica 18, Troq etiqueta 19, Num etiqueta 20).
- * Excluye etiquetas Xerox/offset que solo coinciden por tipo/título en maestro.
  */
 export function tieneItinerarioEtiquetasHugo(
   itinerario: EtiquetasMaquinaFlags,
 ): boolean {
   return itinerario.konica || itinerario.troqueladora || itinerario.numeradora;
+}
+
+/**
+ * Excluye de bandeja etiquetas Xerox: impresión digital plana (paso 2) sin
+ * Konica/Troq/Num. Las etiquetas Hugo sin pasos aún importados en Hub entran.
+ */
+export function isOtExcluidaBandejaXerox(procesoIds: readonly number[]): boolean {
+  if (tieneItinerarioEtiquetasHugo(maquinaFlagsFromProcesoIds(procesoIds))) {
+    return false;
+  }
+  return procesoIds.includes(PROCESO_IMPRESION_DIGITAL_PLANO);
 }
 
 /** Itinerario I/T/N para semáforo: si no hay pasos en maestro, asume I+T+N (etiqueta digital). */
@@ -286,7 +298,8 @@ export function filterCandidatasBandeja(input: {
     if (input.enHojaRuta.has(candidata.otNumero)) continue;
     if (input.enPool.has(candidata.otNumero)) continue;
     if (input.omitirPruebas && isOtNumeroPrueba(candidata.otNumero)) continue;
-    if (!tieneItinerarioEtiquetasHugo(candidata.itinerario)) continue;
+    const procesoIds = input.procesoIdsByOtId.get(otId) ?? [];
+    if (isOtExcluidaBandejaXerox(procesoIds)) continue;
 
     if (needle) {
       const hay = [candidata.otNumero, candidata.cliente, candidata.trabajo]
