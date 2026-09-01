@@ -105,7 +105,7 @@ export function ExternosPrevisionDialog({
       />
 
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="flex max-h-[min(92vh,52rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0">
+        <DialogContent className="flex max-h-[min(92vh,52rem)] min-h-[min(50vh,24rem)] w-[min(96vw,1280px)] min-w-[min(96vw,52rem)] !max-w-[min(96vw,1280px)] resize flex-col gap-0 overflow-auto p-0 sm:!max-w-[min(96vw,1280px)] lg:!max-w-[min(92vw,1400px)]">
           <DialogHeader className="externos-prevision-print-hide border-b px-4 py-3 pr-12">
             <DialogTitle className="flex items-center gap-2 text-[#002147]">
               <Telescope className="size-5 shrink-0 opacity-90" aria-hidden />
@@ -157,8 +157,8 @@ export function ExternosPrevisionDialog({
                     <TableHeader>
                       <TableRow className="bg-slate-50/90">
                         <TableHead className="whitespace-nowrap px-2">OT</TableHead>
-                        <TableHead className="px-2">Cliente</TableHead>
-                        <TableHead className="min-w-[8rem] px-2">Trabajo</TableHead>
+                        <TableHead className="min-w-[9rem] px-2">Cliente</TableHead>
+                        <TableHead className="min-w-[14rem] px-2">Trabajo</TableHead>
                         <TableHead className="whitespace-nowrap px-2 text-right">
                           Cant.
                         </TableHead>
@@ -184,11 +184,11 @@ export function ExternosPrevisionDialog({
                               {row.otNumero}
                             </button>
                           </TableCell>
-                          <TableCell className="max-w-[8rem] truncate px-2 py-1.5 text-xs">
+                          <TableCell className="min-w-[9rem] max-w-[14rem] truncate px-2 py-1.5 text-xs">
                             {row.cliente?.trim() || "—"}
                           </TableCell>
                           <TableCell
-                            className="max-w-[12rem] truncate px-2 py-1.5 text-xs"
+                            className="min-w-[14rem] max-w-[22rem] truncate px-2 py-1.5 text-xs"
                             title={row.trabajo ?? ""}
                           >
                             {row.trabajo?.trim() || "—"}
@@ -203,7 +203,7 @@ export function ExternosPrevisionDialog({
                           </TableCell>
                           <TableCell className="px-2 py-1.5 text-xs">
                             <span className="inline-flex flex-wrap items-center gap-1">
-                              <span className="max-w-[7rem] truncate">
+                              <span className="max-w-[11rem] truncate">
                                 {row.pasoActualNombre?.trim() || "—"}
                               </span>
                               {row.pasoActualEstado ? (
@@ -219,7 +219,7 @@ export function ExternosPrevisionDialog({
                               ) : null}
                             </span>
                           </TableCell>
-                          <TableCell className="max-w-[9rem] truncate px-2 py-1.5 text-xs">
+                          <TableCell className="min-w-[10rem] max-w-[14rem] truncate px-2 py-1.5 text-xs">
                             {row.proximoExternoNombre?.trim() || "—"}
                           </TableCell>
                           <TableCell className="whitespace-nowrap px-2 py-1.5 text-center font-mono text-sm font-semibold tabular-nums text-[#002147]">
