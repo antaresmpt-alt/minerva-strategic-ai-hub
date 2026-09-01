@@ -4,7 +4,7 @@ import { FileDown, Loader2, Telescope } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { HojaRutaOtDialog } from "@/components/produccion/hoja-ruta/hoja-ruta-ot-dialog";
+import { OtResumenRapidoDialog } from "@/components/produccion/ots/ot-resumen-rapido-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -96,7 +96,7 @@ export function ExternosPrevisionDialog({
 
   return (
     <>
-      <HojaRutaOtDialog
+      <OtResumenRapidoDialog
         otNumero={detailOt}
         open={detailOt != null}
         onOpenChange={(o) => {
