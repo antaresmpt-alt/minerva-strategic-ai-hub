@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, Loader2, RefreshCw, Route } from "lucide-react";
+import { Eye, Loader2, RefreshCw, Route, Telescope } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -28,12 +28,14 @@ import {
   normalizeOtRawToString,
   otRawToIdPedido,
 } from "@/lib/externos-excel-import";
+import { ExternosPrevisionDialog } from "@/components/produccion/externos/externos-prevision-dialog";
 import {
   type ExternoItinerarioQueueRow,
   externosComputeDiasHastaFEntregaOt,
   externosDateInputToTimestamptz,
   fetchExternoItinerarioQueue,
 } from "@/lib/externos-itinerario-queue";
+import { fetchExternosPrevision } from "@/lib/externos-prevision";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -141,6 +143,9 @@ export function ExternosItinerarioPoolTab({
   const [bulkProv, setBulkProv] = useState("");
   const [bulkAcab, setBulkAcab] = useState("");
   const [bulkFechaPrev, setBulkFechaPrev] = useState("");
+  const [previsionOpen, setPrevisionOpen] = useState(false);
+  const [previsionCount, setPrevisionCount] = useState<number | null>(null);
+  const [previsionCountLoading, setPrevisionCountLoading] = useState(false);
 
   const proveedorOptions: Option[] = useMemo(
     () => [
@@ -179,6 +184,29 @@ export function ExternosItinerarioPoolTab({
   useEffect(() => {
     void loadQueue();
   }, [loadQueue]);
+
+  const queueOtNumeros = useMemo(
+    () => rows.map((r) => r.ot_numero),
+    [rows],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    setPrevisionCountLoading(true);
+    void (async () => {
+      try {
+        const data = await fetchExternosPrevision(supabase, queueOtNumeros);
+        if (!cancelled) setPrevisionCount(data.length);
+      } catch {
+        if (!cancelled) setPrevisionCount(null);
+      } finally {
+        if (!cancelled) setPrevisionCountLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, queueOtNumeros]);
 
   useEffect(() => {
     if (rows.length === 0 || bulkFechaPrev.length === 10) return;
@@ -301,6 +329,14 @@ export function ExternosItinerarioPoolTab({
 
   return (
     <div className="space-y-4">
+      <ExternosPrevisionDialog
+        open={previsionOpen}
+        onOpenChange={setPrevisionOpen}
+        supabase={supabase}
+        queueOtNumeros={queueOtNumeros}
+        onCountChange={setPrevisionCount}
+      />
+
       <Card className="border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
         <CardHeader className="space-y-2 pb-2">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -317,21 +353,39 @@ export function ExternosItinerarioPoolTab({
                 siguiente proceso (p. ej. troquelado).
               </CardDescription>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="shrink-0"
-              disabled={loading}
-              onClick={() => void loadQueue()}
-            >
-              {loading ? (
-                <Loader2 className="size-4 animate-spin" aria-hidden />
-              ) : (
-                <RefreshCw className="size-4" aria-hidden />
-              )}
-              <span className="ml-2">Actualizar cola</span>
-            </Button>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                title="OTs en curso con externo pendiente más adelante en el itinerario"
+                onClick={() => setPrevisionOpen(true)}
+              >
+                <Telescope className="size-4" aria-hidden />
+                <span className="ml-2">
+                  Previsión
+                  {previsionCountLoading ? (
+                    <Loader2 className="ml-1 inline size-3 animate-spin" aria-hidden />
+                  ) : previsionCount != null ? (
+                    ` (${previsionCount})`
+                  ) : null}
+                </span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={loading}
+                onClick={() => void loadQueue()}
+              >
+                {loading ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  <RefreshCw className="size-4" aria-hidden />
+                )}
+                <span className="ml-2">Actualizar cola</span>
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4 pt-0">
