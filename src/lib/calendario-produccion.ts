@@ -234,3 +234,53 @@ export function semanaLabelEs(weekMonday: Date, includeSaturday: boolean): strin
     d.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
   return `${fmt(weekMonday)} – ${fmt(end)} ${weekMonday.getFullYear()}`;
 }
+
+export function idsEditablesCalendarioDia(
+  lineas: readonly CalendarioProduccionLinea[],
+  ambito: CalendarioAmbito,
+): string[] {
+  return lineas.filter((l) => l.ambito === ambito).map((l) => l.id);
+}
+
+export type PlanMoverCalendarioLoteItem = {
+  id: string;
+  otNumero: string;
+  orden: number;
+};
+
+export type PlanMoverCalendarioLoteResult = {
+  toMove: PlanMoverCalendarioLoteItem[];
+  skippedAlreadyThere: string[];
+};
+
+/**
+ * Plan de mover N pastillas a otro día: mismo orden relativo, al final del destino.
+ * Omite OTs que ya existen en destino (unique fecha+ot+ámbito).
+ */
+export function planMoverCalendarioLote(args: {
+  selectedIds: readonly string[];
+  fromFecha: string;
+  destFecha: string;
+  ambito: CalendarioAmbito;
+  sourceLineas: readonly CalendarioProduccionLinea[];
+  destOtNumerosMismoAmbito: ReadonlySet<string>;
+  startOrden: number;
+}): PlanMoverCalendarioLoteResult {
+  if (args.fromFecha === args.destFecha) {
+    return { toMove: [], skippedAlreadyThere: [] };
+  }
+  const selected = new Set(args.selectedIds);
+  const skippedAlreadyThere: string[] = [];
+  const toMove: PlanMoverCalendarioLoteItem[] = [];
+  let orden = args.startOrden;
+  for (const linea of args.sourceLineas) {
+    if (!selected.has(linea.id) || linea.ambito !== args.ambito) continue;
+    if (args.destOtNumerosMismoAmbito.has(linea.otNumero)) {
+      skippedAlreadyThere.push(linea.otNumero);
+      continue;
+    }
+    toMove.push({ id: linea.id, otNumero: linea.otNumero, orden });
+    orden += 1;
+  }
+  return { toMove, skippedAlreadyThere };
+}

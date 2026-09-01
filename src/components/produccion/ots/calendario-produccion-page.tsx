@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  ArrowRightLeft,
   ClipboardPaste,
   FileDown,
   ListOrdered,
@@ -66,6 +67,8 @@ import {
   numColumnasCalendario,
   semanaLabelEs,
   weekRangeYmd,
+  idsEditablesCalendarioDia,
+  planMoverCalendarioLote,
   type CalendarioProduccionLinea,
 } from "@/lib/calendario-produccion";
 import { appendDetalleSlotAfterCalendarMove } from "@/lib/calendario-detalle-dia";
@@ -425,6 +428,12 @@ function DiaCelda({
   ambitoActivo,
   canEditActivo,
   variant = "mes",
+  moverFromFecha,
+  moverSelectedIds,
+  moverBusy,
+  onStartMover,
+  onToggleMoverOt,
+  onPickDestino,
 }: {
   dayYmd: string;
   dayNum: number;
@@ -441,27 +450,105 @@ function DiaCelda({
   canEditActivo: boolean;
   /** Semana: tipografía mayor y más altura de celda. */
   variant?: "mes" | "semana";
+  moverFromFecha: string | null;
+  moverSelectedIds: readonly string[];
+  moverBusy: boolean;
+  onStartMover: (ymd: string) => void;
+  onToggleMoverOt: (id: string) => void;
+  onPickDestino: (ymd: string) => void;
 }) {
   const isSemana = variant === "semana";
   const hasContenido = lineas.length > 0 || notas.length > 0;
+  const moverActivo = moverFromFecha != null;
+  const isMoverOrigen = moverFromFecha === dayYmd;
+  const isMoverDestino = moverActivo && !isMoverOrigen;
+  const editableCount = lineas.filter((l) => l.ambito === ambitoActivo).length;
+  const showMoverBtn =
+    canEditActivo && (editableCount > 0 || isMoverDestino);
+  const selectedSet = isMoverOrigen ? new Set(moverSelectedIds) : null;
+
+  const handleDayNumberClick = () => {
+    if (moverBusy) return;
+    if (isMoverDestino) {
+      onPickDestino(dayYmd);
+      return;
+    }
+    if (isMoverOrigen) return;
+    onEditDay(dayYmd);
+  };
+
+  const handleEmptyOrPlusClick = () => {
+    if (moverBusy) return;
+    if (isMoverDestino) {
+      onPickDestino(dayYmd);
+      return;
+    }
+    if (isMoverOrigen) return;
+    onEditDay(dayYmd);
+  };
 
   return (
     <div
-      className={
+      className={cn(
         isSemana
           ? "group relative flex min-h-[min(70vh,42rem)] flex-col border border-slate-200/90 bg-white"
-          : "group relative flex min-h-[11rem] flex-col border border-slate-200/90 bg-white"
-      }
+          : "group relative flex min-h-[11rem] flex-col border border-slate-200/90 bg-white",
+        isMoverOrigen && "ring-2 ring-amber-500 ring-inset",
+        isMoverDestino && "ring-1 ring-amber-200 ring-inset",
+      )}
     >
-      <div className="flex shrink-0 items-center justify-between bg-[#002147] px-2 py-1.5">
-        <button
-          type="button"
-          className="rounded px-1 text-[10px] font-medium text-white/80 opacity-0 transition group-hover:opacity-100 hover:bg-white/10"
-          onClick={() => onEditDay(dayYmd)}
-          title="Añadir / editar OTs del día"
-        >
-          <Plus className="size-3.5" />
-        </button>
+      <div
+        className={cn(
+          "flex shrink-0 items-center justify-between px-2 py-1.5",
+          isMoverOrigen ? "bg-amber-700" : "bg-[#002147]",
+        )}
+      >
+        <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            className={cn(
+              "rounded px-1 text-[10px] font-medium text-white/80 transition hover:bg-white/10",
+              moverActivo
+                ? "pointer-events-none opacity-0"
+                : "opacity-0 group-hover:opacity-100",
+            )}
+            onClick={handleEmptyOrPlusClick}
+            title="Añadir / editar OTs del día"
+          >
+            <Plus className="size-3.5" />
+          </button>
+          {showMoverBtn ? (
+            <button
+              type="button"
+              className={cn(
+                "rounded px-1 text-white/90 transition hover:bg-white/10",
+                isMoverOrigen
+                  ? "bg-white/20 text-white"
+                  : "opacity-80 group-hover:opacity-100",
+              )}
+              disabled={moverBusy}
+              aria-pressed={isMoverOrigen}
+              title={
+                isMoverOrigen
+                  ? "Cancelar mover OTs"
+                  : isMoverDestino
+                    ? "Mover aquí las OTs seleccionadas"
+                    : "Seleccionar OTs de este día y pasarlas a otro"
+              }
+              onClick={(e) => {
+                e.stopPropagation();
+                if (moverBusy) return;
+                if (isMoverDestino) {
+                  onPickDestino(dayYmd);
+                  return;
+                }
+                onStartMover(dayYmd);
+              }}
+            >
+              <ArrowRightLeft className="size-3.5" />
+            </button>
+          ) : null}
+        </div>
         <button
           type="button"
           className={
@@ -469,8 +556,14 @@ function DiaCelda({
               ? "shrink-0 text-base font-bold tabular-nums text-white hover:underline"
               : "shrink-0 text-sm font-bold tabular-nums text-white hover:underline"
           }
-          onClick={() => onEditDay(dayYmd)}
-          title="Editar día"
+          onClick={handleDayNumberClick}
+          title={
+            isMoverDestino
+              ? "Mover aquí las OTs seleccionadas"
+              : isMoverOrigen
+                ? "Día origen — pulsa el número de otro día"
+                : "Editar día"
+          }
         >
           {dayNum}
         </button>
@@ -483,9 +576,13 @@ function DiaCelda({
               ? "min-h-[3rem] flex-1 p-2.5 text-left text-sm text-slate-400 hover:bg-slate-50"
               : "min-h-[2rem] flex-1 p-1.5 text-left text-[10px] text-slate-400 hover:bg-slate-50"
           }
-          onClick={() => onEditDay(dayYmd)}
+          onClick={handleEmptyOrPlusClick}
         >
-          {canEditActivo ? "+ OT" : "Ver día"}
+          {isMoverDestino
+            ? "Mover aquí"
+            : canEditActivo
+              ? "+ OT"
+              : "Ver día"}
         </button>
       ) : (
         <div
@@ -505,6 +602,8 @@ function DiaCelda({
             const isDuplicada = duplicatedOtSet.has(`${l.ambito}:${l.otNumero}`);
             const isForeign = l.ambito !== ambitoActivo;
             const canToggle = canEditActivo && !isForeign;
+            const canSelectMover = isMoverOrigen && canToggle;
+            const isSelectedMover = Boolean(selectedSet?.has(l.id));
             const pasoLabel = labelPasoDisponible(info?.pasos ?? []);
             const espejo = derivePastillaEspejo({
               ambito: l.ambito,
@@ -545,6 +644,7 @@ function DiaCelda({
                   isForeign && "opacity-75",
                   hechoVisual && "bg-slate-50/90 opacity-60",
                   espejo.fechaDifiere && !hechoVisual && "ring-1 ring-amber-400/70",
+                  isSelectedMover && "bg-amber-50 ring-2 ring-amber-500",
                   isSemana ? "px-1.5 py-1.5" : "px-1 py-1",
                 )}
               >
@@ -554,18 +654,38 @@ function DiaCelda({
                     "flex min-w-0 flex-1 items-center gap-1.5 rounded-sm text-left",
                     "hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#002147]/40",
                   )}
+                  aria-pressed={canSelectMover ? isSelectedMover : undefined}
                   onClick={(e) => {
                     e.stopPropagation();
+                    if (canSelectMover) {
+                      onToggleMoverOt(l.id);
+                      return;
+                    }
+                    if (moverActivo) return;
                     onOpenOt(l.otNumero);
                   }}
                 >
-                  <span
-                    className={cn(
-                      "size-1.5 shrink-0 rounded-full",
-                      hechoVisual ? "bg-slate-400" : styles.dot,
-                    )}
-                    aria-hidden
-                  />
+                  {canSelectMover ? (
+                    <span
+                      className={cn(
+                        "flex size-3.5 shrink-0 items-center justify-center rounded-sm border",
+                        isSelectedMover
+                          ? "border-amber-700 bg-amber-600 text-white"
+                          : "border-slate-400 bg-white text-transparent",
+                      )}
+                      aria-hidden
+                    >
+                      <Check className="size-2.5" strokeWidth={3} />
+                    </span>
+                  ) : (
+                    <span
+                      className={cn(
+                        "size-1.5 shrink-0 rounded-full",
+                        hechoVisual ? "bg-slate-400" : styles.dot,
+                      )}
+                      aria-hidden
+                    />
+                  )}
                   <AmbitoBadgeWithMaterial
                     ambito={l.ambito}
                     material={material}
@@ -620,9 +740,11 @@ function DiaCelda({
                 </button>
                 <button
                   type="button"
-                  disabled={!canToggle}
+                  disabled={!canToggle || moverActivo}
                   title={
-                    canToggle
+                    moverActivo
+                      ? "Termina de mover OTs para marcar hecho"
+                      : canToggle
                       ? l.marcadoHecho
                         ? "Quitar marca hecho (manual)"
                         : semaforo === "hecho"
@@ -639,11 +761,13 @@ function DiaCelda({
                     l.marcadoHecho
                       ? "border-emerald-600 bg-emerald-600 text-white"
                       : "border-slate-300 bg-white text-transparent hover:border-emerald-500 hover:text-emerald-500",
-                    !canToggle && "cursor-not-allowed opacity-40",
+                    !canToggle || moverActivo
+                      ? "cursor-not-allowed opacity-40"
+                      : null,
                   )}
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (!canToggle) return;
+                    if (!canToggle || moverActivo) return;
                     onToggleMarcadoHecho(l);
                   }}
                 >
@@ -702,6 +826,9 @@ export function CalendarioProduccionPage() {
   const [atrasadasModalOpen, setAtrasadasModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [portapapeles, setPortapapeles] = useState<PortapapelesOt | null>(null);
+  const [moverFromFecha, setMoverFromFecha] = useState<string | null>(null);
+  const [moverSelectedIds, setMoverSelectedIds] = useState<string[]>([]);
+  const moverInFlightRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [ambitoActivo, setAmbitoActivo] = useState<CalendarioAmbito>("impresion");
@@ -1547,6 +1674,8 @@ export function CalendarioProduccionPage() {
       fromFecha: dayYmd,
       label: linea.label,
     });
+    setMoverFromFecha(null);
+    setMoverSelectedIds([]);
     toast.message(`OT ${linea.otNumero} cortada. Abre otro día y pega.`);
   };
 
@@ -1704,6 +1833,199 @@ export function CalendarioProduccionPage() {
       setSaving(false);
     }
   };
+
+  const cancelarMoverLote = useCallback(() => {
+    setMoverFromFecha(null);
+    setMoverSelectedIds([]);
+  }, []);
+
+  const startMoverDia = useCallback(
+    (ymd: string) => {
+      if (!canEditActivo) return;
+      setPortapapeles(null);
+      setDayOpen(false);
+      if (moverFromFecha === ymd) {
+        cancelarMoverLote();
+        toast.message("Movimiento cancelado.");
+        return;
+      }
+      const ids = idsEditablesCalendarioDia(
+        entradasByDay.get(ymd) ?? [],
+        ambitoActivo,
+      );
+      if (ids.length === 0) {
+        toast.message("No hay OTs de tu ámbito en este día.");
+        return;
+      }
+      setMoverFromFecha(ymd);
+      setMoverSelectedIds([]);
+      toast.message(
+        "Selecciona las OTs (o «Todas») y pulsa el número de otro día.",
+      );
+    },
+    [
+      ambitoActivo,
+      canEditActivo,
+      cancelarMoverLote,
+      entradasByDay,
+      moverFromFecha,
+    ],
+  );
+
+  const toggleMoverOt = useCallback((id: string) => {
+    setMoverSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }, []);
+
+  const seleccionarTodasMover = useCallback(() => {
+    if (!moverFromFecha) return;
+    const ids = idsEditablesCalendarioDia(
+      entradasByDay.get(moverFromFecha) ?? [],
+      ambitoActivo,
+    );
+    setMoverSelectedIds((prev) =>
+      prev.length === ids.length && ids.every((id) => prev.includes(id))
+        ? []
+        : ids,
+    );
+  }, [ambitoActivo, entradasByDay, moverFromFecha]);
+
+  const moverLoteADia = useCallback(
+    async (destYmd: string) => {
+      if (!canEditActivo || !moverFromFecha || moverInFlightRef.current) return;
+      if (destYmd === moverFromFecha) {
+        toast.message("Elige otro día.");
+        return;
+      }
+      if (moverSelectedIds.length === 0) {
+        toast.message(
+          "Selecciona las OTs que quieres mover (o pulsa «Todas»).",
+        );
+        return;
+      }
+      const sourceLineas = rowsRef.current
+        .filter((r) => {
+          if (r.fecha.slice(0, 10) !== moverFromFecha) return false;
+          const a = isCalendarioAmbito(r.ambito) ? r.ambito : "impresion";
+          return a === ambitoActivo;
+        })
+        .slice()
+        .sort((a, b) => a.orden - b.orden)
+        .map((r) => ({
+          id: r.id,
+          otNumero: String(r.ot_numero ?? "").trim(),
+          ambito: ambitoActivo,
+          label: "",
+          trabajo: null as string | null,
+          orden: r.orden,
+          marcadoHecho: Boolean(r.marcado_hecho),
+        }));
+      const destRows = rowsRef.current.filter(
+        (r) =>
+          r.fecha.slice(0, 10) === destYmd &&
+          (isCalendarioAmbito(r.ambito) ? r.ambito : "impresion") ===
+            ambitoActivo,
+      );
+      const destOtNumerosMismoAmbito = new Set(
+        destRows.map((r) => String(r.ot_numero ?? "").trim()).filter(Boolean),
+      );
+      const startOrden =
+        destRows.length === 0
+          ? 0
+          : Math.max(...destRows.map((r) => r.orden)) + 1;
+      const plan = planMoverCalendarioLote({
+        selectedIds: moverSelectedIds,
+        fromFecha: moverFromFecha,
+        destFecha: destYmd,
+        ambito: ambitoActivo,
+        sourceLineas,
+        destOtNumerosMismoAmbito,
+        startOrden,
+      });
+      if (plan.toMove.length === 0) {
+        if (plan.skippedAlreadyThere.length > 0) {
+          toast.error(
+            `Ya están en ${fechaDiaLabel(destYmd)}: ${plan.skippedAlreadyThere.join(", ")}`,
+          );
+        } else {
+          toast.message("Nada que mover.");
+        }
+        return;
+      }
+      moverInFlightRef.current = true;
+      setSaving(true);
+      try {
+        const results = await Promise.all(
+          plan.toMove.map((m) =>
+            supabase
+              .from(TABLE)
+              .update({ fecha: destYmd, orden: m.orden })
+              .eq("id", m.id),
+          ),
+        );
+        const dup = results.find((r) => r.error?.code === "23505");
+        if (dup?.error) {
+          toast.error(
+            "Alguna OT ya está en ese día. Recarga e inténtalo.",
+          );
+          await load();
+          return;
+        }
+        const err = results.find((r) => r.error)?.error;
+        if (err) throw err;
+
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        await Promise.all(
+          plan.toMove.map((m) =>
+            appendDetalleSlotAfterCalendarMove(supabase, {
+              calendarioOtId: m.id,
+              otNumero: m.otNumero,
+              ambito: ambitoActivo,
+              fechaDestinoYmd: destYmd,
+              createdBy: user?.id ?? null,
+            }).catch((detErr) => {
+              console.warn("[calendario] append detalle tras mover lote", detErr);
+            }),
+          ),
+        );
+
+        const n = plan.toMove.length;
+        toast.success(
+          n === 1
+            ? `OT ${plan.toMove[0]!.otNumero} movida a ${fechaDiaLabel(destYmd)}.`
+            : `${n} OTs movidas a ${fechaDiaLabel(destYmd)}.`,
+        );
+        if (plan.skippedAlreadyThere.length > 0) {
+          toast.message(
+            `No movidas (ya estaban): ${plan.skippedAlreadyThere.join(", ")}`,
+          );
+        }
+        cancelarMoverLote();
+        await load();
+      } catch (e) {
+        toast.error(errorMessageFromUnknown(e, "No se pudo mover las OTs."));
+      } finally {
+        moverInFlightRef.current = false;
+        setSaving(false);
+      }
+    },
+    [
+      ambitoActivo,
+      canEditActivo,
+      cancelarMoverLote,
+      load,
+      moverFromFecha,
+      moverSelectedIds,
+      supabase,
+    ],
+  );
+
+  useEffect(() => {
+    cancelarMoverLote();
+  }, [ambitoActivo, year, monthIndex, vista, weekMonday, cancelarMoverLote]);
 
   const openDetalle = async (otNumero: string) => {
     setDetalleOpen(true);
@@ -2230,6 +2552,50 @@ export function CalendarioProduccionPage() {
         </div>
       ) : null}
 
+      {moverFromFecha ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          <p className="min-w-0">
+            <span className="font-semibold">Mover OTs</span> de{" "}
+            {fechaDiaLabel(moverFromFecha)}: {moverSelectedIds.length}{" "}
+            seleccionada{moverSelectedIds.length === 1 ? "" : "s"}. Pulsa el{" "}
+            <span className="font-semibold">número de otro día</span>.
+          </p>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 border-amber-400 bg-white px-2"
+              disabled={saving}
+              onClick={seleccionarTodasMover}
+            >
+              {moverSelectedIds.length > 0 &&
+              moverSelectedIds.length ===
+                idsEditablesCalendarioDia(
+                  entradasByDay.get(moverFromFecha) ?? [],
+                  ambitoActivo,
+                ).length
+                ? "Ninguna"
+                : "Todas"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2"
+              disabled={saving}
+              onClick={() => {
+                cancelarMoverLote();
+                toast.message("Movimiento cancelado.");
+              }}
+            >
+              <X className="mr-1 size-3.5" />
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <Dialog open={atrasadasModalOpen} onOpenChange={setAtrasadasModalOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -2335,6 +2701,12 @@ export function CalendarioProduccionPage() {
                           duplicatedOtSet={duplicatedOtSet}
                           ambitoActivo={ambitoActivo}
                           canEditActivo={canEditActivo}
+                          moverFromFecha={moverFromFecha}
+                          moverSelectedIds={moverSelectedIds}
+                          moverBusy={saving}
+                          onStartMover={startMoverDia}
+                          onToggleMoverOt={toggleMoverOt}
+                          onPickDestino={moverLoteADia}
                         />
                       ) : (
                         <div
@@ -2368,6 +2740,12 @@ export function CalendarioProduccionPage() {
                             duplicatedOtSet={duplicatedOtSet}
                             ambitoActivo={ambitoActivo}
                             canEditActivo={canEditActivo}
+                            moverFromFecha={moverFromFecha}
+                            moverSelectedIds={moverSelectedIds}
+                            moverBusy={saving}
+                            onStartMover={startMoverDia}
+                            onToggleMoverOt={toggleMoverOt}
+                            onPickDestino={moverLoteADia}
                           />
                         ) : (
                           <div
