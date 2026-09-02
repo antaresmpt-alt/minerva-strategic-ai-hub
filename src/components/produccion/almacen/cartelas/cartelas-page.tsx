@@ -10,6 +10,7 @@ import {
   Plus,
   Printer,
   RefreshCw,
+  ScanSearch,
   Search,
   SlidersHorizontal,
   Trash2,
@@ -68,6 +69,7 @@ import type {
   RecepcionTipo,
 } from "@/types/prod-stock";
 import { CartelaWizardDialog, type CartelaWizardCreatedInfo } from "./cartela-wizard-dialog";
+import { AlbaranesOcrDialog } from "./albaranes-ocr-dialog";
 import { RecepcionStockDialog } from "./recepcion-stock-dialog";
 import { RecepcionFotosPanel } from "@/components/produccion/recepcion/recepcion-fotos-panel";
 import { OtDestinoSearchInput } from "@/components/produccion/almacen/ot-destino-search-input";
@@ -145,6 +147,7 @@ export function CartelasPage() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardGrupo, setWizardGrupo] = useState<AlbaranPendienteGroup | null>(null);
   const [stockDialogOpen, setStockDialogOpen] = useState(false);
+  const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
 
   // ── Bloque 9.8.1 — Liberar reserva ───────────────────────────────────────
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -895,6 +898,15 @@ export function CartelasPage() {
             </Button>
             <Button
               size="sm"
+              variant="outline"
+              onClick={() => setOcrDialogOpen(true)}
+              className="gap-1.5"
+            >
+              <ScanSearch className="size-4" />
+              OCR albaranes
+            </Button>
+            <Button
+              size="sm"
               onClick={() => setStockDialogOpen(true)}
               className="gap-1.5"
             >
@@ -1095,6 +1107,14 @@ export function CartelasPage() {
         open={stockDialogOpen}
         onClose={() => setStockDialogOpen(false)}
         onCreated={handleStockRecepcionCreated}
+      />
+
+      <AlbaranesOcrDialog
+        open={ocrDialogOpen}
+        onClose={() => setOcrDialogOpen(false)}
+        onCreated={() => {
+          void loadPendientes();
+        }}
       />
 
       {/* Diálogo liberar reserva 9.8.1 */}
