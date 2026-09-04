@@ -257,12 +257,26 @@ function sumHoras(prep: number | null, tiraje: number | null): string | null {
   return roundHoras((prep ?? 0) + (tiraje ?? 0));
 }
 
-/** Horas previstas desde maestro (prep + millar × cantidad) — solo campos vacíos. */
+export type MaestroPrefillMode = "empty" | "overwrite";
+
+function shouldWriteMaestroField(
+  mode: MaestroPrefillMode,
+  current: string,
+  next: string,
+): boolean {
+  if (!next) return false;
+  if (mode === "overwrite") return current !== next;
+  return !current;
+}
+
+/** Horas previstas desde maestro (prep + millar × cantidad). */
 export function buildHorasFormPatchFromMaestro(
   row: MaestroPrefillReferenciaRow,
   currentForm: DespachoFormState,
   cantidadPedido: number | null | undefined,
+  opts?: { mode?: MaestroPrefillMode },
 ): { patch: MaestroHorasFormPatch; filledLabels: string[] } {
+  const mode = opts?.mode ?? "empty";
   const patch: MaestroHorasFormPatch = {};
   const filledLabels: string[] = [];
 
@@ -278,13 +292,19 @@ export function buildHorasFormPatchFromMaestro(
   );
   const tirajeImp = horasTirajeDesdeMillar(millarImp, cantidadPedido);
 
-  if (!currentForm.horas_entrada.trim() && prepImp != null) {
-    patch.horas_entrada = roundHoras(prepImp);
-    filledLabels.push("Horas impresión (prep)");
+  if (prepImp != null) {
+    const next = roundHoras(prepImp);
+    if (shouldWriteMaestroField(mode, currentForm.horas_entrada.trim(), next)) {
+      patch.horas_entrada = next;
+      filledLabels.push("Horas impresión (prep)");
+    }
   }
-  if (!currentForm.horas_tiraje.trim() && tirajeImp != null) {
-    patch.horas_tiraje = roundHoras(tirajeImp);
-    filledLabels.push("Horas impresión (tiraje)");
+  if (tirajeImp != null) {
+    const next = roundHoras(tirajeImp);
+    if (shouldWriteMaestroField(mode, currentForm.horas_tiraje.trim(), next)) {
+      patch.horas_tiraje = next;
+      filledLabels.push("Horas impresión (tiraje)");
+    }
   }
 
   const prepTroq = pickHorasEfectivo(
@@ -299,20 +319,40 @@ export function buildHorasFormPatchFromMaestro(
   );
   const tirajeTroq = horasTirajeDesdeMillar(millarTroq, cantidadPedido);
 
-  if (!currentForm.horas_troquel_preparacion.trim() && prepTroq != null) {
-    patch.horas_troquel_preparacion = roundHoras(prepTroq);
-    filledLabels.push("Horas troquel (prep)");
+  if (prepTroq != null) {
+    const next = roundHoras(prepTroq);
+    if (
+      shouldWriteMaestroField(
+        mode,
+        currentForm.horas_troquel_preparacion.trim(),
+        next,
+      )
+    ) {
+      patch.horas_troquel_preparacion = next;
+      filledLabels.push("Horas troquel (prep)");
+    }
   }
-  if (!currentForm.horas_troquel_tiraje.trim() && tirajeTroq != null) {
-    patch.horas_troquel_tiraje = roundHoras(tirajeTroq);
-    filledLabels.push("Horas troquel (tiraje)");
+  if (tirajeTroq != null) {
+    const next = roundHoras(tirajeTroq);
+    if (
+      shouldWriteMaestroField(mode, currentForm.horas_troquel_tiraje.trim(), next)
+    ) {
+      patch.horas_troquel_tiraje = next;
+      filledLabels.push("Horas troquel (tiraje)");
+    }
   }
-  if (
-    !currentForm.horas_estimadas_troquelado.trim() &&
-  (prepTroq != null || tirajeTroq != null)
-  ) {
+  if (prepTroq != null || tirajeTroq != null) {
     const total = sumHoras(prepTroq, tirajeTroq);
-    if (total) patch.horas_estimadas_troquelado = total;
+    if (
+      total &&
+      shouldWriteMaestroField(
+        mode,
+        currentForm.horas_estimadas_troquelado.trim(),
+        total,
+      )
+    ) {
+      patch.horas_estimadas_troquelado = total;
+    }
   }
 
   const prepEng = pickHorasEfectivo(
@@ -327,20 +367,40 @@ export function buildHorasFormPatchFromMaestro(
   );
   const tirajeEng = horasTirajeDesdeMillar(millarEng, cantidadPedido);
 
-  if (!currentForm.horas_engomado_preparacion.trim() && prepEng != null) {
-    patch.horas_engomado_preparacion = roundHoras(prepEng);
-    filledLabels.push("Horas engomado (prep)");
+  if (prepEng != null) {
+    const next = roundHoras(prepEng);
+    if (
+      shouldWriteMaestroField(
+        mode,
+        currentForm.horas_engomado_preparacion.trim(),
+        next,
+      )
+    ) {
+      patch.horas_engomado_preparacion = next;
+      filledLabels.push("Horas engomado (prep)");
+    }
   }
-  if (!currentForm.horas_engomado_tiraje.trim() && tirajeEng != null) {
-    patch.horas_engomado_tiraje = roundHoras(tirajeEng);
-    filledLabels.push("Horas engomado (tiraje)");
+  if (tirajeEng != null) {
+    const next = roundHoras(tirajeEng);
+    if (
+      shouldWriteMaestroField(mode, currentForm.horas_engomado_tiraje.trim(), next)
+    ) {
+      patch.horas_engomado_tiraje = next;
+      filledLabels.push("Horas engomado (tiraje)");
+    }
   }
-  if (
-    !currentForm.horas_estimadas_engomado.trim() &&
-    (prepEng != null || tirajeEng != null)
-  ) {
+  if (prepEng != null || tirajeEng != null) {
     const total = sumHoras(prepEng, tirajeEng);
-    if (total) patch.horas_estimadas_engomado = total;
+    if (
+      total &&
+      shouldWriteMaestroField(
+        mode,
+        currentForm.horas_estimadas_engomado.trim(),
+        total,
+      )
+    ) {
+      patch.horas_estimadas_engomado = total;
+    }
   }
 
   return { patch, filledLabels };

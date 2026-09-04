@@ -524,11 +524,13 @@ export type MaestroPrefillFormPatch = Partial<
   Pick<DespachoFormState, "material" | "gramaje" | "poses" | "troquel" | "tintas" | "acabado_pral" | "tipo_engomado" | "codigo_caja_embalaje" | "unidades_por_embalaje">
 >;
 
-/** Construye el patch de campos planos del formulario desde el maestro — solo vacíos. */
+/** Construye el patch de campos planos del formulario desde el maestro. */
 export function buildFormPatchFromMaestro(
   maestro: MaestroPrefillReferenciaRow,
-  currentForm: DespachoFormState
+  currentForm: DespachoFormState,
+  opts?: { mode?: "empty" | "overwrite" },
 ): { patch: MaestroPrefillFormPatch; filledLabels: string[]; skippedLabels: string[] } {
+  const mode = opts?.mode ?? "empty";
   const patch: Record<string, string> = {};
   const filledLabels: string[] = [];
   const skippedLabels: string[] = [];
@@ -539,8 +541,12 @@ export function buildFormPatchFromMaestro(
     const maestroVal = maestroValorEfectivoTexto(maestro, key);
     if (!maestroVal) continue;
     const currentVal = String(currentForm[formField] ?? "").trim();
-    if (currentVal) {
-      skippedLabels.push(FIELD_LABELS[key]);
+    if (mode === "empty") {
+      if (currentVal) {
+        skippedLabels.push(FIELD_LABELS[key]);
+        continue;
+      }
+    } else if (currentVal === maestroVal) {
       continue;
     }
     patch[formField] = maestroVal;
@@ -550,12 +556,14 @@ export function buildFormPatchFromMaestro(
   return { patch: patch as MaestroPrefillFormPatch, filledLabels, skippedLabels };
 }
 
-/** Construye el patch de `procesoDatos` (CTP, guillotina, externos) desde `defaults_proceso` — solo vacíos. */
+/** Construye el patch de `procesoDatos` (CTP, guillotina, externos) desde `defaults_proceso`. */
 export function buildProcesoDatosPatchFromMaestro(
   defaults: DefaultsProcesoMaestro | null | undefined,
   currentProcesoDatos: DespachoWizardProcesoDatos,
-  procesoIdsEnRuta: Set<number>
+  procesoIdsEnRuta: Set<number>,
+  opts?: { mode?: "empty" | "overwrite" },
 ): { patch: Partial<DespachoWizardProcesoDatos>; filledLabels: string[] } {
+  const mode = opts?.mode ?? "empty";
   const filledLabels: string[] = [];
   if (!defaults) return { patch: {}, filledLabels };
 
@@ -581,13 +589,21 @@ export function buildProcesoDatosPatchFromMaestro(
     const g = currentProcesoDatos.guillotina;
     const nextG = { ...g };
     let changed = false;
-    if (!g.patron_corte?.trim() && defaults.guillotina.patron_corte) {
-      nextG.patron_corte = defaults.guillotina.patron_corte;
-      changed = true;
+    if (defaults.guillotina.patron_corte) {
+      const cur = g.patron_corte?.trim() ?? "";
+      const next = defaults.guillotina.patron_corte;
+      if (mode === "overwrite" ? cur !== next : !cur) {
+        nextG.patron_corte = next;
+        changed = true;
+      }
     }
-    if (!g.tamano_final?.trim() && defaults.guillotina.tamano_final) {
-      nextG.tamano_final = defaults.guillotina.tamano_final;
-      changed = true;
+    if (defaults.guillotina.tamano_final) {
+      const cur = g.tamano_final?.trim() ?? "";
+      const next = defaults.guillotina.tamano_final;
+      if (mode === "overwrite" ? cur !== next : !cur) {
+        nextG.tamano_final = next;
+        changed = true;
+      }
     }
     if (changed) {
       patch.guillotina = nextG;
@@ -604,13 +620,22 @@ export function buildProcesoDatosPatchFromMaestro(
       const hasCurrent = Boolean(
         current.acabado_detalle?.trim() || current.acabado_cara?.trim() || current.acabado_dorso?.trim()
       );
-      if (hasCurrent) continue;
-      nextExternos[id] = {
+      if (mode === "empty" && hasCurrent) continue;
+      const merged = {
         ...current,
         acabado_detalle: ext.acabado_detalle || current.acabado_detalle,
         acabado_cara: ext.acabado_cara || current.acabado_cara,
         acabado_dorso: ext.acabado_dorso || current.acabado_dorso,
       };
+      if (
+        mode === "overwrite" &&
+        merged.acabado_detalle === current.acabado_detalle &&
+        merged.acabado_cara === current.acabado_cara &&
+        merged.acabado_dorso === current.acabado_dorso
+      ) {
+        continue;
+      }
+      nextExternos[id] = merged;
       changed = true;
     }
     if (changed) {

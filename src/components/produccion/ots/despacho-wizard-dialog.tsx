@@ -1055,7 +1055,7 @@ export function DespachoWizardDialog({
     [applyUltimoTrabajoPrefill]
   );
 
-  /** Botón explícito "Usar maestro": rellena SOLO campos vacíos desde `*_habitual` + `defaults_proceso`. */
+  /** Botón explícito "Usar maestro": sobrescribe técnicos desde oficial → promedio → habitual. */
   const applyMaestroPrefillClick = useCallback(async () => {
     const refId = form.referencia_id;
     const refCodigo = form.referencia_codigo.trim();
@@ -1079,7 +1079,8 @@ export function DespachoWizardDialog({
       const procesoIdsEnRuta = new Set(itinerarioSlots.map((s) => s.procesoId));
       const { patch: formPatch, filledLabels: formFilled } = buildFormPatchFromMaestro(
         maestroRow,
-        form
+        form,
+        { mode: "overwrite" },
       );
       const cantidadPedido = integerOrZeroForDespacho(meta.cantidad);
       const { patch: horasPatch, filledLabels: horasFilled } =
@@ -1087,14 +1088,20 @@ export function DespachoWizardDialog({
           maestroRow,
           { ...form, ...formPatch },
           cantidadPedido > 0 ? cantidadPedido : null,
+          { mode: "overwrite" },
         );
       const { patch: procesoPatch, filledLabels: procesoFilled } =
-        buildProcesoDatosPatchFromMaestro(maestroRow.defaults_proceso, procesoDatos, procesoIdsEnRuta);
+        buildProcesoDatosPatchFromMaestro(
+          maestroRow.defaults_proceso,
+          procesoDatos,
+          procesoIdsEnRuta,
+          { mode: "overwrite" },
+        );
 
       const allFilled = [...formFilled, ...horasFilled, ...procesoFilled];
       if (allFilled.length === 0) {
         toast.info(
-          `Maestro ${refCodigo}: nada nuevo que aportar (ya rellenado o maestro vacío).`
+          `Maestro ${refCodigo}: nada que aplicar (ya igual o maestro vacío).`
         );
         return;
       }
@@ -1106,7 +1113,7 @@ export function DespachoWizardDialog({
       if (Object.keys(procesoPatch).length > 0) {
         setProcesoDatos((pd) => ({ ...pd, ...procesoPatch }));
       }
-      toast.success(`Rellenado desde maestro ${refCodigo}: ${allFilled.join(", ")}.`);
+      toast.success(`Aplicado desde maestro ${refCodigo}: ${allFilled.join(", ")}.`);
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : "No se pudo leer el maestro de artículos."
@@ -3263,7 +3270,7 @@ export function DespachoWizardDialog({
                         Usar maestro
                       </Button>
                       <span className="text-[10px] text-slate-400">
-                        (maestro: solo campos vacíos · oficial → promedio → habitual)
+                        (maestro: sobrescribe técnicos · oficial → promedio → habitual)
                       </span>
                     </div>
                   ) : null}

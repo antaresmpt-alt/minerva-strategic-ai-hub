@@ -98,11 +98,35 @@ describe("buildHorasFormPatchFromMaestro", () => {
     expect(patch.horas_tiraje).toBe("5");
   });
 
-  it("no pisa campos ya rellenados", () => {
+  it("modo empty no pisa campos ya rellenados", () => {
     const row = baseRow({ horas_prep_impresion_promedio: 0.5 });
     const form = { ...emptyDespachoForm(), horas_entrada: "2" };
     const { patch, filledLabels } = buildHorasFormPatchFromMaestro(row, form, 1000);
     expect(patch.horas_entrada).toBeUndefined();
     expect(filledLabels).toEqual([]);
+  });
+
+  it("modo overwrite pisa campos ya rellenados", () => {
+    const row = baseRow({
+      horas_prep_impresion_promedio: 0.5,
+      horas_millar_impresion_promedio: 0.343,
+    });
+    const form = {
+      ...emptyDespachoForm(),
+      horas_entrada: "0.65",
+      horas_tiraje: "1.2",
+    };
+    const { patch, filledLabels } = buildHorasFormPatchFromMaestro(
+      row,
+      form,
+      8000,
+      { mode: "overwrite" },
+    );
+    expect(patch.horas_entrada).toBe("0.5");
+    expect(patch.horas_tiraje).toBe("2.74");
+    expect(filledLabels).toEqual([
+      "Horas impresión (prep)",
+      "Horas impresión (tiraje)",
+    ]);
   });
 });
