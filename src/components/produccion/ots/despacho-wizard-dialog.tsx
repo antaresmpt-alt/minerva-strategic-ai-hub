@@ -20,6 +20,7 @@ import {
   DespachoItinerarioPicker,
   type DespachoItinerarioSlot,
 } from "@/components/produccion/ots/despacho-itinerario-picker";
+import { OtAnteriorSearchInput } from "@/components/produccion/ots/ot-anterior-search-input";
 import {
   ReferenciaMinervaPicker,
   type ReferenciaMinervaValue,
@@ -3271,25 +3272,19 @@ export function DespachoWizardDialog({
                       OT anterior (clonar)
                     </Label>
                     <div className="flex gap-2">
-                      <Input
+                      <OtAnteriorSearchInput
                         id="wiz-ot-anterior"
-                        className="h-8 text-xs font-mono"
                         value={form.ot_anterior_numero}
-                        onChange={(e) =>
+                        onChange={(otNumero, otId) =>
                           setForm((f) => ({
                             ...f,
-                            ot_anterior_numero: e.target.value,
-                            ot_anterior_id: null,
+                            ot_anterior_numero: otNumero,
+                            ot_anterior_id: otId,
                           }))
                         }
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            void cloneFromOtAnterior(form.ot_anterior_numero);
-                          }
-                        }}
-                        placeholder="Nº OT anterior"
+                        excludeOtNumero={seleccion?.num_pedido}
                         disabled={!seleccion}
+                        onConfirm={(ot) => void cloneFromOtAnterior(ot)}
                       />
                       <Button
                         type="button"
@@ -3304,7 +3299,8 @@ export function DespachoWizardDialog({
                       </Button>
                     </div>
                     <p className="text-[11px] text-slate-500">
-                      Sobrescribe campos técnicos del formulario (material, horas, embalaje…).
+                      Busca por número, cliente o artículo. Clonar sobrescribe
+                      campos técnicos (material, horas, embalaje…).
                     </p>
                   </div>
                   {form.referencia_id ? (

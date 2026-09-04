@@ -21,6 +21,7 @@ import {
   DespachoItinerarioPicker,
   type DespachoItinerarioSlot,
 } from "@/components/produccion/ots/despacho-itinerario-picker";
+import { OtAnteriorSearchInput } from "@/components/produccion/ots/ot-anterior-search-input";
 import {
   ReferenciaMinervaPicker,
   type ReferenciaMinervaValue,
@@ -1636,26 +1637,19 @@ export function OtsDespachadasPage({
                   OT anterior (clonar de una OT concreta)
                 </Label>
                 <div className="flex gap-2">
-                  <Input
+                  <OtAnteriorSearchInput
                     id="edit-despacho-ot-anterior"
-                    className="h-8 text-xs font-mono"
                     value={editForm.ot_anterior_numero}
-                    onChange={(e) =>
+                    onChange={(otNumero, otId) =>
                       setEditForm((f) => ({
                         ...f,
-                        ot_anterior_numero: e.target.value,
-                        ot_anterior_id: null,
+                        ot_anterior_numero: otNumero,
+                        ot_anterior_id: otId,
                       }))
                     }
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        void cloneEditFromOtAnterior(
-                          editForm.ot_anterior_numero
-                        );
-                      }
-                    }}
-                    placeholder="Nº OT anterior"
+                    excludeOtNumero={editRow?.ot_numero}
+                    disabled={editSaving}
+                    onConfirm={(ot) => void cloneEditFromOtAnterior(ot)}
                   />
                   <Button
                     type="button"
@@ -1670,7 +1664,8 @@ export function OtsDespachadasPage({
                   </Button>
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  El clonado solo rellena campos vacíos.
+                  Busca por número, cliente o artículo. El clonado
+                  sobrescribe campos técnicos.
                 </p>
               </div>
             </div>
