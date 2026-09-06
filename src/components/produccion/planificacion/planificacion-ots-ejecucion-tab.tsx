@@ -109,6 +109,10 @@ import {
   type ContenedorSeccionMaquina,
   type ContenedorSeccionPaso,
 } from "@/lib/contenedor-seccion";
+import {
+  markEjecucionEnCursoLocal,
+  materializeContenedorRowAfterStart,
+} from "@/lib/contenedor-ejecucion-optimistic";
 import { isOtNumeroPrueba } from "@/lib/ot-prueba";
 import { useFormatoMargenParametros } from "@/hooks/use-formato-margen-parametros";
 import { useSysParametrosSobreproduccion } from "@/hooks/use-sys-parametros-sobreproduccion";
@@ -388,6 +392,16 @@ function enrichContenedorRowPlanHoy(
       plan.turno,
     ),
   };
+}
+
+function sortPasosConPlanHoy<
+  T extends { otNumero: string; fechaEntrega: string | null },
+>(pasos: T[], planByOt: Map<string, PlanHoyDetallePorOt>): T[] {
+  if (planByOt.size === 0) return pasos;
+  const slotByOt = new Map(
+    [...planByOt.entries()].map(([ot, p]) => [ot, p.rank]),
+  );
+  return [...pasos].sort((a, b) => compareConPlanHoy(a, b, slotByOt));
 }
 
 /** I / D / E / T — detalle del día prioriza en la cola. */
@@ -1383,6 +1397,9 @@ export function PlanificacionOtsEjecucionTab({
   const catalogosRef = useRef<CatalogosEjecucion | null>(null);
   const roleRef = useRef<string | null>(null);
   const roleLoadedRef = useRef(false);
+  const authUserRef = useRef<{ id: string | null; email: string | null } | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [planificacionRole, setPlanificacionRole] = useState<string | null>(null);
@@ -1397,14 +1414,19 @@ export function PlanificacionOtsEjecucionTab({
     [planificacionRole],
   );
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true;
+    if (!silent) setLoading(true);
     try {
       let roleRead: string | null = null;
       if (!roleLoadedRef.current) {
         const {
           data: { user: authUser },
         } = await supabase.auth.getUser();
+        authUserRef.current = {
+          id: authUser?.id ?? null,
+          email: authUser?.email ?? null,
+        };
         const uid =
           typeof authUser?.id === "string" && authUser.id.trim().length > 0
             ? authUser.id.trim()
@@ -2143,173 +2165,196 @@ export function PlanificacionOtsEjecucionTab({
         (estado === "activas" ||
           estado === "pendiente_inicio" ||
           estado === "all");
-      const planHoyCache = new Map<
+      const planHoyInflight = new Map<
         string,
-        Map<string, PlanHoyDetallePorOt>
+        Promise<Map<string, PlanHoyDetallePorOt>>
       >();
-      const loadPlanHoy = async (
+      const loadPlanHoy = (
         ambito: Parameters<typeof fetchPlanHoyDetalleByOt>[2],
       ): Promise<Map<string, PlanHoyDetallePorOt>> => {
         const key = String(ambito);
-        const cached = planHoyCache.get(key);
-        if (cached) return cached;
-        const plan = await fetchPlanHoyDetalleByOt(
+        const existing = planHoyInflight.get(key);
+        if (existing) return existing;
+        const pending = fetchPlanHoyDetalleByOt(
           supabase,
           localTodayYmd(),
           ambito,
-        );
-        planHoyCache.set(key, plan);
-        return plan;
+        ).catch((err) => {
+          planHoyInflight.delete(key);
+          throw err;
+        });
+        planHoyInflight.set(key, pending);
+        return pending;
       };
-      if (showContenedorCtp || showContenedorTroquel || showContenedorSecciones) {
-        const { data: activasPaso } = await supabase
-          .from(TABLE_EJECUCIONES)
-          .select("ot_paso_id")
-          .in("estado_ejecucion", ESTADOS_ACTIVAS)
-          .not("ot_paso_id", "is", null);
-        occupiedPasos = new Set(
-          (activasPaso ?? [])
-            .map((r) =>
-              String((r as { ot_paso_id?: string }).ot_paso_id ?? "").trim(),
-            )
-            .filter(Boolean),
-        );
-      }
 
-      if (showContenedorCtp) {
+      const occupiedPromise: Promise<Set<string>> =
+        showContenedorCtp || showContenedorTroquel || showContenedorSecciones
+          ? supabase
+              .from(TABLE_EJECUCIONES)
+              .select("ot_paso_id")
+              .in("estado_ejecucion", ESTADOS_ACTIVAS)
+              .not("ot_paso_id", "is", null)
+              .then(({ data: activasPaso }) => {
+                occupiedPasos = new Set(
+                  (activasPaso ?? [])
+                    .map((r) =>
+                      String(
+                        (r as { ot_paso_id?: string }).ot_paso_id ?? "",
+                      ).trim(),
+                    )
+                    .filter(Boolean),
+                );
+                return occupiedPasos;
+              })
+          : Promise.resolve(occupiedPasos);
+
+      const contenedorCtpTask = (async (): Promise<MesaEjecucion[]> => {
+        if (!showContenedorCtp) return [];
         try {
-          const ctpMaq = await fetchMaquinaCtpActiva(supabase);
-          if (ctpMaq) {
-            const candidatos = await fetchContenedorCtpPasosDisponibles(supabase, {
+          const [occupied, ctpMaq] = await Promise.all([
+            occupiedPromise,
+            fetchMaquinaCtpActiva(supabase),
+          ]);
+          if (!ctpMaq) return [];
+          const candidatos = await fetchContenedorCtpPasosDisponibles(
+            supabase,
+            {
               includePruebas: true,
               soloEjecutable: false,
-              otPasoIdsConEjecucionActiva: occupiedPasos,
-            });
-            contenedorRows = candidatos.map((p) =>
-              buildContenedorCtpVirtualRow(p, ctpMaq),
-            );
-          }
+              otPasoIdsConEjecucionActiva: occupied,
+            },
+          );
+          return candidatos.map((p) =>
+            buildContenedorCtpVirtualRow(p, ctpMaq),
+          );
         } catch (ctpErr) {
           console.warn("[ejecucion] contenedor CTP", ctpErr);
+          return [];
         }
-      }
+      })();
 
-      if (showContenedorTroquel) {
+      const contenedorTroquelTask = (async (): Promise<{
+        rows: MesaEjecucion[];
+        maqs: ContenedorTroquelMaquina[];
+      }> => {
+        if (!showContenedorTroquel) return { rows: [], maqs: [] };
         try {
-          const troquelMaqs = await fetchMaquinasTroquelActivas(supabase);
-          setMaquinasTroquel(troquelMaqs);
-          if (troquelMaqs.length > 0) {
-            const candidatosTroq = await fetchContenedorTroquelPasosDisponibles(
-              supabase,
-              {
-                includePruebas: true,
-                soloEjecutable: false,
-                otPasoIdsConEjecucionActiva: occupiedPasos,
-              },
-            );
-            let pasosTroq = candidatosTroq;
-            let planByOt = new Map<string, PlanHoyDetallePorOt>();
-            try {
-              planByOt = await loadPlanHoy("troquelado");
-              const slotByOt = new Map(
-                [...planByOt.entries()].map(([ot, p]) => [ot, p.rank]),
-              );
-              if (slotByOt.size > 0) {
-                pasosTroq = [...candidatosTroq].sort((a, b) =>
-                  compareConPlanHoy(a, b, slotByOt),
-                );
-              }
-            } catch (planErr) {
-              console.warn("[ejecucion] plan hoy troquelado", planErr);
-            }
-            const troquelNombreById = new Map(
-              troquelMaqs.map((m) => [m.id, m.nombre]),
-            );
-            contenedorRows = [
-              ...contenedorRows,
-              ...pasosTroq.map((p) => {
-                const row = buildContenedorTroquelVirtualRow(p);
-                return enrichContenedorRowPlanHoy(
-                  row,
-                  planByOt,
-                  troquelNombreById,
-                  "Troquelado (elegir al iniciar)",
-                );
-              }),
-            ];
+          const [occupied, troquelMaqs] = await Promise.all([
+            occupiedPromise,
+            fetchMaquinasTroquelActivas(supabase),
+          ]);
+          if (troquelMaqs.length === 0) return { rows: [], maqs: [] };
+          const candidatosTroq = await fetchContenedorTroquelPasosDisponibles(
+            supabase,
+            {
+              includePruebas: true,
+              soloEjecutable: false,
+              otPasoIdsConEjecucionActiva: occupied,
+            },
+          );
+          let planByOt = new Map<string, PlanHoyDetallePorOt>();
+          try {
+            planByOt = await loadPlanHoy("troquelado");
+          } catch (planErr) {
+            console.warn("[ejecucion] plan hoy troquelado", planErr);
           }
+          const pasosTroq = sortPasosConPlanHoy(candidatosTroq, planByOt);
+          const troquelNombreById = new Map(
+            troquelMaqs.map((m) => [m.id, m.nombre]),
+          );
+          return {
+            maqs: troquelMaqs,
+            rows: pasosTroq.map((p) =>
+              enrichContenedorRowPlanHoy(
+                buildContenedorTroquelVirtualRow(p),
+                planByOt,
+                troquelNombreById,
+                "Troquelado (elegir al iniciar)",
+              ),
+            ),
+          };
         } catch (troqErr) {
           console.warn("[ejecucion] contenedor Troquel", troqErr);
+          return { rows: [], maqs: [] };
         }
-      } else {
-        setMaquinasTroquel([]);
-      }
+      })();
 
-      if (showContenedorSecciones) {
+      const contenedorSeccionesTask = (async (): Promise<{
+        rows: MesaEjecucion[];
+        claimMap: Partial<
+          Record<ContenedorSeccionKind, ContenedorSeccionMaquina[]>
+        >;
+      }> => {
+        if (!showContenedorSecciones) {
+          return { rows: [], claimMap: {} };
+        }
         try {
+          const occupied = await occupiedPromise;
           const claimMap: Partial<
             Record<ContenedorSeccionKind, ContenedorSeccionMaquina[]>
           > = {};
-          for (const def of seccionesExtra) {
-            const maqs = await fetchMaquinasContenedorSeccion(supabase, def);
-            if (def.claim) claimMap[def.kind] = maqs;
-            if (maqs.length === 0) continue;
-            const candidatosSec = await fetchContenedorSeccionPasosDisponibles(
-              supabase,
-              def,
-              {
-                includePruebas: true,
-                soloEjecutable: false,
-                otPasoIdsConEjecucionActiva: occupiedPasos,
-              },
-            );
-            let pasosSec = candidatosSec;
-            let planByOt = new Map<string, PlanHoyDetallePorOt>();
-            if (
-              def.kind === "impresion" ||
-              def.kind === "digital" ||
-              def.kind === "engomado"
-            ) {
-              try {
-                planByOt = await loadPlanHoy(def.kind);
-                const slotByOt = new Map(
-                  [...planByOt.entries()].map(([ot, p]) => [ot, p.rank]),
-                );
-                if (slotByOt.size > 0) {
-                  pasosSec = [...candidatosSec].sort((a, b) =>
-                    compareConPlanHoy(a, b, slotByOt),
-                  );
+          const packs = await Promise.all(
+            seccionesExtra.map(async (def) => {
+              const maqs = await fetchMaquinasContenedorSeccion(supabase, def);
+              if (def.claim) claimMap[def.kind] = maqs;
+              if (maqs.length === 0) return [] as MesaEjecucion[];
+              const candidatosSec = await fetchContenedorSeccionPasosDisponibles(
+                supabase,
+                def,
+                {
+                  includePruebas: true,
+                  soloEjecutable: false,
+                  otPasoIdsConEjecucionActiva: occupied,
+                },
+              );
+              let planByOt = new Map<string, PlanHoyDetallePorOt>();
+              if (
+                def.kind === "impresion" ||
+                def.kind === "digital" ||
+                def.kind === "engomado"
+              ) {
+                try {
+                  planByOt = await loadPlanHoy(def.kind);
+                } catch (planErr) {
+                  console.warn("[ejecucion] plan hoy detalle-día", planErr);
                 }
-              } catch (planErr) {
-                console.warn("[ejecucion] plan hoy detalle-día", planErr);
               }
-            }
-            const fixedMaq = def.claim ? null : maqs[0] ?? null;
-            const seccionNombreById = new Map(maqs.map((m) => [m.id, m.nombre]));
-            const claimFallback = `${def.labelBadge.replace(/^Contenedor\s+/i, "")} (elegir al iniciar)`;
-            contenedorRows = [
-              ...contenedorRows,
-              ...pasosSec.map((p) => {
-                const row = buildContenedorSeccionVirtualRow(p, fixedMaq, {
-                  claim: def.claim,
-                  labelBadge: def.labelBadge,
-                });
-                return enrichContenedorRowPlanHoy(
-                  row,
+              const pasosSec = sortPasosConPlanHoy(candidatosSec, planByOt);
+              const fixedMaq = def.claim ? null : (maqs[0] ?? null);
+              const seccionNombreById = new Map(
+                maqs.map((m) => [m.id, m.nombre]),
+              );
+              const claimFallback = `${def.labelBadge.replace(/^Contenedor\s+/i, "")} (elegir al iniciar)`;
+              return pasosSec.map((p) =>
+                enrichContenedorRowPlanHoy(
+                  buildContenedorSeccionVirtualRow(p, fixedMaq, {
+                    claim: def.claim,
+                    labelBadge: def.labelBadge,
+                  }),
                   planByOt,
                   seccionNombreById,
                   claimFallback,
-                );
-              }),
-            ];
-          }
-          setMaquinasClaimSeccion(claimMap);
+                ),
+              );
+            }),
+          );
+          return { rows: packs.flat(), claimMap };
         } catch (secErr) {
           console.warn("[ejecucion] contenedor secciones", secErr);
+          return { rows: [], claimMap: {} };
         }
-      } else {
-        setMaquinasClaimSeccion({});
-      }
+      })();
+
+      const [ctpRows, troquelPack, seccionPack] = await Promise.all([
+        contenedorCtpTask,
+        contenedorTroquelTask,
+        contenedorSeccionesTask,
+      ]);
+      contenedorRows = [...ctpRows, ...troquelPack.rows, ...seccionPack.rows];
+      setMaquinasTroquel(showContenedorTroquel ? troquelPack.maqs : []);
+      setMaquinasClaimSeccion(
+        showContenedorSecciones ? seccionPack.claimMap : {},
+      );
 
       // Contenedor I/D: ¿Guillotina hecha? (misma pregunta Rita/Ramón).
       try {
@@ -2775,9 +2820,12 @@ export function PlanificacionOtsEjecucionTab({
   useEffect(() => {
     if (loading || workScreenId == null) return;
     if (colaRows.some((r) => r.id === workScreenId)) return;
+    // Iniciar con filtro «Por hacer»: la fila pasa a en_curso y sale de la cola,
+    // pero el parte debe seguir abierto.
+    if (rows.some((r) => r.id === workScreenId)) return;
     setWorkScreenId(null);
     setWorkScreenIntent(null);
-  }, [loading, colaRows, workScreenId]);
+  }, [loading, colaRows, rows, workScreenId]);
 
   const patchExecution = useCallback(
     async (row: MesaEjecucion, patch: Record<string, unknown>, datosProcesoUpdate?: DatosProcesoGenerico | null) => {
@@ -2874,7 +2922,7 @@ export function PlanificacionOtsEjecucionTab({
         /* prod_planificacion_pool: sincronizado por trigger prod_trg_mesa_ejecucion_itinerario_finaliza
            (en_transito si quedan pasos; cerrada solo con itinerario completo; sin ot_paso_id -> cerrada). */
         toast.success("Ejecución actualizada.");
-        await loadData();
+        void loadData({ silent: true });
       } catch (e) {
         const msg = errorMessageFromUnknown(e, "No se pudo actualizar la ejecución.");
         toast.error(msg);
@@ -2896,6 +2944,25 @@ export function PlanificacionOtsEjecucionTab({
         return;
       }
       setSavingId(row.id);
+      const commitStart = (next: MesaEjecucion) => {
+        setRows((prev) => prev.map((r) => (r.id === row.id ? next : r)));
+        setWorkScreenId(next.id);
+      };
+      const resolveAuth = async () => {
+        if (authUserRef.current) return authUserRef.current;
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        authUserRef.current = {
+          id: user?.id ?? null,
+          email: user?.email ?? null,
+        };
+        return authUserRef.current;
+      };
+      const dpJson =
+        datosProcesoUpdate != null
+          ? (datosProcesoUpdate as Record<string, unknown>)
+          : undefined;
       try {
         const nowIso = new Date().toISOString();
         let execId = row.id;
@@ -2908,15 +2975,13 @@ export function PlanificacionOtsEjecucionTab({
           if (!pasoId) {
             throw new Error("Paso CTP no encontrado para materializar ejecución.");
           }
-          const {
-            data: { user },
-          } = await supabase.auth.getUser();
+          const user = await resolveAuth();
           const created = await crearEjecucionLigeraCtp(supabase, {
             otNumero: row.ot,
             otPasoId: pasoId,
             maquinaId: row.maquinaId,
-            userId: user?.id ?? null,
-            userEmail: user?.email ?? null,
+            userId: user.id,
+            userEmail: user.email,
             startImmediately: true,
           });
           execId = created.id;
@@ -2927,9 +2992,17 @@ export function PlanificacionOtsEjecucionTab({
               .eq("id", pasoId);
             if (dpErr) throw dpErr;
           }
+          commitStart(
+            materializeContenedorRowAfterStart(row, {
+              execId,
+              inicioRealAt: nowIso,
+              maquinaId: row.maquinaId,
+              maquinaNombre: row.maquinaNombre,
+              datosProcesoJson: dpJson,
+            }),
+          );
           toast.success(`OT ${row.ot} iniciada desde contenedor CTP (sin mesa).`);
-          setWorkScreenId(execId);
-          await loadData();
+          void loadData({ silent: true });
           return;
         }
 
@@ -2951,15 +3024,13 @@ export function PlanificacionOtsEjecucionTab({
               "Elige máquina troquel (claim) antes de iniciar.",
             );
           }
-          const {
-            data: { user },
-          } = await supabase.auth.getUser();
+          const user = await resolveAuth();
           const created = await crearEjecucionLigeraTroquel(supabase, {
             otNumero: row.ot,
             otPasoId: pasoId,
             maquinaId: claimMaquinaId,
-            userId: user?.id ?? null,
-            userEmail: user?.email ?? null,
+            userId: user.id,
+            userEmail: user.email,
             startImmediately: true,
             horasPlanificadas: row.horasPlanificadasSnapshot,
           });
@@ -2974,11 +3045,19 @@ export function PlanificacionOtsEjecucionTab({
           const maqNombre =
             maquinasTroquel.find((m) => m.id === claimMaquinaId)?.nombre ??
             claimMaquinaId;
+          commitStart(
+            materializeContenedorRowAfterStart(row, {
+              execId,
+              inicioRealAt: nowIso,
+              maquinaId: claimMaquinaId,
+              maquinaNombre: maqNombre,
+              datosProcesoJson: dpJson,
+            }),
+          );
           toast.success(
             `OT ${row.ot} iniciada en ${maqNombre} (contenedor Troquel, sin mesa).`,
           );
-          setWorkScreenId(execId);
-          await loadData();
+          void loadData({ silent: true });
           return;
         }
 
@@ -3003,15 +3082,13 @@ export function PlanificacionOtsEjecucionTab({
                 : `No hay máquina para ${def.labelBadge}.`,
             );
           }
-          const {
-            data: { user },
-          } = await supabase.auth.getUser();
+          const user = await resolveAuth();
           const created = await crearEjecucionLigeraSeccion(supabase, {
             otNumero: row.ot,
             otPasoId: seccionParsed.otPasoId,
             maquinaId: claimMaquinaId,
-            userId: user?.id ?? null,
-            userEmail: user?.email ?? null,
+            userId: user.id,
+            userEmail: user.email,
             startImmediately: true,
             horasPlanificadas: row.horasPlanificadasSnapshot,
             horasDefault: def.horasDefault,
@@ -3031,11 +3108,19 @@ export function PlanificacionOtsEjecucionTab({
             )?.find((m) => m.id === claimMaquinaId)?.nombre ??
             row.maquinaNombre ??
             claimMaquinaId;
+          commitStart(
+            materializeContenedorRowAfterStart(row, {
+              execId,
+              inicioRealAt: nowIso,
+              maquinaId: claimMaquinaId,
+              maquinaNombre: maqNombre,
+              datosProcesoJson: dpJson,
+            }),
+          );
           toast.success(
             `OT ${row.ot} iniciada${def.claim ? ` en ${maqNombre}` : ""} (${def.labelBadge}, sin mesa).`,
           );
-          setWorkScreenId(execId);
-          await loadData();
+          void loadData({ silent: true });
           return;
         }
 
@@ -3056,8 +3141,9 @@ export function PlanificacionOtsEjecucionTab({
             .eq("id", row.otPasoId);
           if (dpErr) throw dpErr;
         }
+        commitStart(markEjecucionEnCursoLocal(row, nowIso, dpJson));
         toast.success(`OT ${row.ot} iniciada en máquina.`);
-        await loadData();
+        void loadData({ silent: true });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "No se pudo iniciar la OT.";
         toast.error(msg);
@@ -3089,7 +3175,7 @@ export function PlanificacionOtsEjecucionTab({
           ejecucionId: row.id,
         });
         toast.success(`OT ${row.ot} devuelta al Pool.`);
-        await loadData();
+        void loadData({ silent: true });
       } catch (e) {
         toast.error(errorMessageFromUnknown(e, "No se pudo devolver la OT al Pool."));
       } finally {
@@ -3130,7 +3216,7 @@ export function PlanificacionOtsEjecucionTab({
           .eq("id", row.id);
         if (error) throw error;
         toast.success(`Claim de ${row.ot} anulado. Recarga: debe salir Contenedor otra vez.`);
-        await loadData();
+        void loadData({ silent: true });
       } catch (e) {
         toast.error(
           errorMessageFromUnknown(e, "No se pudo anular la ejecución ligera."),
@@ -3152,7 +3238,7 @@ export function PlanificacionOtsEjecucionTab({
       try {
         await derivarOtAImpresionExterna(supabase, row.ot);
         toast.success(`${row.ot} lista para Ramón (cola Externos).`);
-        await loadData();
+        void loadData({ silent: true });
       } catch (e) {
         toast.error(errorMessageFromUnknown(e, "No se pudo derivar a impresión externa."));
       } finally {
@@ -3206,7 +3292,7 @@ export function PlanificacionOtsEjecucionTab({
           if (dpErr) throw dpErr;
         }
         toast.success("OT pausada.");
-        await loadData();
+        void loadData({ silent: true });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "No se pudo pausar la OT.";
         toast.error(msg);
@@ -3264,7 +3350,7 @@ export function PlanificacionOtsEjecucionTab({
           if (dpErr) throw dpErr;
         }
         toast.success("OT reanudada.");
-        await loadData();
+        void loadData({ silent: true });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "No se pudo reanudar la OT.";
         toast.error(msg);
@@ -3784,7 +3870,9 @@ export function PlanificacionOtsEjecucionTab({
             showCloseButton
           >
             {(() => {
-              const row = colaRows.find((r) => r.id === workScreenId);
+              const row =
+                colaRows.find((r) => r.id === workScreenId) ??
+                rows.find((r) => r.id === workScreenId);
               if (!row) {
                 return (
                   <div className="p-6 text-sm text-slate-600">

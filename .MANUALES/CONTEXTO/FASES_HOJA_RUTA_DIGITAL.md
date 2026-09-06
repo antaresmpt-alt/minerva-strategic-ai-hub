@@ -577,6 +577,7 @@ PDF compacto para acompañar la OT entre departamentos (sustituto papel de la ho
 ✅ **Bloque 9**: 9.0–9.6d + calendario prod. ✅ Derivar→imp. externa §15.6.12 (13 ago). ⏳ OCR/sobrantes baja. `MINERVA_BLOQUE9_…` · `.MANUALES/SESIONES/SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`.
 📋 **Bloque 11**: calendario en uso (Carlos/Jordi); lanzar con cuidado — `MINERVA_BLOQUE11_…`.
 📋 **Bloque 12**: roles/landing por perfil documentado (11 ago), implementación aparcada — `MINERVA_BLOQUE12_…` + `.MANUALES/BRIEFS/MINERVA_ROLES_Y_NAVEGACION.md`. Hasta entonces `/produccion` → maestro OTs (14 ago). **Campo:** 1 tableta/máquina. Cola ejecución = lista gorda en `main` (`.MANUALES/SESIONES/SESION_14AGO2026_EJECUCION_LISTA.md`).
+📋 **Bloque 13**: visibilidad planta / comerciales / andon — solo planteado 6 sep (`MINERVA_BLOQUE13_VISIBILIDAD_PLANTA.md`). Calendario ≠ GPS comercial; pipeline recortado.
 
 > Mapa vivo y prioridades paralelo septiembre: **`.MANUALES/CONTEXTO/MINERVA_HUB_CONTEXTO_MAESTRO.md`** (actualizado 14 ago 2026 tarde).
 

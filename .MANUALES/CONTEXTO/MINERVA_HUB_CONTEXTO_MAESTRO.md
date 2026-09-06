@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `.MANUALES/CONTEXTO/FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: **27 ago 2026 noche** (**Bloque 11** — §27 día completo: PDF cartelas · modal Atrasadas · tooltip Guillotina · valla LEGACY · merge `main` domingo noche).
+> Última actualización: **6 sep 2026** (reunión Gemma ~3 h · Bloque 13 visibilidad planteado · perf Iniciar contenedor).
 
 ---
 
@@ -26,6 +26,8 @@
    - `.MANUALES/BRIEFS/MINERVA_BLOQUE11_BRIEF_JORDI_CARLOS.md` (media página planta)
    - `.MANUALES/BLOQUES/MINERVA_BLOQUE12_ROLES_PERMISOS_NAVEGACION.md` (landing por perfil — sept)
    - `.MANUALES/BLOQUES/MINERVA_BLOQUE12_DETALLE_DIA_MESA.md` (vista mesa detalle del día — 29 ago)
+   - `.MANUALES/BLOQUES/MINERVA_BLOQUE13_VISIBILIDAD_PLANTA.md` (comerciales / pipeline / andon — 📋 6 sep)
+   - `.MANUALES/BRIEFS/MINERVA_FRASES_ALBERT_06SEP2026.md` (cheat sheet 7 sep: calendario vs comercial)
 4. Añadir `.MANUALES/CONTEXTO/MINERVA_CONTEXTO_TECNICO.md` solo si la IA necesita detalles técnicos del repo.
 5. Si el tema es mesa / externos / itinerario post-despacho: `.MANUALES/SESIONES/SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`.
 6. Si el tema es Manipulados / Encajar / entrada a Producción: `.MANUALES/SESIONES/SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`.
@@ -44,6 +46,7 @@
 | `.MANUALES/BRIEFS/MINERVA_ROLES_Y_NAVEGACION.md` | Diseño fino permisos/navegación (complementa Bloque 12). |
 | `.MANUALES/BLOQUES/MINERVA_BLOQUE12_ROLES_PERMISOS_NAVEGACION.md` | Brief implementación: landing operario vs gestor. |
 | `.MANUALES/BLOQUES/MINERVA_BLOQUE12_DETALLE_DIA_MESA.md` | Vista mesa detalle del día + claim ejecución (29 ago). |
+| `.MANUALES/BLOQUES/MINERVA_BLOQUE13_VISIBILIDAD_PLANTA.md` | Comerciales / pipeline recortado / andon (📋 6 sep). |
 | `.MANUALES/BLOQUES/MINERVA_BLOQUE10_PRESUPUESTOS.md` | Bloque futuro: presupuestos, formas, versión real al copiar. |
 | `.MANUALES/BLOQUES/MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` | Brainstorming Bloque 11 (calendario master). |
 | `.MANUALES/BLOQUES/MINERVA_BLOQUE11_DECISION_CALENDARIO_CONTENEDOR.md` | Diseño cerrado + contenedor/bandeja smoke · **§6.5 B** · fase 3 detalle-día. |
@@ -444,6 +447,8 @@ Detalle 1–3.x histórico: ver commits jun / `.MANUALES/CONTEXTO/FASES_HOJA_RUT
 24. **Cola de ejecución táctil (14 ago 2026 tarde)**: lista gorda + semáforo; parte completo lazy al expandir; terminadas ocultas (filtro «de hoy» readonly). Query solo activas + catálogos cacheados; pestañas Planificación lazy. Tableta de planta = **máquina**, no persona. Detalle: `.MANUALES/SESIONES/SESION_14AGO2026_EJECUCION_LISTA.md`.
 
 25. **Bloque 9.8 — Reasignación / STOP (18–21 ago 2026)**: ledger ATP manda. **Cerrado en planta:** 9.8.1–6 (smoke **36112**/#10989) + sync albarán + perf Compras. Merge auto = opcional. **Handoff:** `.MANUALES/SESIONES/SESION_20AGO2026_HANDOFF_NOCHE_CLAUDE.md`.
+
+26. **Reunión Gemma 6 sep 2026:** app vista de arriba a abajo; ritmo = 4–5 OTs reales E2E. **Bloque 13** (📋): vista comercial = pipeline recortado, no el calendario; TV aeropuerto / mapa planta = después. Cierre OT ≠ albarán María José (B6+B7). Promedios siguen bajo demanda. **Perf Iniciar contenedor:** optimistic + fetch paralelo — `.MANUALES/SESIONES/SESION_06SEP2026_REUNION_GEMMA_CONTENEDOR.md`.
 
 ## 📁 Estructura de carpetas relevante
 
