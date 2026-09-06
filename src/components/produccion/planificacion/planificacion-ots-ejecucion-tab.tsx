@@ -2189,23 +2189,23 @@ export function PlanificacionOtsEjecucionTab({
 
       const occupiedPromise: Promise<Set<string>> =
         showContenedorCtp || showContenedorTroquel || showContenedorSecciones
-          ? supabase
-              .from(TABLE_EJECUCIONES)
-              .select("ot_paso_id")
-              .in("estado_ejecucion", ESTADOS_ACTIVAS)
-              .not("ot_paso_id", "is", null)
-              .then(({ data: activasPaso }) => {
-                occupiedPasos = new Set(
-                  (activasPaso ?? [])
-                    .map((r) =>
-                      String(
-                        (r as { ot_paso_id?: string }).ot_paso_id ?? "",
-                      ).trim(),
-                    )
-                    .filter(Boolean),
-                );
-                return occupiedPasos;
-              })
+          ? (async () => {
+              const { data: activasPaso } = await supabase
+                .from(TABLE_EJECUCIONES)
+                .select("ot_paso_id")
+                .in("estado_ejecucion", ESTADOS_ACTIVAS)
+                .not("ot_paso_id", "is", null);
+              occupiedPasos = new Set(
+                (activasPaso ?? [])
+                  .map((r) =>
+                    String(
+                      (r as { ot_paso_id?: string }).ot_paso_id ?? "",
+                    ).trim(),
+                  )
+                  .filter(Boolean),
+              );
+              return occupiedPasos;
+            })()
           : Promise.resolve(occupiedPasos);
 
       const contenedorCtpTask = (async (): Promise<MesaEjecucion[]> => {
