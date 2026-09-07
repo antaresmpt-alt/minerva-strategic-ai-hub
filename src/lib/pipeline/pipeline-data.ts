@@ -154,7 +154,7 @@ export function getSiguientePaso(
   );
 }
 
-/** Texto de “Paso actual” en Pipeline (incl. pendientes de revisión). */
+/** Texto de “Paso actual” en Pipeline (incl. pendientes de revisión / terminadas). */
 export function formatPipelinePasoActualLabel(
   row: Pick<PipelineRowView, "pasoActual" | "pasos" | "badges">,
 ): string {
@@ -168,6 +168,13 @@ export function formatPipelinePasoActualLabel(
     const lastName = last?.procesoNombre?.trim();
     return lastName ? `Listo para cerrar · ${lastName}` : "Listo para cerrar";
   }
+  if (row.pasos.length > 0 && row.pasos.every((p) => p.estadoPaso === "finalizado")) {
+    const ordered = [...row.pasos].sort((a, b) => a.orden - b.orden);
+    const last = ordered[ordered.length - 1];
+    const lastName = last?.procesoNombre?.trim();
+    return lastName ? `Completado · ${lastName}` : "Completado";
+  }
+  if (row.pasos.length === 0) return "Sin itinerario";
   return "—";
 }
 
