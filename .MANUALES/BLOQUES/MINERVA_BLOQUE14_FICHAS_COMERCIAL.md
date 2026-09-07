@@ -16,7 +16,7 @@ Normativa ES/EU → ficha técnica de **todos** los artículos. Manel/Zaida no d
 | Comercial (artículo) | Cliente, ref. cliente (opc.), descripción, tipo, medidas, material, gramaje, tintas, acabados, uds/caja, tipo fondo… |
 | Una vez por cliente | RGS, temperatura → tabla `prod_cliente_ficha` |
 | OT / planta | Troquel fino, ref. embalaje, peso unitario tras 1ª producción |
-| Fotos | Huecos `foto_*_path` + `prod_referencia_adjuntos` — **upload UI pendiente** |
+| Fotos | Upload UI + bucket `referencias-adjuntos` · `foto_*_path` + `prod_referencia_adjuntos` |
 
 - Código siempre **M-xxxxx** Minerva.
 - Migración: `supabase/migrations/20260907180000_bloque14_fichas_comercial.sql` (aplicada en proyecto Supabase).
@@ -24,10 +24,11 @@ Normativa ES/EU → ficha técnica de **todos** los artículos. Manel/Zaida no d
 ## 3. PDF dual
 
 - **Minerva**: ficha interna (habituales + promedios) para planta/OT.
-- **Cliente**: estilo Access/Blanxart; hereda RGS/temp del cliente; placeholders de foto.
+- **Cliente**: estilo Access/Blanxart; hereda RGS/temp del cliente; embebe JPG/PNG o nota si PDF.
 - Lote: botón «PDF cliente lote» (selección o filtrados).
 
-Lib: `src/lib/articulos-maestro-ficha-pdf.ts`.
+Lib: `src/lib/articulos-maestro-ficha-pdf.ts`.  
+Adjuntos: `src/lib/prod-referencia-adjuntos.ts` + panel en form (edición). Bucket Storage `referencias-adjuntos` (PDF/JPG/PNG, 15 MB).
 
 ## 4. Permisos comercial
 
@@ -48,7 +49,6 @@ Crear (Settings / admin) con rol comercial, p.ej.:
 
 ## 6. Fuera de alcance (ahora)
 
-- Upload fotos Storage.
 - Certificados conformidad proveedor (Gemma).
 - Auto-peso desde producción.
 - Merge a `main` hasta OK Manel/demo.
@@ -56,11 +56,12 @@ Crear (Settings / admin) con rol comercial, p.ej.:
 ## 7. Smoke sugerido
 
 1. Login admin → Artículos → crear/editar con tipo fondo + engomado + RGS → PDF Minerva y PDF Cliente (engomado y troqueles duales).
-2. Checkbox «Guardar y crear otro»: mantiene cliente/RGS, limpia artículo, siguiente M-xxxxx.
-3. Descargar plantilla Excel actualizada → rellenar → Importar (incluye engomado, tipo_fondo, RGS/temp).
-4. Filtrar por cliente → PDF cliente lote.
-5. (Cuando existan users) login comercial → solo Pipeline + Artículos.
-6. `npx vitest run src/lib/bloque14-fichas-comercial.test.ts`
+2. Editar artículo → subir **foto producto** (JPG/PNG) + **troquel** (PDF preferido) → Abrir / Sustituir → PDF Minerva/Cliente (imagen embebida o «PDF adjunto»).
+3. Checkbox «Guardar y crear otro»: mantiene cliente/RGS, limpia artículo, siguiente M-xxxxx.
+4. Descargar plantilla Excel actualizada → rellenar → Importar (incluye engomado, tipo_fondo, RGS/temp).
+5. Filtrar por cliente → PDF cliente lote.
+6. Login comercial → solo Pipeline + Artículos; upload adjuntos OK; sin borrar artículos.
+7. `npx vitest run src/lib/bloque14-fichas-comercial.test.ts`
 
 ## 8. Relación con Bloque 13
 
