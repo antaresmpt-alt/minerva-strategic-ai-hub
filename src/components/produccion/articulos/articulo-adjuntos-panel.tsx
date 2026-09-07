@@ -102,17 +102,9 @@ function AdjuntoSlot({
       <p className="mb-2 text-[10px] text-slate-400">{hint}</p>
       {path ? (
         <div className="mb-2 space-y-1.5">
-          {url && isImageStoragePath(path) ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={url}
-              alt={label}
-              className="max-h-28 rounded border border-slate-100 object-contain"
-            />
-          ) : null}
           <p className="truncate font-mono text-[10px] text-slate-500" title={path}>
             {path}
-            {isPdfStoragePath(path) ? " · PDF" : ""}
+            {isPdfStoragePath(path) ? " · PDF" : isImageStoragePath(path) ? " · imagen" : ""}
           </p>
           <div className="flex flex-wrap gap-1.5">
             {url ? (

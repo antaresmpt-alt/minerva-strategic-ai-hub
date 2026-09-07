@@ -31,17 +31,40 @@ function publicAdjuntoUrl(storagePath: string): string {
 
 type PdfImageAsset = { dataUrl: string; format: "JPEG" | "PNG" };
 
-async function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
+/** Preview embebido en ficha: ~900px max, JPEG ~0.72 (ligero). */
+const PREVIEW_MAX_PX = 900;
+const PREVIEW_JPEG_QUALITY = 0.72;
+
+function canvasToJpegAsset(canvas: HTMLCanvasElement): PdfImageAsset | null {
+  try {
+    const dataUrl = canvas.toDataURL("image/jpeg", PREVIEW_JPEG_QUALITY);
+    if (!dataUrl || dataUrl.length < 32) return null;
+    return { dataUrl, format: "JPEG" };
+  } catch {
+    return null;
+  }
 }
 
-/** Convierte BMP/WEBP/GIF/etc. a PNG data URL para jsPDF. */
-async function rasterToPngDataUrl(blob: Blob): Promise<string | null> {
+function drawScaledToCanvas(
+  source: CanvasImageSource,
+  srcW: number,
+  srcH: number,
+): HTMLCanvasElement | null {
+  if (srcW <= 0 || srcH <= 0) return null;
+  const scale = Math.min(1, PREVIEW_MAX_PX / Math.max(srcW, srcH));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(srcW * scale));
+  canvas.height = Math.max(1, Math.round(srcH * scale));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+/** Convierte BMP/WEBP/GIF/JPG/PNG a preview JPEG reducido. */
+async function rasterizeImageBlob(blob: Blob): Promise<PdfImageAsset | null> {
   try {
     const objectUrl = URL.createObjectURL(blob);
     try {
@@ -51,14 +74,12 @@ async function rasterToPngDataUrl(blob: Blob): Promise<string | null> {
         el.onerror = () => reject(new Error("image load failed"));
         el.src = objectUrl;
       });
-      const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth || img.width;
-      canvas.height = img.naturalHeight || img.height;
-      if (canvas.width <= 0 || canvas.height <= 0) return null;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return null;
-      ctx.drawImage(img, 0, 0);
-      return canvas.toDataURL("image/png");
+      const canvas = drawScaledToCanvas(
+        img,
+        img.naturalWidth || img.width,
+        img.naturalHeight || img.height,
+      );
+      return canvas ? canvasToJpegAsset(canvas) : null;
     } finally {
       URL.revokeObjectURL(objectUrl);
     }
@@ -67,33 +88,88 @@ async function rasterToPngDataUrl(blob: Blob): Promise<string | null> {
   }
 }
 
+/** 1ª página del PDF adjunto → preview JPEG (pdfjs). */
+async function rasterizePdfBlob(blob: Blob): Promise<PdfImageAsset | null> {
+  try {
+    const pdfjs = await import("pdfjs-dist");
+    pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+      "pdfjs-dist/build/pdf.worker.min.mjs",
+      import.meta.url,
+    ).toString();
+    const data = new Uint8Array(await blob.arrayBuffer());
+    const pdf = await pdfjs.getDocument({ data }).promise;
+    const page = await pdf.getPage(1);
+    const base = page.getViewport({ scale: 1 });
+    const scale = Math.min(
+      1.6,
+      PREVIEW_MAX_PX / Math.max(base.width, base.height, 1),
+    );
+    const viewport = page.getViewport({ scale: Math.max(0.6, scale) });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.floor(viewport.width));
+    canvas.height = Math.max(1, Math.floor(viewport.height));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+    return canvasToJpegAsset(canvas);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Carga adjunto (imagen o PDF) y genera preview embebible en la ficha.
+ * PDF → raster 1ª página; imagen → downscale JPEG.
+ */
 async function loadPdfImageAsset(
   pathOrUrl: string | null | undefined,
 ): Promise<PdfImageAsset | null> {
   const raw = String(pathOrUrl ?? "").trim();
-  if (!raw || !isImageStoragePath(raw)) return null;
+  if (!raw) return null;
   try {
     const url = publicAdjuntoUrl(raw);
     const res = await fetch(url);
     if (!res.ok) return null;
     const blob = await res.blob();
-    const isPng = /\.png(\?|$)/i.test(raw) || blob.type === "image/png";
-    const isJpeg =
-      /\.jpe?g(\?|$)/i.test(raw) ||
-      blob.type === "image/jpeg" ||
-      blob.type === "image/jpg";
-    if (isPng || isJpeg) {
-      return {
-        dataUrl: await blobToDataUrl(blob),
-        format: isPng ? "PNG" : "JPEG",
-      };
+    const looksPdf =
+      isPdfStoragePath(raw) ||
+      blob.type === "application/pdf" ||
+      blob.type === "application/x-pdf";
+    if (looksPdf) return await rasterizePdfBlob(blob);
+    if (
+      isImageStoragePath(raw) ||
+      blob.type.startsWith("image/")
+    ) {
+      return await rasterizeImageBlob(blob);
     }
-    const png = await rasterToPngDataUrl(blob);
-    if (!png) return null;
-    return { dataUrl: png, format: "PNG" };
+    // MIME raro: intentar PDF y luego imagen
+    const asPdf = await rasterizePdfBlob(blob);
+    if (asPdf) return asPdf;
+    return await rasterizeImageBlob(blob);
   } catch {
     return null;
   }
+}
+
+function addImageContain(
+  doc: jsPDF,
+  asset: PdfImageAsset,
+  x: number,
+  y: number,
+  maxW: number,
+  maxH: number,
+): void {
+  const props = doc.getImageProperties(asset.dataUrl);
+  const iw = Number(props.width) || maxW;
+  const ih = Number(props.height) || maxH;
+  const r = Math.min(maxW / iw, maxH / ih);
+  const w = Math.max(1, iw * r);
+  const h = Math.max(1, ih * r);
+  const ox = x + (maxW - w) / 2;
+  const oy = y + (maxH - h) / 2;
+  doc.addImage(asset.dataUrl, asset.format, ox, oy, w, h);
 }
 
 export type ArticuloFichaPdfModo = "minerva" | "cliente";
@@ -211,58 +287,58 @@ function drawFooter(doc: jsPDF, modo: ArticuloFichaPdfModo): void {
   doc.text("1 / 1", 198, 291, { align: "right" });
 }
 
-/** Huecos / imágenes adjuntas. */
+/** Huecos fijos / previews de adjuntos (imagen o 1ª pág. PDF). El marco no crece. */
 function drawFotoPlaceholders(
   doc: jsPDF,
   row: ProdReferenciaRow,
   y: number,
   assets?: { producto: PdfImageAsset | null; troquel: PdfImageAsset | null },
 ): number {
+  const boxW = 85;
+  const boxH = 42;
+  const labelH = 5;
+  const pad = 2;
+  const imgX = (baseX: number) => baseX + pad;
+  const imgY = y + labelH + 1;
+  const imgW = boxW - pad * 2;
+  const imgH = boxH - labelH - pad - 1;
   const hasProd = Boolean(row.foto_producto_path?.trim());
   const hasTroq = Boolean(row.foto_troquel_path?.trim());
   doc.setDrawColor(200, 200, 200);
-  doc.rect(14, y, 85, 42);
-  doc.rect(111, y, 85, 42);
+  doc.rect(14, y, boxW, boxH);
+  doc.rect(111, y, boxW, boxH);
   doc.setFontSize(7);
   doc.setTextColor(...SLATE);
-  doc.text("Foto producto", 16, y + 5);
+  doc.text("Foto producto", 16, y + 4);
   if (assets?.producto) {
     try {
-      doc.addImage(assets.producto.dataUrl, assets.producto.format, 16, y + 7, 80, 32);
+      addImageContain(doc, assets.producto, imgX(14), imgY, imgW, imgH);
     } catch {
-      doc.text(hasProd ? "Imagen no embebible" : "Pendiente de cargar", 16, y + 12);
+      doc.text(hasProd ? "Adjunto no embebible" : "Pendiente de cargar", 16, y + 12);
     }
   } else {
     doc.text(
-      hasProd
-        ? isPdfStoragePath(row.foto_producto_path)
-          ? "PDF adjunto (abrir en Hub)"
-          : "Pendiente de cargar"
-        : "Pendiente de cargar",
+      hasProd ? "Adjunto no embebible" : "Pendiente de cargar",
       16,
       y + 12,
     );
   }
-  doc.text("Perfil / foto troquel", 113, y + 5);
+  doc.text("Perfil / foto troquel", 113, y + 4);
   if (assets?.troquel) {
     try {
-      doc.addImage(assets.troquel.dataUrl, assets.troquel.format, 113, y + 7, 80, 32);
+      addImageContain(doc, assets.troquel, imgX(111), imgY, imgW, imgH);
     } catch {
-      doc.text(hasTroq ? "Imagen no embebible" : "Pendiente de cargar", 113, y + 12);
+      doc.text(hasTroq ? "Adjunto no embebible" : "Pendiente de cargar", 113, y + 12);
     }
   } else {
     doc.text(
-      hasTroq
-        ? isPdfStoragePath(row.foto_troquel_path)
-          ? "PDF adjunto (abrir en Hub)"
-          : "Pendiente de cargar"
-        : "Pendiente de cargar",
+      hasTroq ? "Adjunto no embebible" : "Pendiente de cargar",
       113,
       y + 12,
     );
   }
   doc.setTextColor(0, 0, 0);
-  return y + 48;
+  return y + boxH + 6;
 }
 
 function buildClienteBody(
@@ -336,6 +412,10 @@ function buildClienteBody(
     y += Math.min(lines.length, 5) * 4 + 2;
   }
 
+  if (y > 220) {
+    doc.addPage();
+    y = 18;
+  }
   y = drawFotoPlaceholders(doc, row, y, assets);
   return y;
 }
@@ -510,16 +590,18 @@ function buildMinervaBody(
     y += Math.min(lines.length, 6) * 4 + 2;
   }
 
-  if (y < 240) {
-    y = sectionTitle(doc, "Fotos / adjuntos", y);
-    drawFotoPlaceholders(doc, row, y, assets);
+  if (y > 220) {
+    doc.addPage();
+    y = 18;
   }
+  y = sectionTitle(doc, "Fotos / adjuntos", y);
+  drawFotoPlaceholders(doc, row, y, assets);
   return y;
 }
 
 /**
  * Genera PDF A4. Por defecto modo minerva + descarga.
- * Embebe JPG/PNG de Storage; si el adjunto es PDF, deja nota «abrir en Hub».
+ * Embebe preview de adjuntos (imagen o 1ª página PDF, JPEG reducido).
  */
 export async function exportArticuloFichaPdf(
   row: ProdReferenciaRow,

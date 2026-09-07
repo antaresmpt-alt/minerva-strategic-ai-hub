@@ -28,7 +28,8 @@ Normativa ES/EU → ficha técnica de **todos** los artículos. Manel/Zaida no d
 - Lote: botón «PDF cliente lote» (selección o filtrados).
 
 Lib: `src/lib/articulos-maestro-ficha-pdf.ts`.  
-Adjuntos: `src/lib/prod-referencia-adjuntos.ts` + panel en form (edición). Bucket Storage `referencias-adjuntos` (PDF/JPG/PNG, 15 MB).
+Adjuntos: `src/lib/prod-referencia-adjuntos.ts` + panel en form (edición; sin preview en modal — Abrir). Bucket Storage `referencias-adjuntos` (PDF/JPG/PNG/BMP…, 15 MB).  
+En PDF Minerva/Cliente se embebe preview (imagen o 1ª página del PDF adjunto, JPEG reducido).
 
 ## 4. Permisos comercial
 
