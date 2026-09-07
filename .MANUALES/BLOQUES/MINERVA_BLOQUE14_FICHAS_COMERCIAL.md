@@ -31,8 +31,10 @@ Lib: `src/lib/articulos-maestro-ficha-pdf.ts`.
 
 ## 4. Permisos comercial
 
-- Rol `comercial` → módulo `produccion` + rutas **solo** `/produccion/articulos` y `/produccion/pipeline` (+ hub `/produccion` → redirect artículos).
-- Nav shell: `comercialMinimal` (Pipeline + Artículos).
+- Rol `comercial` → módulo `produccion` **ON** en `role_permissions`.
+- Rutas app: solo `/produccion/articulos` + `/produccion/pipeline` (+ redirect hub).
+- Nav shell: Pipeline + Artículos.
+- RLS: maestro `insert/update` OK, **sin delete**; pipeline/OTs/ejecución/pool **solo SELECT**.
 - Siguen: chat, sales, SEM, SEO.
 
 ## 5. Usuarios previstos
