@@ -53,10 +53,12 @@ Crear (Settings / admin) con rol comercial, p.ej.:
 
 ## 7. Smoke sugerido
 
-1. Login admin → Artículos → crear/editar con tipo fondo + RGS cliente → PDF Minerva y PDF Cliente.
-2. Filtrar por cliente → PDF cliente lote.
-3. (Cuando existan users) login comercial → solo ve Pipeline + Artículos; OTs/ejecución denegado.
-4. `npx vitest run src/lib/bloque14-fichas-comercial.test.ts`
+1. Login admin → Artículos → crear/editar con tipo fondo + engomado + RGS → PDF Minerva y PDF Cliente (engomado y troqueles duales).
+2. Checkbox «Guardar y crear otro»: mantiene cliente/RGS, limpia artículo, siguiente M-xxxxx.
+3. Descargar plantilla Excel actualizada → rellenar → Importar (incluye engomado, tipo_fondo, RGS/temp).
+4. Filtrar por cliente → PDF cliente lote.
+5. (Cuando existan users) login comercial → solo Pipeline + Artículos.
+6. `npx vitest run src/lib/bloque14-fichas-comercial.test.ts`
 
 ## 8. Relación con Bloque 13
 

@@ -39,6 +39,7 @@ import {
   descargarPlantillaArticulos,
   exportarArticulosAExcel,
   exportarArticulosAPdf,
+  nextCodigoMinerva,
   parseArticulosExcelFile,
   type ArticuloDiffResult,
   type ArticuloImportRow,
@@ -549,6 +550,8 @@ function ArticuloFormDialog({
   recalculandoPromedios,
   clienteFicha,
   onClienteFichaChange,
+  keepOpen = false,
+  onKeepOpenChange,
 }: {
   open: boolean;
   title: string;
@@ -564,6 +567,9 @@ function ArticuloFormDialog({
   recalculandoPromedios?: boolean;
   clienteFicha: ClienteFichaForm;
   onClienteFichaChange: (f: ClienteFichaForm) => void;
+  /** Solo creación: mantener modal abierto tras guardar. */
+  keepOpen?: boolean;
+  onKeepOpenChange?: (v: boolean) => void;
 }) {
   const set = (k: keyof ArticuloForm, v: string | boolean | DefaultsProcesoMaestro) =>
     onFormChange({ ...form, [k]: v });
@@ -1101,32 +1107,44 @@ function ArticuloFormDialog({
           />
         </div>
 
-        <DialogFooter className="gap-2 sm:justify-between">
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => handlePdfFicha("minerva")}
-              disabled={saving || !form.codigo.trim()}
-              title="Ficha interna Minerva (planta / OT)"
-            >
-              <FileDown className="size-3.5" />
-              PDF Minerva
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => handlePdfFicha("cliente")}
-              disabled={saving || !form.codigo.trim()}
-              title="Ficha para entregar al cliente (RGS/temp heredados)"
-            >
-              <FileDown className="size-3.5" />
-              PDF Cliente
-            </Button>
+        <DialogFooter className="flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => handlePdfFicha("minerva")}
+                disabled={saving || !form.codigo.trim()}
+                title="Ficha interna Minerva (planta / OT)"
+              >
+                <FileDown className="size-3.5" />
+                PDF Minerva
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => handlePdfFicha("cliente")}
+                disabled={saving || !form.codigo.trim()}
+                title="Ficha para entregar al cliente (RGS/temp heredados)"
+              >
+                <FileDown className="size-3.5" />
+                PDF Cliente
+              </Button>
+            </div>
+            {onKeepOpenChange ? (
+              <label className="inline-flex items-center gap-2 text-xs text-slate-700">
+                <Checkbox
+                  checked={keepOpen}
+                  onCheckedChange={(v) => onKeepOpenChange(v === true)}
+                  aria-label="Guardar y crear otro"
+                />
+                Guardar y crear otro
+              </label>
+            ) : null}
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>
@@ -1173,6 +1191,7 @@ export function ArticulosMaestroPage() {
   const [savingCreate, setSavingCreate] = useState(false);
   const [createClienteFicha, setCreateClienteFicha] =
     useState<ClienteFichaForm>(EMPTY_CLIENTE_FICHA);
+  const [createKeepOpen, setCreateKeepOpen] = useState(true);
 
   const loadClienteFichaInto = useCallback(
     async (
@@ -1313,14 +1332,37 @@ export function ArticulosMaestroPage() {
       if (err) throw err;
       await persistClienteFichaIfNeeded(createForm.cliente, createClienteFicha);
       toast.success(`Artículo ${createForm.codigo} creado`);
-      setCreateOpen(false);
-      await loadData();
+      if (createKeepOpen) {
+        const nextCodigo = nextCodigoMinerva([
+          ...rows.map((r) => r.codigo),
+          createForm.codigo,
+        ]);
+        const keepCliente = createForm.cliente;
+        setCreateForm({
+          ...EMPTY_FORM,
+          codigo: nextCodigo,
+          cliente: keepCliente,
+        });
+        createClienteLoadedRef.current = normalizeClienteNombre(keepCliente);
+        await loadData();
+      } else {
+        setCreateOpen(false);
+        await loadData();
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Error creando artículo");
     } finally {
       setSavingCreate(false);
     }
-  }, [createForm, createClienteFicha, supabase, loadData, persistClienteFichaIfNeeded]);
+  }, [
+    createForm,
+    createClienteFicha,
+    createKeepOpen,
+    rows,
+    supabase,
+    loadData,
+    persistClienteFichaIfNeeded,
+  ]);
 
   // ── Editar ──────────────────────────────────────────────────────────────────
 
@@ -1942,6 +1984,8 @@ export function ArticulosMaestroPage() {
         onClose={() => setCreateOpen(false)}
         clienteFicha={createClienteFicha}
         onClienteFichaChange={setCreateClienteFicha}
+        keepOpen={createKeepOpen}
+        onKeepOpenChange={setCreateKeepOpen}
       />
 
       {/* Modal Editar */}

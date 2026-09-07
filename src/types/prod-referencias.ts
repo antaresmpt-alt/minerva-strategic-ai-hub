@@ -212,10 +212,19 @@ export type ArticuloExcelRow = {
   formato_ancho_mm?: string | number | null;
   formato_fondo_mm?: string | number | null;
   material_habitual?: string | null;
+  gramaje_habitual?: string | number | null;
   poses_habitual?: string | number | null;
   troquel_habitual?: string | null;
   tintas_habituales?: string | null;
   acabado_habitual?: string | null;
+  tipo_engomado_habitual?: string | null;
+  tipo_fondo?: string | null;
+  caja_embalaje_habitual?: string | null;
+  unidades_por_embalaje_habitual?: string | number | null;
+  peso_unitario?: string | number | null;
   ruta_habitual?: string | null;
   notas?: string | null;
+  /** Defaults ficha cliente (no van a prod_referencias). */
+  registro_sanitario?: string | null;
+  temperatura_conservacion?: string | null;
 };

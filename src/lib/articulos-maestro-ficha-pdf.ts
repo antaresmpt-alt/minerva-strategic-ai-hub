@@ -131,36 +131,26 @@ function drawFooter(doc: jsPDF, modo: ArticuloFichaPdfModo): void {
   doc.text("1 / 1", 198, 291, { align: "right" });
 }
 
-/** Huecos reservados para fotos (upload pendiente). */
+/** Huecos reservados para fotos (upload pendiente). Siempre visibles. */
 function drawFotoPlaceholders(doc: jsPDF, row: ProdReferenciaRow, y: number): number {
   const hasProd = Boolean(row.foto_producto_path?.trim());
   const hasTroq = Boolean(row.foto_troquel_path?.trim());
-  if (!hasProd && !hasTroq) {
-    doc.setFontSize(7.5);
-    doc.setTextColor(...SLATE);
-    doc.text(
-      "Fotos: espacio reservado (producto izq. · perfil troquel der.) — carga pendiente.",
-      14,
-      y + 3,
-    );
-    doc.setTextColor(0, 0, 0);
-    return y + 10;
-  }
-  // Paths listos: marco vacío con nota (embed de imagen en Storage → fase upload).
   doc.setDrawColor(200, 200, 200);
   doc.rect(14, y, 85, 42);
   doc.rect(111, y, 85, 42);
   doc.setFontSize(7);
   doc.setTextColor(...SLATE);
+  doc.text("Foto producto", 16, y + 6);
   doc.text(
-    hasProd ? `Producto: ${row.foto_producto_path}` : "Producto (sin foto)",
+    hasProd ? String(row.foto_producto_path) : "Pendiente de cargar",
     16,
-    y + 6,
+    y + 12,
   );
+  doc.text("Perfil / foto troquel", 113, y + 6);
   doc.text(
-    hasTroq ? `Troquel: ${row.foto_troquel_path}` : "Troquel (sin foto)",
+    hasTroq ? String(row.foto_troquel_path) : "Pendiente de cargar",
     113,
-    y + 6,
+    y + 12,
   );
   doc.setTextColor(0, 0, 0);
   return y + 48;
@@ -196,7 +186,14 @@ function buildClienteBody(
       ["Acabados", txt(row.acabado_habitual)],
       ["Medidas (mm)", fmtMm(row)],
       ["Tipo fondo", txt(row.tipo_fondo)],
-      ["Troquel", txt(row.troquel_habitual)],
+      ["Troquel (código)", txt(row.troquel_habitual) === "—" ? "Pendiente de cargar" : txt(row.troquel_habitual)],
+      [
+        "Perfil / foto troquel",
+        row.foto_troquel_path?.trim()
+          ? row.foto_troquel_path
+          : "Pendiente de cargar",
+      ],
+      ["Engomado (tipo)", txt(row.tipo_engomado_habitual)],
     ]) + 3;
 
   y = sectionTitle(doc, "Logística", y);
@@ -277,11 +274,17 @@ function buildMinervaBody(doc: jsPDF, row: ProdReferenciaRow, startY: number): n
         "Gramaje",
         row.gramaje_habitual != null ? `${row.gramaje_habitual} g/m²` : "—",
       ],
-      ["Troquel", txt(row.troquel_habitual)],
+      ["Troquel (código)", txt(row.troquel_habitual) === "—" ? "Pendiente de cargar" : txt(row.troquel_habitual)],
+      [
+        "Perfil / foto troquel",
+        row.foto_troquel_path?.trim()
+          ? row.foto_troquel_path
+          : "Pendiente de cargar",
+      ],
       ["Poses", txt(row.poses_habitual)],
       ["Tintas", txt(row.tintas_habituales)],
       ["Acabado", txt(row.acabado_habitual)],
-      ["Engomado", txt(row.tipo_engomado_habitual)],
+      ["Engomado (tipo)", txt(row.tipo_engomado_habitual)],
       ["Caja embalaje", txt(row.caja_embalaje_habitual)],
       [
         "Uds / caja",
@@ -389,6 +392,12 @@ function buildMinervaBody(doc: jsPDF, row: ProdReferenciaRow, startY: number): n
     doc.setFontSize(8);
     const lines = doc.splitTextToSize(row.notas.trim(), 182);
     doc.text(lines.slice(0, 6), 14, y);
+    y += Math.min(lines.length, 6) * 4 + 2;
+  }
+
+  if (y < 240) {
+    y = sectionTitle(doc, "Fotos (carga pendiente)", y);
+    drawFotoPlaceholders(doc, row, y);
   }
   return y;
 }
