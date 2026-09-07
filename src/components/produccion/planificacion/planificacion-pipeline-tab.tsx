@@ -851,19 +851,17 @@ export function PlanificacionPipelineTab() {
                             {row.pasoActual.procesoNombre ?? "—"}{" "}
                             <span className="text-slate-500">({row.pasoActual.estadoPaso})</span>
                           </span>
-                        ) : row.badges.includes("pendiente_revision") ? (
+                        ) : (
                           <span
                             className={
                               compactMode
-                                ? "text-[11px] font-medium text-teal-800"
-                                : "text-xs font-medium text-teal-800"
+                                ? "text-[11px] font-medium text-slate-700"
+                                : "text-xs font-medium text-slate-700"
                             }
                             title={formatPipelinePasoActualLabel(row)}
                           >
                             {formatPipelinePasoActualLabel(row)}
                           </span>
-                        ) : (
-                          <span className={compactMode ? "text-[11px] text-slate-500" : "text-xs text-slate-500"}>—</span>
                         )}
                       </TableCell>
                       <TableCell className={compactMode ? "py-1 text-[11px]" : "text-xs"}>
