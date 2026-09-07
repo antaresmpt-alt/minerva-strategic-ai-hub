@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { ProduccionShell } from "@/components/produccion/produccion-shell";
-import { canAccessHubModule } from "@/lib/permissions";
+import { canAccessHubModule, normalizeDbRole } from "@/lib/permissions";
 import {
   getCurrentProfileRole,
   getModuleAccessForCurrentUser,
@@ -39,12 +39,14 @@ export default async function ProduccionLayout({
     "etiquetas_digital",
     dynamic
   );
+  const comercialMinimal = normalizeDbRole(role) === "comercial";
 
   return (
     <ProduccionShell
       hasProduccionModule={hasProduccionModule}
       hasProduccionEjecucionModule={hasProduccionEjecucionModule}
       hasEtiquetasDigitalModule={hasEtiquetasDigitalModule}
+      comercialMinimal={comercialMinimal}
     >
       {children}
     </ProduccionShell>

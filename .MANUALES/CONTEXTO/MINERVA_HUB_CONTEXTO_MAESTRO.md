@@ -27,6 +27,7 @@
    - `.MANUALES/BLOQUES/MINERVA_BLOQUE12_ROLES_PERMISOS_NAVEGACION.md` (landing por perfil — sept)
    - `.MANUALES/BLOQUES/MINERVA_BLOQUE12_DETALLE_DIA_MESA.md` (vista mesa detalle del día — 29 ago)
    - `.MANUALES/BLOQUES/MINERVA_BLOQUE13_VISIBILIDAD_PLANTA.md` (comerciales / pipeline / andon — 📋 6 sep)
+   - `.MANUALES/BLOQUES/MINERVA_BLOQUE14_FICHAS_COMERCIAL.md` (entrada ficha maestro + PDF cliente — 🚧 7 sep)
    - `.MANUALES/BRIEFS/MINERVA_FRASES_ALBERT_06SEP2026.md` (cheat sheet 7 sep: calendario vs comercial)
 4. Añadir `.MANUALES/CONTEXTO/MINERVA_CONTEXTO_TECNICO.md` solo si la IA necesita detalles técnicos del repo.
 5. Si el tema es mesa / externos / itinerario post-despacho: `.MANUALES/SESIONES/SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`.
@@ -47,6 +48,7 @@
 | `.MANUALES/BLOQUES/MINERVA_BLOQUE12_ROLES_PERMISOS_NAVEGACION.md` | Brief implementación: landing operario vs gestor. |
 | `.MANUALES/BLOQUES/MINERVA_BLOQUE12_DETALLE_DIA_MESA.md` | Vista mesa detalle del día + claim ejecución (29 ago). |
 | `.MANUALES/BLOQUES/MINERVA_BLOQUE13_VISIBILIDAD_PLANTA.md` | Comerciales / pipeline recortado / andon (📋 6 sep). |
+| `.MANUALES/BLOQUES/MINERVA_BLOQUE14_FICHAS_COMERCIAL.md` | Fichas en maestro + PDF dual + rol comercial (🚧 7 sep). |
 | `.MANUALES/BLOQUES/MINERVA_BLOQUE10_PRESUPUESTOS.md` | Bloque futuro: presupuestos, formas, versión real al copiar. |
 | `.MANUALES/BLOQUES/MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` | Brainstorming Bloque 11 (calendario master). |
 | `.MANUALES/BLOQUES/MINERVA_BLOQUE11_DECISION_CALENDARIO_CONTENEDOR.md` | Diseño cerrado + contenedor/bandeja smoke · **§6.5 B** · fase 3 detalle-día. |

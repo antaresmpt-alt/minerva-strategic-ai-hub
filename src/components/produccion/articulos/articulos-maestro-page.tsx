@@ -39,23 +39,43 @@ import {
   descargarPlantillaArticulos,
   exportarArticulosAExcel,
   exportarArticulosAPdf,
+  nextCodigoMinerva,
   parseArticulosExcelFile,
   type ArticuloDiffResult,
   type ArticuloImportRow,
 } from "@/lib/articulos-maestro-import";
 import { actualizarPromediosMaestro } from "@/lib/maestro-promedios-update";
-import { exportArticuloFichaPdf } from "@/lib/articulos-maestro-ficha-pdf";
+import {
+  exportArticuloFichaPdf,
+  exportArticulosFichaClienteLote,
+  type ArticuloFichaPdfModo,
+} from "@/lib/articulos-maestro-ficha-pdf";
 import { buildMaestroPromediosPanel } from "@/lib/maestro-prefill";
 import { parseDecimalLoose } from "@/lib/parse-decimal-input";
+import {
+  fetchClienteFichaByCliente,
+  upsertClienteFicha,
+} from "@/lib/prod-cliente-ficha";
 import {
   ARTICULO_TIPO_PRODUCTO_OPTIONS,
   type ProdReferenciaRow,
   type DefaultsProcesoMaestro,
 } from "@/types/prod-referencias";
 import {
+  normalizeClienteNombre,
+  type ProdClienteFichaRow,
+} from "@/types/prod-cliente-ficha";
+import {
   CTP_REQUISITO_DEFS,
   type DespachoWizardCtpDatos,
 } from "@/lib/ctp-despacho";
+
+const EMPTY_CLIENTE_FICHA = {
+  registro_sanitario: "",
+  temperatura_conservacion: "",
+};
+
+type ClienteFichaForm = typeof EMPTY_CLIENTE_FICHA;
 
 const REFERENCIAS_PAGE_SIZE = 1000;
 
@@ -116,6 +136,9 @@ type ArticuloForm = {
   horas_millar_engomado_oficial: string;
   horas_guillotina_oficial: string;
   horas_desbroce_oficial: string;
+  /** Bloque 14 */
+  tipo_fondo: string;
+  peso_unitario: string;
 };
 
 const EMPTY_FORM: ArticuloForm = {
@@ -151,6 +174,8 @@ const EMPTY_FORM: ArticuloForm = {
   horas_millar_engomado_oficial: "",
   horas_guillotina_oficial: "",
   horas_desbroce_oficial: "",
+  tipo_fondo: "",
+  peso_unitario: "",
 };
 
 function numToFormStr(v: number | null | undefined): string {
@@ -203,6 +228,8 @@ function rowToForm(row: ProdReferenciaRow): ArticuloForm {
     horas_millar_engomado_oficial: numToFormStr(row.horas_millar_engomado_oficial),
     horas_guillotina_oficial: numToFormStr(row.horas_guillotina_oficial),
     horas_desbroce_oficial: numToFormStr(row.horas_desbroce_oficial),
+    tipo_fondo: row.tipo_fondo ?? "",
+    peso_unitario: numToFormStr(row.peso_unitario),
   };
 }
 
@@ -241,6 +268,8 @@ function formToPayload(form: ArticuloForm) {
     horas_millar_engomado_oficial: parseNum(form.horas_millar_engomado_oficial),
     horas_guillotina_oficial: parseNum(form.horas_guillotina_oficial),
     horas_desbroce_oficial: parseNum(form.horas_desbroce_oficial),
+    tipo_fondo: form.tipo_fondo.trim() || null,
+    peso_unitario: parseNum(form.peso_unitario),
   };
 }
 
@@ -329,6 +358,10 @@ function buildFichaPdfRow(
     horas_desbroce_promedio: base?.horas_desbroce_promedio ?? null,
     horas_desbroce_oficial: payload.horas_desbroce_oficial,
     horas_desbroce_muestra_n: base?.horas_desbroce_muestra_n ?? null,
+    tipo_fondo: payload.tipo_fondo,
+    peso_unitario: payload.peso_unitario,
+    foto_producto_path: base?.foto_producto_path ?? null,
+    foto_troquel_path: base?.foto_troquel_path ?? null,
     created_at: base?.created_at ?? null,
     updated_at: base?.updated_at ?? null,
   };
@@ -515,6 +548,10 @@ function ArticuloFormDialog({
   promediosRow,
   onRecalcularPromedios,
   recalculandoPromedios,
+  clienteFicha,
+  onClienteFichaChange,
+  keepOpen = false,
+  onKeepOpenChange,
 }: {
   open: boolean;
   title: string;
@@ -528,18 +565,40 @@ function ArticuloFormDialog({
   promediosRow?: ProdReferenciaRow | null;
   onRecalcularPromedios?: () => void;
   recalculandoPromedios?: boolean;
+  clienteFicha: ClienteFichaForm;
+  onClienteFichaChange: (f: ClienteFichaForm) => void;
+  /** Solo creación: mantener modal abierto tras guardar. */
+  keepOpen?: boolean;
+  onKeepOpenChange?: (v: boolean) => void;
 }) {
   const set = (k: keyof ArticuloForm, v: string | boolean | DefaultsProcesoMaestro) =>
     onFormChange({ ...form, [k]: v });
 
-  const handlePdfFicha = () => {
+  const handlePdfFicha = (modo: ArticuloFichaPdfModo) => {
     if (!form.codigo.trim()) {
       toast.error("Indica un código antes de generar la ficha PDF.");
       return;
     }
     try {
-      exportArticuloFichaPdf(buildFichaPdfRow(form, promediosRow));
-      toast.success(`PDF ficha · ${form.codigo.trim()}`);
+      const clientePayload: ProdClienteFichaRow | null = form.cliente.trim()
+        ? {
+            id: "",
+            cliente: normalizeClienteNombre(form.cliente),
+            registro_sanitario: clienteFicha.registro_sanitario.trim() || null,
+            temperatura_conservacion:
+              clienteFicha.temperatura_conservacion.trim() || null,
+            notas: null,
+            created_at: null,
+            updated_at: null,
+          }
+        : null;
+      exportArticuloFichaPdf(buildFichaPdfRow(form, promediosRow), {
+        modo,
+        clienteFicha: clientePayload,
+      });
+      toast.success(
+        `PDF ${modo === "cliente" ? "cliente" : "Minerva"} · ${form.codigo.trim()}`,
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo generar el PDF");
     }
@@ -554,6 +613,12 @@ function ArticuloFormDialog({
         </DialogHeader>
 
         <div className="grid gap-4 py-2">
+          <div className="rounded-md border border-[#C69C2B]/40 bg-[#C69C2B]/10 px-3 py-2 text-[11px] text-[#002147]">
+            Entrada comercial: cliente, descripción, tipo, medidas, material, tintas,
+            acabados y uds/caja. RGS y temperatura se guardan <strong>una vez por
+            cliente</strong>. Fotos: placeholders en PDF (upload más adelante).
+          </div>
+
           {/* Identidad */}
           <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
             Identidad
@@ -573,7 +638,7 @@ function ArticuloFormDialog({
               </div>
             )}
             <div className="grid gap-1">
-              <Label className="text-xs">Referencia cliente</Label>
+              <Label className="text-xs">Referencia cliente (opcional)</Label>
               <Input
                 className="h-8 font-mono text-xs"
                 placeholder="EU858"
@@ -597,6 +662,43 @@ function ArticuloFormDialog({
                 placeholder="LABORATORIOS ANUR, S.L"
                 value={form.cliente}
                 onChange={(e) => set("cliente", e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Ficha cliente (RGS / temp) */}
+          <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            Datos fijos del cliente (heredan en PDF cliente)
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-1">
+              <Label className="text-xs">Registro sanitario (RGS)</Label>
+              <Input
+                className="h-8 text-xs"
+                placeholder="39.01234/CAT"
+                value={clienteFicha.registro_sanitario}
+                onChange={(e) =>
+                  onClienteFichaChange({
+                    ...clienteFicha,
+                    registro_sanitario: e.target.value,
+                  })
+                }
+                disabled={!form.cliente.trim()}
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label className="text-xs">Temperatura conservación</Label>
+              <Input
+                className="h-8 text-xs"
+                placeholder="Ambiente / 2–8 ºC"
+                value={clienteFicha.temperatura_conservacion}
+                onChange={(e) =>
+                  onClienteFichaChange({
+                    ...clienteFicha,
+                    temperatura_conservacion: e.target.value,
+                  })
+                }
+                disabled={!form.cliente.trim()}
               />
             </div>
           </div>
@@ -703,6 +805,15 @@ function ArticuloFormDialog({
               />
             </div>
             <div className="grid gap-1">
+              <Label className="text-xs">Tipo de fondo</Label>
+              <Input
+                className="h-8 text-xs"
+                placeholder="Automontable / encajado…"
+                value={form.tipo_fondo}
+                onChange={(e) => set("tipo_fondo", e.target.value)}
+              />
+            </div>
+            <div className="grid gap-1">
               <Label className="text-xs">Poses habitual</Label>
               <Input
                 className="h-8 text-xs"
@@ -760,6 +871,18 @@ function ArticuloFormDialog({
                 onChange={(e) => set("unidades_por_embalaje_habitual", e.target.value)}
               />
             </div>
+            <div className="grid gap-1">
+              <Label className="text-xs">Peso unitario (g) — tras 1ª producción</Label>
+              <Input
+                className="h-8 text-xs"
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="—"
+                value={form.peso_unitario}
+                onChange={(e) => set("peso_unitario", e.target.value)}
+              />
+            </div>
             <div className="col-span-2 grid gap-1">
               <Label className="text-xs">Ruta habitual</Label>
               <Input
@@ -770,6 +893,11 @@ function ArticuloFormDialog({
               />
             </div>
           </div>
+
+          <p className="text-[10px] text-slate-400">
+            Fotos producto / troquel: huecos en Storage listos; subida en siguiente
+            iteración. El PDF muestra placeholders.
+          </p>
 
           {promediosRow ? (
             <>
@@ -979,19 +1107,45 @@ function ArticuloFormDialog({
           />
         </div>
 
-        <DialogFooter className="gap-2 sm:justify-between">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={handlePdfFicha}
-            disabled={saving || !form.codigo.trim()}
-            title="Descarga ficha técnica A4 (1 hoja) con habituales y promedios"
-          >
-            <FileDown className="size-3.5" />
-            PDF ficha
-          </Button>
+        <DialogFooter className="flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => handlePdfFicha("minerva")}
+                disabled={saving || !form.codigo.trim()}
+                title="Ficha interna Minerva (planta / OT)"
+              >
+                <FileDown className="size-3.5" />
+                PDF Minerva
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => handlePdfFicha("cliente")}
+                disabled={saving || !form.codigo.trim()}
+                title="Ficha para entregar al cliente (RGS/temp heredados)"
+              >
+                <FileDown className="size-3.5" />
+                PDF Cliente
+              </Button>
+            </div>
+            {onKeepOpenChange ? (
+              <label className="inline-flex items-center gap-2 text-xs text-slate-700">
+                <Checkbox
+                  checked={keepOpen}
+                  onCheckedChange={(v) => onKeepOpenChange(v === true)}
+                  aria-label="Guardar y crear otro"
+                />
+                Guardar y crear otro
+              </label>
+            ) : null}
+          </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>
               Cancelar
@@ -1028,11 +1182,59 @@ export function ArticulosMaestroPage() {
   const [editingRow, setEditingRow] = useState<ProdReferenciaRow | null>(null);
   const [editForm, setEditForm] = useState<ArticuloForm>(EMPTY_FORM);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [editClienteFicha, setEditClienteFicha] =
+    useState<ClienteFichaForm>(EMPTY_CLIENTE_FICHA);
 
   // Modal crear
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<ArticuloForm>(EMPTY_FORM);
   const [savingCreate, setSavingCreate] = useState(false);
+  const [createClienteFicha, setCreateClienteFicha] =
+    useState<ClienteFichaForm>(EMPTY_CLIENTE_FICHA);
+  const [createKeepOpen, setCreateKeepOpen] = useState(true);
+
+  const loadClienteFichaInto = useCallback(
+    async (
+      cliente: string | null | undefined,
+      setForm: (f: ClienteFichaForm) => void,
+    ) => {
+      const key = normalizeClienteNombre(cliente);
+      if (!key) {
+        setForm({ ...EMPTY_CLIENTE_FICHA });
+        return;
+      }
+      try {
+        const row = await fetchClienteFichaByCliente(supabase, key);
+        setForm({
+          registro_sanitario: row?.registro_sanitario ?? "",
+          temperatura_conservacion: row?.temperatura_conservacion ?? "",
+        });
+      } catch {
+        setForm({ ...EMPTY_CLIENTE_FICHA });
+      }
+    },
+    [supabase],
+  );
+
+  const persistClienteFichaIfNeeded = useCallback(
+    async (cliente: string, ficha: ClienteFichaForm) => {
+      const key = normalizeClienteNombre(cliente);
+      if (!key) return;
+      const hasData =
+        ficha.registro_sanitario.trim() ||
+        ficha.temperatura_conservacion.trim();
+      if (!hasData) return;
+      await upsertClienteFicha(supabase, {
+        cliente: key,
+        registro_sanitario: ficha.registro_sanitario,
+        temperatura_conservacion: ficha.temperatura_conservacion,
+      });
+    },
+    [supabase],
+  );
+
+  const createClienteLoadedRef = useRef("");
+  const editClienteLoadedRef = useRef("");
 
   // Import
   const [importOpen, setImportOpen] = useState(false);
@@ -1116,6 +1318,7 @@ export function ArticulosMaestroPage() {
     }, 0);
     const nextCodigo = `M-${String(nextNum + 1).padStart(5, "0")}`;
     setCreateForm({ ...EMPTY_FORM, codigo: nextCodigo });
+    setCreateClienteFicha({ ...EMPTY_CLIENTE_FICHA });
     setCreateOpen(true);
   }, [rows]);
 
@@ -1127,22 +1330,51 @@ export function ArticulosMaestroPage() {
         .from("prod_referencias")
         .insert(formToPayload(createForm));
       if (err) throw err;
+      await persistClienteFichaIfNeeded(createForm.cliente, createClienteFicha);
       toast.success(`Artículo ${createForm.codigo} creado`);
-      setCreateOpen(false);
-      await loadData();
+      if (createKeepOpen) {
+        const nextCodigo = nextCodigoMinerva([
+          ...rows.map((r) => r.codigo),
+          createForm.codigo,
+        ]);
+        const keepCliente = createForm.cliente;
+        setCreateForm({
+          ...EMPTY_FORM,
+          codigo: nextCodigo,
+          cliente: keepCliente,
+        });
+        createClienteLoadedRef.current = normalizeClienteNombre(keepCliente);
+        await loadData();
+      } else {
+        setCreateOpen(false);
+        await loadData();
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Error creando artículo");
     } finally {
       setSavingCreate(false);
     }
-  }, [createForm, supabase, loadData]);
+  }, [
+    createForm,
+    createClienteFicha,
+    createKeepOpen,
+    rows,
+    supabase,
+    loadData,
+    persistClienteFichaIfNeeded,
+  ]);
 
   // ── Editar ──────────────────────────────────────────────────────────────────
 
-  const openEdit = useCallback((row: ProdReferenciaRow) => {
-    setEditingRow(row);
-    setEditForm(rowToForm(row));
-  }, []);
+  const openEdit = useCallback(
+    (row: ProdReferenciaRow) => {
+      setEditingRow(row);
+      setEditForm(rowToForm(row));
+      editClienteLoadedRef.current = normalizeClienteNombre(row.cliente);
+      void loadClienteFichaInto(row.cliente, setEditClienteFicha);
+    },
+    [loadClienteFichaInto],
+  );
 
   const handleSaveEdit = useCallback(async () => {
     if (!editingRow) return;
@@ -1153,6 +1385,7 @@ export function ArticulosMaestroPage() {
         .update(formToPayload(editForm))
         .eq("id", editingRow.id);
       if (err) throw err;
+      await persistClienteFichaIfNeeded(editForm.cliente, editClienteFicha);
       toast.success(`Artículo ${editingRow.codigo} actualizado`);
       setEditingRow(null);
       await loadData();
@@ -1161,7 +1394,43 @@ export function ArticulosMaestroPage() {
     } finally {
       setSavingEdit(false);
     }
-  }, [editingRow, editForm, supabase, loadData]);
+  }, [
+    editingRow,
+    editForm,
+    editClienteFicha,
+    supabase,
+    loadData,
+    persistClienteFichaIfNeeded,
+  ]);
+
+  // Reload RGS/temp solo cuando cambia el nombre de cliente (no al editar RGS).
+  useEffect(() => {
+    if (!createOpen) {
+      createClienteLoadedRef.current = "";
+      return;
+    }
+    const key = normalizeClienteNombre(createForm.cliente);
+    if (key === createClienteLoadedRef.current) return;
+    const t = window.setTimeout(() => {
+      createClienteLoadedRef.current = key;
+      void loadClienteFichaInto(key, setCreateClienteFicha);
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [createOpen, createForm.cliente, loadClienteFichaInto]);
+
+  useEffect(() => {
+    if (!editingRow) {
+      editClienteLoadedRef.current = "";
+      return;
+    }
+    const key = normalizeClienteNombre(editForm.cliente);
+    if (key === editClienteLoadedRef.current) return;
+    const t = window.setTimeout(() => {
+      editClienteLoadedRef.current = key;
+      void loadClienteFichaInto(key, setEditClienteFicha);
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [editingRow, editForm.cliente, loadClienteFichaInto]);
 
   // ── Export ──────────────────────────────────────────────────────────────────
 
@@ -1172,6 +1441,46 @@ export function ArticulosMaestroPage() {
   const handleExportPdf = useCallback(() => {
     exportarArticulosAPdf(rowsFiltradas);
   }, [rowsFiltradas]);
+
+  const handleExportPdfClienteLote = useCallback(async () => {
+    const source =
+      selectedIds.size > 0
+        ? rowsFiltradas.filter((r) => selectedIds.has(r.id))
+        : rowsFiltradas;
+    if (source.length === 0) {
+      toast.message("Nada que exportar", {
+        description: "Filtra o selecciona artículos primero.",
+      });
+      return;
+    }
+    try {
+      const clientes = source.map((r) => r.cliente ?? "");
+      const { fetchClienteFichasMap } = await import("@/lib/prod-cliente-ficha");
+      const map = await fetchClienteFichasMap(supabase, clientes);
+      exportArticulosFichaClienteLote(source, map);
+      toast.success(`PDF cliente lote · ${source.length} ficha(s)`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo generar el lote");
+    }
+  }, [rowsFiltradas, selectedIds, supabase]);
+
+  const exportRowPdf = useCallback(
+    async (row: ProdReferenciaRow, modo: ArticuloFichaPdfModo) => {
+      try {
+        let clienteFicha: ProdClienteFichaRow | null = null;
+        if (modo === "cliente" && row.cliente) {
+          clienteFicha = await fetchClienteFichaByCliente(supabase, row.cliente);
+        }
+        exportArticuloFichaPdf(row, { modo, clienteFicha });
+        toast.success(
+          `PDF ${modo === "cliente" ? "cliente" : "Minerva"} · ${row.codigo}`,
+        );
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "No se pudo generar el PDF");
+      }
+    },
+    [supabase],
+  );
 
   // ── Promedios (§7.1.9 paso 4) ────────────────────────────────────────────────
 
@@ -1370,8 +1679,8 @@ export function ArticulosMaestroPage() {
           </h1>
         </div>
         <p className="mt-0.5 text-xs text-slate-500">
-          Catálogo de referencias Minerva · {rows.length} artículos ·{" "}
-          {rows.filter((r) => r.activo).length} activos
+          Catálogo de referencias Minerva · entrada comercial + planta ·{" "}
+          {rows.length} artículos · {rows.filter((r) => r.activo).length} activos
         </p>
         {rows.length > 0 && (
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]">
@@ -1408,6 +1717,19 @@ export function ArticulosMaestroPage() {
         <Button size="sm" variant="outline" onClick={handleExportPdf} className="gap-1.5">
           <FileText className="size-3.5" />
           Exportar PDF
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void handleExportPdfClienteLote()}
+          className="gap-1.5"
+          title="Una página por artículo (modo cliente). Usa selección si hay checkboxes; si no, filtrados."
+        >
+          <FileDown className="size-3.5" />
+          PDF cliente lote
+          {selectedIds.size > 0
+            ? ` (${selectedIds.size})`
+            : ` (${rowsFiltradas.length})`}
         </Button>
         <Button
           size="sm"
@@ -1619,19 +1941,19 @@ export function ArticulosMaestroPage() {
                         size="sm"
                         variant="ghost"
                         className="h-7 px-2"
-                        title="PDF ficha A4"
-                        onClick={() => {
-                          try {
-                            exportArticuloFichaPdf(r);
-                            toast.success(`PDF ficha · ${r.codigo}`);
-                          } catch (e) {
-                            toast.error(
-                              e instanceof Error ? e.message : "No se pudo generar el PDF",
-                            );
-                          }
-                        }}
+                        title="PDF Minerva (interno)"
+                        onClick={() => void exportRowPdf(r, "minerva")}
                       >
                         <FileDown className="size-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-1.5 text-[10px] font-semibold text-[#C69C2B]"
+                        title="PDF Cliente"
+                        onClick={() => void exportRowPdf(r, "cliente")}
+                      >
+                        Cli
                       </Button>
                       <Button
                         size="sm"
@@ -1654,12 +1976,16 @@ export function ArticulosMaestroPage() {
       <ArticuloFormDialog
         open={createOpen}
         title="Crear nuevo artículo"
-        description="El código se auto-sugerirá pero puedes cambiarlo."
+        description="Código Minerva obligatorio. Rellena lo que sepas; planta completará el resto."
         form={createForm}
         saving={savingCreate}
         onFormChange={setCreateForm}
         onSave={handleCreate}
         onClose={() => setCreateOpen(false)}
+        clienteFicha={createClienteFicha}
+        onClienteFichaChange={setCreateClienteFicha}
+        keepOpen={createKeepOpen}
+        onKeepOpenChange={setCreateKeepOpen}
       />
 
       {/* Modal Editar */}
@@ -1679,6 +2005,8 @@ export function ArticulosMaestroPage() {
         }
         onRecalcularPromedios={handleRecalcularArticuloEditando}
         recalculandoPromedios={updatingPromedios}
+        clienteFicha={editClienteFicha}
+        onClienteFichaChange={setEditClienteFicha}
       />
 
       {/* Modal Import */}

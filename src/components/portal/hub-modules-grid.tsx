@@ -5,6 +5,7 @@ import { useCallback, useState } from "react";
 import {
   accessDeniedMessage,
   canAccessHubModule,
+  normalizeDbRole,
   type HubModuleId,
 } from "@/lib/permissions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -187,7 +188,11 @@ export function HubModulesGrid({
             />
             <ModuleCard
               title="Producción"
-              description="Órdenes de trabajo, fichas técnicas y almacén. Panel alineado con el hub estratégico."
+              description={
+                normalizeDbRole(role) === "comercial"
+                  ? "Maestro de artículos (fichas) y pipeline en solo lectura."
+                  : "Órdenes de trabajo, fichas técnicas y almacén. Panel alineado con el hub estratégico."
+              }
               iconFrame="module"
               icon={
                 <ModuleMark
@@ -195,8 +200,16 @@ export function HubModulesGrid({
                   alt={MODULE_IMG.produccion.alt}
                 />
               }
-              actionLabel="Acceder a Producción"
-              href="/produccion"
+              actionLabel={
+                normalizeDbRole(role) === "comercial"
+                  ? "Artículos y pipeline"
+                  : "Acceder a Producción"
+              }
+              href={
+                normalizeDbRole(role) === "comercial"
+                  ? "/produccion/articulos"
+                  : "/produccion"
+              }
               accessAllowed={allow("produccion")}
               onAccessDenied={onDenied}
             />

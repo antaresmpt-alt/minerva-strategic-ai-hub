@@ -2,11 +2,13 @@ import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { upsertClienteFicha } from "@/lib/prod-cliente-ficha";
 import type {
   ArticuloExcelRow,
   ProdReferenciaPromediosKey,
   ProdReferenciaRow,
 } from "@/types/prod-referencias";
+import { normalizeClienteNombre } from "@/types/prod-cliente-ficha";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -73,13 +75,20 @@ export type ArticuloImportRow = Omit<
   | "total_repeticiones"
   | "fsc"
   | "fsc_fecha_validacion"
-  | "tipo_engomado_habitual"
+  | "foto_producto_path"
+  | "foto_troquel_path"
   | ProdReferenciaPromediosKey
 > & {
   __presentFields?: Partial<Record<keyof ArticuloImportDbRow, boolean>>;
+  /** Opcional: upsert en prod_cliente_ficha (no es columna de prod_referencias). */
+  registro_sanitario?: string | null;
+  temperatura_conservacion?: string | null;
 };
 
-type ArticuloImportDbRow = Omit<ArticuloImportRow, "__presentFields">;
+type ArticuloImportDbRow = Omit<
+  ArticuloImportRow,
+  "__presentFields" | "registro_sanitario" | "temperatura_conservacion"
+>;
 
 const IMPORT_DB_FIELDS = [
   "codigo",
@@ -93,10 +102,16 @@ const IMPORT_DB_FIELDS = [
   "formato_ancho_mm",
   "formato_fondo_mm",
   "material_habitual",
+  "gramaje_habitual",
   "poses_habitual",
   "troquel_habitual",
   "tintas_habituales",
   "acabado_habitual",
+  "tipo_engomado_habitual",
+  "tipo_fondo",
+  "caja_embalaje_habitual",
+  "unidades_por_embalaje_habitual",
+  "peso_unitario",
   "ruta_habitual",
   "notas",
 ] as const satisfies readonly (keyof ArticuloImportDbRow)[];
@@ -338,16 +353,23 @@ export async function parseArticulosExcelFile(
             formato_ancho_mm: parseOptionalNum(row.formato_ancho_mm),
             formato_fondo_mm: parseOptionalNum(row.formato_fondo_mm),
             material_habitual: cleanStr(row.material_habitual),
-            gramaje_habitual: null,
+            gramaje_habitual: parseOptionalNum(row.gramaje_habitual),
             poses_habitual: parseOptionalInt(row.poses_habitual),
             troquel_habitual: cleanStr(row.troquel_habitual),
             tintas_habituales: cleanStr(row.tintas_habituales),
             acabado_habitual: cleanStr(row.acabado_habitual),
+            tipo_engomado_habitual: cleanStr(row.tipo_engomado_habitual),
+            tipo_fondo: cleanStr(row.tipo_fondo),
+            caja_embalaje_habitual: cleanStr(row.caja_embalaje_habitual),
+            unidades_por_embalaje_habitual: parseOptionalInt(
+              row.unidades_por_embalaje_habitual,
+            ),
+            peso_unitario: parseOptionalNum(row.peso_unitario),
             ruta_habitual: cleanStr(row.ruta_habitual),
-            caja_embalaje_habitual: null,
-            unidades_por_embalaje_habitual: null,
             notas: cleanStr(row.notas),
             defaults_proceso: null,
+            registro_sanitario: cleanStr(row.registro_sanitario),
+            temperatura_conservacion: cleanStr(row.temperatura_conservacion),
           };
           return setPresentFields(parsedRow, {
             codigo: fieldPresent(row.codigo),
@@ -361,10 +383,18 @@ export async function parseArticulosExcelFile(
             formato_ancho_mm: fieldPresent(row.formato_ancho_mm),
             formato_fondo_mm: fieldPresent(row.formato_fondo_mm),
             material_habitual: fieldPresent(row.material_habitual),
+            gramaje_habitual: fieldPresent(row.gramaje_habitual),
             poses_habitual: fieldPresent(row.poses_habitual),
             troquel_habitual: fieldPresent(row.troquel_habitual),
             tintas_habituales: fieldPresent(row.tintas_habituales),
             acabado_habitual: fieldPresent(row.acabado_habitual),
+            tipo_engomado_habitual: fieldPresent(row.tipo_engomado_habitual),
+            tipo_fondo: fieldPresent(row.tipo_fondo),
+            caja_embalaje_habitual: fieldPresent(row.caja_embalaje_habitual),
+            unidades_por_embalaje_habitual: fieldPresent(
+              row.unidades_por_embalaje_habitual,
+            ),
+            peso_unitario: fieldPresent(row.peso_unitario),
             ruta_habitual: fieldPresent(row.ruta_habitual),
             notas: fieldPresent(row.notas),
           });
@@ -435,6 +465,22 @@ export function computeArticulosDiff(
 
 // ─── Apply diff ───────────────────────────────────────────────────────────────
 
+async function upsertClienteFichaFromImportRow(
+  supabase: SupabaseClient,
+  row: ArticuloImportRow,
+): Promise<void> {
+  const cliente = normalizeClienteNombre(row.cliente);
+  if (!cliente) return;
+  const rgs = cleanStr(row.registro_sanitario);
+  const temp = cleanStr(row.temperatura_conservacion);
+  if (!rgs && !temp) return;
+  await upsertClienteFicha(supabase, {
+    cliente,
+    registro_sanitario: rgs,
+    temperatura_conservacion: temp,
+  });
+}
+
 export async function aplicarArticulosDiff(
   supabase: SupabaseClient,
   diff: ArticuloDiffResult,
@@ -457,12 +503,30 @@ export async function aplicarArticulosDiff(
     insertados = result.insertados;
     duplicados += result.duplicados;
     omitidos.push(...result.omitidos);
+    for (const row of filtered.nuevos) {
+      try {
+        await upsertClienteFichaFromImportRow(supabase, row);
+      } catch (e) {
+        omitidos.push(
+          `${importRowLabel(row)} (ficha cliente) → ${errorMessage(e)}`,
+        );
+      }
+    }
   }
 
   if (opts.incluirModificados && diff.modificados.length > 0) {
     for (const { incoming, existing } of diff.modificados) {
       const patch = buildArticuloUpdatePatch(incoming);
-      if (Object.keys(patch).length === 0) continue;
+      if (Object.keys(patch).length === 0) {
+        try {
+          await upsertClienteFichaFromImportRow(supabase, incoming);
+        } catch (e) {
+          omitidos.push(
+            `${importRowLabel(incoming)} (ficha cliente) → ${errorMessage(e)}`,
+          );
+        }
+        continue;
+      }
       const { error } = await supabase
         .from("prod_referencias")
         .update(patch)
@@ -471,6 +535,13 @@ export async function aplicarArticulosDiff(
         omitidos.push(`${importRowLabel(incoming)} → ${errorMessage(error)}`);
       } else {
         actualizados++;
+        try {
+          await upsertClienteFichaFromImportRow(supabase, incoming);
+        } catch (e) {
+          omitidos.push(
+            `${importRowLabel(incoming)} (ficha cliente) → ${errorMessage(e)}`,
+          );
+        }
       }
     }
   }
@@ -481,30 +552,43 @@ export async function aplicarArticulosDiff(
 // ─── Export ───────────────────────────────────────────────────────────────────
 
 const EXPORT_COLS = [
-  { key: "codigo",             label: "codigo" },
+  { key: "codigo", label: "codigo" },
   { key: "referencia_cliente", label: "referencia_cliente" },
-  { key: "descripcion",        label: "descripcion" },
-  { key: "cliente",            label: "cliente" },
-  { key: "tipo_producto",      label: "tipo_producto" },
-  { key: "subtipo",            label: "subtipo" },
-  { key: "activo",             label: "activo" },
-  { key: "formato_largo_mm",   label: "formato_largo_mm" },
-  { key: "formato_ancho_mm",   label: "formato_ancho_mm" },
-  { key: "formato_fondo_mm",   label: "formato_fondo_mm" },
-  { key: "material_habitual",  label: "material_habitual" },
-  { key: "poses_habitual",     label: "poses_habitual" },
-  { key: "troquel_habitual",   label: "troquel_habitual" },
-  { key: "tintas_habituales",  label: "tintas_habituales" },
-  { key: "acabado_habitual",   label: "acabado_habitual" },
-  { key: "ruta_habitual",      label: "ruta_habitual" },
-  { key: "notas",              label: "notas" },
+  { key: "descripcion", label: "descripcion" },
+  { key: "cliente", label: "cliente" },
+  { key: "tipo_producto", label: "tipo_producto" },
+  { key: "subtipo", label: "subtipo" },
+  { key: "activo", label: "activo" },
+  { key: "formato_largo_mm", label: "formato_largo_mm" },
+  { key: "formato_ancho_mm", label: "formato_ancho_mm" },
+  { key: "formato_fondo_mm", label: "formato_fondo_mm" },
+  { key: "material_habitual", label: "material_habitual" },
+  { key: "gramaje_habitual", label: "gramaje_habitual" },
+  { key: "poses_habitual", label: "poses_habitual" },
+  { key: "troquel_habitual", label: "troquel_habitual" },
+  { key: "tintas_habituales", label: "tintas_habituales" },
+  { key: "acabado_habitual", label: "acabado_habitual" },
+  { key: "tipo_engomado_habitual", label: "tipo_engomado_habitual" },
+  { key: "tipo_fondo", label: "tipo_fondo" },
+  { key: "caja_embalaje_habitual", label: "caja_embalaje_habitual" },
+  { key: "unidades_por_embalaje_habitual", label: "unidades_por_embalaje_habitual" },
+  { key: "peso_unitario", label: "peso_unitario" },
+  { key: "ruta_habitual", label: "ruta_habitual" },
+  { key: "notas", label: "notas" },
+  { key: "registro_sanitario", label: "registro_sanitario" },
+  { key: "temperatura_conservacion", label: "temperatura_conservacion" },
 ] as const;
 
 export function exportarArticulosAExcel(rows: ProdReferenciaRow[], filename = "maestro_articulos.xlsx"): void {
   const data = rows.map((r) =>
     Object.fromEntries(
-      EXPORT_COLS.map(({ key }) => [key, r[key as keyof ProdReferenciaRow] ?? ""])
-    )
+      EXPORT_COLS.map(({ key }) => {
+        if (key === "registro_sanitario" || key === "temperatura_conservacion") {
+          return [key, ""];
+        }
+        return [key, r[key as keyof ProdReferenciaRow] ?? ""];
+      }),
+    ),
   );
   const ws = XLSX.utils.json_to_sheet(data, { header: EXPORT_COLS.map((c) => c.key) });
   const wb = XLSX.utils.book_new();
@@ -626,12 +710,20 @@ export function descargarPlantillaArticulos(): void {
       formato_ancho_mm: 60,
       formato_fondo_mm: 25,
       material_habitual: "Zenith 300g",
+      gramaje_habitual: 300,
       poses_habitual: 4,
       troquel_habitual: "TAG00205",
       tintas_habituales: "4+1",
       acabado_habitual: "Barniz AC brillo",
+      tipo_engomado_habitual: "Pegado 4 puntos",
+      tipo_fondo: "automontable",
+      caja_embalaje_habitual: "MN2L",
+      unidades_por_embalaje_habitual: 450,
+      peso_unitario: "",
       ruta_habitual: "impresion+troquelado+engomado",
       notas: "",
+      registro_sanitario: "39.01234/CAT",
+      temperatura_conservacion: "Ambiente",
     },
     {
       codigo: "M-00002",
@@ -645,12 +737,20 @@ export function descargarPlantillaArticulos(): void {
       formato_ancho_mm: 65,
       formato_fondo_mm: 30,
       material_habitual: "Zenith 300g",
+      gramaje_habitual: 300,
       poses_habitual: 4,
       troquel_habitual: "TAG00547",
       tintas_habituales: "4+0",
       acabado_habitual: "Plastificado mate",
+      tipo_engomado_habitual: "Pegado lateral",
+      tipo_fondo: "",
+      caja_embalaje_habitual: "MN2L",
+      unidades_por_embalaje_habitual: 300,
+      peso_unitario: "",
       ruta_habitual: "impresion+plastico+troquelado+engomado",
       notas: "",
+      registro_sanitario: "39.01234/CAT",
+      temperatura_conservacion: "Ambiente",
     },
     {
       codigo: "",
@@ -664,12 +764,20 @@ export function descargarPlantillaArticulos(): void {
       formato_ancho_mm: "",
       formato_fondo_mm: "",
       material_habitual: "",
+      gramaje_habitual: "",
       poses_habitual: "",
       troquel_habitual: "",
       tintas_habituales: "",
       acabado_habitual: "",
+      tipo_engomado_habitual: "",
+      tipo_fondo: "",
+      caja_embalaje_habitual: "",
+      unidades_por_embalaje_habitual: "",
+      peso_unitario: "",
       ruta_habitual: "",
       notas: "Fila de ejemplo con codigo vacío: se auto-asigna M-NNNNN al importar",
+      registro_sanitario: "",
+      temperatura_conservacion: "",
     },
   ];
 
@@ -677,14 +785,13 @@ export function descargarPlantillaArticulos(): void {
     header: EXPORT_COLS.map((c) => c.key),
   });
 
-  // Ajustar ancho de columnas
-  ws["!cols"] = [
-    { wch: 10 }, { wch: 20 }, { wch: 40 }, { wch: 35 },
-    { wch: 14 }, { wch: 16 }, { wch: 8 },
-    { wch: 16 }, { wch: 16 }, { wch: 16 },
-    { wch: 22 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 25 }, { wch: 40 },
-    { wch: 50 },
-  ];
+  ws["!cols"] = EXPORT_COLS.map((c) => {
+    if (c.key === "descripcion" || c.key === "ruta_habitual" || c.key === "notas") {
+      return { wch: 40 };
+    }
+    if (c.key === "cliente") return { wch: 32 };
+    return { wch: 18 };
+  });
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "articulos");

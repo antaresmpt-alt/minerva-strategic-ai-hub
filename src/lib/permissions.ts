@@ -157,7 +157,8 @@ export function canAccessHubModule(
       module === "chat" ||
       module === "sales" ||
       module === "sem" ||
-      module === "seo"
+      module === "seo" ||
+      module === "produccion"
     );
   }
 
@@ -168,6 +169,16 @@ export function canAccessHubModule(
   return false;
 }
 
+/** Rutas de producción permitidas al rol comercial (Bloque 14). */
+export function isComercialProduccionPath(pathname: string): boolean {
+  const p = pathname.split("?")[0] ?? pathname;
+  /** Hub `/produccion` redirige a artículos (ver `app/produccion/page.tsx`). */
+  if (p === "/produccion" || p === "/produccion/") return true;
+  if (p.startsWith("/produccion/articulos")) return true;
+  if (p.startsWith("/produccion/pipeline")) return true;
+  return false;
+}
+
 /** Prefijos de ruta de página (sin API). */
 export function canAccessPagePath(
   role: string | null,
@@ -175,8 +186,23 @@ export function canAccessPagePath(
   dynamic?: Map<string, boolean> | null
 ): boolean {
   if (!normalizeDbRole(role)) return false;
+  const p0 = pathname.split("?")[0] ?? pathname;
+
+  /** Comercial: maestro + pipeline (+ hub sales/seo); no planta. */
+  if (normalizeDbRole(role) === "comercial") {
+    if (p0.startsWith("/auth/")) return true;
+    if (p0 === "/" || p0 === "") return true;
+    if (p0.startsWith("/chat")) return true;
+    if (p0.startsWith("/analytics/sales")) return true;
+    if (p0.startsWith("/sem")) return true;
+    if (p0.startsWith("/seo")) return true;
+    if (isComercialProduccionPath(p0)) return true;
+    if (p0.startsWith("/produccion")) return false;
+    return false;
+  }
+
   if (hasDynamicAccess(dynamic)) {
-    const p = pathname.split("?")[0] ?? pathname;
+    const p = p0;
     /** Handoff post-login (middleware redirige aquí); no forma parte del mapa de módulos. */
     if (p.startsWith("/auth/")) return true;
     /** Misma regla que sin `role_permissions`: admin/gerencia no quedan bloqueados en rutas no listadas. */
@@ -202,7 +228,7 @@ export function canAccessPagePath(
 
   if (hasFullAccess(role)) return true;
 
-  const p = pathname.split("?")[0] ?? pathname;
+  const p = p0;
 
   if (p.startsWith("/auth/")) return true;
 
