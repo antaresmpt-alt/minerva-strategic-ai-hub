@@ -67,6 +67,14 @@ export type ProdReferenciaRow = {
   fsc: boolean;
   fsc_fecha_validacion: string | null;
 
+  /** Bloque 14 — ficha técnica cliente / Access */
+  tipo_fondo: string | null;
+  /** Peso real 1 ud acabada (g). Tras 1ª producción. */
+  peso_unitario: number | null;
+  /** Hueco fotos Storage (upload UI pendiente). */
+  foto_producto_path: string | null;
+  foto_troquel_path: string | null;
+
   /** Trazabilidad histórica (actualizado automáticamente por el sistema) */
   ultima_ot_numero: string | null;
   ultima_ot_fecha: string | null;

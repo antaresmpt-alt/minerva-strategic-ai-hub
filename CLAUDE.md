@@ -6,6 +6,7 @@ Fuente de verdad = este repo (Git), no copias subidas a un Project de claude.ai.
 El maestro indexa sesiones y briefs. Abrir `.MANUALES/CONTEXTO/MINERVA_CONTEXTO_TECNICO.md` o `.MANUALES/SESIONES/SESION_*.md`
 cuando el maestro lo cite; no hace falta pegarlos todos en cada chat.
 
+Sesión 7 sep → Bloque 14 fichas comercial `.MANUALES/BLOQUES/MINERVA_BLOQUE14_FICHAS_COMERCIAL.md` (rama `feature/bloque14-fichas-comercial`)
 Sesión 6 sep → reunión Gemma + perf contenedor `.MANUALES/SESIONES/SESION_06SEP2026_REUNION_GEMMA_CONTENEDOR.md` · frases Albert `.MANUALES/BRIEFS/MINERVA_FRASES_ALBERT_06SEP2026.md` · Bloque 13 `.MANUALES/BLOQUES/MINERVA_BLOQUE13_VISIBILIDAD_PLANTA.md`
 Sesión activa piloto lunes → perf calendario `.MANUALES/SESIONES/SESION_30AGO2026_CALENDARIO_PERF.md` · Bloque 12 `.MANUALES/BLOQUES/MINERVA_BLOQUE12_DETALLE_DIA_MESA.md`
 Calendario perf 30 ago → `.MANUALES/SESIONES/SESION_30AGO2026_CALENDARIO_PERF.md`

@@ -157,6 +157,7 @@ export function ProduccionShell({
   hasProduccionModule = true,
   hasProduccionEjecucionModule = false,
   hasEtiquetasDigitalModule = false,
+  comercialMinimal = false,
 }: {
   children: React.ReactNode;
   /** Si es false (p. ej. rol Almacén), en rutas de Muelle solo se muestra navegación mínima. */
@@ -165,15 +166,23 @@ export function ProduccionShell({
   hasProduccionEjecucionModule?: boolean;
   /** Acceso al departamento de etiquetas digital sin el resto de Producción. */
   hasEtiquetasDigitalModule?: boolean;
+  /** Bloque 14: comercial solo pipeline + artículos. */
+  comercialMinimal?: boolean;
 }) {
   const pathname = usePathname();
   const underMuelle = pathname.startsWith("/produccion/muelle");
   const underEtiquetasDigital = pathname.startsWith("/produccion/etiquetas-digital");
   const onlyExecution = hasProduccionEjecucionModule && !hasProduccionModule;
   const showFullProduccionNav =
+    !comercialMinimal &&
     !onlyExecution &&
     (!underMuelle || hasProduccionModule) &&
     (!underEtiquetasDigital || hasProduccionModule);
+
+  const comercialNavItems = NAV_FLAT.filter(
+    (i) =>
+      i.href === "/produccion/pipeline" || i.href === "/produccion/articulos",
+  );
 
   /** Items visibles en modo completo (excluye OTs en ejecución que va en su propio bloque) */
   const visibleGroups: NavGroup[] = NAV_GROUPS.map((g) => ({
@@ -247,9 +256,15 @@ export function ProduccionShell({
             )}
 
             {/* Solo ejecución (tablet) */}
-            {onlyExecution && (
+            {onlyExecution && !comercialMinimal && (
               <NavLink item={onlyEjecucionItem} pathname={pathname} />
             )}
+
+            {/* Comercial: pipeline + maestro artículos (Bloque 14) */}
+            {comercialMinimal &&
+              comercialNavItems.map((item) => (
+                <NavLink key={item.href} item={item} pathname={pathname} />
+              ))}
 
             {/* Navegación completa con grupos */}
             {showFullProduccionNav &&

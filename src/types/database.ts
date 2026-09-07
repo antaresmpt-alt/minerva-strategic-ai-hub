@@ -2496,6 +2496,8 @@ export type Database = {
           formato_largo_mm: number | null
           fsc: boolean
           fsc_fecha_validacion: string | null
+          foto_producto_path: string | null
+          foto_troquel_path: string | null
           gramaje_habitual: number | null
           gramaje_muestra_n: number | null
           gramaje_oficial: number | null
@@ -2532,6 +2534,7 @@ export type Database = {
           merma_oficial: number | null
           merma_promedio: number | null
           notas: string | null
+          peso_unitario: number | null
           poses_habitual: number | null
           poses_muestra_n: number | null
           poses_oficial: number | null
@@ -2547,6 +2550,7 @@ export type Database = {
           tipo_engomado_habitual: string | null
           tipo_engomado_oficial: string | null
           tipo_engomado_promedio: string | null
+          tipo_fondo: string | null
           tipo_producto: string | null
           total_repeticiones: number
           troquel_habitual: string | null
@@ -2578,6 +2582,8 @@ export type Database = {
           formato_largo_mm?: number | null
           fsc?: boolean
           fsc_fecha_validacion?: string | null
+          foto_producto_path?: string | null
+          foto_troquel_path?: string | null
           gramaje_habitual?: number | null
           gramaje_muestra_n?: number | null
           gramaje_oficial?: number | null
@@ -2614,6 +2620,7 @@ export type Database = {
           merma_oficial?: number | null
           merma_promedio?: number | null
           notas?: string | null
+          peso_unitario?: number | null
           poses_habitual?: number | null
           poses_muestra_n?: number | null
           poses_oficial?: number | null
@@ -2629,6 +2636,7 @@ export type Database = {
           tipo_engomado_habitual?: string | null
           tipo_engomado_oficial?: string | null
           tipo_engomado_promedio?: string | null
+          tipo_fondo?: string | null
           tipo_producto?: string | null
           total_repeticiones?: number
           troquel_habitual?: string | null
@@ -2660,6 +2668,8 @@ export type Database = {
           formato_largo_mm?: number | null
           fsc?: boolean
           fsc_fecha_validacion?: string | null
+          foto_producto_path?: string | null
+          foto_troquel_path?: string | null
           gramaje_habitual?: number | null
           gramaje_muestra_n?: number | null
           gramaje_oficial?: number | null
@@ -2696,6 +2706,7 @@ export type Database = {
           merma_oficial?: number | null
           merma_promedio?: number | null
           notas?: string | null
+          peso_unitario?: number | null
           poses_habitual?: number | null
           poses_muestra_n?: number | null
           poses_oficial?: number | null
@@ -2711,6 +2722,7 @@ export type Database = {
           tipo_engomado_habitual?: string | null
           tipo_engomado_oficial?: string | null
           tipo_engomado_promedio?: string | null
+          tipo_fondo?: string | null
           tipo_producto?: string | null
           total_repeticiones?: number
           troquel_habitual?: string | null
@@ -2725,6 +2737,74 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      prod_cliente_ficha: {
+        Row: {
+          cliente: string
+          created_at: string | null
+          id: string
+          notas: string | null
+          registro_sanitario: string | null
+          temperatura_conservacion: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          cliente: string
+          created_at?: string | null
+          id?: string
+          notas?: string | null
+          registro_sanitario?: string | null
+          temperatura_conservacion?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          cliente?: string
+          created_at?: string | null
+          id?: string
+          notas?: string | null
+          registro_sanitario?: string | null
+          temperatura_conservacion?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      prod_referencia_adjuntos: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          id: string
+          public_url: string | null
+          referencia_id: string
+          storage_path: string
+          tipo: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          public_url?: string | null
+          referencia_id: string
+          storage_path: string
+          tipo: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          public_url?: string | null
+          referencia_id?: string
+          storage_path?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prod_referencia_adjuntos_referencia_id_fkey"
+            columns: ["referencia_id"]
+            isOneToOne: false
+            referencedRelation: "prod_referencias"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       prod_rutas_plantilla: {
         Row: {

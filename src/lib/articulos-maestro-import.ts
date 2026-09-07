@@ -347,6 +347,10 @@ export async function parseArticulosExcelFile(
             caja_embalaje_habitual: null,
             unidades_por_embalaje_habitual: null,
             notas: cleanStr(row.notas),
+            tipo_fondo: null,
+            peso_unitario: null,
+            foto_producto_path: null,
+            foto_troquel_path: null,
             defaults_proceso: null,
           };
           return setPresentFields(parsedRow, {
