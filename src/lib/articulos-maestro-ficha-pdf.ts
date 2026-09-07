@@ -21,6 +21,20 @@ const NAVY: [number, number, number] = [0, 33, 71];
 const GOLD: [number, number, number] = [198, 156, 43];
 const SLATE: [number, number, number] = [100, 116, 139];
 
+/** Pie / cabezal como ficha Access (Adobe Scan 7 sep 2026). */
+const LETTERHEAD = {
+  company: "MINERVA PACKAGING & PRINT CREATORS",
+  address: "C/ Cabrera, 13-15 · 08192 Sant Quirze del Vallès (Barcelona) · SPAIN",
+  contact: "Tel. 93 711 30 61 · www.minervaglobal.es · minerva@minervaglobal.es",
+  logoPath: "/images/brand-minerva-round.png",
+} as const;
+
+function fmtPeso(row: ProdReferenciaRow): string {
+  return row.peso_unitario != null
+    ? `${row.peso_unitario} g`
+    : "Pendiente 1ª producción";
+}
+
 function publicAdjuntoUrl(storagePath: string): string {
   if (storagePath.startsWith("http://") || storagePath.startsWith("https://")) {
     return storagePath;
@@ -235,38 +249,67 @@ function kvTable(
     ?.finalY ?? startY;
 }
 
+async function loadLogoAsset(): Promise<PdfImageAsset | null> {
+  try {
+    const base =
+      typeof window !== "undefined" && window.location?.origin
+        ? window.location.origin
+        : "";
+    const url = `${base}${LETTERHEAD.logoPath}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await rasterizeImageBlob(blob);
+  } catch {
+    return null;
+  }
+}
+
 function drawHeader(
   doc: jsPDF,
   row: ProdReferenciaRow,
   modo: ArticuloFichaPdfModo,
+  logo: PdfImageAsset | null,
 ): number {
+  // Franja superior navy + logo + marca (estilo ficha papel)
   doc.setFillColor(...NAVY);
-  doc.rect(0, 0, 210, 22, "F");
+  doc.rect(0, 0, 210, 28, "F");
   doc.setFillColor(...GOLD);
-  doc.rect(0, 22, 210, 1.2, "F");
+  doc.rect(0, 28, 210, 1.2, "F");
+
+  if (logo) {
+    try {
+      doc.addImage(logo.dataUrl, logo.format, 10, 4, 18, 18);
+    } catch {
+      /* logo opcional */
+    }
+  }
+
+  const textLeft = logo ? 32 : 12;
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.text(LETTERHEAD.company, textLeft, 11);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.text(
+    modo === "cliente" ? "Ficha técnica · Cliente" : "Ficha técnica · Interno",
+    textLeft,
+    17,
+  );
+  doc.setFontSize(6.5);
+  doc.setTextColor(200, 210, 220);
+  doc.text(LETTERHEAD.address, textLeft, 23);
 
   doc.setTextColor(255, 255, 255);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
-  doc.text("MINERVA", 12, 10);
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "normal");
-  doc.text(
-    modo === "cliente"
-      ? "Ficha técnica · Cliente"
-      : "Ficha técnica de artículo · Interno",
-    12,
-    16,
-  );
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.text(txt(row.codigo), 198, 11, { align: "right" });
+  doc.setFontSize(15);
+  doc.text(txt(row.codigo), 198, 12, { align: "right" });
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
-  doc.text(txt(row.referencia_cliente), 198, 17, { align: "right" });
+  doc.text(txt(row.referencia_cliente), 198, 18, { align: "right" });
   doc.setTextColor(0, 0, 0);
-  return 28;
+  return 34;
 }
 
 function drawFooter(doc: jsPDF, modo: ArticuloFichaPdfModo): void {
@@ -274,17 +317,23 @@ function drawFooter(doc: jsPDF, modo: ArticuloFichaPdfModo): void {
     dateStyle: "short",
     timeStyle: "short",
   }).format(new Date());
-  doc.setDrawColor(...GOLD);
-  doc.setLineWidth(0.4);
-  doc.line(12, 287, 198, 287);
-  doc.setFontSize(7);
-  doc.setTextColor(...SLATE);
-  doc.text(
-    `Generado ${generated} · Minerva Hub · ${modo === "cliente" ? "PDF cliente" : "PDF interno"}`,
-    12,
-    291,
-  );
-  doc.text("1 / 1", 198, 291, { align: "right" });
+  const pageCount = doc.getNumberOfPages();
+  for (let p = 1; p <= pageCount; p++) {
+    doc.setPage(p);
+    doc.setDrawColor(...GOLD);
+    doc.setLineWidth(0.4);
+    doc.line(12, 282, 198, 282);
+    doc.setFontSize(6.5);
+    doc.setTextColor(...SLATE);
+    doc.text(LETTERHEAD.address, 12, 286);
+    doc.text(LETTERHEAD.contact, 12, 290);
+    doc.text(
+      `Generado ${generated} · ${modo === "cliente" ? "PDF cliente" : "PDF interno"}`,
+      12,
+      294,
+    );
+    doc.text(`${p} / ${pageCount}`, 198, 294, { align: "right" });
+  }
 }
 
 /** Huecos fijos / previews de adjuntos (imagen o 1ª pág. PDF). El marco no crece. */
@@ -323,7 +372,7 @@ function drawFotoPlaceholders(
       y + 12,
     );
   }
-  doc.text("Perfil / foto troquel", 113, y + 4);
+  doc.text("Troquel", 113, y + 4);
   if (assets?.troquel) {
     try {
       addImageContain(doc, assets.troquel, imgX(111), imgY, imgW, imgH);
@@ -373,13 +422,8 @@ function buildClienteBody(
       ["Medidas (mm)", fmtMm(row)],
       ["Tipo fondo", txt(row.tipo_fondo)],
       ["Troquel (código)", txt(row.troquel_habitual) === "—" ? "Pendiente de cargar" : txt(row.troquel_habitual)],
-      [
-        "Perfil / foto troquel",
-        row.foto_troquel_path?.trim()
-          ? row.foto_troquel_path
-          : "Pendiente de cargar",
-      ],
       ["Engomado (tipo)", txt(row.tipo_engomado_habitual)],
+      ["Peso", fmtPeso(row)],
     ]) + 3;
 
   y = sectionTitle(doc, "Logística", y);
@@ -389,12 +433,7 @@ function buildClienteBody(
     kvTable(doc, y, [
       ["Temperatura conservación", txt(temp)],
       ["Registro sanitario", txt(rgs)],
-      [
-        "Peso unitario",
-        row.peso_unitario != null
-          ? `${row.peso_unitario} g`
-          : "Pendiente 1ª producción",
-      ],
+      ["Peso", fmtPeso(row)],
       ["Ref. / medida embalaje", txt(row.caja_embalaje_habitual)],
       [
         "Unidades por caja",
@@ -441,12 +480,7 @@ function buildMinervaBody(
       ["Estado", row.activo ? "Activo" : "Inactivo"],
       ["Dimensiones", fmtMm(row)],
       ["Tipo fondo", txt(row.tipo_fondo)],
-      [
-        "Peso unitario",
-        row.peso_unitario != null
-          ? `${row.peso_unitario} g`
-          : "Pendiente 1ª producción",
-      ],
+      ["Peso", fmtPeso(row)],
       [
         "FSC",
         row.fsc
@@ -470,12 +504,6 @@ function buildMinervaBody(
         row.gramaje_habitual != null ? `${row.gramaje_habitual} g/m²` : "—",
       ],
       ["Troquel (código)", txt(row.troquel_habitual) === "—" ? "Pendiente de cargar" : txt(row.troquel_habitual)],
-      [
-        "Perfil / foto troquel",
-        row.foto_troquel_path?.trim()
-          ? row.foto_troquel_path
-          : "Pendiente de cargar",
-      ],
       ["Poses", txt(row.poses_habitual)],
       ["Tintas", txt(row.tintas_habituales)],
       ["Acabado", txt(row.acabado_habitual)],
@@ -608,13 +636,14 @@ export async function exportArticuloFichaPdf(
   options?: ExportArticuloFichaPdfOptions,
 ): Promise<jsPDF> {
   const modo: ArticuloFichaPdfModo = options?.modo ?? "minerva";
-  const [producto, troquel] = await Promise.all([
+  const [producto, troquel, logo] = await Promise.all([
     loadPdfImageAsset(row.foto_producto_path),
     loadPdfImageAsset(row.foto_troquel_path),
+    loadLogoAsset(),
   ]);
   const assets = { producto, troquel };
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-  let y = drawHeader(doc, row, modo);
+  const y = drawHeader(doc, row, modo, logo);
   if (modo === "cliente") {
     buildClienteBody(doc, row, options?.clienteFicha, y, assets);
   } else {
@@ -652,11 +681,12 @@ export async function exportArticulosFichaClienteLote(
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i]!;
     doc.addPage();
-    const [producto, troquel] = await Promise.all([
+    const [producto, troquel, logo] = await Promise.all([
       loadPdfImageAsset(row.foto_producto_path),
       loadPdfImageAsset(row.foto_troquel_path),
+      loadLogoAsset(),
     ]);
-    const y = drawHeader(doc, row, "cliente");
+    const y = drawHeader(doc, row, "cliente", logo);
     buildClienteBody(
       doc,
       row,
@@ -664,8 +694,8 @@ export async function exportArticulosFichaClienteLote(
       y,
       { producto, troquel },
     );
-    drawFooter(doc, "cliente");
   }
+  drawFooter(doc, "cliente");
   const safe =
     filename ??
     `fichas-cliente-${(clienteKey || "lote").replace(/[^\w.-]+/g, "_").slice(0, 40)}.pdf`;
