@@ -16,7 +16,7 @@ Normativa ES/EU → ficha técnica de **todos** los artículos. Manel/Zaida no d
 | Comercial (artículo) | Cliente, ref. cliente (opc.), descripción, tipo, medidas, material, gramaje, tintas, acabados, uds/caja, tipo fondo… |
 | Una vez por cliente | RGS, temperatura → tabla `prod_cliente_ficha` |
 | OT / planta | Troquel fino, ref. embalaje, peso unitario tras 1ª producción |
-| Fotos | Upload UI + bucket `referencias-adjuntos` · `foto_*_path` + `prod_referencia_adjuntos` |
+| Fotos | Mismos formatos en foto y troquel: PDF, JPG, PNG, BMP, WEBP, GIF… · bucket `referencias-adjuntos` |
 
 - Código siempre **M-xxxxx** Minerva.
 - Migración: `supabase/migrations/20260907180000_bloque14_fichas_comercial.sql` (aplicada en proyecto Supabase).
@@ -56,7 +56,7 @@ Crear (Settings / admin) con rol comercial, p.ej.:
 ## 7. Smoke sugerido
 
 1. Login admin → Artículos → crear/editar con tipo fondo + engomado + RGS → PDF Minerva y PDF Cliente (engomado y troqueles duales).
-2. Editar artículo → subir **foto producto** (JPG/PNG) + **troquel** (PDF preferido) → Abrir / Sustituir → PDF Minerva/Cliente (imagen embebida o «PDF adjunto»).
+2. Editar artículo → **Troquel habitual** con buscador (mismo picker que despacho) → subir adjuntos (PDF/JPG/PNG/BMP… en ambos slots) → PDF Minerva/Cliente.
 3. Checkbox «Guardar y crear otro»: mantiene cliente/RGS, limpia artículo, siguiente M-xxxxx.
 4. Descargar plantilla Excel actualizada → rellenar → Importar (incluye engomado, tipo_fondo, RGS/temp).
 5. Filtrar por cliente → PDF cliente lote.

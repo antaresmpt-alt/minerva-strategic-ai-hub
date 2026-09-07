@@ -3,6 +3,25 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export const REFERENCIAS_ADJUNTOS_BUCKET = "referencias-adjuntos";
 export const MAX_ADJUNTO_BYTES = 15 * 1024 * 1024;
 
+/** Mismos formatos en foto producto y troquel/perfil (sin distinción). */
+export const ADJUNTO_ALLOWED_MIMES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/bmp",
+  "image/x-ms-bmp",
+  "image/webp",
+  "image/gif",
+  "image/tiff",
+  "image/tif",
+] as const;
+
+export const ADJUNTO_ACCEPT =
+  "application/pdf,image/jpeg,image/png,image/bmp,image/webp,image/gif,image/tiff,.pdf,.jpg,.jpeg,.png,.bmp,.webp,.gif,.tif,.tiff";
+
+export const ADJUNTO_HINT =
+  "PDF, JPG, PNG, BMP, WEBP, GIF… · máx. 15 MB";
+
 export type ReferenciaAdjuntoTipo = "foto_producto" | "perfil_troquel";
 
 export type ProdReferenciaAdjuntoRow = {
@@ -15,30 +34,39 @@ export type ProdReferenciaAdjuntoRow = {
   created_at: string | null;
 };
 
-function allowedMimes(tipo: ReferenciaAdjuntoTipo): readonly string[] {
-  return tipo === "foto_producto"
-    ? ["image/jpeg", "image/png"]
-    : ["application/pdf", "image/jpeg", "image/png"];
-}
-
 function normalizeMime(file: File): string {
   const t = (file.type || "").toLowerCase().trim();
-  if (t) return t === "image/jpg" ? "image/jpeg" : t;
+  if (t) {
+    if (t === "image/jpg") return "image/jpeg";
+    if (t === "image/x-bmp") return "image/bmp";
+    return t;
+  }
   const n = file.name.toLowerCase();
   if (n.endsWith(".pdf")) return "application/pdf";
   if (n.endsWith(".png")) return "image/png";
   if (n.endsWith(".jpg") || n.endsWith(".jpeg")) return "image/jpeg";
+  if (n.endsWith(".bmp")) return "image/bmp";
+  if (n.endsWith(".webp")) return "image/webp";
+  if (n.endsWith(".gif")) return "image/gif";
+  if (n.endsWith(".tif") || n.endsWith(".tiff")) return "image/tiff";
   return "";
 }
 
-function extFromMime(mime: string): string {
+function extFromMime(mime: string, fileName: string): string {
   if (mime === "application/pdf") return "pdf";
   if (mime === "image/png") return "png";
-  return "jpg";
+  if (mime === "image/webp") return "webp";
+  if (mime === "image/gif") return "gif";
+  if (mime === "image/bmp" || mime === "image/x-ms-bmp") return "bmp";
+  if (mime === "image/tiff" || mime === "image/tif") return "tiff";
+  if (mime === "image/jpeg") return "jpg";
+  const n = fileName.toLowerCase();
+  const m = n.match(/\.([a-z0-9]+)$/);
+  return m?.[1] ?? "bin";
 }
 
 export function validateReferenciaAdjuntoFile(
-  tipo: ReferenciaAdjuntoTipo,
+  _tipo: ReferenciaAdjuntoTipo,
   file: File,
 ): string | null {
   if (file.size <= 0) return "Archivo vacío.";
@@ -46,17 +74,18 @@ export function validateReferenciaAdjuntoFile(
     return `Máximo ${Math.round(MAX_ADJUNTO_BYTES / (1024 * 1024))} MB.`;
   }
   const mime = normalizeMime(file);
-  if (!mime || !allowedMimes(tipo).includes(mime)) {
-    return tipo === "foto_producto"
-      ? "Foto producto: solo JPG o PNG."
-      : "Troquel: PDF, JPG o PNG.";
+  if (
+    !mime ||
+    !(ADJUNTO_ALLOWED_MIMES as readonly string[]).includes(mime)
+  ) {
+    return "Formato no admitido. Usa PDF, JPG, PNG, BMP, WEBP o GIF.";
   }
   return null;
 }
 
 export function isImageStoragePath(pathOrUrl: string | null | undefined): boolean {
   const s = String(pathOrUrl ?? "").toLowerCase();
-  return /\.(png|jpe?g)(\?|$)/i.test(s);
+  return /\.(png|jpe?g|bmp|webp|gif|tiff?)(\?|$)/i.test(s);
 }
 
 export function isPdfStoragePath(pathOrUrl: string | null | undefined): boolean {
@@ -105,7 +134,7 @@ export async function uploadReferenciaAdjunto(
   if (err) throw new Error(err);
 
   const mime = normalizeMime(opts.file);
-  const ext = extFromMime(mime);
+  const ext = extFromMime(mime, opts.file.name);
   const safeCodigo = opts.codigo.trim().replace(/[^\w.-]+/g, "_") || "ref";
   const storagePath = `${safeCodigo}/${opts.tipo}/${crypto.randomUUID()}.${ext}`;
 

@@ -31,6 +31,42 @@ function publicAdjuntoUrl(storagePath: string): string {
 
 type PdfImageAsset = { dataUrl: string; format: "JPEG" | "PNG" };
 
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** Convierte BMP/WEBP/GIF/etc. a PNG data URL para jsPDF. */
+async function rasterToPngDataUrl(blob: Blob): Promise<string | null> {
+  try {
+    const objectUrl = URL.createObjectURL(blob);
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error("image load failed"));
+        el.src = objectUrl;
+      });
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      if (canvas.width <= 0 || canvas.height <= 0) return null;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+      ctx.drawImage(img, 0, 0);
+      return canvas.toDataURL("image/png");
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  } catch {
+    return null;
+  }
+}
+
 async function loadPdfImageAsset(
   pathOrUrl: string | null | undefined,
 ): Promise<PdfImageAsset | null> {
@@ -41,16 +77,20 @@ async function loadPdfImageAsset(
     const res = await fetch(url);
     if (!res.ok) return null;
     const blob = await res.blob();
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result ?? ""));
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(blob);
-    });
-    const format: "JPEG" | "PNG" = /\.png(\?|$)/i.test(raw) || blob.type === "image/png"
-      ? "PNG"
-      : "JPEG";
-    return { dataUrl, format };
+    const isPng = /\.png(\?|$)/i.test(raw) || blob.type === "image/png";
+    const isJpeg =
+      /\.jpe?g(\?|$)/i.test(raw) ||
+      blob.type === "image/jpeg" ||
+      blob.type === "image/jpg";
+    if (isPng || isJpeg) {
+      return {
+        dataUrl: await blobToDataUrl(blob),
+        format: isPng ? "PNG" : "JPEG",
+      };
+    }
+    const png = await rasterToPngDataUrl(blob);
+    if (!png) return null;
+    return { dataUrl: png, format: "PNG" };
   } catch {
     return null;
   }

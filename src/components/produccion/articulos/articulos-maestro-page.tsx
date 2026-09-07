@@ -33,6 +33,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ArticuloAdjuntosPanel } from "@/components/produccion/articulos/articulo-adjuntos-panel";
+import { TroquelPickerField } from "@/components/produccion/ots/troquel-picker-field";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
   aplicarArticulosDiff,
@@ -812,15 +813,21 @@ function ArticuloFormDialog({
                 onChange={(e) => set("gramaje_habitual", e.target.value)}
               />
             </div>
-            <div className="grid gap-1">
-              <Label className="text-xs">Troquel habitual</Label>
-              <Input
-                className="h-8 font-mono text-xs"
-                placeholder="TAG00205"
-                value={form.troquel_habitual}
-                onChange={(e) => set("troquel_habitual", e.target.value)}
-              />
-            </div>
+            <TroquelPickerField
+              id="articulo-troquel-habitual"
+              label="Troquel habitual"
+              value={form.troquel_habitual}
+              onChange={(v) => set("troquel_habitual", v)}
+              onTroquelPicked={(picked) => {
+                onFormChange({
+                  ...form,
+                  troquel_habitual: picked.num_troquel,
+                  poses_habitual: picked.num_figuras?.trim()
+                    ? picked.num_figuras.trim()
+                    : form.poses_habitual,
+                });
+              }}
+            />
             <div className="grid gap-1">
               <Label className="text-xs">Tipo de fondo</Label>
               <Input

@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
+  ADJUNTO_ACCEPT,
+  ADJUNTO_HINT,
   isImageStoragePath,
   isPdfStoragePath,
   publicUrlForStoragePath,
@@ -192,8 +194,8 @@ export function ArticuloAdjuntosPanel({
   if (!referenciaId) {
     return (
       <p className="text-[11px] text-slate-500">
-        Guarda el artículo primero para poder subir foto de producto y perfil de
-        troquel (PDF / JPG / PNG).
+        Guarda el artículo primero para poder subir adjuntos (foto producto o
+        perfil de troquel: PDF, JPG, PNG, BMP…).
       </p>
     );
   }
@@ -205,8 +207,8 @@ export function ArticuloAdjuntosPanel({
         codigo={codigo}
         tipo="foto_producto"
         label="Foto producto"
-        hint="JPG o PNG · máx. 15 MB"
-        accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+        hint={ADJUNTO_HINT}
+        accept={ADJUNTO_ACCEPT}
         path={fotoProductoPath}
         onPathChange={onFotoProductoChange}
       />
@@ -215,8 +217,8 @@ export function ArticuloAdjuntosPanel({
         codigo={codigo}
         tipo="perfil_troquel"
         label="Troquel / perfil"
-        hint="PDF preferido · también JPG/PNG · máx. 15 MB"
-        accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png"
+        hint={ADJUNTO_HINT}
+        accept={ADJUNTO_ACCEPT}
         path={fotoTroquelPath}
         onPathChange={onFotoTroquelChange}
       />
