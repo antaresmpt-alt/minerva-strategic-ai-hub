@@ -32,6 +32,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { ArticuloAdjuntosPanel } from "@/components/produccion/articulos/articulo-adjuntos-panel";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
   aplicarArticulosDiff,
@@ -139,6 +140,8 @@ type ArticuloForm = {
   /** Bloque 14 */
   tipo_fondo: string;
   peso_unitario: string;
+  foto_producto_path: string;
+  foto_troquel_path: string;
 };
 
 const EMPTY_FORM: ArticuloForm = {
@@ -176,6 +179,8 @@ const EMPTY_FORM: ArticuloForm = {
   horas_desbroce_oficial: "",
   tipo_fondo: "",
   peso_unitario: "",
+  foto_producto_path: "",
+  foto_troquel_path: "",
 };
 
 function numToFormStr(v: number | null | undefined): string {
@@ -230,6 +235,8 @@ function rowToForm(row: ProdReferenciaRow): ArticuloForm {
     horas_desbroce_oficial: numToFormStr(row.horas_desbroce_oficial),
     tipo_fondo: row.tipo_fondo ?? "",
     peso_unitario: numToFormStr(row.peso_unitario),
+    foto_producto_path: row.foto_producto_path ?? "",
+    foto_troquel_path: row.foto_troquel_path ?? "",
   };
 }
 
@@ -270,6 +277,7 @@ function formToPayload(form: ArticuloForm) {
     horas_desbroce_oficial: parseNum(form.horas_desbroce_oficial),
     tipo_fondo: form.tipo_fondo.trim() || null,
     peso_unitario: parseNum(form.peso_unitario),
+    // Paths se gestionan al subir adjunto; no sobrescribir desde form vacío
   };
 }
 
@@ -360,8 +368,8 @@ function buildFichaPdfRow(
     horas_desbroce_muestra_n: base?.horas_desbroce_muestra_n ?? null,
     tipo_fondo: payload.tipo_fondo,
     peso_unitario: payload.peso_unitario,
-    foto_producto_path: base?.foto_producto_path ?? null,
-    foto_troquel_path: base?.foto_troquel_path ?? null,
+    foto_producto_path: form.foto_producto_path.trim() || base?.foto_producto_path || null,
+    foto_troquel_path: form.foto_troquel_path.trim() || base?.foto_troquel_path || null,
     created_at: base?.created_at ?? null,
     updated_at: base?.updated_at ?? null,
   };
@@ -552,6 +560,8 @@ function ArticuloFormDialog({
   onClienteFichaChange,
   keepOpen = false,
   onKeepOpenChange,
+  referenciaId = null,
+  onAdjuntoPathChange,
 }: {
   open: boolean;
   title: string;
@@ -570,11 +580,18 @@ function ArticuloFormDialog({
   /** Solo creación: mantener modal abierto tras guardar. */
   keepOpen?: boolean;
   onKeepOpenChange?: (v: boolean) => void;
+  /** Id BD para subir adjuntos (solo edición / tras crear). */
+  referenciaId?: string | null;
+  /** Sincroniza tabla/editingRow tras upload (paths ya van en BD). */
+  onAdjuntoPathChange?: (
+    field: "foto_producto_path" | "foto_troquel_path",
+    path: string | null,
+  ) => void;
 }) {
   const set = (k: keyof ArticuloForm, v: string | boolean | DefaultsProcesoMaestro) =>
     onFormChange({ ...form, [k]: v });
 
-  const handlePdfFicha = (modo: ArticuloFichaPdfModo) => {
+  const handlePdfFicha = async (modo: ArticuloFichaPdfModo) => {
     if (!form.codigo.trim()) {
       toast.error("Indica un código antes de generar la ficha PDF.");
       return;
@@ -592,7 +609,7 @@ function ArticuloFormDialog({
             updated_at: null,
           }
         : null;
-      exportArticuloFichaPdf(buildFichaPdfRow(form, promediosRow), {
+      await exportArticuloFichaPdf(buildFichaPdfRow(form, promediosRow), {
         modo,
         clienteFicha: clientePayload,
       });
@@ -894,10 +911,23 @@ function ArticuloFormDialog({
             </div>
           </div>
 
-          <p className="text-[10px] text-slate-400">
-            Fotos producto / troquel: huecos en Storage listos; subida en siguiente
-            iteración. El PDF muestra placeholders.
+          <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            Adjuntos ficha (foto / troquel)
           </p>
+          <ArticuloAdjuntosPanel
+            referenciaId={referenciaId}
+            codigo={form.codigo.trim() || "SIN-CODIGO"}
+            fotoProductoPath={form.foto_producto_path.trim() || null}
+            fotoTroquelPath={form.foto_troquel_path.trim() || null}
+            onFotoProductoChange={(path) => {
+              onFormChange({ ...form, foto_producto_path: path ?? "" });
+              onAdjuntoPathChange?.("foto_producto_path", path);
+            }}
+            onFotoTroquelChange={(path) => {
+              onFormChange({ ...form, foto_troquel_path: path ?? "" });
+              onAdjuntoPathChange?.("foto_troquel_path", path);
+            }}
+          />
 
           {promediosRow ? (
             <>
@@ -1115,7 +1145,7 @@ function ArticuloFormDialog({
                 variant="outline"
                 size="sm"
                 className="gap-1.5"
-                onClick={() => handlePdfFicha("minerva")}
+                onClick={() => void handlePdfFicha("minerva")}
                 disabled={saving || !form.codigo.trim()}
                 title="Ficha interna Minerva (planta / OT)"
               >
@@ -1127,7 +1157,7 @@ function ArticuloFormDialog({
                 variant="outline"
                 size="sm"
                 className="gap-1.5"
-                onClick={() => handlePdfFicha("cliente")}
+                onClick={() => void handlePdfFicha("cliente")}
                 disabled={saving || !form.codigo.trim()}
                 title="Ficha para entregar al cliente (RGS/temp heredados)"
               >
@@ -1457,7 +1487,7 @@ export function ArticulosMaestroPage() {
       const clientes = source.map((r) => r.cliente ?? "");
       const { fetchClienteFichasMap } = await import("@/lib/prod-cliente-ficha");
       const map = await fetchClienteFichasMap(supabase, clientes);
-      exportArticulosFichaClienteLote(source, map);
+      await exportArticulosFichaClienteLote(source, map);
       toast.success(`PDF cliente lote · ${source.length} ficha(s)`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo generar el lote");
@@ -1471,7 +1501,7 @@ export function ArticulosMaestroPage() {
         if (modo === "cliente" && row.cliente) {
           clienteFicha = await fetchClienteFichaByCliente(supabase, row.cliente);
         }
-        exportArticuloFichaPdf(row, { modo, clienteFicha });
+        await exportArticuloFichaPdf(row, { modo, clienteFicha });
         toast.success(
           `PDF ${modo === "cliente" ? "cliente" : "Minerva"} · ${row.codigo}`,
         );
@@ -1986,6 +2016,7 @@ export function ArticulosMaestroPage() {
         onClienteFichaChange={setCreateClienteFicha}
         keepOpen={createKeepOpen}
         onKeepOpenChange={setCreateKeepOpen}
+        referenciaId={null}
       />
 
       {/* Modal Editar */}
@@ -2007,6 +2038,15 @@ export function ArticulosMaestroPage() {
         recalculandoPromedios={updatingPromedios}
         clienteFicha={editClienteFicha}
         onClienteFichaChange={setEditClienteFicha}
+        referenciaId={editingRow?.id ?? null}
+        onAdjuntoPathChange={(field, path) => {
+          if (!editingRow) return;
+          const id = editingRow.id;
+          setEditingRow((er) => (er ? { ...er, [field]: path } : er));
+          setRows((rs) =>
+            rs.map((r) => (r.id === id ? { ...r, [field]: path } : r)),
+          );
+        }}
       />
 
       {/* Modal Import */}

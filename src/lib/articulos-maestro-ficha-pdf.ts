@@ -7,6 +7,11 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
 import { buildMaestroPromediosPanel } from "@/lib/maestro-prefill";
+import {
+  isImageStoragePath,
+  isPdfStoragePath,
+  REFERENCIAS_ADJUNTOS_BUCKET,
+} from "@/lib/prod-referencia-adjuntos";
 import { normalizeClienteNombre } from "@/types/prod-cliente-ficha";
 import type { ProdClienteFichaRow } from "@/types/prod-cliente-ficha";
 import type { DefaultsProcesoMaestro } from "@/types/prod-referencias";
@@ -15,6 +20,41 @@ import type { ProdReferenciaRow } from "@/types/prod-referencias";
 const NAVY: [number, number, number] = [0, 33, 71];
 const GOLD: [number, number, number] = [198, 156, 43];
 const SLATE: [number, number, number] = [100, 116, 139];
+
+function publicAdjuntoUrl(storagePath: string): string {
+  if (storagePath.startsWith("http://") || storagePath.startsWith("https://")) {
+    return storagePath;
+  }
+  const base = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");
+  return `${base}/storage/v1/object/public/${REFERENCIAS_ADJUNTOS_BUCKET}/${storagePath.replace(/^\//, "")}`;
+}
+
+type PdfImageAsset = { dataUrl: string; format: "JPEG" | "PNG" };
+
+async function loadPdfImageAsset(
+  pathOrUrl: string | null | undefined,
+): Promise<PdfImageAsset | null> {
+  const raw = String(pathOrUrl ?? "").trim();
+  if (!raw || !isImageStoragePath(raw)) return null;
+  try {
+    const url = publicAdjuntoUrl(raw);
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+    const format: "JPEG" | "PNG" = /\.png(\?|$)/i.test(raw) || blob.type === "image/png"
+      ? "PNG"
+      : "JPEG";
+    return { dataUrl, format };
+  } catch {
+    return null;
+  }
+}
 
 export type ArticuloFichaPdfModo = "minerva" | "cliente";
 
@@ -131,8 +171,13 @@ function drawFooter(doc: jsPDF, modo: ArticuloFichaPdfModo): void {
   doc.text("1 / 1", 198, 291, { align: "right" });
 }
 
-/** Huecos reservados para fotos (upload pendiente). Siempre visibles. */
-function drawFotoPlaceholders(doc: jsPDF, row: ProdReferenciaRow, y: number): number {
+/** Huecos / imágenes adjuntas. */
+function drawFotoPlaceholders(
+  doc: jsPDF,
+  row: ProdReferenciaRow,
+  y: number,
+  assets?: { producto: PdfImageAsset | null; troquel: PdfImageAsset | null },
+): number {
   const hasProd = Boolean(row.foto_producto_path?.trim());
   const hasTroq = Boolean(row.foto_troquel_path?.trim());
   doc.setDrawColor(200, 200, 200);
@@ -140,18 +185,42 @@ function drawFotoPlaceholders(doc: jsPDF, row: ProdReferenciaRow, y: number): nu
   doc.rect(111, y, 85, 42);
   doc.setFontSize(7);
   doc.setTextColor(...SLATE);
-  doc.text("Foto producto", 16, y + 6);
-  doc.text(
-    hasProd ? String(row.foto_producto_path) : "Pendiente de cargar",
-    16,
-    y + 12,
-  );
-  doc.text("Perfil / foto troquel", 113, y + 6);
-  doc.text(
-    hasTroq ? String(row.foto_troquel_path) : "Pendiente de cargar",
-    113,
-    y + 12,
-  );
+  doc.text("Foto producto", 16, y + 5);
+  if (assets?.producto) {
+    try {
+      doc.addImage(assets.producto.dataUrl, assets.producto.format, 16, y + 7, 80, 32);
+    } catch {
+      doc.text(hasProd ? "Imagen no embebible" : "Pendiente de cargar", 16, y + 12);
+    }
+  } else {
+    doc.text(
+      hasProd
+        ? isPdfStoragePath(row.foto_producto_path)
+          ? "PDF adjunto (abrir en Hub)"
+          : "Pendiente de cargar"
+        : "Pendiente de cargar",
+      16,
+      y + 12,
+    );
+  }
+  doc.text("Perfil / foto troquel", 113, y + 5);
+  if (assets?.troquel) {
+    try {
+      doc.addImage(assets.troquel.dataUrl, assets.troquel.format, 113, y + 7, 80, 32);
+    } catch {
+      doc.text(hasTroq ? "Imagen no embebible" : "Pendiente de cargar", 113, y + 12);
+    }
+  } else {
+    doc.text(
+      hasTroq
+        ? isPdfStoragePath(row.foto_troquel_path)
+          ? "PDF adjunto (abrir en Hub)"
+          : "Pendiente de cargar"
+        : "Pendiente de cargar",
+      113,
+      y + 12,
+    );
+  }
   doc.setTextColor(0, 0, 0);
   return y + 48;
 }
@@ -161,6 +230,7 @@ function buildClienteBody(
   row: ProdReferenciaRow,
   clienteFicha: ProdClienteFichaRow | null | undefined,
   startY: number,
+  assets?: { producto: PdfImageAsset | null; troquel: PdfImageAsset | null },
 ): number {
   let y = startY;
   y = sectionTitle(doc, "Información general", y);
@@ -226,11 +296,16 @@ function buildClienteBody(
     y += Math.min(lines.length, 5) * 4 + 2;
   }
 
-  y = drawFotoPlaceholders(doc, row, y);
+  y = drawFotoPlaceholders(doc, row, y, assets);
   return y;
 }
 
-function buildMinervaBody(doc: jsPDF, row: ProdReferenciaRow, startY: number): number {
+function buildMinervaBody(
+  doc: jsPDF,
+  row: ProdReferenciaRow,
+  startY: number,
+  assets?: { producto: PdfImageAsset | null; troquel: PdfImageAsset | null },
+): number {
   let y = startY;
   y = sectionTitle(doc, "Identidad", y);
   y =
@@ -396,26 +471,32 @@ function buildMinervaBody(doc: jsPDF, row: ProdReferenciaRow, startY: number): n
   }
 
   if (y < 240) {
-    y = sectionTitle(doc, "Fotos (carga pendiente)", y);
-    drawFotoPlaceholders(doc, row, y);
+    y = sectionTitle(doc, "Fotos / adjuntos", y);
+    drawFotoPlaceholders(doc, row, y, assets);
   }
   return y;
 }
 
 /**
  * Genera PDF A4. Por defecto modo minerva + descarga.
+ * Embebe JPG/PNG de Storage; si el adjunto es PDF, deja nota «abrir en Hub».
  */
-export function exportArticuloFichaPdf(
+export async function exportArticuloFichaPdf(
   row: ProdReferenciaRow,
   options?: ExportArticuloFichaPdfOptions,
-): jsPDF {
+): Promise<jsPDF> {
   const modo: ArticuloFichaPdfModo = options?.modo ?? "minerva";
+  const [producto, troquel] = await Promise.all([
+    loadPdfImageAsset(row.foto_producto_path),
+    loadPdfImageAsset(row.foto_troquel_path),
+  ]);
+  const assets = { producto, troquel };
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   let y = drawHeader(doc, row, modo);
   if (modo === "cliente") {
-    buildClienteBody(doc, row, options?.clienteFicha, y);
+    buildClienteBody(doc, row, options?.clienteFicha, y, assets);
   } else {
-    buildMinervaBody(doc, row, y);
+    buildMinervaBody(doc, row, y, assets);
   }
   drawFooter(doc, modo);
 
@@ -433,15 +514,15 @@ export function exportArticuloFichaPdf(
 }
 
 /** Exporta varias fichas cliente en un único PDF multipágina. */
-export function exportArticulosFichaClienteLote(
+export async function exportArticulosFichaClienteLote(
   rows: readonly ProdReferenciaRow[],
   clienteFichaByCliente: Map<string, ProdClienteFichaRow>,
   filename?: string,
-): void {
+): Promise<void> {
   if (rows.length === 0) throw new Error("No hay artículos para exportar.");
   const first = rows[0]!;
   const clienteKey = normalizeClienteNombre(first.cliente);
-  const doc = exportArticuloFichaPdf(first, {
+  const doc = await exportArticuloFichaPdf(first, {
     modo: "cliente",
     clienteFicha: clienteFichaByCliente.get(clienteKey) ?? null,
     save: false,
@@ -449,12 +530,17 @@ export function exportArticulosFichaClienteLote(
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i]!;
     doc.addPage();
-    let y = drawHeader(doc, row, "cliente");
+    const [producto, troquel] = await Promise.all([
+      loadPdfImageAsset(row.foto_producto_path),
+      loadPdfImageAsset(row.foto_troquel_path),
+    ]);
+    const y = drawHeader(doc, row, "cliente");
     buildClienteBody(
       doc,
       row,
       clienteFichaByCliente.get(normalizeClienteNombre(row.cliente)) ?? null,
       y,
+      { producto, troquel },
     );
     drawFooter(doc, "cliente");
   }
