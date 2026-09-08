@@ -1,5 +1,8 @@
 /** Bloque 14 — Defaults ficha técnica a nivel cliente (RGS, temperatura). */
 
+/** RGS Minerva (ficha Access / Adobe Scan 7 sep 2026). Prefill en altas. */
+export const DEFAULT_REGISTRO_SANITARIO_MINERVA = "39.04187/B.";
+
 export type ProdClienteFichaRow = {
   id: string;
   cliente: string;

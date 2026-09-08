@@ -133,9 +133,13 @@ export function TroquelPickerField({
                   className="w-full px-2 py-1.5 text-left hover:bg-slate-100"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => {
-                    onChange(h.num_troquel);
                     setQ(h.num_troquel);
-                    onTroquelPicked?.(h);
+                    // Si hay onTroquelPicked, solo él actualiza (evita race que pierde poses).
+                    if (onTroquelPicked) {
+                      onTroquelPicked(h);
+                    } else {
+                      onChange(h.num_troquel);
+                    }
                     setOpen(false);
                   }}
                 >

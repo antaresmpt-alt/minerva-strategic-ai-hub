@@ -2545,6 +2545,7 @@ export type Database = {
           ruta_habitual: string | null
           subtipo: string | null
           tintas_habituales: string | null
+          tintas_ecologicas: boolean
           tintas_oficial: string | null
           tintas_promedio: string | null
           tipo_engomado_habitual: string | null
@@ -2631,6 +2632,7 @@ export type Database = {
           ruta_habitual?: string | null
           subtipo?: string | null
           tintas_habituales?: string | null
+          tintas_ecologicas?: boolean
           tintas_oficial?: string | null
           tintas_promedio?: string | null
           tipo_engomado_habitual?: string | null
@@ -2717,6 +2719,7 @@ export type Database = {
           ruta_habitual?: string | null
           subtipo?: string | null
           tintas_habituales?: string | null
+          tintas_ecologicas?: boolean
           tintas_oficial?: string | null
           tintas_promedio?: string | null
           tipo_engomado_habitual?: string | null

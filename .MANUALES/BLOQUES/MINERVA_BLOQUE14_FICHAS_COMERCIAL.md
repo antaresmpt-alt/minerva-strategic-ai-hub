@@ -17,6 +17,8 @@ Normativa ES/EU → ficha técnica de **todos** los artículos. Manel/Zaida no d
 | Una vez por cliente | RGS, temperatura → tabla `prod_cliente_ficha` |
 | OT / planta | Troquel fino, ref. embalaje, peso unitario tras 1ª producción |
 | Fotos | Mismos formatos en foto y troquel: PDF, JPG, PNG, BMP, WEBP, GIF… · bucket `referencias-adjuntos` |
+| Tintas ecológicas | Checkbox Sí/No en maestro + PDF cliente/Minerva + Excel |
+| RGS | Prefill fijo Minerva `39.04187/B.` (editable) |
 
 - Código siempre **M-xxxxx** Minerva.
 - Migración: `supabase/migrations/20260907180000_bloque14_fichas_comercial.sql` (aplicada en proyecto Supabase).

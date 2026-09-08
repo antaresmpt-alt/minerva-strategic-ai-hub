@@ -64,6 +64,7 @@ import {
   type DefaultsProcesoMaestro,
 } from "@/types/prod-referencias";
 import {
+  DEFAULT_REGISTRO_SANITARIO_MINERVA,
   normalizeClienteNombre,
   type ProdClienteFichaRow,
 } from "@/types/prod-cliente-ficha";
@@ -73,7 +74,7 @@ import {
 } from "@/lib/ctp-despacho";
 
 const EMPTY_CLIENTE_FICHA = {
-  registro_sanitario: "",
+  registro_sanitario: DEFAULT_REGISTRO_SANITARIO_MINERVA,
   temperatura_conservacion: "",
 };
 
@@ -119,6 +120,7 @@ type ArticuloForm = {
   poses_habitual: string;
   troquel_habitual: string;
   tintas_habituales: string;
+  tintas_ecologicas: boolean;
   acabado_habitual: string;
   ruta_habitual: string;
   tipo_engomado_habitual: string;
@@ -161,6 +163,7 @@ const EMPTY_FORM: ArticuloForm = {
   poses_habitual: "",
   troquel_habitual: "",
   tintas_habituales: "",
+  tintas_ecologicas: false,
   acabado_habitual: "",
   ruta_habitual: "",
   tipo_engomado_habitual: "",
@@ -217,6 +220,7 @@ function rowToForm(row: ProdReferenciaRow): ArticuloForm {
     poses_habitual: row.poses_habitual != null ? String(row.poses_habitual) : "",
     troquel_habitual: row.troquel_habitual ?? "",
     tintas_habituales: row.tintas_habituales ?? "",
+    tintas_ecologicas: Boolean(row.tintas_ecologicas),
     acabado_habitual: row.acabado_habitual ?? "",
     ruta_habitual: row.ruta_habitual ?? "",
     tipo_engomado_habitual: row.tipo_engomado_habitual ?? "",
@@ -259,6 +263,7 @@ function formToPayload(form: ArticuloForm) {
     poses_habitual: parseNum(form.poses_habitual) != null ? Math.round(parseNum(form.poses_habitual)!) : null,
     troquel_habitual: form.troquel_habitual.trim() || null,
     tintas_habituales: form.tintas_habituales.trim() || null,
+    tintas_ecologicas: form.tintas_ecologicas,
     acabado_habitual: form.acabado_habitual.trim() || null,
     ruta_habitual: form.ruta_habitual.trim() || null,
     tipo_engomado_habitual: form.tipo_engomado_habitual.trim() || null,
@@ -305,6 +310,7 @@ function buildFichaPdfRow(
     poses_habitual: payload.poses_habitual,
     troquel_habitual: payload.troquel_habitual,
     tintas_habituales: payload.tintas_habituales,
+    tintas_ecologicas: Boolean(payload.tintas_ecologicas),
     acabado_habitual: payload.acabado_habitual,
     ruta_habitual: payload.ruta_habitual,
     tipo_engomado_habitual: payload.tipo_engomado_habitual,
@@ -602,7 +608,9 @@ function ArticuloFormDialog({
         ? {
             id: "",
             cliente: normalizeClienteNombre(form.cliente),
-            registro_sanitario: clienteFicha.registro_sanitario.trim() || null,
+            registro_sanitario:
+              clienteFicha.registro_sanitario.trim() ||
+              DEFAULT_REGISTRO_SANITARIO_MINERVA,
             temperatura_conservacion:
               clienteFicha.temperatura_conservacion.trim() || null,
             notas: null,
@@ -819,12 +827,11 @@ function ArticuloFormDialog({
               value={form.troquel_habitual}
               onChange={(v) => set("troquel_habitual", v)}
               onTroquelPicked={(picked) => {
+                const poses = picked.num_figuras?.trim() ?? "";
                 onFormChange({
                   ...form,
                   troquel_habitual: picked.num_troquel,
-                  poses_habitual: picked.num_figuras?.trim()
-                    ? picked.num_figuras.trim()
-                    : form.poses_habitual,
+                  ...(poses ? { poses_habitual: poses } : {}),
                 });
               }}
             />
@@ -856,6 +863,21 @@ function ArticuloFormDialog({
                 value={form.tintas_habituales}
                 onChange={(e) => set("tintas_habituales", e.target.value)}
               />
+            </div>
+            <div className="flex items-end pb-1">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="articulo-tintas-eco"
+                  checked={form.tintas_ecologicas}
+                  onCheckedChange={(v) => set("tintas_ecologicas", v === true)}
+                />
+                <Label
+                  htmlFor="articulo-tintas-eco"
+                  className="text-xs font-normal text-slate-700"
+                >
+                  Tintas ecológicas
+                </Label>
+              </div>
             </div>
             <div className="grid gap-1">
               <Label className="text-xs">Acabado habitual</Label>
@@ -1243,7 +1265,8 @@ export function ArticulosMaestroPage() {
       try {
         const row = await fetchClienteFichaByCliente(supabase, key);
         setForm({
-          registro_sanitario: row?.registro_sanitario ?? "",
+          registro_sanitario:
+            row?.registro_sanitario?.trim() || DEFAULT_REGISTRO_SANITARIO_MINERVA,
           temperatura_conservacion: row?.temperatura_conservacion ?? "",
         });
       } catch {

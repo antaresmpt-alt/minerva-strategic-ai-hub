@@ -12,8 +12,11 @@ import {
   isPdfStoragePath,
   REFERENCIAS_ADJUNTOS_BUCKET,
 } from "@/lib/prod-referencia-adjuntos";
-import { normalizeClienteNombre } from "@/types/prod-cliente-ficha";
-import type { ProdClienteFichaRow } from "@/types/prod-cliente-ficha";
+import {
+  DEFAULT_REGISTRO_SANITARIO_MINERVA,
+  normalizeClienteNombre,
+  type ProdClienteFichaRow,
+} from "@/types/prod-cliente-ficha";
 import type { DefaultsProcesoMaestro } from "@/types/prod-referencias";
 import type { ProdReferenciaRow } from "@/types/prod-referencias";
 
@@ -23,16 +26,20 @@ const SLATE: [number, number, number] = [100, 116, 139];
 
 /** Pie / cabezal como ficha Access (Adobe Scan 7 sep 2026). */
 const LETTERHEAD = {
-  company: "MINERVA PACKAGING & PRINT CREATORS",
   address: "C/ Cabrera, 13-15 · 08192 Sant Quirze del Vallès (Barcelona) · SPAIN",
   contact: "Tel. 93 711 30 61 · www.minervaglobal.es · minerva@minervaglobal.es",
-  logoPath: "/images/brand-minerva-round.png",
+  /** Logo oficial largo (MINERVA + símbolo + PACKAGING & PRINT CREATORS). */
+  logoPath: "/images/brand-minerva-logo-largo.png",
 } as const;
 
 function fmtPeso(row: ProdReferenciaRow): string {
   return row.peso_unitario != null
     ? `${row.peso_unitario} g`
     : "Pendiente 1ª producción";
+}
+
+function fmtTintasEco(row: ProdReferenciaRow): string {
+  return row.tintas_ecologicas ? "Sí" : "No";
 }
 
 function publicAdjuntoUrl(storagePath: string): string {
@@ -259,7 +266,27 @@ async function loadLogoAsset(): Promise<PdfImageAsset | null> {
     const res = await fetch(url);
     if (!res.ok) return null;
     const blob = await res.blob();
-    return await rasterizeImageBlob(blob);
+    // Mantener PNG (mejor para logo con transparencia); downscale suave.
+    const objectUrl = URL.createObjectURL(blob);
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error("logo load failed"));
+        el.src = objectUrl;
+      });
+      const canvas = drawScaledToCanvas(
+        img,
+        img.naturalWidth || img.width,
+        img.naturalHeight || img.height,
+      );
+      if (!canvas) return null;
+      const dataUrl = canvas.toDataURL("image/png");
+      if (!dataUrl || dataUrl.length < 32) return null;
+      return { dataUrl, format: "PNG" };
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
   } catch {
     return null;
   }
@@ -271,45 +298,59 @@ function drawHeader(
   modo: ArticuloFichaPdfModo,
   logo: PdfImageAsset | null,
 ): number {
-  // Franja superior navy + logo + marca (estilo ficha papel)
-  doc.setFillColor(...NAVY);
-  doc.rect(0, 0, 210, 28, "F");
-  doc.setFillColor(...GOLD);
-  doc.rect(0, 28, 210, 1.2, "F");
-
+  // Logo oficial largo + estadillo debajo (no franja navy / logo app)
+  let y = 8;
   if (logo) {
     try {
-      doc.addImage(logo.dataUrl, logo.format, 10, 4, 18, 18);
+      const props = doc.getImageProperties(logo.dataUrl);
+      const maxW = 95;
+      const maxH = 18;
+      const iw = Number(props.width) || maxW;
+      const ih = Number(props.height) || maxH;
+      const r = Math.min(maxW / iw, maxH / ih);
+      const w = Math.max(1, iw * r);
+      const h = Math.max(1, ih * r);
+      doc.addImage(logo.dataUrl, logo.format, 12, y, w, h);
+      y += h + 3;
     } catch {
-      /* logo opcional */
+      y = 12;
     }
+  } else {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.setTextColor(...NAVY);
+    doc.text("MINERVA", 12, 14);
+    y = 16;
   }
 
-  const textLeft = logo ? 32 : 12;
-  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  doc.setTextColor(...SLATE);
+  doc.text(LETTERHEAD.address, 12, y + 3);
+  doc.text(LETTERHEAD.contact, 12, y + 7);
+
+  doc.setTextColor(...NAVY);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
-  doc.text(LETTERHEAD.company, textLeft, 11);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
   doc.text(
-    modo === "cliente" ? "Ficha técnica · Cliente" : "Ficha técnica · Interno",
-    textLeft,
-    17,
+    modo === "cliente" ? "FICHA TÉCNICA · CLIENTE" : "FICHA TÉCNICA · INTERNO",
+    198,
+    y + 3,
+    { align: "right" },
   );
-  doc.setFontSize(6.5);
-  doc.setTextColor(200, 210, 220);
-  doc.text(LETTERHEAD.address, textLeft, 23);
-
-  doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(15);
-  doc.text(txt(row.codigo), 198, 12, { align: "right" });
+  doc.setFontSize(14);
+  doc.text(txt(row.codigo), 198, y + 10, { align: "right" });
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
-  doc.text(txt(row.referencia_cliente), 198, 18, { align: "right" });
+  doc.setTextColor(...SLATE);
+  doc.text(txt(row.referencia_cliente), 198, y + 15, { align: "right" });
+
+  doc.setDrawColor(...GOLD);
+  doc.setLineWidth(0.6);
+  const lineY = y + 18;
+  doc.line(12, lineY, 198, lineY);
   doc.setTextColor(0, 0, 0);
-  return 34;
+  return lineY + 6;
 }
 
 function drawFooter(doc: jsPDF, modo: ArticuloFichaPdfModo): void {
@@ -322,17 +363,15 @@ function drawFooter(doc: jsPDF, modo: ArticuloFichaPdfModo): void {
     doc.setPage(p);
     doc.setDrawColor(...GOLD);
     doc.setLineWidth(0.4);
-    doc.line(12, 282, 198, 282);
-    doc.setFontSize(6.5);
+    doc.line(12, 287, 198, 287);
+    doc.setFontSize(7);
     doc.setTextColor(...SLATE);
-    doc.text(LETTERHEAD.address, 12, 286);
-    doc.text(LETTERHEAD.contact, 12, 290);
     doc.text(
-      `Generado ${generated} · ${modo === "cliente" ? "PDF cliente" : "PDF interno"}`,
+      `Generado ${generated} · Minerva Hub · ${modo === "cliente" ? "PDF cliente" : "PDF interno"}`,
       12,
-      294,
+      291,
     );
-    doc.text(`${p} / ${pageCount}`, 198, 294, { align: "right" });
+    doc.text(`${p} / ${pageCount}`, 198, 291, { align: "right" });
   }
 }
 
@@ -418,6 +457,7 @@ function buildClienteBody(
           : "No",
       ],
       ["Tintas", txt(row.tintas_habituales)],
+      ["Tintas ecológicas", fmtTintasEco(row)],
       ["Acabados", txt(row.acabado_habitual)],
       ["Medidas (mm)", fmtMm(row)],
       ["Tipo fondo", txt(row.tipo_fondo)],
@@ -427,7 +467,9 @@ function buildClienteBody(
     ]) + 3;
 
   y = sectionTitle(doc, "Logística", y);
-  const rgs = clienteFicha?.registro_sanitario;
+  const rgs =
+    clienteFicha?.registro_sanitario?.trim() ||
+    DEFAULT_REGISTRO_SANITARIO_MINERVA;
   const temp = clienteFicha?.temperatura_conservacion;
   y =
     kvTable(doc, y, [
@@ -506,6 +548,7 @@ function buildMinervaBody(
       ["Troquel (código)", txt(row.troquel_habitual) === "—" ? "Pendiente de cargar" : txt(row.troquel_habitual)],
       ["Poses", txt(row.poses_habitual)],
       ["Tintas", txt(row.tintas_habituales)],
+      ["Tintas ecológicas", fmtTintasEco(row)],
       ["Acabado", txt(row.acabado_habitual)],
       ["Engomado (tipo)", txt(row.tipo_engomado_habitual)],
       ["Caja embalaje", txt(row.caja_embalaje_habitual)],

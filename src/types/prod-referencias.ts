@@ -57,6 +57,8 @@ export type ProdReferenciaRow = {
   poses_habitual: number | null;
   troquel_habitual: string | null;
   tintas_habituales: string | null;
+  /** Bloque 14 — tintas ecológicas (Sí/No). */
+  tintas_ecologicas: boolean;
   acabado_habitual: string | null;
   ruta_habitual: string | null;
   tipo_engomado_habitual: string | null;
@@ -216,6 +218,7 @@ export type ArticuloExcelRow = {
   poses_habitual?: string | number | null;
   troquel_habitual?: string | null;
   tintas_habituales?: string | null;
+  tintas_ecologicas?: string | boolean | null;
   acabado_habitual?: string | null;
   tipo_engomado_habitual?: string | null;
   tipo_fondo?: string | null;

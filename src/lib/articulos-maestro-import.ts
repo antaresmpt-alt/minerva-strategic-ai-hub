@@ -8,7 +8,10 @@ import type {
   ProdReferenciaPromediosKey,
   ProdReferenciaRow,
 } from "@/types/prod-referencias";
-import { normalizeClienteNombre } from "@/types/prod-cliente-ficha";
+import {
+  DEFAULT_REGISTRO_SANITARIO_MINERVA,
+  normalizeClienteNombre,
+} from "@/types/prod-cliente-ficha";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -106,6 +109,7 @@ const IMPORT_DB_FIELDS = [
   "poses_habitual",
   "troquel_habitual",
   "tintas_habituales",
+  "tintas_ecologicas",
   "acabado_habitual",
   "tipo_engomado_habitual",
   "tipo_fondo",
@@ -357,6 +361,10 @@ export async function parseArticulosExcelFile(
             poses_habitual: parseOptionalInt(row.poses_habitual),
             troquel_habitual: cleanStr(row.troquel_habitual),
             tintas_habituales: cleanStr(row.tintas_habituales),
+            tintas_ecologicas:
+              row.tintas_ecologicas == null || row.tintas_ecologicas === ""
+                ? false
+                : parseBool(row.tintas_ecologicas),
             acabado_habitual: cleanStr(row.acabado_habitual),
             tipo_engomado_habitual: cleanStr(row.tipo_engomado_habitual),
             tipo_fondo: cleanStr(row.tipo_fondo),
@@ -387,6 +395,7 @@ export async function parseArticulosExcelFile(
             poses_habitual: fieldPresent(row.poses_habitual),
             troquel_habitual: fieldPresent(row.troquel_habitual),
             tintas_habituales: fieldPresent(row.tintas_habituales),
+            tintas_ecologicas: fieldPresent(row.tintas_ecologicas),
             acabado_habitual: fieldPresent(row.acabado_habitual),
             tipo_engomado_habitual: fieldPresent(row.tipo_engomado_habitual),
             tipo_fondo: fieldPresent(row.tipo_fondo),
@@ -471,9 +480,8 @@ async function upsertClienteFichaFromImportRow(
 ): Promise<void> {
   const cliente = normalizeClienteNombre(row.cliente);
   if (!cliente) return;
-  const rgs = cleanStr(row.registro_sanitario);
+  const rgs = cleanStr(row.registro_sanitario) ?? DEFAULT_REGISTRO_SANITARIO_MINERVA;
   const temp = cleanStr(row.temperatura_conservacion);
-  if (!rgs && !temp) return;
   await upsertClienteFicha(supabase, {
     cliente,
     registro_sanitario: rgs,
@@ -567,6 +575,7 @@ const EXPORT_COLS = [
   { key: "poses_habitual", label: "poses_habitual" },
   { key: "troquel_habitual", label: "troquel_habitual" },
   { key: "tintas_habituales", label: "tintas_habituales" },
+  { key: "tintas_ecologicas", label: "tintas_ecologicas" },
   { key: "acabado_habitual", label: "acabado_habitual" },
   { key: "tipo_engomado_habitual", label: "tipo_engomado_habitual" },
   { key: "tipo_fondo", label: "tipo_fondo" },
@@ -714,6 +723,7 @@ export function descargarPlantillaArticulos(): void {
       poses_habitual: 4,
       troquel_habitual: "TAG00205",
       tintas_habituales: "4+1",
+      tintas_ecologicas: "no",
       acabado_habitual: "Barniz AC brillo",
       tipo_engomado_habitual: "Pegado 4 puntos",
       tipo_fondo: "automontable",
@@ -722,7 +732,7 @@ export function descargarPlantillaArticulos(): void {
       peso_unitario: "",
       ruta_habitual: "impresion+troquelado+engomado",
       notas: "",
-      registro_sanitario: "39.01234/CAT",
+      registro_sanitario: "39.04187/B.",
       temperatura_conservacion: "Ambiente",
     },
     {
@@ -741,6 +751,7 @@ export function descargarPlantillaArticulos(): void {
       poses_habitual: 4,
       troquel_habitual: "TAG00547",
       tintas_habituales: "4+0",
+      tintas_ecologicas: "si",
       acabado_habitual: "Plastificado mate",
       tipo_engomado_habitual: "Pegado lateral",
       tipo_fondo: "",
@@ -749,7 +760,7 @@ export function descargarPlantillaArticulos(): void {
       peso_unitario: "",
       ruta_habitual: "impresion+plastico+troquelado+engomado",
       notas: "",
-      registro_sanitario: "39.01234/CAT",
+      registro_sanitario: "39.04187/B.",
       temperatura_conservacion: "Ambiente",
     },
     {
@@ -768,6 +779,7 @@ export function descargarPlantillaArticulos(): void {
       poses_habitual: "",
       troquel_habitual: "",
       tintas_habituales: "",
+      tintas_ecologicas: "no",
       acabado_habitual: "",
       tipo_engomado_habitual: "",
       tipo_fondo: "",
@@ -776,7 +788,7 @@ export function descargarPlantillaArticulos(): void {
       peso_unitario: "",
       ruta_habitual: "",
       notas: "Fila de ejemplo con codigo vacío: se auto-asigna M-NNNNN al importar",
-      registro_sanitario: "",
+      registro_sanitario: "39.04187/B.",
       temperatura_conservacion: "",
     },
   ];
