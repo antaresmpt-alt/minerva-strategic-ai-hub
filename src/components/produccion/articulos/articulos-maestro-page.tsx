@@ -210,6 +210,17 @@ function formatImportError(error: unknown): string {
   return String(error || "Error importando");
 }
 
+function formatSupabaseError(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  if (typeof error === "object" && error != null) {
+    const e = error as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown };
+    const msg = [e.message, e.details, e.hint].filter(Boolean).map(String).join(" · ");
+    if (msg.trim()) return msg;
+  }
+  if (typeof error === "string" && error.trim()) return error;
+  return fallback;
+}
+
 function rowToForm(row: ProdReferenciaRow): ArticuloForm {
   return {
     codigo: row.codigo,
@@ -1725,15 +1736,21 @@ export function ArticulosMaestroPage({
         return;
       }
       const ok = window.confirm(
-        `¿Eliminar el artículo ${row.codigo}?\n\nEsta acción no se puede deshacer.`,
+        `¿Eliminar el artículo ${row.codigo}?\n\nEsta acción no se puede deshacer.\nSi tenía OTs vinculadas, se desvinculan (no se borran las OTs).`,
       );
       if (!ok) return;
       try {
-        const { error: delErr } = await supabase
+        const { data, error: delErr } = await supabase
           .from("prod_referencias")
           .delete()
-          .eq("id", row.id);
+          .eq("id", row.id)
+          .select("id");
         if (delErr) throw delErr;
+        if (!data?.length) {
+          throw new Error(
+            "No se eliminó ninguna fila (permisos RLS o ya no existe).",
+          );
+        }
         setRows((prev) => prev.filter((r) => r.id !== row.id));
         setSelectedIds((prev) => {
           const next = new Set(prev);
@@ -1743,7 +1760,7 @@ export function ArticulosMaestroPage({
         if (editingRow?.id === row.id) setEditingRow(null);
         toast.success(`Artículo ${row.codigo} eliminado`);
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "No se pudo eliminar");
+        toast.error(formatSupabaseError(e, "No se pudo eliminar"));
       }
     },
     [canDeleteArticulos, editingRow?.id, supabase],
@@ -1757,22 +1774,32 @@ export function ArticulosMaestroPage({
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
     const ok = window.confirm(
-      `¿Eliminar ${ids.length} artículo(s) seleccionado(s)?\n\nEsta acción no se puede deshacer.`,
+      `¿Eliminar ${ids.length} artículo(s) seleccionado(s)?\n\nEsta acción no se puede deshacer.\nSi tenían OTs vinculadas, se desvinculan (no se borran las OTs).`,
     );
     if (!ok) return;
     try {
-      const { error: delErr } = await supabase
+      const { data, error: delErr } = await supabase
         .from("prod_referencias")
         .delete()
-        .in("id", ids);
+        .in("id", ids)
+        .select("id");
       if (delErr) throw delErr;
-      const idSet = new Set(ids);
+      if (!data?.length) {
+        throw new Error(
+          "No se eliminó ninguna fila (permisos RLS o ya no existen).",
+        );
+      }
+      const idSet = new Set(data.map((r) => r.id));
       setRows((prev) => prev.filter((r) => !idSet.has(r.id)));
-      setSelectedIds(new Set());
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const id of idSet) next.delete(id);
+        return next;
+      });
       if (editingRow && idSet.has(editingRow.id)) setEditingRow(null);
-      toast.success(`${ids.length} artículo(s) eliminado(s)`);
+      toast.success(`${data.length} artículo(s) eliminado(s)`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo eliminar");
+      toast.error(formatSupabaseError(e, "No se pudo eliminar"));
     }
   }, [canDeleteArticulos, editingRow, selectedIds, supabase]);
 
