@@ -1,5 +1,5 @@
 -- Al borrar un artículo del maestro, desvincular OTs (no bloquear).
--- En producción las FKs quedaron como NO ACTION pese a migraciones que pedían SET NULL.
+-- Asegura ON DELETE SET NULL en despachadas y producidas.
 
 alter table public.produccion_ot_despachadas
   drop constraint if exists produccion_ot_despachadas_referencia_id_fkey;
