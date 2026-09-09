@@ -2486,6 +2486,7 @@ export type Database = {
           caja_embalaje_habitual: string | null
           caja_embalaje_oficial: string | null
           caja_embalaje_promedio: string | null
+          bultos_por_palet_habitual: number | null
           cliente: string | null
           codigo: string
           created_at: string | null
@@ -2573,6 +2574,7 @@ export type Database = {
           caja_embalaje_habitual?: string | null
           caja_embalaje_oficial?: string | null
           caja_embalaje_promedio?: string | null
+          bultos_por_palet_habitual?: number | null
           cliente?: string | null
           codigo: string
           created_at?: string | null
@@ -2660,6 +2662,7 @@ export type Database = {
           caja_embalaje_habitual?: string | null
           caja_embalaje_oficial?: string | null
           caja_embalaje_promedio?: string | null
+          bultos_por_palet_habitual?: number | null
           cliente?: string | null
           codigo?: string
           created_at?: string | null

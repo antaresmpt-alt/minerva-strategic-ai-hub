@@ -13,6 +13,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Trash2,
   Upload,
   X,
 } from "lucide-react";
@@ -63,6 +64,7 @@ import {
 } from "@/lib/prod-cliente-ficha";
 import {
   ARTICULO_TIPO_PRODUCTO_OPTIONS,
+  calcUdsPorPalet,
   type ProdReferenciaRow,
   type DefaultsProcesoMaestro,
 } from "@/types/prod-referencias";
@@ -129,6 +131,7 @@ type ArticuloForm = {
   tipo_engomado_habitual: string;
   caja_embalaje_habitual: string;
   unidades_por_embalaje_habitual: string;
+  bultos_por_palet_habitual: string;
   fsc: boolean;
   fsc_fecha_validacion: string;
   notas: string;
@@ -172,6 +175,7 @@ const EMPTY_FORM: ArticuloForm = {
   tipo_engomado_habitual: "",
   caja_embalaje_habitual: "",
   unidades_por_embalaje_habitual: "",
+  bultos_por_palet_habitual: "",
   fsc: false,
   fsc_fecha_validacion: "",
   notas: "",
@@ -229,6 +233,7 @@ function rowToForm(row: ProdReferenciaRow): ArticuloForm {
     tipo_engomado_habitual: row.tipo_engomado_habitual ?? "",
     caja_embalaje_habitual: row.caja_embalaje_habitual ?? "",
     unidades_por_embalaje_habitual: row.unidades_por_embalaje_habitual != null ? String(row.unidades_por_embalaje_habitual) : "",
+    bultos_por_palet_habitual: row.bultos_por_palet_habitual != null ? String(row.bultos_por_palet_habitual) : "",
     fsc: row.fsc ?? false,
     fsc_fecha_validacion: row.fsc_fecha_validacion ?? "",
     notas: row.notas ?? "",
@@ -272,6 +277,7 @@ function formToPayload(form: ArticuloForm) {
     tipo_engomado_habitual: form.tipo_engomado_habitual.trim() || null,
     caja_embalaje_habitual: form.caja_embalaje_habitual.trim() || null,
     unidades_por_embalaje_habitual: parseNum(form.unidades_por_embalaje_habitual) != null ? Math.round(parseNum(form.unidades_por_embalaje_habitual)!) : null,
+    bultos_por_palet_habitual: parseNum(form.bultos_por_palet_habitual) != null ? Math.round(parseNum(form.bultos_por_palet_habitual)!) : null,
     fsc: form.fsc,
     fsc_fecha_validacion: form.fsc ? form.fsc_fecha_validacion.trim() || null : null,
     notas: form.notas.trim() || null,
@@ -319,6 +325,7 @@ function buildFichaPdfRow(
     tipo_engomado_habitual: payload.tipo_engomado_habitual,
     caja_embalaje_habitual: payload.caja_embalaje_habitual,
     unidades_por_embalaje_habitual: payload.unidades_por_embalaje_habitual,
+    bultos_por_palet_habitual: payload.bultos_por_palet_habitual,
     fsc: payload.fsc,
     fsc_fecha_validacion: payload.fsc_fecha_validacion,
     ultima_ot_numero: base?.ultima_ot_numero ?? null,
@@ -601,8 +608,63 @@ function ArticuloFormDialog({
   /** Rol comercial: resalta campos que salen en PDF ficha cliente. */
   highlightFichaCliente?: boolean;
 }) {
+  const [cajasDefaultByCodigo, setCajasDefaultByCodigo] = useState<
+    Map<string, number>
+  >(() => new Map());
+  const [cajaCodigos, setCajaCodigos] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      const supabase = createSupabaseBrowserClient();
+      const { data } = await supabase
+        .from("prod_cajas_embalaje")
+        .select("codigo, bultos_por_palet_default")
+        .eq("activo", true)
+        .order("orden");
+      if (cancelled || !data) return;
+      const map = new Map<string, number>();
+      const codes: string[] = [];
+      for (const c of data) {
+        if (!c.codigo) continue;
+        codes.push(c.codigo);
+        if (c.bultos_por_palet_default != null) {
+          map.set(c.codigo, c.bultos_por_palet_default);
+          map.set(c.codigo.toUpperCase(), c.bultos_por_palet_default);
+        }
+      }
+      setCajasDefaultByCodigo(map);
+      setCajaCodigos(codes);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
   const set = (k: keyof ArticuloForm, v: string | boolean | DefaultsProcesoMaestro) =>
     onFormChange({ ...form, [k]: v });
+
+  const setCajaEmbalaje = (raw: string) => {
+    const key = raw.trim();
+    const def =
+      cajasDefaultByCodigo.get(key) ??
+      cajasDefaultByCodigo.get(key.toUpperCase());
+    if (def != null) {
+      onFormChange({
+        ...form,
+        caja_embalaje_habitual: raw,
+        bultos_por_palet_habitual: String(def),
+      });
+      return;
+    }
+    set("caja_embalaje_habitual", raw);
+  };
+
+  const udsPorPaletCalc = calcUdsPorPalet(
+    parseDecimalLoose(form.unidades_por_embalaje_habitual),
+    parseDecimalLoose(form.bultos_por_palet_habitual),
+  );
 
   const fc = (...extra: Array<string | false | undefined>) =>
     cn(
@@ -928,9 +990,15 @@ function ArticuloFormDialog({
               <Input
                 className="h-8 font-mono text-xs"
                 placeholder="MN2L"
+                list="articulo-cajas-embalaje-list"
                 value={form.caja_embalaje_habitual}
-                onChange={(e) => set("caja_embalaje_habitual", e.target.value)}
+                onChange={(e) => setCajaEmbalaje(e.target.value)}
               />
+              <datalist id="articulo-cajas-embalaje-list">
+                {cajaCodigos.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
             </div>
             <div className={fc()}>
               <Label className="text-xs">Uds por caja habitual</Label>
@@ -944,7 +1012,37 @@ function ArticuloFormDialog({
               />
             </div>
             <div className={fc()}>
-              <Label className="text-xs">Peso unitario (g) — tras 1ª producción</Label>
+              <Label className="text-xs">Bultos por palet</Label>
+              <Input
+                className="h-8 text-xs"
+                type="number"
+                min={1}
+                placeholder="25"
+                value={form.bultos_por_palet_habitual}
+                onChange={(e) => set("bultos_por_palet_habitual", e.target.value)}
+              />
+              <p className="text-[10px] text-slate-500">
+                Se propone desde Settings (cajas) al elegir MN2L, MN1L… Editable.
+              </p>
+            </div>
+            <div className={fc()}>
+              <Label className="text-xs">Uds × palet (calculado)</Label>
+              <Input
+                className="h-8 text-xs bg-slate-50"
+                readOnly
+                tabIndex={-1}
+                value={
+                  udsPorPaletCalc != null
+                    ? String(udsPorPaletCalc)
+                    : "—"
+                }
+              />
+              <p className="text-[10px] text-slate-500">
+                Uds/caja × bultos/palet
+              </p>
+            </div>
+            <div className={fc()}>
+              <Label className="text-xs">Peso unitario (g)</Label>
               <Input
                 className="h-8 text-xs"
                 type="number"
@@ -1277,6 +1375,7 @@ export function ArticulosMaestroPage({
   const supabase = createSupabaseBrowserClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const highlightFichaCliente = normalizeDbRole(userRole) === "comercial";
+  const canDeleteArticulos = normalizeDbRole(userRole) !== "comercial";
 
   const [rows, setRows] = useState<ProdReferenciaRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1605,7 +1704,7 @@ export function ArticulosMaestroPage({
     async (row: ProdReferenciaRow, modo: ArticuloFichaPdfModo) => {
       try {
         let clienteFicha: ProdClienteFichaRow | null = null;
-        if (modo === "cliente" && row.cliente) {
+        if (row.cliente) {
           clienteFicha = await fetchClienteFichaByCliente(supabase, row.cliente);
         }
         await exportArticuloFichaPdf(row, { modo, clienteFicha });
@@ -1618,6 +1717,64 @@ export function ArticulosMaestroPage({
     },
     [supabase],
   );
+
+  const handleDeleteArticulo = useCallback(
+    async (row: ProdReferenciaRow) => {
+      if (!canDeleteArticulos) {
+        toast.error("Tu rol no puede borrar artículos.");
+        return;
+      }
+      const ok = window.confirm(
+        `¿Eliminar el artículo ${row.codigo}?\n\nEsta acción no se puede deshacer.`,
+      );
+      if (!ok) return;
+      try {
+        const { error: delErr } = await supabase
+          .from("prod_referencias")
+          .delete()
+          .eq("id", row.id);
+        if (delErr) throw delErr;
+        setRows((prev) => prev.filter((r) => r.id !== row.id));
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(row.id);
+          return next;
+        });
+        if (editingRow?.id === row.id) setEditingRow(null);
+        toast.success(`Artículo ${row.codigo} eliminado`);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "No se pudo eliminar");
+      }
+    },
+    [canDeleteArticulos, editingRow?.id, supabase],
+  );
+
+  const handleDeleteSeleccionados = useCallback(async () => {
+    if (!canDeleteArticulos) {
+      toast.error("Tu rol no puede borrar artículos.");
+      return;
+    }
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    const ok = window.confirm(
+      `¿Eliminar ${ids.length} artículo(s) seleccionado(s)?\n\nEsta acción no se puede deshacer.`,
+    );
+    if (!ok) return;
+    try {
+      const { error: delErr } = await supabase
+        .from("prod_referencias")
+        .delete()
+        .in("id", ids);
+      if (delErr) throw delErr;
+      const idSet = new Set(ids);
+      setRows((prev) => prev.filter((r) => !idSet.has(r.id)));
+      setSelectedIds(new Set());
+      if (editingRow && idSet.has(editingRow.id)) setEditingRow(null);
+      toast.success(`${ids.length} artículo(s) eliminado(s)`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo eliminar");
+    }
+  }, [canDeleteArticulos, editingRow, selectedIds, supabase]);
 
   // ── Promedios (§7.1.9 paso 4) ────────────────────────────────────────────────
 
@@ -1912,6 +2069,19 @@ export function ArticulosMaestroPage({
         >
           Actualizar seleccionados ({selectedIds.size})
         </Button>
+        {canDeleteArticulos ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void handleDeleteSeleccionados()}
+            disabled={loading || selectedIds.size === 0}
+            className="gap-1.5 border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+            title="Eliminar filas marcadas con checkbox."
+          >
+            <Trash2 className="size-3.5" />
+            Eliminar seleccionados ({selectedIds.size})
+          </Button>
+        ) : null}
       </div>
 
       {/* Filtros */}
@@ -2109,6 +2279,17 @@ export function ArticulosMaestroPage({
                       >
                         <Pencil className="size-3.5" />
                       </Button>
+                      {canDeleteArticulos ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-red-600 hover:bg-red-50 hover:text-red-700"
+                          title={`Eliminar ${r.codigo}`}
+                          onClick={() => void handleDeleteArticulo(r)}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>

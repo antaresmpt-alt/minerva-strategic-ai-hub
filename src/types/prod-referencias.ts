@@ -64,6 +64,8 @@ export type ProdReferenciaRow = {
   tipo_engomado_habitual: string | null;
   caja_embalaje_habitual: string | null;
   unidades_por_embalaje_habitual: number | null;
+  /** Bultos (cajas) por palet; prefill desde prod_cajas_embalaje, editable. */
+  bultos_por_palet_habitual: number | null;
 
   /** Certificación FSC */
   fsc: boolean;
@@ -224,6 +226,7 @@ export type ArticuloExcelRow = {
   tipo_fondo?: string | null;
   caja_embalaje_habitual?: string | null;
   unidades_por_embalaje_habitual?: string | number | null;
+  bultos_por_palet_habitual?: string | number | null;
   peso_unitario?: string | number | null;
   ruta_habitual?: string | null;
   notas?: string | null;
@@ -231,3 +234,14 @@ export type ArticuloExcelRow = {
   registro_sanitario?: string | null;
   temperatura_conservacion?: string | null;
 };
+
+/** Uds × palet = uds/caja × bultos/palet (solo si ambos son > 0). */
+export function calcUdsPorPalet(
+  udsPorCaja: number | null | undefined,
+  bultosPorPalet: number | null | undefined,
+): number | null {
+  if (udsPorCaja == null || bultosPorPalet == null) return null;
+  if (!Number.isFinite(udsPorCaja) || !Number.isFinite(bultosPorPalet)) return null;
+  if (udsPorCaja <= 0 || bultosPorPalet <= 0) return null;
+  return Math.round(udsPorCaja * bultosPorPalet);
+}
