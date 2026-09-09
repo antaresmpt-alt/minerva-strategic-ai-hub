@@ -13,6 +13,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Trash2,
   Upload,
   X,
 } from "lucide-react";
@@ -1041,7 +1042,7 @@ function ArticuloFormDialog({
               </p>
             </div>
             <div className={fc()}>
-              <Label className="text-xs">Peso unitario (g) — tras 1ª producción</Label>
+              <Label className="text-xs">Peso unitario (g)</Label>
               <Input
                 className="h-8 text-xs"
                 type="number"
@@ -1374,6 +1375,7 @@ export function ArticulosMaestroPage({
   const supabase = createSupabaseBrowserClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const highlightFichaCliente = normalizeDbRole(userRole) === "comercial";
+  const canDeleteArticulos = normalizeDbRole(userRole) !== "comercial";
 
   const [rows, setRows] = useState<ProdReferenciaRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1702,7 +1704,7 @@ export function ArticulosMaestroPage({
     async (row: ProdReferenciaRow, modo: ArticuloFichaPdfModo) => {
       try {
         let clienteFicha: ProdClienteFichaRow | null = null;
-        if (modo === "cliente" && row.cliente) {
+        if (row.cliente) {
           clienteFicha = await fetchClienteFichaByCliente(supabase, row.cliente);
         }
         await exportArticuloFichaPdf(row, { modo, clienteFicha });
@@ -1715,6 +1717,64 @@ export function ArticulosMaestroPage({
     },
     [supabase],
   );
+
+  const handleDeleteArticulo = useCallback(
+    async (row: ProdReferenciaRow) => {
+      if (!canDeleteArticulos) {
+        toast.error("Tu rol no puede borrar artículos.");
+        return;
+      }
+      const ok = window.confirm(
+        `¿Eliminar el artículo ${row.codigo}?\n\nEsta acción no se puede deshacer.`,
+      );
+      if (!ok) return;
+      try {
+        const { error: delErr } = await supabase
+          .from("prod_referencias")
+          .delete()
+          .eq("id", row.id);
+        if (delErr) throw delErr;
+        setRows((prev) => prev.filter((r) => r.id !== row.id));
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(row.id);
+          return next;
+        });
+        if (editingRow?.id === row.id) setEditingRow(null);
+        toast.success(`Artículo ${row.codigo} eliminado`);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "No se pudo eliminar");
+      }
+    },
+    [canDeleteArticulos, editingRow?.id, supabase],
+  );
+
+  const handleDeleteSeleccionados = useCallback(async () => {
+    if (!canDeleteArticulos) {
+      toast.error("Tu rol no puede borrar artículos.");
+      return;
+    }
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    const ok = window.confirm(
+      `¿Eliminar ${ids.length} artículo(s) seleccionado(s)?\n\nEsta acción no se puede deshacer.`,
+    );
+    if (!ok) return;
+    try {
+      const { error: delErr } = await supabase
+        .from("prod_referencias")
+        .delete()
+        .in("id", ids);
+      if (delErr) throw delErr;
+      const idSet = new Set(ids);
+      setRows((prev) => prev.filter((r) => !idSet.has(r.id)));
+      setSelectedIds(new Set());
+      if (editingRow && idSet.has(editingRow.id)) setEditingRow(null);
+      toast.success(`${ids.length} artículo(s) eliminado(s)`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo eliminar");
+    }
+  }, [canDeleteArticulos, editingRow, selectedIds, supabase]);
 
   // ── Promedios (§7.1.9 paso 4) ────────────────────────────────────────────────
 
@@ -2009,6 +2069,19 @@ export function ArticulosMaestroPage({
         >
           Actualizar seleccionados ({selectedIds.size})
         </Button>
+        {canDeleteArticulos ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void handleDeleteSeleccionados()}
+            disabled={loading || selectedIds.size === 0}
+            className="gap-1.5 border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+            title="Eliminar filas marcadas con checkbox."
+          >
+            <Trash2 className="size-3.5" />
+            Eliminar seleccionados ({selectedIds.size})
+          </Button>
+        ) : null}
       </div>
 
       {/* Filtros */}
@@ -2206,6 +2279,17 @@ export function ArticulosMaestroPage({
                       >
                         <Pencil className="size-3.5" />
                       </Button>
+                      {canDeleteArticulos ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-red-600 hover:bg-red-50 hover:text-red-700"
+                          title={`Eliminar ${r.codigo}`}
+                          onClick={() => void handleDeleteArticulo(r)}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>

@@ -33,12 +33,12 @@ const LETTERHEAD = {
   contact: "Tel. 93 711 30 61 · www.minervaglobal.es · minerva@minervaglobal.es",
   /** Logo oficial largo (MINERVA + símbolo + PACKAGING & PRINT CREATORS). */
   logoPath: "/images/brand-minerva-logo-largo.png",
+  /** Licencia FSC de Minerva (cabezal ficha). */
+  fscLicense: "FSC® C142407",
 } as const;
 
-function fmtPeso(row: ProdReferenciaRow): string {
-  return row.peso_unitario != null
-    ? `${row.peso_unitario} g`
-    : "Pendiente 1ª producción";
+function fmtPeso(row: ProdReferenciaRow): string | null {
+  return row.peso_unitario != null ? `${row.peso_unitario} g` : null;
 }
 
 function fmtTintasEco(row: ProdReferenciaRow): string {
@@ -314,6 +314,7 @@ function drawHeader(
   row: ProdReferenciaRow,
   modo: ArticuloFichaPdfModo,
   logo: PdfImageAsset | null,
+  registroSanitario?: string | null,
 ): number {
   // Logo oficial largo + estadillo debajo (no franja navy / logo app)
   let y = 8;
@@ -346,6 +347,13 @@ function drawHeader(
   doc.text(LETTERHEAD.address, 12, y + 3);
   doc.text(LETTERHEAD.contact, 12, y + 7);
 
+  const rgs =
+    registroSanitario?.trim() || DEFAULT_REGISTRO_SANITARIO_MINERVA;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(...NAVY);
+  doc.text(`${rgs} - ${LETTERHEAD.fscLicense}`, 12, y + 12);
+
   doc.setTextColor(...NAVY);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
@@ -364,7 +372,7 @@ function drawHeader(
 
   doc.setDrawColor(...GOLD);
   doc.setLineWidth(0.6);
-  const lineY = y + 18;
+  const lineY = y + 20;
   doc.line(12, lineY, 198, lineY);
   doc.setTextColor(0, 0, 0);
   return lineY + 6;
@@ -461,6 +469,7 @@ function buildClienteBody(
 ): number {
   let y = startY;
   y = sectionTitle(doc, "Información general", y);
+  const pesoCliente = fmtPeso(row);
   y =
     kvTable(doc, y, [
       ["Cliente", txt(row.cliente)],
@@ -486,19 +495,16 @@ function buildClienteBody(
       ["Tipo fondo", txt(row.tipo_fondo)],
       ["Troquel (código)", txt(row.troquel_habitual) === "—" ? "Pendiente de cargar" : txt(row.troquel_habitual)],
       ["Engomado (tipo)", txt(row.tipo_engomado_habitual)],
-      ["Peso", fmtPeso(row)],
+      ...(pesoCliente ? ([["Peso", pesoCliente]] as Array<[string, string]>) : []),
     ]) + 3;
 
   y = sectionTitle(doc, "Logística", y);
-  const rgs =
-    clienteFicha?.registro_sanitario?.trim() ||
-    DEFAULT_REGISTRO_SANITARIO_MINERVA;
   const temp = clienteFicha?.temperatura_conservacion;
+  const pesoLog = fmtPeso(row);
   y =
     kvTable(doc, y, [
       ["Temperatura conservación", txt(temp)],
-      ["Registro sanitario", txt(rgs)],
-      ["Peso", fmtPeso(row)],
+      ...(pesoLog ? ([["Peso", pesoLog]] as Array<[string, string]>) : []),
       ["Ref. / medida embalaje", txt(row.caja_embalaje_habitual)],
       [
         "Unidades por caja",
@@ -534,6 +540,7 @@ function buildMinervaBody(
 ): number {
   let y = startY;
   y = sectionTitle(doc, "Identidad", y);
+  const pesoMinerva = fmtPeso(row);
   y =
     kvTable(doc, y, [
       ["Código Minerva", txt(row.codigo)],
@@ -547,7 +554,9 @@ function buildMinervaBody(
       ["Estado", row.activo ? "Activo" : "Inactivo"],
       ["Dimensiones", fmtMm(row)],
       ["Tipo fondo", txt(row.tipo_fondo)],
-      ["Peso", fmtPeso(row)],
+      ...(pesoMinerva
+        ? ([["Peso", pesoMinerva]] as Array<[string, string]>)
+        : []),
       [
         "FSC",
         row.fsc
@@ -713,7 +722,8 @@ export async function exportArticuloFichaPdf(
   ]);
   const assets = { producto, troquel };
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-  const y = drawHeader(doc, row, modo, logo);
+  const rgsHeader = options?.clienteFicha?.registro_sanitario ?? null;
+  const y = drawHeader(doc, row, modo, logo, rgsHeader);
   if (modo === "cliente") {
     buildClienteBody(doc, row, options?.clienteFicha, y, assets);
   } else {
@@ -756,7 +766,14 @@ export async function exportArticulosFichaClienteLote(
       loadPdfImageAsset(row.foto_troquel_path),
       loadLogoAsset(),
     ]);
-    const y = drawHeader(doc, row, "cliente", logo);
+    const y = drawHeader(
+      doc,
+      row,
+      "cliente",
+      logo,
+      clienteFichaByCliente.get(normalizeClienteNombre(row.cliente))
+        ?.registro_sanitario ?? null,
+    );
     buildClienteBody(
       doc,
       row,
