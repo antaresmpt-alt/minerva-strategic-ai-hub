@@ -33,3 +33,10 @@ describe("normalizeClienteNombre", () => {
     expect(normalizeClienteNombre(null)).toBe("");
   });
 });
+
+describe("Bloque 14 — PDF cliente fotos", () => {
+  it("exportArticuloFichaPdf está disponible", async () => {
+    const mod = await import("@/lib/articulos-maestro-ficha-pdf");
+    expect(typeof mod.exportArticuloFichaPdf).toBe("function");
+  });
+});

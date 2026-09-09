@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Boxes,
+  Copy,
   Download,
   FileDown,
   FileText,
@@ -35,6 +36,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { ArticuloAdjuntosPanel } from "@/components/produccion/articulos/articulo-adjuntos-panel";
 import { TroquelPickerField } from "@/components/produccion/ots/troquel-picker-field";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { normalizeDbRole } from "@/lib/permissions";
+import { cn } from "@/lib/utils";
 import {
   aplicarArticulosDiff,
   computeArticulosDiff,
@@ -569,6 +572,7 @@ function ArticuloFormDialog({
   onKeepOpenChange,
   referenciaId = null,
   onAdjuntoPathChange,
+  highlightFichaCliente = false,
 }: {
   open: boolean;
   title: string;
@@ -594,9 +598,19 @@ function ArticuloFormDialog({
     field: "foto_producto_path" | "foto_troquel_path",
     path: string | null,
   ) => void;
+  /** Rol comercial: resalta campos que salen en PDF ficha cliente. */
+  highlightFichaCliente?: boolean;
 }) {
   const set = (k: keyof ArticuloForm, v: string | boolean | DefaultsProcesoMaestro) =>
     onFormChange({ ...form, [k]: v });
+
+  const fc = (...extra: Array<string | false | undefined>) =>
+    cn(
+      "grid gap-1",
+      highlightFichaCliente &&
+        "rounded-md border border-[#C69C2B]/55 bg-[#C69C2B]/[0.08] px-2 py-1.5",
+      ...extra,
+    );
 
   const handlePdfFicha = async (modo: ArticuloFichaPdfModo) => {
     if (!form.codigo.trim()) {
@@ -640,9 +654,19 @@ function ArticuloFormDialog({
 
         <div className="grid gap-4 py-2">
           <div className="rounded-md border border-[#C69C2B]/40 bg-[#C69C2B]/10 px-3 py-2 text-[11px] text-[#002147]">
-            Entrada comercial: cliente, descripción, tipo, medidas, material, tintas,
-            acabados y uds/caja. RGS y temperatura se guardan <strong>una vez por
-            cliente</strong>. Fotos: placeholders en PDF (upload más adelante).
+            {highlightFichaCliente ? (
+              <>
+                Campos con borde <strong>ámbar</strong> salen en la{" "}
+                <strong>ficha PDF cliente</strong>. Completa esos primero.
+                RGS y temperatura se guardan <strong>una vez por cliente</strong>.
+              </>
+            ) : (
+              <>
+                Entrada comercial: cliente, descripción, tipo, medidas, material, tintas,
+                acabados y uds/caja. RGS y temperatura se guardan{" "}
+                <strong>una vez por cliente</strong>.
+              </>
+            )}
           </div>
 
           {/* Identidad */}
@@ -663,7 +687,7 @@ function ArticuloFormDialog({
                 />
               </div>
             )}
-            <div className="grid gap-1">
+            <div className={fc()}>
               <Label className="text-xs">Referencia cliente (opcional)</Label>
               <Input
                 className="h-8 font-mono text-xs"
@@ -672,7 +696,7 @@ function ArticuloFormDialog({
                 onChange={(e) => set("referencia_cliente", e.target.value)}
               />
             </div>
-            <div className={`grid gap-1 ${showCodigo ? "" : "col-span-2"}`}>
+            <div className={fc(showCodigo ? "" : "col-span-2")}>
               <Label className="text-xs">Descripción</Label>
               <Input
                 className="h-8 text-xs"
@@ -681,7 +705,7 @@ function ArticuloFormDialog({
                 onChange={(e) => set("descripcion", e.target.value)}
               />
             </div>
-            <div className="grid gap-1">
+            <div className={fc()}>
               <Label className="text-xs">Cliente</Label>
               <Input
                 className="h-8 text-xs"
@@ -697,7 +721,7 @@ function ArticuloFormDialog({
             Datos fijos del cliente (heredan en PDF cliente)
           </p>
           <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1">
+            <div className={fc()}>
               <Label className="text-xs">Registro sanitario (RGS)</Label>
               <Input
                 className="h-8 text-xs"
@@ -712,7 +736,7 @@ function ArticuloFormDialog({
                 disabled={!form.cliente.trim()}
               />
             </div>
-            <div className="grid gap-1">
+            <div className={fc()}>
               <Label className="text-xs">Temperatura conservación</Label>
               <Input
                 className="h-8 text-xs"
@@ -734,7 +758,7 @@ function ArticuloFormDialog({
             Clasificación
           </p>
           <div className="grid grid-cols-3 gap-3">
-            <div className="grid gap-1">
+            <div className={fc()}>
               <Label className="text-xs">Tipo de producto</Label>
               <select
                 className="h-8 rounded-md border border-input bg-background px-2 text-xs"
@@ -782,7 +806,7 @@ function ArticuloFormDialog({
                 ["formato_fondo_mm", "Fondo"],
               ] as const
             ).map(([k, label]) => (
-              <div key={k} className="grid gap-1">
+              <div key={k} className={fc()}>
                 <Label className="text-xs">{label}</Label>
                 <Input
                   className="h-8 text-xs"
@@ -801,7 +825,7 @@ function ArticuloFormDialog({
             Sugerencias técnicas (pre-rellenan el despacho)
           </p>
           <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1">
+            <div className={fc()}>
               <Label className="text-xs">Material habitual</Label>
               <Input
                 className="h-8 text-xs"
@@ -810,7 +834,7 @@ function ArticuloFormDialog({
                 onChange={(e) => set("material_habitual", e.target.value)}
               />
             </div>
-            <div className="grid gap-1">
+            <div className={fc()}>
               <Label className="text-xs">Gramaje habitual (g/m²)</Label>
               <Input
                 className="h-8 text-xs"
@@ -821,21 +845,23 @@ function ArticuloFormDialog({
                 onChange={(e) => set("gramaje_habitual", e.target.value)}
               />
             </div>
-            <TroquelPickerField
-              id="articulo-troquel-habitual"
-              label="Troquel habitual"
-              value={form.troquel_habitual}
-              onChange={(v) => set("troquel_habitual", v)}
-              onTroquelPicked={(picked) => {
-                const poses = picked.num_figuras?.trim() ?? "";
-                onFormChange({
-                  ...form,
-                  troquel_habitual: picked.num_troquel,
-                  ...(poses ? { poses_habitual: poses } : {}),
-                });
-              }}
-            />
-            <div className="grid gap-1">
+            <div className={fc()}>
+              <TroquelPickerField
+                id="articulo-troquel-habitual"
+                label="Troquel habitual"
+                value={form.troquel_habitual}
+                onChange={(v) => set("troquel_habitual", v)}
+                onTroquelPicked={(picked) => {
+                  const poses = picked.num_figuras?.trim() ?? "";
+                  onFormChange({
+                    ...form,
+                    troquel_habitual: picked.num_troquel,
+                    ...(poses ? { poses_habitual: poses } : {}),
+                  });
+                }}
+              />
+            </div>
+            <div className={fc()}>
               <Label className="text-xs">Tipo de fondo</Label>
               <Input
                 className="h-8 text-xs"
@@ -855,7 +881,7 @@ function ArticuloFormDialog({
                 onChange={(e) => set("poses_habitual", e.target.value)}
               />
             </div>
-            <div className="grid gap-1">
+            <div className={fc()}>
               <Label className="text-xs">Tintas habituales</Label>
               <Input
                 className="h-8 text-xs"
@@ -864,7 +890,7 @@ function ArticuloFormDialog({
                 onChange={(e) => set("tintas_habituales", e.target.value)}
               />
             </div>
-            <div className="flex items-end pb-1">
+            <div className={fc("flex items-end pb-1")}>
               <div className="flex items-center gap-2">
                 <Checkbox
                   id="articulo-tintas-eco"
@@ -879,7 +905,7 @@ function ArticuloFormDialog({
                 </Label>
               </div>
             </div>
-            <div className="grid gap-1">
+            <div className={fc()}>
               <Label className="text-xs">Acabado habitual</Label>
               <Input
                 className="h-8 text-xs"
@@ -888,7 +914,7 @@ function ArticuloFormDialog({
                 onChange={(e) => set("acabado_habitual", e.target.value)}
               />
             </div>
-            <div className="grid gap-1">
+            <div className={fc()}>
               <Label className="text-xs">Tipo de engomado habitual</Label>
               <Input
                 className="h-8 text-xs"
@@ -897,7 +923,7 @@ function ArticuloFormDialog({
                 onChange={(e) => set("tipo_engomado_habitual", e.target.value)}
               />
             </div>
-            <div className="grid gap-1">
+            <div className={fc()}>
               <Label className="text-xs">Caja embalaje habitual</Label>
               <Input
                 className="h-8 font-mono text-xs"
@@ -906,7 +932,7 @@ function ArticuloFormDialog({
                 onChange={(e) => set("caja_embalaje_habitual", e.target.value)}
               />
             </div>
-            <div className="grid gap-1">
+            <div className={fc()}>
               <Label className="text-xs">Uds por caja habitual</Label>
               <Input
                 className="h-8 text-xs"
@@ -917,7 +943,7 @@ function ArticuloFormDialog({
                 onChange={(e) => set("unidades_por_embalaje_habitual", e.target.value)}
               />
             </div>
-            <div className="grid gap-1">
+            <div className={fc()}>
               <Label className="text-xs">Peso unitario (g) — tras 1ª producción</Label>
               <Input
                 className="h-8 text-xs"
@@ -943,20 +969,33 @@ function ArticuloFormDialog({
           <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
             Adjuntos ficha (foto / troquel)
           </p>
-          <ArticuloAdjuntosPanel
-            referenciaId={referenciaId}
-            codigo={form.codigo.trim() || "SIN-CODIGO"}
-            fotoProductoPath={form.foto_producto_path.trim() || null}
-            fotoTroquelPath={form.foto_troquel_path.trim() || null}
-            onFotoProductoChange={(path) => {
-              onFormChange({ ...form, foto_producto_path: path ?? "" });
-              onAdjuntoPathChange?.("foto_producto_path", path);
-            }}
-            onFotoTroquelChange={(path) => {
-              onFormChange({ ...form, foto_troquel_path: path ?? "" });
-              onAdjuntoPathChange?.("foto_troquel_path", path);
-            }}
-          />
+          {highlightFichaCliente ? (
+            <p className="text-[10px] text-[#8a6a1a]">
+              En PDF cliente solo sale la <strong>foto del artículo</strong> (no el
+              troquel).
+            </p>
+          ) : null}
+          <div
+            className={cn(
+              highlightFichaCliente &&
+                "rounded-md border border-[#C69C2B]/55 bg-[#C69C2B]/[0.08] p-2",
+            )}
+          >
+            <ArticuloAdjuntosPanel
+              referenciaId={referenciaId}
+              codigo={form.codigo.trim() || "SIN-CODIGO"}
+              fotoProductoPath={form.foto_producto_path.trim() || null}
+              fotoTroquelPath={form.foto_troquel_path.trim() || null}
+              onFotoProductoChange={(path) => {
+                onFormChange({ ...form, foto_producto_path: path ?? "" });
+                onAdjuntoPathChange?.("foto_producto_path", path);
+              }}
+              onFotoTroquelChange={(path) => {
+                onFormChange({ ...form, foto_troquel_path: path ?? "" });
+                onAdjuntoPathChange?.("foto_troquel_path", path);
+              }}
+            />
+          </div>
 
           {promediosRow ? (
             <>
@@ -1130,7 +1169,13 @@ function ArticuloFormDialog({
           <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
             Certificación FSC
           </p>
-          <div className="grid grid-cols-2 items-end gap-3">
+          <div
+            className={cn(
+              "grid grid-cols-2 items-end gap-3",
+              highlightFichaCliente &&
+                "rounded-md border border-[#C69C2B]/55 bg-[#C69C2B]/[0.08] px-2 py-1.5",
+            )}
+          >
             <div className="flex items-center gap-2 pb-1">
               <Checkbox
                 id="fsc-check"
@@ -1156,14 +1201,16 @@ function ArticuloFormDialog({
 
           {/* Notas */}
           <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            Notas
+            Notas / observaciones ficha cliente
           </p>
-          <Textarea
-            className="min-h-[60px] text-xs"
-            placeholder="Observaciones, incidencias históricas…"
-            value={form.notas}
-            onChange={(e) => set("notas", e.target.value)}
-          />
+          <div className={fc()}>
+            <Textarea
+              className="min-h-[60px] text-xs"
+              placeholder="Observaciones, incidencias históricas…"
+              value={form.notas}
+              onChange={(e) => set("notas", e.target.value)}
+            />
+          </div>
         </div>
 
         <DialogFooter className="flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1222,9 +1269,14 @@ function ArticuloFormDialog({
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-export function ArticulosMaestroPage() {
+export function ArticulosMaestroPage({
+  userRole = null,
+}: {
+  userRole?: string | null;
+}) {
   const supabase = createSupabaseBrowserClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const highlightFichaCliente = normalizeDbRole(userRole) === "comercial";
 
   const [rows, setRows] = useState<ProdReferenciaRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1244,13 +1296,16 @@ export function ArticulosMaestroPage() {
   const [editClienteFicha, setEditClienteFicha] =
     useState<ClienteFichaForm>(EMPTY_CLIENTE_FICHA);
 
-  // Modal crear
+  // Modal crear / copiar
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<ArticuloForm>(EMPTY_FORM);
   const [savingCreate, setSavingCreate] = useState(false);
   const [createClienteFicha, setCreateClienteFicha] =
     useState<ClienteFichaForm>(EMPTY_CLIENTE_FICHA);
   const [createKeepOpen, setCreateKeepOpen] = useState(true);
+  const [createCopyFromCodigo, setCreateCopyFromCodigo] = useState<string | null>(
+    null,
+  );
 
   const loadClienteFichaInto = useCallback(
     async (
@@ -1371,16 +1426,36 @@ export function ArticulosMaestroPage() {
   // ── Crear ───────────────────────────────────────────────────────────────────
 
   const openCreate = useCallback(() => {
-    const nextNum = rows.reduce((max, r) => {
-      const m = r.codigo.match(/^M-(\d{5})$/);
-      if (m) { const n = parseInt(m[1], 10); return n > max ? n : max; }
-      return max;
-    }, 0);
-    const nextCodigo = `M-${String(nextNum + 1).padStart(5, "0")}`;
+    const nextCodigo = nextCodigoMinerva(rows.map((r) => r.codigo));
+    setCreateCopyFromCodigo(null);
     setCreateForm({ ...EMPTY_FORM, codigo: nextCodigo });
     setCreateClienteFicha({ ...EMPTY_CLIENTE_FICHA });
     setCreateOpen(true);
   }, [rows]);
+
+  /** Copia técnica de un artículo existente → nuevo M-xxxxx (otro diseño). */
+  const openCopyFrom = useCallback(
+    (row: ProdReferenciaRow) => {
+      const nextCodigo = nextCodigoMinerva(rows.map((r) => r.codigo));
+      const copied = rowToForm(row);
+      setCreateCopyFromCodigo(row.codigo);
+      setCreateForm({
+        ...copied,
+        codigo: nextCodigo,
+        // Otro diseño: no reutilizar fotos del origen
+        foto_producto_path: "",
+        foto_troquel_path: "",
+      });
+      createClienteLoadedRef.current = normalizeClienteNombre(row.cliente);
+      void loadClienteFichaInto(row.cliente, setCreateClienteFicha);
+      setCreateOpen(true);
+      toast.message(`Copia de ${row.codigo}`, {
+        description:
+          "Revisa descripción, ref. cliente y sube la foto del nuevo diseño.",
+      });
+    },
+    [rows, loadClienteFichaInto],
+  );
 
   const handleCreate = useCallback(async () => {
     if (!createForm.codigo.trim()) return;
@@ -1398,6 +1473,7 @@ export function ArticulosMaestroPage() {
           createForm.codigo,
         ]);
         const keepCliente = createForm.cliente;
+        setCreateCopyFromCodigo(null);
         setCreateForm({
           ...EMPTY_FORM,
           codigo: nextCodigo,
@@ -1406,6 +1482,7 @@ export function ArticulosMaestroPage() {
         createClienteLoadedRef.current = normalizeClienteNombre(keepCliente);
         await loadData();
       } else {
+        setCreateCopyFromCodigo(null);
         setCreateOpen(false);
         await loadData();
       }
@@ -2019,6 +2096,15 @@ export function ArticulosMaestroPage() {
                         size="sm"
                         variant="ghost"
                         className="h-7 px-2"
+                        title={`Copiar ${r.codigo} como nuevo artículo`}
+                        onClick={() => openCopyFrom(r)}
+                      >
+                        <Copy className="size-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2"
                         onClick={() => openEdit(r)}
                       >
                         <Pencil className="size-3.5" />
@@ -2032,21 +2118,33 @@ export function ArticulosMaestroPage() {
         </div>
       )}
 
-      {/* Modal Crear */}
+      {/* Modal Crear / Copiar */}
       <ArticuloFormDialog
         open={createOpen}
-        title="Crear nuevo artículo"
-        description="Código Minerva obligatorio. Rellena lo que sepas; planta completará el resto."
+        title={
+          createCopyFromCodigo
+            ? `Copiar artículo · desde ${createCopyFromCodigo}`
+            : "Crear nuevo artículo"
+        }
+        description={
+          createCopyFromCodigo
+            ? `Copia técnica de ${createCopyFromCodigo} con código nuevo. Cambia descripción / ref. cliente y sube la foto del diseño. Las fotos del origen no se copian.`
+            : "Código Minerva obligatorio. Rellena lo que sepas; planta completará el resto."
+        }
         form={createForm}
         saving={savingCreate}
         onFormChange={setCreateForm}
         onSave={handleCreate}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => {
+          setCreateCopyFromCodigo(null);
+          setCreateOpen(false);
+        }}
         clienteFicha={createClienteFicha}
         onClienteFichaChange={setCreateClienteFicha}
         keepOpen={createKeepOpen}
         onKeepOpenChange={setCreateKeepOpen}
         referenciaId={null}
+        highlightFichaCliente={highlightFichaCliente}
       />
 
       {/* Modal Editar */}
@@ -2069,6 +2167,7 @@ export function ArticulosMaestroPage() {
         clienteFicha={editClienteFicha}
         onClienteFichaChange={setEditClienteFicha}
         referenciaId={editingRow?.id ?? null}
+        highlightFichaCliente={highlightFichaCliente}
         onAdjuntoPathChange={(field, path) => {
           if (!editingRow) return;
           const id = editingRow.id;

@@ -16,7 +16,7 @@ Normativa ES/EU → ficha técnica de **todos** los artículos. Manel/Zaida no d
 | Comercial (artículo) | Cliente, ref. cliente (opc.), descripción, tipo, medidas, material, gramaje, tintas, acabados, uds/caja, tipo fondo… |
 | Una vez por cliente | RGS, temperatura → tabla `prod_cliente_ficha` |
 | OT / planta | Troquel fino, ref. embalaje, peso unitario tras 1ª producción |
-| Fotos | Mismos formatos en foto y troquel: PDF, JPG, PNG, BMP, WEBP, GIF… · bucket `referencias-adjuntos` |
+| Fotos | Mismos formatos en foto y troquel: PDF, JPG, PNG… · bucket `referencias-adjuntos`. **PDF cliente: solo foto artículo** (sin troquel; decisión Jordi 9 sep). Minerva: ambas. |
 | Tintas ecológicas | Checkbox Sí/No en maestro + PDF cliente/Minerva + Excel |
 | RGS | Prefill fijo Minerva `39.04187/B.` (editable) |
 

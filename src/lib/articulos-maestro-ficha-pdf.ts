@@ -381,9 +381,11 @@ function drawFotoPlaceholders(
   row: ProdReferenciaRow,
   y: number,
   assets?: { producto: PdfImageAsset | null; troquel: PdfImageAsset | null },
+  opts?: { includeTroquel?: boolean },
 ): number {
-  const boxW = 85;
-  const boxH = 42;
+  const includeTroquel = opts?.includeTroquel !== false;
+  const boxW = includeTroquel ? 85 : 182;
+  const boxH = includeTroquel ? 42 : 52;
   const labelH = 5;
   const pad = 2;
   const imgX = (baseX: number) => baseX + pad;
@@ -394,7 +396,9 @@ function drawFotoPlaceholders(
   const hasTroq = Boolean(row.foto_troquel_path?.trim());
   doc.setDrawColor(200, 200, 200);
   doc.rect(14, y, boxW, boxH);
-  doc.rect(111, y, boxW, boxH);
+  if (includeTroquel) {
+    doc.rect(111, y, boxW, boxH);
+  }
   doc.setFontSize(7);
   doc.setTextColor(...SLATE);
   doc.text("Foto producto", 16, y + 4);
@@ -411,19 +415,21 @@ function drawFotoPlaceholders(
       y + 12,
     );
   }
-  doc.text("Troquel", 113, y + 4);
-  if (assets?.troquel) {
-    try {
-      addImageContain(doc, assets.troquel, imgX(111), imgY, imgW, imgH);
-    } catch {
-      doc.text(hasTroq ? "Adjunto no embebible" : "Pendiente de cargar", 113, y + 12);
+  if (includeTroquel) {
+    doc.text("Troquel", 113, y + 4);
+    if (assets?.troquel) {
+      try {
+        addImageContain(doc, assets.troquel, imgX(111), imgY, imgW, imgH);
+      } catch {
+        doc.text(hasTroq ? "Adjunto no embebible" : "Pendiente de cargar", 113, y + 12);
+      }
+    } else {
+      doc.text(
+        hasTroq ? "Adjunto no embebible" : "Pendiente de cargar",
+        113,
+        y + 12,
+      );
     }
-  } else {
-    doc.text(
-      hasTroq ? "Adjunto no embebible" : "Pendiente de cargar",
-      113,
-      y + 12,
-    );
   }
   doc.setTextColor(0, 0, 0);
   return y + boxH + 6;
@@ -497,7 +503,7 @@ function buildClienteBody(
     doc.addPage();
     y = 18;
   }
-  y = drawFotoPlaceholders(doc, row, y, assets);
+  y = drawFotoPlaceholders(doc, row, y, assets, { includeTroquel: false });
   return y;
 }
 
@@ -666,7 +672,7 @@ function buildMinervaBody(
     y = 18;
   }
   y = sectionTitle(doc, "Fotos / adjuntos", y);
-  drawFotoPlaceholders(doc, row, y, assets);
+  drawFotoPlaceholders(doc, row, y, assets, { includeTroquel: true });
   return y;
 }
 
