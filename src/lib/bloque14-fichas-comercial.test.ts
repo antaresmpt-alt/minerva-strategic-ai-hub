@@ -34,6 +34,16 @@ describe("normalizeClienteNombre", () => {
   });
 });
 
+describe("calcUdsPorPalet", () => {
+  it("multiplica uds/caja × bultos/palet", async () => {
+    const { calcUdsPorPalet } = await import("@/types/prod-referencias");
+    expect(calcUdsPorPalet(450, 25)).toBe(11250);
+    expect(calcUdsPorPalet(null, 25)).toBeNull();
+    expect(calcUdsPorPalet(450, null)).toBeNull();
+    expect(calcUdsPorPalet(0, 25)).toBeNull();
+  });
+});
+
 describe("Bloque 14 — PDF cliente fotos", () => {
   it("exportArticuloFichaPdf está disponible", async () => {
     const mod = await import("@/lib/articulos-maestro-ficha-pdf");

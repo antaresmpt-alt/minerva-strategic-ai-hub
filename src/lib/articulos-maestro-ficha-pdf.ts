@@ -18,7 +18,10 @@ import {
   type ProdClienteFichaRow,
 } from "@/types/prod-cliente-ficha";
 import type { DefaultsProcesoMaestro } from "@/types/prod-referencias";
-import type { ProdReferenciaRow } from "@/types/prod-referencias";
+import {
+  calcUdsPorPalet,
+  type ProdReferenciaRow,
+} from "@/types/prod-referencias";
 
 const NAVY: [number, number, number] = [0, 33, 71];
 const GOLD: [number, number, number] = [198, 156, 43];
@@ -40,6 +43,20 @@ function fmtPeso(row: ProdReferenciaRow): string {
 
 function fmtTintasEco(row: ProdReferenciaRow): string {
   return row.tintas_ecologicas ? "Sí" : "No";
+}
+
+function fmtUdsPorPalet(row: ProdReferenciaRow): string {
+  const n = calcUdsPorPalet(
+    row.unidades_por_embalaje_habitual,
+    row.bultos_por_palet_habitual,
+  );
+  return n != null ? String(n) : "—";
+}
+
+function fmtBultosPorPalet(row: ProdReferenciaRow): string {
+  return row.bultos_por_palet_habitual != null
+    ? String(row.bultos_por_palet_habitual)
+    : "—";
 }
 
 function publicAdjuntoUrl(storagePath: string): string {
@@ -489,6 +506,8 @@ function buildClienteBody(
           ? String(row.unidades_por_embalaje_habitual)
           : "—",
       ],
+      ["Bultos por palet", fmtBultosPorPalet(row)],
+      ["Uds × palet", fmtUdsPorPalet(row)],
     ]) + 3;
 
   if (row.notas?.trim()) {
@@ -564,6 +583,8 @@ function buildMinervaBody(
           ? String(row.unidades_por_embalaje_habitual)
           : "—",
       ],
+      ["Bultos / palet", fmtBultosPorPalet(row)],
+      ["Uds × palet", fmtUdsPorPalet(row)],
       ["Ruta habitual", txt(row.ruta_habitual)],
     ]) + 4;
 
