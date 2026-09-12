@@ -12,7 +12,7 @@
 | `891cf9f` | Informe residuos v1 + quitar netas en Compras (solo H. brutas) |
 | `ad0535d` | Conciliar factura por albarán + columnas Formato/H. brutas más compactas |
 | `c3c28f4` | Columna Factura € en Compras, bloque factura en editar, aviso cartelas prueba |
-| *(este commit)* | Scroll horizontal Compras, columnas fijas izq., Cliente/Título más anchos, docs sesión |
+| `b4cec12` | Scroll horizontal Compras, columnas fijas izq., Cliente/Título más anchos, docs sesión |
 
 ---
 
