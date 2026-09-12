@@ -1474,8 +1474,11 @@ export function ComprasMaterialPage() {
 
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const topScrollRef = useRef<HTMLDivElement>(null);
+  const scrollSyncLockRef = useRef(false);
+  const [hScrollWidth, setHScrollWidth] = useState(0);
   const tableHeaders = table.getHeaderGroups()[0]?.headers ?? [];
   const tableTotalWidth = table.getTotalSize();
+  const hScrollContentWidth = hScrollWidth > 0 ? hScrollWidth : tableTotalWidth;
 
   const { stickyLeftByColumnId, lastStickyColumnId } = useMemo(() => {
     const stickyLeftByColumnId = new Map<string, number>();
@@ -1493,20 +1496,54 @@ export function ComprasMaterialPage() {
   }, [tableHeaders]);
 
   const syncTableScrollFromTop = useCallback(() => {
+    if (scrollSyncLockRef.current) return;
     const top = topScrollRef.current;
     const main = tableScrollRef.current;
-    if (top && main && top.scrollLeft !== main.scrollLeft) {
-      main.scrollLeft = top.scrollLeft;
-    }
+    if (!top || !main) return;
+    scrollSyncLockRef.current = true;
+    main.scrollLeft = top.scrollLeft;
+    requestAnimationFrame(() => {
+      scrollSyncLockRef.current = false;
+    });
   }, []);
 
   const syncTopScrollFromTable = useCallback(() => {
+    if (scrollSyncLockRef.current) return;
     const top = topScrollRef.current;
     const main = tableScrollRef.current;
-    if (top && main && top.scrollLeft !== main.scrollLeft) {
-      top.scrollLeft = main.scrollLeft;
-    }
+    if (!top || !main) return;
+    scrollSyncLockRef.current = true;
+    top.scrollLeft = main.scrollLeft;
+    requestAnimationFrame(() => {
+      scrollSyncLockRef.current = false;
+    });
   }, []);
+
+  useEffect(() => {
+    const main = tableScrollRef.current;
+    if (!main) return;
+
+    const refreshScrollMetrics = () => {
+      const width = main.scrollWidth;
+      if (width > 0) setHScrollWidth(width);
+      const top = topScrollRef.current;
+      if (top && top.scrollLeft !== main.scrollLeft) {
+        scrollSyncLockRef.current = true;
+        top.scrollLeft = main.scrollLeft;
+        requestAnimationFrame(() => {
+          scrollSyncLockRef.current = false;
+        });
+      }
+    };
+
+    refreshScrollMetrics();
+    const ro = new ResizeObserver(refreshScrollMetrics);
+    ro.observe(main);
+    const tableEl = main.querySelector("table");
+    if (tableEl) ro.observe(tableEl);
+
+    return () => ro.disconnect();
+  }, [rowsFiltradas, loading, columns, tableTotalWidth]);
 
   const abrirGmailYModalConfirmCompras = useCallback(async () => {
     if (selectedRows.length === 0) return;
@@ -2316,11 +2353,17 @@ export function ComprasMaterialPage() {
         <div className="overflow-hidden rounded-lg border border-slate-200/90 bg-white shadow-sm">
           <div
             ref={topScrollRef}
-            aria-hidden
-            className="overflow-x-auto overflow-y-hidden border-b border-slate-100"
+            role="scrollbar"
+            aria-orientation="horizontal"
+            aria-label="Desplazamiento horizontal de la tabla"
+            className="h-3 shrink-0 overflow-x-auto overflow-y-hidden border-b border-slate-200/80 bg-slate-100/60"
             onScroll={syncTableScrollFromTop}
           >
-            <div style={{ width: tableTotalWidth, height: 1 }} />
+            <div
+              aria-hidden
+              className="h-3"
+              style={{ width: hScrollContentWidth }}
+            />
           </div>
           <div
             ref={tableScrollRef}
@@ -2329,7 +2372,7 @@ export function ComprasMaterialPage() {
           >
             <Table
               className="table-fixed text-xs"
-              style={{ minWidth: tableTotalWidth }}
+              style={{ minWidth: hScrollContentWidth }}
             >
               <TableHeader className="bg-slate-50/95 sticky top-0 z-20 shadow-[0_1px_0_0_rgb(226_232_240)]">
                 {table.getHeaderGroups().map((headerGroup) => (
