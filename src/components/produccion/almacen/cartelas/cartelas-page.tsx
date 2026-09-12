@@ -9,6 +9,7 @@ import {
   Package,
   Plus,
   Printer,
+  Receipt,
   Recycle,
   RefreshCw,
   ScanSearch,
@@ -73,6 +74,7 @@ import type {
 import { CartelaWizardDialog, type CartelaWizardCreatedInfo } from "./cartela-wizard-dialog";
 import { AlbaranesOcrDialog } from "./albaranes-ocr-dialog";
 import { RecepcionStockDialog } from "./recepcion-stock-dialog";
+import { ConciliarFacturaDialog } from "@/components/produccion/almacen/conciliar-factura-dialog";
 import { ResiduosAnalisisDialog } from "@/components/produccion/almacen/residuos-analisis-dialog";
 import { RecepcionFotosPanel } from "@/components/produccion/recepcion/recepcion-fotos-panel";
 import { OtDestinoSearchInput } from "@/components/produccion/almacen/ot-destino-search-input";
@@ -152,6 +154,7 @@ export function CartelasPage() {
   const [stockDialogOpen, setStockDialogOpen] = useState(false);
   const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
   const [residuosDialogOpen, setResiduosDialogOpen] = useState(false);
+  const [facturaDialogOpen, setFacturaDialogOpen] = useState(false);
 
   // ── Bloque 9.8.1 — Liberar reserva ───────────────────────────────────────
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -855,16 +858,28 @@ export function CartelasPage() {
             Almacén · Emma / Ramón
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-          onClick={() => setResiduosDialogOpen(true)}
-        >
-          <Recycle className="size-4" />
-          Análisis residuos
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setFacturaDialogOpen(true)}
+          >
+            <Receipt className="size-4" />
+            Conciliar factura
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setResiduosDialogOpen(true)}
+          >
+            <Recycle className="size-4" />
+            Análisis residuos
+          </Button>
+        </div>
       </div>
 
       <Tabs
@@ -1152,6 +1167,14 @@ export function CartelasPage() {
         onClose={() => setOcrDialogOpen(false)}
         onCreated={() => {
           void loadPendientes();
+        }}
+      />
+
+      <ConciliarFacturaDialog
+        open={facturaDialogOpen}
+        onOpenChange={setFacturaDialogOpen}
+        onApplied={() => {
+          void loadCartelas();
         }}
       />
 

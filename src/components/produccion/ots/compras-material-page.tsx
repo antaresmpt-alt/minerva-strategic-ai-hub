@@ -23,6 +23,7 @@ import {
   Loader2,
   Mail,
   Printer,
+  Receipt,
   Recycle,
 } from "lucide-react";
 import { addDays, addWeeks, format, startOfDay, startOfWeek } from "date-fns";
@@ -38,6 +39,7 @@ import {
   type ManualCompraInitialValues,
 } from "@/components/produccion/ots/compras-material-manual-dialog";
 import { ComprasMaterialEditDialog } from "@/components/produccion/ots/compras-material-edit-dialog";
+import { ConciliarFacturaDialog } from "@/components/produccion/almacen/conciliar-factura-dialog";
 import { ResiduosAnalisisDialog } from "@/components/produccion/almacen/residuos-analisis-dialog";
 import { createComprasMaterialColumns } from "@/components/produccion/ots/compras-material-columns";
 import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
@@ -357,6 +359,10 @@ export function ComprasMaterialPage() {
   const [manualInitialValues, setManualInitialValues] =
     useState<ManualCompraInitialValues | null>(null);
   const [residuosOpen, setResiduosOpen] = useState(false);
+  const [facturaOpen, setFacturaOpen] = useState(false);
+  const [facturaAlbaranInicial, setFacturaAlbaranInicial] = useState<
+    string | undefined
+  >(undefined);
 
   /** Rol del usuario actual — para gates de permisos 9.8.3. */
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -1979,6 +1985,22 @@ export function ComprasMaterialPage() {
                 <Recycle className="size-4 text-[#002147]/80" aria-hidden />
                 Análisis residuos
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                title="Registrar importe factura y prorratear a cartelas"
+                onClick={() => {
+                  setFacturaAlbaranInicial(
+                    filtroAlbaranDebounced.trim() || undefined
+                  );
+                  setFacturaOpen(true);
+                }}
+              >
+                <Receipt className="size-4 text-[#002147]/80" aria-hidden />
+                Conciliar factura
+              </Button>
               {!puedeSolicitar && solicitarDisabledReason ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -2158,6 +2180,22 @@ export function ComprasMaterialPage() {
             >
               <Recycle className="size-4 text-[#002147]/80" aria-hidden />
               Análisis residuos
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              title="Registrar importe factura y prorratear a cartelas"
+              onClick={() => {
+                setFacturaAlbaranInicial(
+                  filtroAlbaranDebounced.trim() || undefined
+                );
+                setFacturaOpen(true);
+              }}
+            >
+              <Receipt className="size-4 text-[#002147]/80" aria-hidden />
+              Conciliar factura
             </Button>
             {!puedeSolicitar && solicitarDisabledReason ? (
               <Tooltip>
@@ -2386,6 +2424,15 @@ export function ComprasMaterialPage() {
           </div>
         </div>
       )}
+
+      <ConciliarFacturaDialog
+        open={facturaOpen}
+        onOpenChange={(open) => {
+          setFacturaOpen(open);
+          if (!open) setFacturaAlbaranInicial(undefined);
+        }}
+        initialAlbaran={facturaAlbaranInicial}
+      />
 
       <ResiduosAnalisisDialog
         open={residuosOpen}

@@ -2409,6 +2409,9 @@ export type Database = {
           gramaje: number | null
           hojas_recibidas: number
           id: string
+          importe_factura_at: string | null
+          importe_factura_eur: number | null
+          importe_factura_por_email: string | null
           material_nombre: string | null
           notas: string | null
           palets_recibidos: number | null
@@ -2430,6 +2433,9 @@ export type Database = {
           gramaje?: number | null
           hojas_recibidas: number
           id?: string
+          importe_factura_at?: string | null
+          importe_factura_eur?: number | null
+          importe_factura_por_email?: string | null
           material_nombre?: string | null
           notas?: string | null
           palets_recibidos?: number | null
@@ -2451,6 +2457,9 @@ export type Database = {
           gramaje?: number | null
           hojas_recibidas?: number
           id?: string
+          importe_factura_at?: string | null
+          importe_factura_eur?: number | null
+          importe_factura_por_email?: string | null
           material_nombre?: string | null
           notas?: string | null
           palets_recibidos?: number | null

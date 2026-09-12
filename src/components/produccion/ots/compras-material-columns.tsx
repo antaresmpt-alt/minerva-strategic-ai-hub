@@ -342,6 +342,7 @@ export function createComprasMaterialColumns(
           {row.original.material?.trim() ? row.original.material : "—"}
         </div>
       ),
+      size: 128,
     },
     {
       id: "gramaje",
@@ -365,10 +366,11 @@ export function createComprasMaterialColumns(
         </span>
       ),
       cell: ({ row }) => (
-        <div className="truncate px-1 py-0.5 text-[11px]">
+        <div className="truncate px-1 py-0.5 text-center text-[11px]">
           {row.original.tamano_hoja?.trim() ? row.original.tamano_hoja : "—"}
         </div>
       ),
+      size: 68,
     },
     {
       id: "hojas",
@@ -385,6 +387,7 @@ export function createComprasMaterialColumns(
           </div>
         );
       },
+      size: 68,
     },
     {
       accessorKey: "cliente",
@@ -398,6 +401,7 @@ export function createComprasMaterialColumns(
           {row.original.cliente ?? "—"}
         </div>
       ),
+      size: 96,
     },
     {
       accessorKey: "titulo",
@@ -411,6 +415,7 @@ export function createComprasMaterialColumns(
           {row.original.titulo ?? "—"}
         </div>
       ),
+      size: 112,
     },
     {
       id: "proveedor",
