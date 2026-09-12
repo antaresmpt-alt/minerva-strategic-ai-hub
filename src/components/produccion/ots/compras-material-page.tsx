@@ -106,6 +106,23 @@ const TABLE_COMPRAS_COMUNICACION = "prod_compras_material_comunicacion";
 const TABLE_LOGS_AUDITORIA = "prod_logs_auditoria";
 const PAGE_SIZE = 500;
 
+/** Columnas que permanecen visibles al desplazarse horizontalmente (queja Jordi). */
+const COMPRAS_STICKY_LEFT_COLUMN_IDS = [
+  "select",
+  "acciones_edit",
+  "acciones_multi",
+  "ot_numero",
+  "num_compra",
+  "material",
+  "cliente",
+] as const;
+
+const COMPRAS_STICKY_LEFT_SET = new Set<string>(COMPRAS_STICKY_LEFT_COLUMN_IDS);
+
+function isComprasStickyColumn(columnId: string): boolean {
+  return COMPRAS_STICKY_LEFT_SET.has(columnId);
+}
+
 type PendingCompraCorreoEnvio = {
   ids: string[];
   ots: string[];
@@ -1455,6 +1472,42 @@ export function ComprasMaterialPage() {
     getSortedRowModel: getSortedRowModel(),
   });
 
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const tableHeaders = table.getHeaderGroups()[0]?.headers ?? [];
+  const tableTotalWidth = table.getTotalSize();
+
+  const { stickyLeftByColumnId, lastStickyColumnId } = useMemo(() => {
+    const stickyLeftByColumnId = new Map<string, number>();
+    let left = 0;
+    let lastStickyColumnId: string | null = null;
+    for (const h of tableHeaders) {
+      const id = h.column.id;
+      if (isComprasStickyColumn(id)) {
+        stickyLeftByColumnId.set(id, left);
+        lastStickyColumnId = id;
+        left += h.getSize();
+      }
+    }
+    return { stickyLeftByColumnId, lastStickyColumnId };
+  }, [tableHeaders]);
+
+  const syncTableScrollFromTop = useCallback(() => {
+    const top = topScrollRef.current;
+    const main = tableScrollRef.current;
+    if (top && main && top.scrollLeft !== main.scrollLeft) {
+      main.scrollLeft = top.scrollLeft;
+    }
+  }, []);
+
+  const syncTopScrollFromTable = useCallback(() => {
+    const top = topScrollRef.current;
+    const main = tableScrollRef.current;
+    if (top && main && top.scrollLeft !== main.scrollLeft) {
+      top.scrollLeft = main.scrollLeft;
+    }
+  }, []);
+
   const abrirGmailYModalConfirmCompras = useCallback(async () => {
     if (selectedRows.length === 0) return;
     const provTarget =
@@ -2261,25 +2314,54 @@ export function ComprasMaterialPage() {
 
       {viewMode === "lista" ? (
         <div className="overflow-hidden rounded-lg border border-slate-200/90 bg-white shadow-sm">
-          <div className="max-h-[min(70vh,720px)] overflow-auto">
-            <Table className="table-fixed min-w-[1524px] text-xs">
+          <div
+            ref={topScrollRef}
+            aria-hidden
+            className="overflow-x-auto overflow-y-hidden border-b border-slate-100"
+            onScroll={syncTableScrollFromTop}
+          >
+            <div style={{ width: tableTotalWidth, height: 1 }} />
+          </div>
+          <div
+            ref={tableScrollRef}
+            className="max-h-[min(70vh,720px)] overflow-auto"
+            onScroll={syncTopScrollFromTable}
+          >
+            <Table
+              className="table-fixed text-xs"
+              style={{ minWidth: tableTotalWidth }}
+            >
               <TableHeader className="bg-slate-50/95 sticky top-0 z-20 shadow-[0_1px_0_0_rgb(226_232_240)]">
                 {table.getHeaderGroups().map((headerGroup) => (
                   <TableRow key={headerGroup.id} className="hover:bg-transparent">
-                    {headerGroup.headers.map((header) => (
-                      <TableHead
-                        key={header.id}
-                        className="sticky top-0 z-20 bg-slate-50/95 px-0.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600"
-                        style={{ width: header.getSize() }}
-                      >
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(
-                              header.column.columnDef.header,
-                              header.getContext()
-                            )}
-                      </TableHead>
-                    ))}
+                    {headerGroup.headers.map((header) => {
+                      const colId = header.column.id;
+                      const stickyLeft = stickyLeftByColumnId.get(colId);
+                      const isSticky = stickyLeft != null;
+                      const isLastSticky = colId === lastStickyColumnId;
+                      return (
+                        <TableHead
+                          key={header.id}
+                          className={cn(
+                            "sticky top-0 bg-slate-50/95 px-0.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600",
+                            isSticky ? "z-30" : "z-20",
+                            isLastSticky &&
+                              "shadow-[4px_0_6px_-4px_rgba(0,33,71,0.15)]"
+                          )}
+                          style={{
+                            width: header.getSize(),
+                            ...(isSticky ? { left: stickyLeft } : {}),
+                          }}
+                        >
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(
+                                header.column.columnDef.header,
+                                header.getContext()
+                              )}
+                        </TableHead>
+                      );
+                    })}
                   </TableRow>
                 ))}
               </TableHeader>
@@ -2325,19 +2407,35 @@ export function ComprasMaterialPage() {
                       <TableRow
                         key={row.id}
                         className={cn(
-                          "hover:bg-slate-50/80",
+                          "group hover:bg-slate-50/80",
                           startsNewOtGroup && "border-t-2 border-slate-300/80"
                         )}
                         data-state={row.getIsSelected() ? "selected" : undefined}
                       >
-                        {row.getVisibleCells().map((cell) => (
-                          <TableCell key={cell.id} className="p-0 align-middle">
-                            {flexRender(
-                              cell.column.columnDef.cell,
-                              cell.getContext()
-                            )}
-                          </TableCell>
-                        ))}
+                        {row.getVisibleCells().map((cell) => {
+                          const colId = cell.column.id;
+                          const stickyLeft = stickyLeftByColumnId.get(colId);
+                          const isSticky = stickyLeft != null;
+                          const isLastSticky = colId === lastStickyColumnId;
+                          return (
+                            <TableCell
+                              key={cell.id}
+                              className={cn(
+                                "p-0 align-middle",
+                                isSticky &&
+                                  "sticky z-10 bg-white group-hover:bg-slate-50/80 [[data-state=selected]_&]:bg-slate-100/90",
+                                isLastSticky &&
+                                  "shadow-[4px_0_6px_-4px_rgba(0,33,71,0.12)]"
+                              )}
+                              style={isSticky ? { left: stickyLeft } : undefined}
+                            >
+                              {flexRender(
+                                cell.column.columnDef.cell,
+                                cell.getContext()
+                              )}
+                            </TableCell>
+                          );
+                        })}
                       </TableRow>
                     );
                   })

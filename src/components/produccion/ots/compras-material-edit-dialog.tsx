@@ -324,7 +324,7 @@ export function ComprasMaterialEditDialog({
             </div>
             <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Factura (Emma)
+                Factura
               </p>
               {row?.importe_factura_eur != null && row.importe_factura_eur > 0 ? (
                 <p className="mt-1 text-sm tabular-nums text-[#002147]">

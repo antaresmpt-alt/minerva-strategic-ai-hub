@@ -401,7 +401,7 @@ export function createComprasMaterialColumns(
           {row.original.cliente ?? "—"}
         </div>
       ),
-      size: 120,
+      size: 140,
     },
     {
       accessorKey: "titulo",
@@ -415,7 +415,7 @@ export function createComprasMaterialColumns(
           {row.original.titulo ?? "—"}
         </div>
       ),
-      size: 140,
+      size: 160,
     },
     {
       id: "proveedor",

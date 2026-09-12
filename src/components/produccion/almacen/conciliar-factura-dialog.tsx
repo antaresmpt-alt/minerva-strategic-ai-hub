@@ -225,7 +225,7 @@ function ConciliarFacturaDialogBody({
                 </div>
                 <div className="flex items-end text-xs text-slate-500 pb-2">
                   Se prorratea por hojas a cada cartela del albarán. Si al cartelar
-                  ya se puso coste, la factura de Emma lo sustituye.
+                  ya se puso coste, la factura conciliada lo sustituye.
                 </div>
               </div>
 
@@ -340,9 +340,9 @@ export function ConciliarFacturaDialog({
             Conciliar factura por albarán
           </DialogTitle>
           <DialogDescription>
-            Emma registra el importe de factura y se prorratea el coste a las
-            cartelas del albarán. Si al cartelar ya se indicó coste, se
-            sustituye por el de la factura.
+            Registra el importe de factura y se prorratea el coste a las cartelas
+            del albarán. Si al cartelar ya se indicó coste, se sustituye por el
+            de la factura.
           </DialogDescription>
         </DialogHeader>
         {open ? (
