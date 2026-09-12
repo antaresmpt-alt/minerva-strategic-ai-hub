@@ -184,6 +184,8 @@ export type AlbaranPendienteGroup = {
   fecha_recepcion: string;
   palets_recibidos: number | null;
   hojas_recibidas_total: number;
+  /** Suma kg resueltos de las líneas (Residuos / declaración). */
+  peso_kg_total: number | null;
   recepciones: AlbaranRecepcionLine[];
   /** URLs públicas de fotos del muelle (todas las recepciones del grupo). */
   foto_urls: string[];
@@ -210,6 +212,11 @@ export type AlbaranRecepcionLine = {
   trabajo_titulo: string | null;
   proveedor_nombre: string | null;
   foto_urls: string[];
+  /** Peso albarán (kg o tn en BD). */
+  cantidad_peso: number | null;
+  cantidad_peso_unidad: "kg" | "tn" | null;
+  /** kg normalizados (albarán o calculado desde hojas). */
+  peso_kg_resuelto: number | null;
 };
 
 /** Datos que el wizard de cartelado necesita para cada palet. */

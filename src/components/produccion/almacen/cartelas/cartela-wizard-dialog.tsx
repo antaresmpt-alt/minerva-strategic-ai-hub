@@ -36,6 +36,11 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RecepcionFotosPanel } from "@/components/produccion/recepcion/recepcion-fotos-panel";
+import {
+  formatPesoKg,
+  kilosDesdeHojas,
+  proratePesoKg,
+} from "@/lib/albaranes-ocr";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import {
   buildRefLote,
@@ -544,6 +549,20 @@ export function CartelaWizardDialog({
         const recepcionLine =
           grupo.recepciones.find((r) => r.ot_numero === primeraOt) ??
           grupo.recepciones[0];
+        const recepcionHojas =
+          recepcionLine?.hojas_recibidas_muelle ?? cantidad;
+        const paletKg =
+          recepcionLine?.peso_kg_resuelto != null && recepcionHojas > 0
+            ? proratePesoKg(
+                recepcionLine.peso_kg_resuelto,
+                cantidad,
+                recepcionHojas
+              )
+            : kilosDesdeHojas(
+                cantidad,
+                p.gramaje ? parseInt(p.gramaje, 10) : 0,
+                p.formato
+              );
 
         const trabajoTitulo = primeraOt
           ? resolveTrabajoTitulo(
@@ -585,6 +604,8 @@ export function CartelaWizardDialog({
             formato: p.formato || null,
             cantidad_inicial: cantidad,
             cantidad_actual: cantidad,
+            cantidad_peso: paletKg,
+            cantidad_peso_unidad: paletKg != null ? "kg" : null,
             coste: costeNum,
             ot_destino_numero:
               p.ots_referencia.length === 1 ? p.ots_referencia[0] : null,
@@ -741,6 +762,25 @@ export function CartelaWizardDialog({
               type="number"
               className="h-9 text-sm"
             />
+            {(() => {
+              const h = parseInt(p.cantidad_inicial, 10) || 0;
+              const g = parseInt(p.gramaje, 10) || 0;
+              const line = grupo?.recepciones[0];
+              const kg =
+                line?.peso_kg_resuelto != null &&
+                (line.hojas_recibidas_muelle ?? 0) > 0 &&
+                h > 0
+                  ? proratePesoKg(
+                      line.peso_kg_resuelto,
+                      h,
+                      line.hojas_recibidas_muelle!
+                    )
+                  : kilosDesdeHojas(h, g, p.formato);
+              const label = formatPesoKg(kg);
+              return label ? (
+                <p className="text-[10px] text-slate-500 mt-0.5">≈ {label}</p>
+              ) : null;
+            })()}
           </div>
           <div>
             <Label className="text-xs">Cód. artículo</Label>
@@ -1121,6 +1161,9 @@ export function CartelaWizardDialog({
                                 : line.num_hojas_brutas
                                   ? ` · ${line.num_hojas_brutas.toLocaleString("es-ES")} h`
                                   : ""}
+                              {line.peso_kg_resuelto != null
+                                ? ` · ${formatPesoKg(line.peso_kg_resuelto)}`
+                                : ""}
                               {line.palets_recibidos_muelle != null
                                 ? ` · ${line.palets_recibidos_muelle} palet${line.palets_recibidos_muelle !== 1 ? "s" : ""}`
                                 : ""}

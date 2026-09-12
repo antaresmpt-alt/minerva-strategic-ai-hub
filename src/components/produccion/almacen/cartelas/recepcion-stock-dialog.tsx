@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { kilosDesdeHojas } from "@/lib/albaranes-ocr";
 import { uploadRecepcionFotos } from "@/lib/recepcion-fotos-upload";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { AlbaranPendienteGroup } from "@/types/prod-stock";
@@ -47,6 +48,7 @@ function buildStockGrupo(
     fecha_recepcion: new Date().toISOString(),
     palets_recibidos: palets,
     hojas_recibidas_total: hojas,
+    peso_kg_total: kilosDesdeHojas(hojas, gramaje ?? 0, formato),
     foto_urls: [],
     cartelas_existentes: 0,
     cartelas_prueba_existentes: 0,
@@ -67,6 +69,9 @@ function buildStockGrupo(
         trabajo_titulo: null,
         proveedor_nombre: proveedorNombre,
         foto_urls: [],
+        cantidad_peso: null,
+        cantidad_peso_unidad: null,
+        peso_kg_resuelto: kilosDesdeHojas(hojas, gramaje ?? 0, formato),
       },
     ],
   };
@@ -200,6 +205,11 @@ export function RecepcionStockDialog({
           ? user.id.trim()
           : null;
 
+      const kilosResueltos =
+        gramajeNum != null
+          ? kilosDesdeHojas(hojasNum, gramajeNum, formato.trim())
+          : null;
+
       const { data: recepIns, error: rErr } = await supabase
         .from("prod_recepciones_material")
         .insert({
@@ -213,6 +223,8 @@ export function RecepcionStockDialog({
           albaran_proveedor: alb,
           hojas_recibidas: hojasNum,
           palets_recibidos: paletsInt,
+          cantidad_peso: kilosResueltos,
+          cantidad_peso_unidad: kilosResueltos != null ? "kg" : null,
           estado_recepcion: "Total",
           notas: notas.trim() || null,
           recepcionado_por: recepcionadoPorUuid,

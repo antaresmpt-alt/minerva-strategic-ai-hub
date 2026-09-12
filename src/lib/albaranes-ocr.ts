@@ -223,6 +223,61 @@ export function hojasDesdeKilos(
   return Math.max(1, Math.round(hojas));
 }
 
+/** Inversa de hojasDesdeKilos — kg = (hojas × gramaje × m²) / 1000 */
+export function kilosDesdeHojas(
+  hojas: number,
+  gramaje: number,
+  formato: string | null | undefined
+): number | null {
+  if (!(hojas > 0) || !(gramaje > 0)) return null;
+  const dims = parseFormatoCm(formato);
+  if (!dims) return null;
+  const formatoM2 = (dims.wCm / 100) * (dims.hCm / 100);
+  if (!(formatoM2 > 0)) return null;
+  const kilos = (hojas * gramaje * formatoM2) / 1000;
+  if (!Number.isFinite(kilos) || kilos <= 0) return null;
+  return Math.round(kilos * 100) / 100;
+}
+
+/** Peso en kg: albarán si existe; si no, calculado desde hojas+gramaje+formato. */
+export function resolvePesoKg(input: {
+  cantidad_peso?: number | null;
+  cantidad_peso_unidad?: string | null;
+  hojas?: number | null;
+  gramaje?: number | null;
+  formato?: string | null;
+}): number | null {
+  if (input.cantidad_peso != null && input.cantidad_peso > 0) {
+    const u = String(input.cantidad_peso_unidad ?? "kg").toLowerCase();
+    return u === "tn" ? input.cantidad_peso * 1000 : input.cantidad_peso;
+  }
+  return kilosDesdeHojas(
+    input.hojas ?? 0,
+    input.gramaje ?? 0,
+    input.formato
+  );
+}
+
+export function formatPesoKg(kilos: number | null | undefined): string | null {
+  if (kilos == null || !(kilos > 0)) return null;
+  if (kilos >= 1000) {
+    const tn = kilos / 1000;
+    return `${tn.toLocaleString("es-ES", { maximumFractionDigits: 3 })} t`;
+  }
+  return `${kilos.toLocaleString("es-ES", { maximumFractionDigits: 1 })} kg`;
+}
+
+/** Reparte kg de recepción entre palets según hojas. */
+export function proratePesoKg(
+  totalKg: number,
+  parteHojas: number,
+  totalHojas: number
+): number | null {
+  if (!(totalKg > 0) || !(parteHojas > 0) || !(totalHojas > 0)) return null;
+  const kg = (totalKg * parteHojas) / totalHojas;
+  return Math.round(kg * 100) / 100;
+}
+
 export function parseOtNumero(raw: unknown): string {
   const digits = String(raw ?? "").replace(/\D/g, "");
   if (digits.length < 5 || digits.length > 7) return "";

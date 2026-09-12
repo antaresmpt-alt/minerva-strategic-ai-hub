@@ -52,6 +52,7 @@ import {
   formatClienteTrabajo,
   otTitulosFromMetadata,
 } from "@/lib/cartelas-ot-metadata";
+import { formatPesoKg, resolvePesoKg } from "@/lib/albaranes-ocr";
 import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 import { errorMessageFromUnknown } from "@/lib/error-message";
 import { fetchFotosByRecepcionIds, mergeFotoUrls } from "@/lib/recepcion-fotos-fetch";
@@ -169,6 +170,7 @@ export function CartelasPage() {
         .from("prod_recepciones_material")
         .select(
           `id, albaran_proveedor, fecha_recepcion, palets_recibidos, hojas_recibidas, notas,
+           cantidad_peso, cantidad_peso_unidad,
            compra_id, tipo_recepcion, material_nombre, gramaje, formato,
            prod_proveedores(nombre),
            prod_compra_material(
@@ -247,6 +249,7 @@ export function CartelasPage() {
             fecha_recepcion: fechaRecepcion,
             palets_recibidos: 0,
             hojas_recibidas_total: 0,
+            peso_kg_total: null,
             foto_urls: [...lineFotos],
             recepciones: [],
             cartelas_existentes: cartelasByRecepcion[recepcionId] ?? 0,
@@ -271,6 +274,34 @@ export function CartelasPage() {
         group.cartelas_prueba_existentes +=
           cartelasPruebaByRecepcion[recepcionId] ?? 0;
 
+        const cantidadPeso =
+          typeof r.cantidad_peso === "number" ? r.cantidad_peso : null;
+        const cantidadPesoUnidad =
+          r.cantidad_peso_unidad === "kg" || r.cantidad_peso_unidad === "tn"
+            ? r.cantidad_peso_unidad
+            : null;
+        const gramajeLine = esStock
+          ? typeof r.gramaje === "number"
+            ? r.gramaje
+            : null
+          : typeof compra?.gramaje === "number"
+            ? compra.gramaje
+            : null;
+        const formatoLine = esStock
+          ? typeof r.formato === "string"
+            ? r.formato
+            : null
+          : typeof compra?.tamano_hoja === "string"
+            ? compra.tamano_hoja
+            : null;
+        const pesoKgResuelto = resolvePesoKg({
+          cantidad_peso: cantidadPeso,
+          cantidad_peso_unidad: cantidadPesoUnidad,
+          hojas: hojasRecibidas,
+          gramaje: gramajeLine,
+          formato: formatoLine,
+        });
+
         const compraOt = String(compra?.ot_numero ?? "").trim();
         const sinOtCompra = !esStock && !compraOt;
         const line: AlbaranRecepcionLine = {
@@ -285,20 +316,8 @@ export function CartelasPage() {
             : typeof compra?.material === "string"
               ? compra.material
               : null,
-          gramaje: esStock
-            ? typeof r.gramaje === "number"
-              ? r.gramaje
-              : null
-            : typeof compra?.gramaje === "number"
-              ? compra.gramaje
-              : null,
-          tamano_hoja: esStock
-            ? typeof r.formato === "string"
-              ? r.formato
-              : null
-            : typeof compra?.tamano_hoja === "string"
-              ? compra.tamano_hoja
-              : null,
+          gramaje: gramajeLine,
+          tamano_hoja: formatoLine,
           hojas_recibidas_muelle: hojasRecibidas,
           palets_recibidos_muelle: paletsRecibidos,
           notas_muelle: notasMuelle,
@@ -316,7 +335,13 @@ export function CartelasPage() {
               : null,
           proveedor_nombre: proveedor ?? null,
           foto_urls: lineFotos,
+          cantidad_peso: cantidadPeso,
+          cantidad_peso_unidad: cantidadPesoUnidad,
+          peso_kg_resuelto: pesoKgResuelto,
         };
+        if (pesoKgResuelto != null) {
+          group.peso_kg_total = (group.peso_kg_total ?? 0) + pesoKgResuelto;
+        }
         group.recepciones.push(line);
       }
 
@@ -1177,6 +1202,9 @@ function AlbaranCard({
               {grupo.palets_recibidos ?? "?"} palet
               {(grupo.palets_recibidos ?? 0) !== 1 ? "s" : ""} ·{" "}
               {grupo.hojas_recibidas_total.toLocaleString("es-ES")} hojas
+              {grupo.peso_kg_total != null
+                ? ` · ${formatPesoKg(grupo.peso_kg_total)}`
+                : ""}
             </CardDescription>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -1253,6 +1281,11 @@ function AlbaranCard({
                 {line.hojas_recibidas_muelle != null ? (
                   <span className="text-slate-600 block">
                     {line.hojas_recibidas_muelle.toLocaleString("es-ES")} h
+                  </span>
+                ) : null}
+                {line.peso_kg_resuelto != null ? (
+                  <span className="text-slate-500 block text-[10px]">
+                    {formatPesoKg(line.peso_kg_resuelto)}
                   </span>
                 ) : null}
                 {line.num_hojas_brutas != null &&

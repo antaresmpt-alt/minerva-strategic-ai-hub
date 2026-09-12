@@ -26,6 +26,7 @@ import {
 import { albaranParaRecepcion } from "@/lib/albaran-placeholders";
 import { filesToAlbaranOcrParts } from "@/lib/albaranes-ocr-files";
 import {
+  kilosDesdeHojas,
   patchOcrDraftRow,
   type AlbaranOcrCompra,
   type AlbaranOcrDraftRow,
@@ -194,6 +195,12 @@ export function AlbaranesOcrDialog({
           r.ot_numero && !esOc ? `OT ${r.ot_numero}` : null,
         ].filter(Boolean);
 
+        const kilosResueltos =
+          r.kilos ??
+          (r.hojas != null && r.gramaje != null
+            ? kilosDesdeHojas(r.hojas, r.gramaje, r.formato)
+            : null);
+
         const insertRow: Record<string, unknown> = {
           compra_id: esOc ? r.compra_id : null,
           tipo_recepcion: esOc ? "oc" : "stock_libre",
@@ -207,8 +214,8 @@ export function AlbaranesOcrDialog({
           albaran_proveedor: alb,
           hojas_recibidas: r.hojas,
           palets_recibidos: r.palets && r.palets > 0 ? r.palets : 1,
-          cantidad_peso: r.kilos,
-          cantidad_peso_unidad: r.kilos != null ? "kg" : null,
+          cantidad_peso: kilosResueltos,
+          cantidad_peso_unidad: kilosResueltos != null ? "kg" : null,
           estado_recepcion: "Total",
           notas: notasParts.join(" · ") || null,
           recepcionado_por: recepcionadoPorUuid,

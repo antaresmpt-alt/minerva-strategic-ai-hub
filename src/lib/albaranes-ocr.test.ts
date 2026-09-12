@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildOcrDraftRows,
   hojasDesdeKilos,
+  kilosDesdeHojas,
+  resolvePesoKg,
   matchProveedor,
   normalizeFormato,
   normalizeProveedorKey,
@@ -41,6 +43,32 @@ describe("hojasDesdeKilos", () => {
   it("sin formato o gramaje → null", () => {
     expect(hojasDesdeKilos(35, 100, "")).toBeNull();
     expect(hojasDesdeKilos(35, 0, "70×100")).toBeNull();
+  });
+});
+
+describe("kilosDesdeHojas", () => {
+  it("OFFSET 70×100 100 g · 500 h → 35 kg", () => {
+    expect(kilosDesdeHojas(500, 100, "70×100")).toBe(35);
+  });
+
+  it("roundtrip con hojasDesdeKilos", () => {
+    const h = hojasDesdeKilos(35, 100, "70×100");
+    expect(h).toBe(500);
+    expect(kilosDesdeHojas(h!, 100, "70×100")).toBe(35);
+  });
+});
+
+describe("resolvePesoKg", () => {
+  it("prioriza albarán en tn", () => {
+    expect(
+      resolvePesoKg({ cantidad_peso: 0.185, cantidad_peso_unidad: "tn" })
+    ).toBe(185);
+  });
+
+  it("calcula si no hay peso en albarán", () => {
+    expect(
+      resolvePesoKg({ hojas: 500, gramaje: 100, formato: "70×100" })
+    ).toBe(35);
   });
 });
 
