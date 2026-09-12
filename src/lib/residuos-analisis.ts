@@ -10,6 +10,20 @@ import { formatFechaEsCorta } from "@/lib/produccion-date-format";
 
 export type ResiduosAgrupacion = "detalle" | "proveedor" | "material" | "mes";
 
+const AGRUPACION_LABEL: Record<ResiduosAgrupacion, string> = {
+  detalle: "Detalle (recepción)",
+  proveedor: "Por proveedor",
+  material: "Por material",
+  mes: "Por mes",
+};
+
+function formatKgInforme(kg: number | null | undefined): string {
+  const formatted = formatPesoKg(kg);
+  if (formatted) return formatted;
+  if (kg == null || !(kg > 0)) return "—";
+  return `${kg.toLocaleString("es-ES", { maximumFractionDigits: 1 })} kg`;
+}
+
 export type ResiduosAnalisisFiltros = {
   desdeYmd: string;
   hastaYmd: string;
@@ -247,15 +261,28 @@ export function exportResiduosEntradasExcel(
     Kg: r.kg != null ? Math.round(r.kg * 100) / 100 : "",
   }));
 
-  const agrupadoSheet = agrupado.map((r) => ({
-    Clave: r.clave,
-    Proveedor: r.proveedor,
-    Material: r.material,
-    Hojas: r.hojas,
-    Kg: Math.round(r.kg * 100) / 100,
-    Recepciones: r.recepciones,
-    Albaranes: r.albaranes,
-  }));
+  const agrupadoSheet = [
+    ...agrupado.map((r) => ({
+      Clave: r.clave,
+      Proveedor: r.proveedor,
+      Material: r.material,
+      Hojas: r.hojas,
+      Kg: Math.round(r.kg * 100) / 100,
+      Toneladas: Math.round((r.kg / 1000) * 1000) / 1000,
+      Recepciones: r.recepciones,
+      Albaranes: r.albaranes,
+    })),
+    {
+      Clave: "TOTAL",
+      Proveedor: "",
+      Material: "",
+      Hojas: tot.hojas,
+      Kg: Math.round(tot.kg * 100) / 100,
+      Toneladas: Math.round((tot.kg / 1000) * 1000) / 1000,
+      Recepciones: tot.recepciones,
+      Albaranes: tot.albaranes,
+    },
+  ];
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumen), "Resumen");
@@ -283,21 +310,22 @@ export function exportResiduosEntradasPdf(
   doc.setFontSize(9);
   doc.setTextColor(60, 60, 60);
   doc.text(`Periodo: ${periodoLabel}`, 10, 18);
+  doc.text(`Vista: ${AGRUPACION_LABEL[agrupacion]}`, 10, 23);
   doc.text(
-    `Recepciones: ${tot.recepciones} · Albaranes: ${tot.albaranes} · Hojas: ${tot.hojas.toLocaleString("es-ES")} · Peso: ${formatPesoKg(tot.kg) ?? "—"}`,
+    `Recepciones: ${tot.recepciones} · Albaranes: ${tot.albaranes} · Hojas: ${tot.hojas.toLocaleString("es-ES")} · Peso total: ${formatKgInforme(tot.kg)}`,
     10,
-    23
+    28
   );
   doc.text(
     `Generado: ${new Date().toLocaleString("es-ES")} · Uso interno (preparación declaraciones)`,
     10,
-    28
+    33
   );
 
   const isDetalle = agrupacion === "detalle";
   const head = isDetalle
-    ? [["Fecha", "Albarán", "Proveedor", "OT", "Material", "Formato", "Hojas", "Kg"]]
-    : [["Grupo", "Proveedor", "Material / periodo", "Hojas", "Kg", "Recep.", "Alb."]];
+    ? [["Fecha", "Albarán", "Proveedor", "OT", "Material", "Formato", "Hojas", "Peso"]]
+    : [["Grupo", "Proveedor", "Material / periodo", "Hojas", "Peso", "Recep.", "Alb."]];
 
   const body = isDetalle
     ? detalle.map((r) => [
@@ -307,25 +335,56 @@ export function exportResiduosEntradasPdf(
         r.otNumero ?? "—",
         r.material,
         r.formato ?? "—",
-        String(r.hojas),
-        r.kg != null ? r.kg.toLocaleString("es-ES", { maximumFractionDigits: 1 }) : "—",
+        r.hojas.toLocaleString("es-ES"),
+        formatKgInforme(r.kg),
       ])
     : agrupado.map((r) => [
         r.clave,
         r.proveedor,
         r.material,
-        String(r.hojas),
-        r.kg.toLocaleString("es-ES", { maximumFractionDigits: 1 }),
+        r.hojas.toLocaleString("es-ES"),
+        formatKgInforme(r.kg),
         String(r.recepciones),
         String(r.albaranes),
       ]);
 
+  const foot = isDetalle
+    ? [
+        [
+          "TOTAL",
+          "",
+          "",
+          "",
+          "",
+          "",
+          tot.hojas.toLocaleString("es-ES"),
+          formatKgInforme(tot.kg),
+        ],
+      ]
+    : [
+        [
+          "TOTAL",
+          "",
+          "",
+          tot.hojas.toLocaleString("es-ES"),
+          formatKgInforme(tot.kg),
+          String(tot.recepciones),
+          String(tot.albaranes),
+        ],
+      ];
+
   autoTable(doc, {
     head,
     body,
-    startY: 32,
+    foot,
+    startY: 37,
     styles: { fontSize: 7, cellPadding: 1.5 },
     headStyles: { fillColor: [0, 33, 71] },
+    footStyles: {
+      fillColor: [241, 245, 249],
+      textColor: [0, 33, 71],
+      fontStyle: "bold",
+    },
   });
 
   const stamp = new Date().toISOString().slice(0, 10);
