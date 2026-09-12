@@ -55,6 +55,7 @@ minerva-strategic-ai-hub/
 │   │   │   │   ├── compras-mail-config/
 │   │   │   │   └── troquel-archivo/
 │   │   │   ├── gemini/
+│   │   │   │   ├── albaranes-ocr/
 │   │   │   │   ├── analyze/
 │   │   │   │   ├── chat/
 │   │   │   │   ├── creativo/

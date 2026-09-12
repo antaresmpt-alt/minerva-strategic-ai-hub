@@ -15,6 +15,7 @@
    - `.MANUALES/BLOQUES/MINERVA_BLOQUE7_ODOO_ALBARANES.md`
    - `.MANUALES/BLOQUES/MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`
    - `.MANUALES/BLOQUES/MINERVA_BLOQUE9_MATERIAL_CARTELAS.md`
+   - `.MANUALES/SESIONES/SESION_02SEP2026_BLOQUE9_7_OCR_ALBARANES.md` (**9.7 OCR albaranes** — 2 sep)
    - `.MANUALES/BLOQUES/MINERVA_BLOQUE9_REASIGNACION_STOP.md` (9.8: liberar/reasignar/recomprar; OT **98019** + **98020** validadas)
    - `.MANUALES/BLOQUES/MINERVA_BLOQUE10_PRESUPUESTOS.md` (futuro)
    - `.MANUALES/BLOQUES/MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` (brainstorming)
@@ -63,7 +64,8 @@
 | `.MANUALES/SESIONES/SESION_14AGO2026_EJECUCION_LISTA.md` | Sesión 14 ago (tarde): lista gorda ejecución, semáforo, perf, tableta por máquina (Ramón). |
 | `.MANUALES/SESIONES/SESION_17AGO2026_PREFILL_RUTA_MUELLE_B6.md` | Sesión 17 ago: prefill Ruta, cartela admin, Ramón brutas/netas, muelle, OT 98016 E2E. |
 | `.MANUALES/BLOQUES/MINERVA_BLOQUE9_REASIGNACION_STOP.md` | Bloque 9.8: liberar/reasignar/recomprar, ledger. **9.8.1–9.8.6** smoke OK + sync albarán. |
-| `.MANUALES/BRIEFS/INVENTARIO_BOTONES_CARTELAS_STOCK.md` | Inventario botones Cartelas/Stock para manual usuario (Claude). |
+| `.MANUALES/BRIEFS/INVENTARIO_BOTONES_CARTELAS_STOCK.md` | Inventario botones Cartelas/Stock para manual usuario (Claude). Incluye **OCR albaranes** (2 sep). |
+| `.MANUALES/SESIONES/SESION_02SEP2026_BLOQUE9_7_OCR_ALBARANES.md` | **9.7 OCR albaranes** (2 sep): PDF/fotos → tabla revisión → recepciones en Pendientes. |
 | `.MANUALES/SESIONES/SESION_18AGO2026_STOP_MATERIAL.md` | Sesión 18 ago: acuerdo spec 9.8 + alta 98019. |
 | `.MANUALES/SESIONES/SESION_19AGO2026_STOP_MATERIAL_98020.md` | Sesión 19 ago: lab 98020 A+B+C + commits 9.8.2/4/5. |
 | `.MANUALES/SESIONES/SESION_20AGO2026_BACKLOG_P0_STOP.md` | Sesión 20 ago mañana: P0 7.1–7.3 + P2 §18.9/11/15 smoke. |
@@ -281,7 +283,7 @@ src/components/produccion/planificacion/
 | 6 | Producidas / cierre OT | ✅ MVP + promedios + oficiales + clone. ✅ Cierre **contenedor** 8.4 (snapshot barco) |
 | 7 | Expedición / Albarán | ⏸ **Aparcado** hasta decisión Odoo |
 | 8 | Contenedor / formas / hijas | 🔄 FORMATO–8.1 ✅ · **8.2 wizard MVP ✅** · 8.3 parcial · **8.4 cierre barco ✅** · **8.5 convergencia 📋 diseño** · 8.6 futuro · **captura envío externos ✅** |
-| 9 | Material, cartelas, stock, calendario prod. | ✅ 9.0–9.6d + 9.4 + **§15.6.12**. ✅ **9.8.1–9.8.6** smoke planta 21 ago + stock libre + perf Compras + sync albarán. Polish: Histórico/Despachadas; merge auto 9.8.6 opcional. ⏳ OCR 9.7; fotos 9.10 |
+| 9 | Material, cartelas, stock, calendario prod. | ✅ 9.0–9.6d + 9.4 + **§15.6.12**. ✅ **9.8.1–9.8.6** smoke planta 21 ago + stock libre + perf Compras + sync albarán. ✅ **9.7 OCR albaranes** (2 sep, `0bfef6b`) — Ramón revisa tabla y confirma; no cartela solo. ⏳ fotos 9.10; partida 1 material → 2+ OTs |
 | 10 | Presupuestos | ⏸ Futuro (más miga; tras Minerva estable) |
 | 11 | Calendario = master planificar / lanzar | 🔄 **Éxito de uso** (Carlos/Jordi). Ampliar con cuidado: planificar sí; lanzar suave (pool/mesa) + conflictos de máquina. Sin reordenar el menú (convive con Pool/Mesa/Pipeline) |
 | 12 | Roles, permisos, landing por perfil | 📋 **Documentado** — operario→ejecución; gestor→home rico. **14 ago:** 1 tableta/máquina (Ramón). Aparcado de código; crítico antes usuarios masivos |
@@ -346,7 +348,8 @@ Detalle 1–3.x histórico: ver commits jun / `.MANUALES/CONTEXTO/FASES_HOJA_RUT
 - [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor; tableta = máquina — `MINERVA_BLOQUE12_…` (no abrir ya; default gestor = maestro OTs)
 - [ ] **Bloque 5 puente**: Rita lanza OTs a Hugo (no bloquea paralelo si Hugo sigue a mano)
 
-### Hecho reciente (jul–ago)
+### Hecho reciente (jul–sep)
+- [x] **2 sep:** **9.7 OCR albaranes** — PDF/fotos → tabla revisión → recepciones en Pendientes (`0bfef6b`). No cartela automático. Pendiente: 1 partida → 2+ OTs. `.MANUALES/SESIONES/SESION_02SEP2026_BLOQUE9_7_OCR_ALBARANES.md`
 - [x] **30 ago:** Calendario **perf 3 PRs** (bandeja fantasma, batch guardar detalle-día, inputs/memo) + ejecución filtros — `.MANUALES/SESIONES/SESION_30AGO2026_CALENDARIO_PERF.md` · patrón «módulo fantasma» (ver también Compras `20a06a5`)
 - [x] **29 ago noche (impro):** Bloque 12 UI — **vista mesa** detalle del día (pool+columnas+DnD) · claim ejecución desde plan · exclusiones E (MNRV/desbroce) · sin botón pastilla — `.MANUALES/SESIONES/SESION_29AGO2026_BLOQUE12_DETALLE_DIA_MESA.md` · `.MANUALES/BLOQUES/MINERVA_BLOQUE12_DETALLE_DIA_MESA.md` · decisión §28
 - [x] **27 ago noche (pulido UX):** Bloque 11 — **modal Atrasadas** · Guillotina **tooltip** pastillas + chip ejecución · **valla LEGACY** — `7dc75cb` · decisión §27
@@ -386,7 +389,7 @@ Detalle 1–3.x histórico: ver commits jun / `.MANUALES/CONTEXTO/FASES_HOJA_RUT
 - [ ] Pulir Digital / Guillotina; PDF acompañante — **aparcado** hasta TEST con Rita + Patricia/Paula (OK v1 primera tanda; ver sesión 17 ago)
 - [ ] 8.6 / engomado por ref. solo si barcos multi-ref diarios lo exigen
 - [ ] **8.5** convergencia B/C cuando un barco real lo pida (docs listos en Bloque 8)
-- [ ] 9.7 OCR albarán (baja); sobrantes al cierre (B6+B9)
+- [x] **9.7 OCR albarán** (2 sep MVP) — falta 1 partida → 2+ OTs; **sobrantes al cierre** (B6+B9)
 - [ ] Preguntas §12 planta (CTP hija) si hace falta antes de 8.4 fino
 
 ### Siguiente foco (orden sugerido post smoke 21 ago)

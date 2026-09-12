@@ -145,7 +145,7 @@ export const DEFAULT_EMAIL_PLANTILLA_COMPRAS: EmailPlantillaBloques = {
   header:
     "Estimados,\n\nPor la presente les solicitamos presupuesto y confirmación de plazo para el siguiente material:",
   detail:
-    "OT {ot_asociada} · {material} · Gramaje {gramaje} · Formato {formato} · Brutas: {cantidad}",
+    "OT {ot_asociada} · {material} · Gramaje {gramaje} · Formato {formato} · Brutas: {cantidad} · Fecha deseada recepción: {fecha_prevista}",
   footer:
     "Quedamos a la espera de su confirmación para proceder con el pedido.\n\nSaludos cordiales,",
 };
@@ -456,6 +456,8 @@ function varsComprasFila(
     gramaje,
     formato: (row.tamano_hoja ?? "").trim() || "—",
     ot_asociada: otPosicionComprasDisplay(row),
+    /** Misma fecha que columna «Fecha prevista» / calendario compras. */
+    fecha_prevista: formatFechaEsCorta(row.fecha_prevista_recepcion) || "—",
   };
 }
 
@@ -470,6 +472,7 @@ function varsComprasAgregadas(
         .filter((v) => v !== "—" && v.trim().length > 0)
     ),
   ].join(", ");
+  const first = rows[0];
   return {
     proveedor: nombreProveedor.trim() || "—",
     material: rows.length === 1 ? varsComprasFila(rows[0]!, nombreProveedor).material : `${rows.length} líneas`,
@@ -477,6 +480,9 @@ function varsComprasAgregadas(
     gramaje: "—",
     formato: "—",
     ot_asociada: ots || "—",
+    fecha_prevista: first
+      ? formatFechaEsCorta(first.fecha_prevista_recepcion) || "—"
+      : "—",
   };
 }
 

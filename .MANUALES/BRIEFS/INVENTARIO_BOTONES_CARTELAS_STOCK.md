@@ -1,6 +1,6 @@
 # Inventario de botones — Cartelas & Stock (para manual de usuario)
 
-> Fuente: código en `main` a **21 ago 2026** (incluye **9.8.6 MVP**).
+> Fuente: código en `main` a **2 sep 2026** (incluye **9.7 OCR albaranes** + **9.8.6 MVP**).
 > Destinatario: quien escribe el manual (Ramón / Juan / Emma), **sin jerga de código**.
 > Casos STOP: **A** = reservado sin consumo · **B** = ya hubo consumo · **C** = stock libre / compra sin OT.
 
@@ -24,6 +24,7 @@ Pantalla: Producción → Almacén → **Cartelas** → pestaña **Pendientes**.
 | Ocultar sin albarán | Chip en barra (activo por defecto) | Almacén | Esconde recepciones sin número de albarán | Solo filtro |
 | Solo 30 días | Chip en barra | Almacén | Limita a recepciones recientes | Solo filtro |
 | Actualizar (icono refresh) | Barra | Almacén | Recarga la bandeja de pendientes | — |
+| **OCR albaranes** | Barra (junto a Recepción STOCK) | Almacén | Sube PDF/fotos de albaranes; la IA rellena una tabla; Ramón revisa y confirma | Crea **entradas** (recepciones) en Pendientes. **No** imprime cartelas |
 | **Recepción STOCK** | Barra (botón principal) | Almacén | Abre el flujo de entrada de material **sin OT** (compra/cartela stock libre) | Nueva recepción / cartela posible en stock libre (**Caso C**) |
 | **Generar cartelas →** | En cada tarjeta de albarán **sin** cartelas reales aún | Almacén | Abre el asistente para crear cartelas de esa recepción | Palets nuevos (normalmente **reservados** a la OT de la compra, o libres si es STOCK) |
 | **Añadir cartelas →** | Misma tarjeta si **ya** hay cartelas creadas | Almacén | Abre el asistente para crear **más** cartelas del mismo albarán | Más palets ligados a esa recepción |
@@ -63,6 +64,7 @@ Pestaña **Cartelas** (listado).
 
 | Modal | Quién lo ve | Qué pide | Resultado |
 |-------|-------------|----------|-----------|
+| **OCR albaranes** | Ramón (Almacén) | PDF o fotos de albaranes; luego tabla para corregir y marcar OK | Recepciones nuevas en Pendientes (ligadas a compra o STOCK). Hay que **Generar cartelas** después |
 | Liberar reserva de OT | Oficina | Confirmar OT + notas opcionales | Reserva liberada; ledger anota el movimiento |
 | Asignar stock libre a OT | Almacén | OT destino (+ notas) | Reserva creada; badge OT “Material en stock asignado” |
 | **¿Actualizar despacho?** (9.8.6) | Solo **Oficina**, **justo después** de asignar con éxito | “Ahora no” / “Abrir lápiz despacho” | Abre el editor de despacho forzado de esa OT (mismo espíritu que el lápiz en OTs Despachadas) |

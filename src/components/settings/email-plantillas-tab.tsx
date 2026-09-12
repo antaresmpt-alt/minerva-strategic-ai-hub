@@ -354,11 +354,13 @@ export function EmailPlantillasTab() {
               Variables:{" "}
               <code className="rounded bg-muted px-1 py-0.5 text-xs">
                 {"{proveedor}"} {`{material}`} {`{cantidad}`} {`{gramaje}`}{" "}
-                {`{formato}`} {`{ot_asociada}`}
+                {`{formato}`} {`{ot_asociada}`} {`{fecha_prevista}`}
               </code>
               . En asunto/cabecera/pie,{" "}
               <code className="text-xs">{`{ot_asociada}`}</code> lista las OT de
-              la selección; en la línea de detalle corresponde a cada fila.
+              la selección; en la línea de detalle corresponde a cada fila.{" "}
+              <code className="text-xs">{`{fecha_prevista}`}</code> es la fecha
+              prevista de recepción (deseada en el mail al proveedor).
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">

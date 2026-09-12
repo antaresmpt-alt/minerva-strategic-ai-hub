@@ -56,6 +56,7 @@ next-env.d.ts
 datos.txt
 notas.txt
 secrets.txt
+DISQUISICIONES VARIAS MANEL/
 
 # Archivos de datos (Excel y CSV) 
 # Ignoramos todos para evitar subir datos reales de clientes por error

@@ -4,7 +4,7 @@
 > Tema: recepción de material, cartelas de palet, stock libre y trazabilidad.
 > Complementa `.MANUALES/CONTEXTO/MINERVA_HUB_CONTEXTO_MAESTRO.md`, `.MANUALES/CONTEXTO/FASES_HOJA_RUTA_DIGITAL.md` y briefings Bloques 6 y 7.
 >
-> **Estado:** ✅ **9.0–9.6d + 9.4 A/B/C** + **Calendario Producción** (18 jul 2026) — cartelas (impresión **1 copia**), Stock ATP, consumo guillotina/impresión/troquel/imp. externa, planificador OTs Jordi. **Validado E2E:** OT **98013**. ✅ **§15.6.12 derivar a externa (13 ago)** — OT **98015**. ✅ **17 ago:** corregir cartela en paso cerrado (98016 palet 99018); Ramón brutas/netas + muelle netas deseadas. 📋 **9.8 reasignación/STOP** — spec 18 ago: `.MANUALES/BLOQUES/MINERVA_BLOQUE9_REASIGNACION_STOP.md` (OT **98019**; código no empezado). ⏳ Plan engomado desde troquel, 9.7 OCR, 9.10 fotos, cierre OT sobrantes (Bloque 6).
+> **Estado:** ✅ **9.0–9.6d + 9.4 A/B/C** + **Calendario Producción** + **§15.6.12** + **9.8.1–9.8.6** + **9.7 OCR albaranes** (2 sep 2026, `0bfef6b`) — PDF/fotos → tabla que Ramón confirma → recepciones en Pendientes (**no** cartelas automáticas). **Validado E2E cartelas:** OT **98013**. ⏳ Plan engomado desde troquel, 9.10 fotos, 1 partida → 2+ OTs, cierre OT sobrantes (Bloque 6).
 > **Origen:** Optimus + cartelas CARPAPSA (15 jun 2026).
 > **Actualizado:** 18 ago 2026 — 9.8 spec STOP/reasignar. Antes: 14 ago sesiones 13–14; §15.14 / `.MANUALES/SESIONES/SESION_14AGO2026_MANIPULADOS_ENCAJAR.md`.
 > **PENDIENTE:** 9.8 código (1+1b primero). H1/H2 recuento global. Ubicación por filas de material (catálogo UI sin definir en planta). Ajuste impresión A6 física vs A4 PDF.
@@ -875,7 +875,7 @@ No bloquean 9.0–9.4. Se encadenan cuando el flujo administrativo de cartelas f
 |------|------------|
 | **9.5** | **Puente muelle → administración**: bandeja «Recepciones en muelle pendientes de cartelar» (foto + datos del muelle ya guardados) | ✅ **7 jul 2026** — `RecepcionFotosPanel` en bandeja + wizard; `fetchFotosByRecepcionIds`; hojas/notas muelle por línea |
 | **9.6** | Recepción **STOCK sin OC** y albarán **multi-línea** (varias OTs / líneas en un mismo envío) | ✅ **9.6a–d 9 jul** — STOCK: `RecepcionStockDialog`; opción C: aviso muelle + wizard suma OTs; **opción B: recepción multi-línea en muelle** (§15.9.4) |
-| **9.7** | **Sugerencia desde foto** (Gemini Vision u OCR asistido): prefill proveedor, nº albarán, líneas, kilos — **siempre confirmación humana** (patrón import externos Optimus) |
+| **9.7** | **OCR albaranes de entrada** (Gemini Vision): PDF/fotos → tabla revisión → recepciones en Pendientes. **Siempre confirmación humana.** No crea cartelas. ✅ **2 sep 2026** — `0bfef6b` · sesión `.MANUALES/SESIONES/SESION_02SEP2026_BLOQUE9_7_OCR_ALBARANES.md`. Pendiente: 1 partida → 2+ OTs |
 | **9.8** | **Reasignación / STOP material** — liberar reserva, compra corrección, aviso formato, revertir consumo. Spec: `.MANUALES/BLOQUES/MINERVA_BLOQUE9_REASIGNACION_STOP.md`. OT lab **98019**. |
 | **9.9** | **Búsqueda inteligente de material (NL → cartelas)**: ✅ **7 jul 2026** — LLM extrae criterios → query sobre `stock_palets_atp` → tabla + resumen con IDs reales (sin alucinación). API `POST /api/gemini/stock-analyze`. |
 | **9.10** | Adjuntar/reenlazar fotos muelle en flujo de cartelado; menos papel físico circulando *(antes numerado 9.8; 18 ago se cede 9.8 a STOP)* |
@@ -885,7 +885,7 @@ No bloquean 9.0–9.4. Se encadenan cuando el flujo administrativo de cartelas f
   Juan: muelle → cartelas → stock + entregas desde almacén
 
 [Fase B — luego]
-  Muelle (foto) ──► cartelado agrupado ──► (opcional) IA sugiere campos
+  Muelle (foto) ──► cartelado agrupado ──► OCR albaranes (oficina / Ramón) ──► confirmar ──► Pendientes
 ```
 
 ---
@@ -1068,7 +1068,7 @@ Mezcla recomendada: 2–3 OTs simples + 1 barco (si aplica, regla I1) + 1 con ma
 | 9.6 — STOCK sin OC + multi-línea | ✅ | 9.6a STOCK + 9.6b aviso + 9.6c wizard + **9.6d muelle multi-línea** (9 jul) |
 | Sync Optimus v2 | ✅ | Diff nuevos/actualizados/no en Excel + `last_seen_in_optimus_import_at` (§15.9.3) |
 | Pool «Ver cartelas» | ✅ | Diálogo lazy con `#ID Stock` por OT (§15.9.5) |
-| 9.7 — Sugerencia desde foto (IA) | ⏳ | Confirmación humana obligatoria |
+| 9.7 — OCR albaranes (IA + revisión) | ✅ 2 sep 2026 | Modal en Pendientes; API `POST /api/gemini/albaranes-ocr`. Pendiente: 1 partida → 2+ OTs |
 | 9.8 — Reasignación / STOP | 📋 spec 18 ago | `.MANUALES/BLOQUES/MINERVA_BLOQUE9_REASIGNACION_STOP.md` · OT **98019** · código: 9.8.1+1b primero |
 | 9.10 — Fotos/adjuntos en flujo cartelas | ⏳ | Antes 9.8; renumerado 18 ago |
 
@@ -1583,7 +1583,7 @@ Emma/Carlos ven las líneas agrupadas en Cartelas por `albaran_proveedor` (sin c
 | Validar 9.3 split con palet real | Media | Reservas duras bloquean split (v1) |
 | Sync: marcar agotados palets no vistos | Media | Filtro `last_seen` antiguo en Stock |
 | 9.4 déficit → `material_status` mesa | Media | Pool ya hecho |
-| 9.7 OCR albarán | Baja | Último paso, acordado |
+| 9.7 OCR albarán | ✅ 2 sep | MVP en `main` (`0bfef6b`). Falta 1 partida → 2+ OTs |
 | Cierre OT sobrantes (Bloque 6) | Baja | Sin popup auto multi-OT |
 
 #### 15.10 Sesión 14 jul 2026 — Prueba E2E OT 98013 (impresión externa + cartela)
@@ -1815,7 +1815,7 @@ Mapa mental por sección (Carlos Impresión, Rita Digital, Antonio Troquel, Gabr
 
 **Captura envío/recepción:** ya existía (`ExternoCantidadDialog`); no es pendiente de §15.6.12.
 
-**Pendiente post-sesión:** muelle netas vs brutas; plan engomado desde troquel; OCR 9.7; prefill horas al añadir en Ruta.
+**Pendiente post-sesión:** muelle netas vs brutas; plan engomado desde troquel; prefill horas al añadir en Ruta. **OCR 9.7 → hecho 2 sep** (`.MANUALES/SESIONES/SESION_02SEP2026_BLOQUE9_7_OCR_ALBARANES.md`).
 
 #### 15.15 Sesión 14 ago 2026 — Encajar Manipulados / portada
 
@@ -1827,3 +1827,12 @@ Mapa mental por sección (Carlos Impresión, Rita Digital, Antonio Troquel, Gabr
 | Pool / entrada | Sin lápiz en Pool; `/produccion` → `/produccion/ots` | `b1c4104`, `1305dcc` |
 
 **OT de prueba:** **36286** — 25 / MN1L 2500 / 28.800 uds.
+
+#### 15.16 Sesión 2 sep 2026 — 9.7 OCR albaranes ✅
+
+> Detalle: `.MANUALES/SESIONES/SESION_02SEP2026_BLOQUE9_7_OCR_ALBARANES.md`. Commit `0bfef6b`.
+
+Ramón sube PDF/fotos en **Cartelas → Pendientes → OCR albaranes**. Gemini propone líneas; él confirma. Se crean **recepciones** (oc o stock_libre), no cartelas.
+
+**Pendiente de producto (no código aún):** una partida de material del albarán que hay que **partir entre 2+ OTs** antes de confirmar.
+

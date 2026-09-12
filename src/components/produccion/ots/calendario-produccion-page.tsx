@@ -1305,6 +1305,7 @@ export function CalendarioProduccionPage() {
         `${parsed.length} OTs importadas en ${labelCalendarioAmbito(ambitoActivo)}.`,
       );
       await load();
+      setBandejaRefreshKey((k) => k + 1);
     } catch (e) {
       toast.error(errorMessageFromUnknown(e, "No se pudo importar el Excel."));
     } finally {
@@ -1375,6 +1376,7 @@ export function CalendarioProduccionPage() {
           );
         }
         await load();
+        setBandejaRefreshKey((k) => k + 1);
       } catch (e) {
         toast.error(errorMessageFromUnknown(e, "No se pudo añadir la OT."));
       } finally {
@@ -1654,6 +1656,7 @@ export function CalendarioProduccionPage() {
       if (portapapeles?.id === id) setPortapapeles(null);
       toast.success("OT quitada del planificador.");
       await load();
+      setBandejaRefreshKey((k) => k + 1);
     } catch (e) {
       toast.error(errorMessageFromUnknown(e, "No se pudo quitar la OT."));
     } finally {

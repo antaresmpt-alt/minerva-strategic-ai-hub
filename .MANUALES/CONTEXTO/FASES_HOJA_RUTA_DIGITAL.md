@@ -574,7 +574,7 @@ PDF compacto para acompañar la OT entre departamentos (sustituto papel de la ho
 ✅ **Bloque 6 MVP** (23 jul) + engomado/promedios/oficiales/clone (jul–ago). ✅ Cierre contenedor 8.4 (11 ago).
 ⏸ **Bloque 7 APARCADO**: Expedición/Albarán (hasta decisión Odoo).
 🔄 **Bloque 8**: FORMATO–8.1 ✅ · **8.2 wizard MVP ✅** · 8.3 parcial · **8.4 cierre barco ✅** · **8.5 convergencia 📋** · 8.6 futuro. Fuente: `.MANUALES/BLOQUES/MINERVA_BLOQUE8_FORMAS_Y_COMPONENTES.md`.
-✅ **Bloque 9**: 9.0–9.6d + calendario prod. ✅ Derivar→imp. externa §15.6.12 (13 ago). ⏳ OCR/sobrantes baja. `MINERVA_BLOQUE9_…` · `.MANUALES/SESIONES/SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`.
+✅ **Bloque 9**: 9.0–9.6d + calendario prod. ✅ Derivar→imp. externa §15.6.12 (13 ago). ✅ **9.8 STOP**. ✅ **9.7 OCR albaranes** (2 sep). ⏳ sobrantes cierre; 9.10 fotos; 1 partida → 2+ OTs. `MINERVA_BLOQUE9_…` · `.MANUALES/SESIONES/SESION_02SEP2026_BLOQUE9_7_OCR_ALBARANES.md`.
 📋 **Bloque 11**: calendario en uso (Carlos/Jordi); lanzar con cuidado — `MINERVA_BLOQUE11_…`.
 📋 **Bloque 12**: roles/landing por perfil documentado (11 ago), implementación aparcada — `MINERVA_BLOQUE12_…` + `.MANUALES/BRIEFS/MINERVA_ROLES_Y_NAVEGACION.md`. Hasta entonces `/produccion` → maestro OTs (14 ago). **Campo:** 1 tableta/máquina. Cola ejecución = lista gorda en `main` (`.MANUALES/SESIONES/SESION_14AGO2026_EJECUCION_LISTA.md`).
 📋 **Bloque 13**: visibilidad planta / comerciales / andon — solo planteado 6 sep (`MINERVA_BLOQUE13_VISIBILIDAD_PLANTA.md`). Calendario ≠ GPS comercial; pipeline recortado.
@@ -584,7 +584,7 @@ PDF compacto para acompañar la OT entre departamentos (sustituto papel de la ho
 
 ---
 
-**Última actualización**: 19 de agosto de 2026 — Bloque 9.8 lab **98020** validado (`.MANUALES/SESIONES/SESION_19AGO2026_STOP_MATERIAL_98020.md`). Código 9.8.2/4/5 en `main`. 18 ago: 98019-A. 17 ago: 98016 E2E.
+**Última actualización**: 2 de septiembre de 2026 — Bloque **9.7 OCR albaranes** en `main` (`0bfef6b`). Antes: 19 ago 9.8 lab 98020.
 
 ---
 
@@ -1166,4 +1166,33 @@ Principio: el ledger ATP manda (no las líneas de Optimus); no fiarse de que el 
 | Cascade planificación STOP | 📋 | P0 mañana — botón confirmado §19 (no cascade silencioso) |
 
 Fotos/adjuntos del roadmap viejo (antes 9.8) → **9.10**.
+
+---
+
+## Bloque 9.7 — OCR albaranes de entrada ✅ **2 sep 2026**
+
+> Fuente: `.MANUALES/SESIONES/SESION_02SEP2026_BLOQUE9_7_OCR_ALBARANES.md` · brief `.MANUALES/BLOQUES/MINERVA_BLOQUE9_MATERIAL_CARTELAS.md` §11 / §15.16.
+
+### Hecho
+
+- Botón **OCR albaranes** en Cartelas → Pendientes (junto a Recepción STOCK).
+- Modal: PDF o fotos → Gemini Vision → tabla editable (proveedor, albarán, OT, STOCK, material, gramaje, formato, palets, kg, hojas, compra Minerva).
+- Confirmación humana **obligatoria**. Crea `prod_recepciones_material` (oc o stock_libre). **No crea cartelas.**
+- Cruce con catálogo proveedores, compras pendientes, antiduplicado por nº albarán. Kilos → hojas si el papel no trae pliegos.
+- API `POST /api/gemini/albaranes-ocr` (módulo producción). Lib `albaranes-ocr.ts`.
+
+### Pendiente
+
+- Una partida de material para **2+ OTs** (partir hojas/palets a mano en la tabla).
+- 9.10 adjuntar el original a la recepción.
+
+### Archivos clave
+
+| Pieza | Ruta |
+|-------|------|
+| Modal | `albaranes-ocr-dialog.tsx` |
+| Lib + tests | `albaranes-ocr.ts`, `albaranes-ocr.test.ts` |
+| Cliente PDF/fotos | `albaranes-ocr-files.ts` |
+| API | `src/app/api/gemini/albaranes-ocr/route.ts` |
+
 
