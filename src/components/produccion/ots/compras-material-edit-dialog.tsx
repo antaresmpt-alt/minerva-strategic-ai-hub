@@ -66,7 +66,17 @@ type Props = {
   row: ComprasMaterialTableRow | null;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
+  onConciliarFactura?: (albaran: string) => void;
 };
+
+function formatEuro(n: number | null | undefined): string {
+  if (n == null || !(n > 0)) return "—";
+  return n.toLocaleString("es-ES", {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: 2,
+  });
+}
 
 /**
  * Modal aislado: el estado de los inputs vive aquí.
@@ -77,6 +87,7 @@ export function ComprasMaterialEditDialog({
   row,
   onOpenChange,
   onSaved,
+  onConciliarFactura,
 }: Props) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [material, setMaterial] = useState("");
@@ -310,6 +321,42 @@ export function ComprasMaterialEditDialog({
                 placeholder="Instrucciones o comentarios para muelle"
                 className="resize-y text-xs leading-snug"
               />
+            </div>
+            <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Factura (Emma)
+              </p>
+              {row?.importe_factura_eur != null && row.importe_factura_eur > 0 ? (
+                <p className="mt-1 text-sm tabular-nums text-[#002147]">
+                  {formatEuro(row.importe_factura_eur)}
+                  {row.importe_factura_at ? (
+                    <span className="ml-1 text-xs font-normal text-slate-500">
+                      · {formatFechaEsCorta(row.importe_factura_at)}
+                    </span>
+                  ) : null}
+                  {row.importe_factura_por_email ? (
+                    <span className="block text-xs font-normal text-slate-500">
+                      {row.importe_factura_por_email}
+                    </span>
+                  ) : null}
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-slate-500">
+                  Sin conciliar — usa «Conciliar factura» cuando llegue la
+                  factura del proveedor.
+                </p>
+              )}
+              {onConciliarFactura && albaran.trim() ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 h-7 text-xs"
+                  onClick={() => onConciliarFactura(albaran.trim())}
+                >
+                  Conciliar factura
+                </Button>
+              ) : null}
             </div>
           </div>
           <div>

@@ -401,7 +401,7 @@ export function createComprasMaterialColumns(
           {row.original.cliente ?? "—"}
         </div>
       ),
-      size: 96,
+      size: 120,
     },
     {
       accessorKey: "titulo",
@@ -415,7 +415,7 @@ export function createComprasMaterialColumns(
           {row.original.titulo ?? "—"}
         </div>
       ),
-      size: 112,
+      size: 140,
     },
     {
       id: "proveedor",
@@ -533,6 +533,40 @@ export function createComprasMaterialColumns(
         </div>
       ),
       size: 120,
+    },
+    {
+      id: "importe_factura",
+      header: () => (
+        <span className="text-[10px] font-semibold uppercase tracking-wide">
+          Factura €
+        </span>
+      ),
+      cell: ({ row }) => {
+        const imp = row.original.importe_factura_eur;
+        return (
+          <div
+            className="whitespace-nowrap px-1 py-0.5 text-right text-[11px] tabular-nums"
+            title={
+              imp != null && row.original.importe_factura_at
+                ? `Conciliada ${row.original.importe_factura_at.slice(0, 10)}${
+                    row.original.importe_factura_por_email
+                      ? ` · ${row.original.importe_factura_por_email}`
+                      : ""
+                  }`
+                : "Sin conciliar — usar «Conciliar factura»"
+            }
+          >
+            {imp != null && imp > 0
+              ? imp.toLocaleString("es-ES", {
+                  style: "currency",
+                  currency: "EUR",
+                  maximumFractionDigits: 2,
+                })
+              : "—"}
+          </div>
+        );
+      },
+      size: 76,
     },
     {
       id: "notas",

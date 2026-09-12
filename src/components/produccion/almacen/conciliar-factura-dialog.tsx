@@ -193,7 +193,17 @@ function ConciliarFacturaDialogBody({
             ) : null}
           </div>
 
-          {ctx.palets.length === 0 ? (
+          {ctx.palets.length === 0 && ctx.paletsPrueba.length > 0 ? (
+            <p className="text-sm text-amber-800 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+              Hay {ctx.paletsPrueba.length} cartela
+              {ctx.paletsPrueba.length !== 1 ? "s" : ""} de{" "}
+              <strong>prueba</strong> (Id ≥ 99000) ligada
+              {ctx.paletsPrueba.length !== 1 ? "s" : ""} a este albarán, pero la
+              conciliación de factura solo aplica a cartelas de producción.
+              Cartela de nuevo sin marcar «Cartela de prueba», o usa un albarán
+              con cartelas reales.
+            </p>
+          ) : ctx.palets.length === 0 ? (
             <p className="text-sm text-amber-800 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
               Hay recepción pero aún no hay cartelas carteladas para este albarán.
             </p>

@@ -39,4 +39,10 @@ export type ComprasMaterialTableRow = {
    * (`prod_recepciones_material` → `prod_recepciones_fotos`).
    */
   recepcion_foto_urls: string[];
+  /** Suma importes conciliados en recepciones de esta compra (Emma). */
+  importe_factura_eur: number | null;
+  /** Fecha de la última conciliación registrada. */
+  importe_factura_at: string | null;
+  /** Email de quien concilió (última recepción conciliada). */
+  importe_factura_por_email: string | null;
 };

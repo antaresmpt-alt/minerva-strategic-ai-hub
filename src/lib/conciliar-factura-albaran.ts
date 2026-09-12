@@ -24,6 +24,8 @@ export type AlbaranConciliacionContext = {
   albaranProveedor: string;
   recepciones: RecepcionConciliacionRow[];
   palets: PaletConciliacionRow[];
+  /** Cartelas sandbox (≥99000) — no entran en conciliación. */
+  paletsPrueba: PaletConciliacionRow[];
   hojasTotal: number;
   importeFacturaRegistrado: number | null;
 };
@@ -142,6 +144,7 @@ export async function fetchAlbaranConciliacionContext(
   }));
 
   const paletsProd = palets.filter((p) => !p.es_prueba);
+  const paletsPrueba = palets.filter((p) => p.es_prueba);
   const hojasTotal = paletsProd.reduce((acc, p) => acc + p.cantidad_inicial, 0);
   const importeFacturaRegistrado = recepciones.reduce(
     (acc, r) => acc + (r.importe_factura_eur ?? 0),
@@ -152,6 +155,7 @@ export async function fetchAlbaranConciliacionContext(
     albaranProveedor: albaran,
     recepciones,
     palets: paletsProd,
+    paletsPrueba,
     hojasTotal,
     importeFacturaRegistrado:
       importeFacturaRegistrado > 0 ? importeFacturaRegistrado : null,

@@ -639,10 +639,21 @@ export function ComprasMaterialPage() {
           ultima_recepcion_por_email: null,
           ultima_recepcion_por_nombre: null,
           recepcion_foto_urls: [] as string[],
+          importe_factura_eur: null,
+          importe_factura_at: null,
+          importe_factura_por_email: null,
         };
       });
 
       const fotosByCompra = new Map<string, string[]>();
+      const facturaByCompra = new Map<
+        string,
+        {
+          importe: number;
+          at: string | null;
+          porEmail: string | null;
+        }
+      >();
       const ultimaRecepcionByCompra = new Map<
         string,
         {
@@ -658,7 +669,7 @@ export function ComprasMaterialPage() {
         const { data: receps, error: recErr } = await supabase
           .from(TABLE_RECEPCION)
           .select(
-            "id, compra_id, fecha_recepcion, notas, recepcionado_por, recepcionado_por_email, recepcionado_por_nombre"
+            "id, compra_id, fecha_recepcion, notas, recepcionado_por, recepcionado_por_email, recepcionado_por_nombre, importe_factura_eur, importe_factura_at, importe_factura_por_email"
           )
           .in("compra_id", compraIds);
         if (recErr) throw recErr;
@@ -673,10 +684,38 @@ export function ComprasMaterialPage() {
             recepcionado_por: string | null;
             recepcionado_por_email: string | null;
             recepcionado_por_nombre: string | null;
+            importe_factura_eur: number | null;
+            importe_factura_at: string | null;
+            importe_factura_por_email: string | null;
           };
           if (!rec.id || !rec.compra_id) continue;
           recepToCompra.set(rec.id, rec.compra_id);
           recepIds.push(rec.id);
+          const imp =
+            typeof rec.importe_factura_eur === "number"
+              ? rec.importe_factura_eur
+              : null;
+          if (imp != null && imp > 0) {
+            const prev = facturaByCompra.get(rec.compra_id) ?? {
+              importe: 0,
+              at: null as string | null,
+              porEmail: null as string | null,
+            };
+            const importe = prev.importe + imp;
+            const nextAt = rec.importe_factura_at ?? "";
+            const prevAt = prev.at ?? "";
+            facturaByCompra.set(rec.compra_id, {
+              importe,
+              at:
+                !prev.at || nextAt >= prevAt
+                  ? rec.importe_factura_at ?? prev.at
+                  : prev.at,
+              porEmail:
+                !prev.at || nextAt >= prevAt
+                  ? rec.importe_factura_por_email ?? prev.porEmail
+                  : prev.porEmail,
+            });
+          }
           const nota = String(rec.notas ?? "").trim();
           if (!nota) continue;
           const prev = ultimaRecepcionByCompra.get(rec.compra_id);
@@ -724,6 +763,10 @@ export function ComprasMaterialPage() {
         ultima_recepcion_por_nombre:
           ultimaRecepcionByCompra.get(r.id)?.porNombre ?? null,
         recepcion_foto_urls: fotosByCompra.get(r.id) ?? [],
+        importe_factura_eur: facturaByCompra.get(r.id)?.importe ?? null,
+        importe_factura_at: facturaByCompra.get(r.id)?.at ?? null,
+        importe_factura_por_email:
+          facturaByCompra.get(r.id)?.porEmail ?? null,
       }));
 
       setRows(merged);
@@ -1616,6 +1659,7 @@ export function ComprasMaterialPage() {
         ? formatFechaEsCorta(r.fecha_entrega_maestro)
         : "",
       Albarán: r.albaran_proveedor?.trim() ?? "",
+      "Factura €": r.importe_factura_eur ?? "",
       "Fotos recep.": r.recepcion_foto_urls?.length ?? 0,
     }));
     const ws = XLSX.utils.json_to_sheet(data);
@@ -2432,6 +2476,7 @@ export function ComprasMaterialPage() {
           if (!open) setFacturaAlbaranInicial(undefined);
         }}
         initialAlbaran={facturaAlbaranInicial}
+        onApplied={() => void loadRows()}
       />
 
       <ResiduosAnalisisDialog
@@ -2448,6 +2493,12 @@ export function ComprasMaterialPage() {
           if (!o) setEditRow(null);
         }}
         onSaved={() => void loadRows()}
+        onConciliarFactura={(albaran) => {
+          setEditOpen(false);
+          setEditRow(null);
+          setFacturaAlbaranInicial(albaran);
+          setFacturaOpen(true);
+        }}
       />
 
       <ComprasMaterialManualDialog
