@@ -9,6 +9,7 @@ import {
   Package,
   Plus,
   Printer,
+  Recycle,
   RefreshCw,
   ScanSearch,
   Search,
@@ -72,6 +73,7 @@ import type {
 import { CartelaWizardDialog, type CartelaWizardCreatedInfo } from "./cartela-wizard-dialog";
 import { AlbaranesOcrDialog } from "./albaranes-ocr-dialog";
 import { RecepcionStockDialog } from "./recepcion-stock-dialog";
+import { ResiduosAnalisisDialog } from "@/components/produccion/almacen/residuos-analisis-dialog";
 import { RecepcionFotosPanel } from "@/components/produccion/recepcion/recepcion-fotos-panel";
 import { OtDestinoSearchInput } from "@/components/produccion/almacen/ot-destino-search-input";
 import {
@@ -149,6 +151,7 @@ export function CartelasPage() {
   const [wizardGrupo, setWizardGrupo] = useState<AlbaranPendienteGroup | null>(null);
   const [stockDialogOpen, setStockDialogOpen] = useState(false);
   const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
+  const [residuosDialogOpen, setResiduosDialogOpen] = useState(false);
 
   // ── Bloque 9.8.1 — Liberar reserva ───────────────────────────────────────
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -843,7 +846,7 @@ export function CartelasPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-[#002147]">
             Cartelas de material
@@ -852,6 +855,16 @@ export function CartelasPage() {
             Almacén · Emma / Ramón
           </p>
         </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={() => setResiduosDialogOpen(true)}
+        >
+          <Recycle className="size-4" />
+          Análisis residuos
+        </Button>
       </div>
 
       <Tabs
@@ -1140,6 +1153,11 @@ export function CartelasPage() {
         onCreated={() => {
           void loadPendientes();
         }}
+      />
+
+      <ResiduosAnalisisDialog
+        open={residuosDialogOpen}
+        onOpenChange={setResiduosDialogOpen}
       />
 
       {/* Diálogo liberar reserva 9.8.1 */}

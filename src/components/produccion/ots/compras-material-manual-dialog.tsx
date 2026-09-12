@@ -177,7 +177,6 @@ export function ComprasMaterialManualDialog({
     try {
       const gramaje = parseOptionalDecimalInput(form.gramaje);
       const tamanoHoja = form.formato.trim() || null;
-      const numHojasNetas = parseOptionalIntInput(form.hojasNetas);
       const numHojasBrutas = parseOptionalIntInput(form.hojasBrutas);
       const notasBase = form.notasCompra.trim();
       const notasCompra = esStockLibre
@@ -194,7 +193,7 @@ export function ComprasMaterialManualDialog({
         material,
         gramaje,
         tamano_hoja: tamanoHoja,
-        num_hojas_netas: numHojasNetas,
+        num_hojas_netas: null,
         num_hojas_brutas: numHojasBrutas,
         notas: notasCompra,
         estado: "Pendiente",
@@ -215,7 +214,6 @@ export function ComprasMaterialManualDialog({
           material,
           gramaje,
           tamano_hoja: tamanoHoja,
-          num_hojas_netas: numHojasNetas,
           num_hojas_brutas: numHojasBrutas,
         };
         if (isCorreccionFlow) {
@@ -243,7 +241,6 @@ export function ComprasMaterialManualDialog({
           material: "",
           gramaje: "",
           formato: "",
-          hojasNetas: "",
           hojasBrutas: "",
           notasCompra: "",
           posicion: String(posicionParsed + 1),
@@ -323,10 +320,6 @@ export function ComprasMaterialManualDialog({
                         ? String(s.gramaje)
                         : prev.gramaje,
                     formato: s.tamano_hoja?.trim() || prev.formato,
-                    hojasNetas:
-                      s.num_hojas_netas != null
-                        ? String(s.num_hojas_netas)
-                        : prev.hojasNetas,
                     hojasBrutas:
                       s.num_hojas_brutas != null
                         ? String(s.num_hojas_brutas)
@@ -437,22 +430,8 @@ export function ComprasMaterialManualDialog({
             />
           </div>
           <div className="grid gap-1">
-            <Label htmlFor="manual-hojas-netas" className="text-xs">
-              Hojas netas
-            </Label>
-            <Input
-              id="manual-hojas-netas"
-              type="number"
-              step={1}
-              value={form.hojasNetas}
-              onChange={(e) => patch({ hojasNetas: e.target.value })}
-              placeholder="Ej. 1800"
-              className="h-8 text-xs"
-            />
-          </div>
-          <div className="grid gap-1">
             <Label htmlFor="manual-hojas-brutas" className="text-xs">
-              Hojas brutas
+              Hojas brutas (compra)
             </Label>
             <Input
               id="manual-hojas-brutas"

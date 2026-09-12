@@ -374,21 +374,14 @@ export function createComprasMaterialColumns(
       id: "hojas",
       header: () => (
         <span className="text-[10px] font-semibold uppercase tracking-wide">
-          Netas / Brutas
+          H. brutas
         </span>
       ),
       cell: ({ row }) => {
-        const n = row.original.num_hojas_netas;
         const b = row.original.num_hojas_brutas;
         return (
           <div className="whitespace-nowrap px-1 py-0.5 text-center text-[11px] tabular-nums">
-            {n != null || b != null ? (
-              <>
-                {n ?? "—"} / {b ?? "—"}
-              </>
-            ) : (
-              "—"
-            )}
+            {b != null ? b.toLocaleString("es-ES") : "—"}
           </div>
         );
       },

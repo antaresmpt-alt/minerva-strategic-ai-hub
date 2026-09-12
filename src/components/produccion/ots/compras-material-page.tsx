@@ -23,6 +23,7 @@ import {
   Loader2,
   Mail,
   Printer,
+  Recycle,
 } from "lucide-react";
 import { addDays, addWeeks, format, startOfDay, startOfWeek } from "date-fns";
 import { es as esLocale } from "date-fns/locale";
@@ -37,6 +38,7 @@ import {
   type ManualCompraInitialValues,
 } from "@/components/produccion/ots/compras-material-manual-dialog";
 import { ComprasMaterialEditDialog } from "@/components/produccion/ots/compras-material-edit-dialog";
+import { ResiduosAnalisisDialog } from "@/components/produccion/almacen/residuos-analisis-dialog";
 import { createComprasMaterialColumns } from "@/components/produccion/ots/compras-material-columns";
 import { useSysParametrosOtsCompras } from "@/hooks/use-sys-parametros-ots-compras";
 import { Button } from "@/components/ui/button";
@@ -277,7 +279,7 @@ function buildManualInitialFromRow(
     gramaje:
       row.gramaje != null && Number.isFinite(row.gramaje) ? String(row.gramaje) : "",
     formato: row.tamano_hoja?.trim() ?? "",
-    hojasNetas: row.num_hojas_netas != null ? String(row.num_hojas_netas) : "",
+    hojasNetas: "",
     hojasBrutas: row.num_hojas_brutas != null ? String(row.num_hojas_brutas) : "",
     cliente: row.cliente?.trim() ?? "",
     titulo: row.titulo?.trim() ?? "",
@@ -354,6 +356,7 @@ export function ComprasMaterialPage() {
   const [isCorreccionFlow, setIsCorreccionFlow] = useState(false);
   const [manualInitialValues, setManualInitialValues] =
     useState<ManualCompraInitialValues | null>(null);
+  const [residuosOpen, setResiduosOpen] = useState(false);
 
   /** Rol del usuario actual — para gates de permisos 9.8.3. */
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -770,17 +773,13 @@ export function ComprasMaterialPage() {
     const qTecnica = filtroBusquedaTecnica.trim().toLowerCase();
     if (qTecnica) {
       list = list.filter((r) => {
-        const netas = r.num_hojas_netas != null ? String(r.num_hojas_netas) : "";
         const brutas =
           r.num_hojas_brutas != null ? String(r.num_hojas_brutas) : "";
         const bloques = [
           r.material,
           r.gramaje != null ? String(r.gramaje) : "",
           r.tamano_hoja,
-          netas,
           brutas,
-          netas && brutas ? `${netas}/${brutas}` : "",
-          netas && brutas ? `${netas} / ${brutas}` : "",
         ].map((x) => String(x ?? "").toLowerCase());
         return bloques.some((s) => s.includes(qTecnica));
       });
@@ -1854,11 +1853,11 @@ export function ComprasMaterialPage() {
             </div>
             <div className="grid min-w-0 max-w-sm flex-1 gap-1.5">
               <Label htmlFor="busq-compra-mat-tecnica">
-                Buscar (material, gramaje, formato, netas/brutas)
+                Buscar (material, gramaje, formato, h. brutas)
               </Label>
               <Input
                 id="busq-compra-mat-tecnica"
-                placeholder="Ej. couché 350 o 5000/5500"
+                placeholder="Ej. couché 350 o 5000"
                 value={filtroBusquedaTecnica}
                 onChange={(e) => setFiltroBusquedaTecnica(e.target.value)}
                 className="h-9 w-full max-w-sm"
@@ -1969,6 +1968,17 @@ export function ComprasMaterialPage() {
                 <Printer className="size-4 text-[#002147]/80" aria-hidden />
                 PDF
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                title="Entradas papel/cartón por recepciones"
+                onClick={() => setResiduosOpen(true)}
+              >
+                <Recycle className="size-4 text-[#002147]/80" aria-hidden />
+                Análisis residuos
+              </Button>
               {!puedeSolicitar && solicitarDisabledReason ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -2027,11 +2037,11 @@ export function ComprasMaterialPage() {
           </div>
           <div className="grid min-w-0 gap-1.5">
             <Label htmlFor="busq-compra-mat-tecnica-m">
-              Buscar (material, gramaje, formato, netas/brutas)
+              Buscar (material, gramaje, formato, h. brutas)
             </Label>
             <Input
               id="busq-compra-mat-tecnica-m"
-              placeholder="Ej. couché 350 o 5000/5500"
+              placeholder="Ej. couché 350 o 5000"
               value={filtroBusquedaTecnica}
               onChange={(e) => setFiltroBusquedaTecnica(e.target.value)}
               className="min-h-11 w-full touch-manipulation text-base"
@@ -2137,6 +2147,17 @@ export function ComprasMaterialPage() {
               </span>
               <Printer className="size-4 text-[#002147]/80" aria-hidden />
               PDF
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              title="Entradas papel/cartón por recepciones"
+              onClick={() => setResiduosOpen(true)}
+            >
+              <Recycle className="size-4 text-[#002147]/80" aria-hidden />
+              Análisis residuos
             </Button>
             {!puedeSolicitar && solicitarDisabledReason ? (
               <Tooltip>
@@ -2365,6 +2386,12 @@ export function ComprasMaterialPage() {
           </div>
         </div>
       )}
+
+      <ResiduosAnalisisDialog
+        open={residuosOpen}
+        onOpenChange={setResiduosOpen}
+        proveedores={proveedoresPapelCarton}
+      />
 
       <ComprasMaterialEditDialog
         open={editOpen}
