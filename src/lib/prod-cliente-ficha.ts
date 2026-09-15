@@ -65,11 +65,19 @@ export async function upsertClienteFicha(
     notas:
       input.notas != null ? String(input.notas).trim() || null : null,
   };
-  const { data, error } = await supabase
+  const { error: upsertErr } = await supabase
     .from(TABLE)
-    .upsert(payload, { onConflict: "cliente" })
+    .upsert(payload, { onConflict: "cliente" });
+  if (upsertErr) throw upsertErr;
+
+  const { data, error: fetchErr } = await supabase
+    .from(TABLE)
     .select("*")
-    .single();
-  if (error) throw error;
+    .eq("cliente", cliente)
+    .maybeSingle();
+  if (fetchErr) throw fetchErr;
+  if (!data) {
+    throw new Error(`Ficha de cliente guardada pero no visible (${cliente}).`);
+  }
   return data as ProdClienteFichaRow;
 }

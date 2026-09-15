@@ -279,7 +279,10 @@ function formatSupabaseError(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim()) return error.message;
   if (typeof error === "object" && error != null) {
     const e = error as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown };
-    const msg = [e.message, e.details, e.hint].filter(Boolean).map(String).join(" · ");
+    const msg = [e.message, e.details, e.hint, e.code ? `code=${e.code}` : null]
+      .filter(Boolean)
+      .map(String)
+      .join(" · ");
     if (msg.trim()) return msg;
   }
   if (typeof error === "string" && error.trim()) return error;
@@ -1567,9 +1570,18 @@ export function ArticulosMaestroPage({
     try {
       setRows(await fetchAllProdReferencias(supabase));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error cargando artículos");
+      setError(formatSupabaseError(e, "Error cargando artículos"));
     } finally {
       setLoading(false);
+    }
+  }, [supabase]);
+
+  /** Refresca filas sin spinner de página (p. ej. tras crear y abrir edición). */
+  const refreshRowsQuiet = useCallback(async () => {
+    try {
+      setRows(await fetchAllProdReferencias(supabase));
+    } catch {
+      /* tabla puede quedar desfasada; el modal de edición sigue válido */
     }
   }, [supabase]);
 
@@ -1680,15 +1692,34 @@ export function ArticulosMaestroPage({
     if (!createForm.codigo.trim()) return;
     setSavingCreate(true);
     try {
-      const { data: created, error: err } = await supabase
+      const payload = formToPayload(createForm);
+      const codigo = payload.codigo;
+      const { error: insertErr } = await supabase
         .from("prod_referencias")
-        .insert(formToPayload(createForm))
-        .select()
-        .single();
-      if (err) throw err;
-      if (!created) throw new Error("No se recibió el artículo creado");
-      await persistClienteFichaIfNeeded(createForm.cliente, createClienteFicha);
-      const createdRow = created as ProdReferenciaRow;
+        .insert(payload);
+      if (insertErr) throw insertErr;
+
+      try {
+        await persistClienteFichaIfNeeded(createForm.cliente, createClienteFicha);
+      } catch (fichaErr) {
+        toast.warning("Artículo creado; no se guardó la ficha de cliente", {
+          description: formatSupabaseError(fichaErr, "Error en ficha cliente"),
+        });
+      }
+
+      const { data: fetched, error: fetchErr } = await supabase
+        .from("prod_referencias")
+        .select("*")
+        .eq("codigo", codigo)
+        .maybeSingle();
+      if (fetchErr) throw fetchErr;
+      if (!fetched?.id) {
+        throw new Error(
+          `Artículo ${codigo} guardado, pero no se pudo abrir para adjuntos. Recarga la tabla y edítalo.`,
+        );
+      }
+
+      const createdRow = fetched as ProdReferenciaRow;
       setRows((prev) => {
         const without = prev.filter((r) => r.id !== createdRow.id);
         return [createdRow, ...without];
@@ -1700,13 +1731,13 @@ export function ArticulosMaestroPage({
       setEditForm(rowToForm(createdRow));
       editClienteLoadedRef.current = normalizeClienteNombre(createdRow.cliente);
       void loadClienteFichaInto(createdRow.cliente, setEditClienteFicha);
-      toast.success(`Artículo ${createForm.codigo} creado`, {
+      toast.success(`Artículo ${codigo} creado`, {
         description:
           "Sube la foto del diseño aquí. Luego «Copiar siguiente» para otro artículo.",
       });
-      void loadData();
+      void refreshRowsQuiet();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Error creando artículo");
+      toast.error(formatSupabaseError(e, "Error creando artículo"));
     } finally {
       setSavingCreate(false);
     }
@@ -1714,7 +1745,7 @@ export function ArticulosMaestroPage({
     createForm,
     createClienteFicha,
     supabase,
-    loadData,
+    refreshRowsQuiet,
     persistClienteFichaIfNeeded,
     loadClienteFichaInto,
   ]);
@@ -1749,13 +1780,19 @@ export function ArticulosMaestroPage({
         .update(formToPayload(editForm))
         .eq("id", editingRow.id);
       if (err) throw err;
-      await persistClienteFichaIfNeeded(editForm.cliente, editClienteFicha);
+      try {
+        await persistClienteFichaIfNeeded(editForm.cliente, editClienteFicha);
+      } catch (fichaErr) {
+        toast.warning("Artículo guardado; ficha de cliente no actualizada", {
+          description: formatSupabaseError(fichaErr, "Error en ficha cliente"),
+        });
+      }
       toast.success(`Artículo ${editingRow.codigo} actualizado`);
       setEditPostCreateFlow(false);
       setEditingRow(null);
       await loadData();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Error guardando cambios");
+      toast.error(formatSupabaseError(e, "Error guardando cambios"));
     } finally {
       setSavingEdit(false);
     }
