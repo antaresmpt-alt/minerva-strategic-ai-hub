@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Boxes,
   Copy,
   Download,
@@ -208,6 +211,68 @@ function formatImportError(error: unknown): string {
       .join(" · ");
   }
   return String(error || "Error importando");
+}
+
+type ArticulosTablaSortKey = "codigo" | "referencia_cliente";
+
+function compareArticulosSortKey(
+  a: ProdReferenciaRow,
+  b: ProdReferenciaRow,
+  key: ArticulosTablaSortKey,
+): number {
+  if (key === "codigo") {
+    return a.codigo.localeCompare(b.codigo, "es", {
+      numeric: true,
+      sensitivity: "base",
+    });
+  }
+  const ra = (a.referencia_cliente ?? "").trim();
+  const rb = (b.referencia_cliente ?? "").trim();
+  if (!ra && !rb) return 0;
+  if (!ra) return 1;
+  if (!rb) return -1;
+  return ra.localeCompare(rb, "es", { numeric: true, sensitivity: "base" });
+}
+
+function ArticulosSortHeader({
+  label,
+  columnKey,
+  sortKey,
+  sortDir,
+  onSort,
+}: {
+  label: string;
+  columnKey: ArticulosTablaSortKey;
+  sortKey: ArticulosTablaSortKey | null;
+  sortDir: "asc" | "desc";
+  onSort: (k: ArticulosTablaSortKey) => void;
+}) {
+  const sorted = sortKey === columnKey;
+  return (
+    <button
+      type="button"
+      title={`Ordenar por ${label}`}
+      className={cn(
+        "-mx-0.5 inline-flex max-w-full min-w-0 items-center gap-0.5 rounded px-0.5 py-0.5 text-left font-medium text-slate-500 hover:bg-slate-100/90 hover:text-slate-700",
+        sorted && "text-[#002147]",
+      )}
+      onClick={() => onSort(columnKey)}
+    >
+      <span className="min-w-0 shrink truncate">{label}</span>
+      <span
+        className="inline-flex size-3 shrink-0 items-center justify-center"
+        aria-hidden
+      >
+        {sorted && sortDir === "asc" ? (
+          <ArrowUp className="size-3 text-[#002147]" strokeWidth={2.25} />
+        ) : sorted && sortDir === "desc" ? (
+          <ArrowDown className="size-3 text-[#002147]" strokeWidth={2.25} />
+        ) : (
+          <ArrowUpDown className="size-3 text-slate-300" strokeWidth={2} />
+        )}
+      </span>
+    </button>
+  );
 }
 
 function formatSupabaseError(error: unknown, fallback: string): string {
@@ -591,6 +656,7 @@ function ArticuloFormDialog({
   referenciaId = null,
   onAdjuntoPathChange,
   highlightFichaCliente = false,
+  onCopyNext,
 }: {
   open: boolean;
   title: string;
@@ -618,6 +684,8 @@ function ArticuloFormDialog({
   ) => void;
   /** Rol comercial: resalta campos que salen en PDF ficha cliente. */
   highlightFichaCliente?: boolean;
+  /** Edición: abre copia técnica del artículo actual (cadena Delaviuda / fichas). */
+  onCopyNext?: () => void;
 }) {
   const [cajasDefaultByCodigo, setCajasDefaultByCodigo] = useState<
     Map<string, number>
@@ -1361,7 +1429,21 @@ function ArticuloFormDialog({
               </label>
             ) : null}
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {onCopyNext ? (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="gap-1.5"
+                onClick={onCopyNext}
+                disabled={saving}
+                title="Copia técnica de este artículo con código nuevo"
+              >
+                <Copy className="size-3.5" />
+                Copiar siguiente
+              </Button>
+            ) : null}
             <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>
               Cancelar
             </Button>
@@ -1412,10 +1494,14 @@ export function ArticulosMaestroPage({
   const [savingCreate, setSavingCreate] = useState(false);
   const [createClienteFicha, setCreateClienteFicha] =
     useState<ClienteFichaForm>(EMPTY_CLIENTE_FICHA);
-  const [createKeepOpen, setCreateKeepOpen] = useState(true);
   const [createCopyFromCodigo, setCreateCopyFromCodigo] = useState<string | null>(
     null,
   );
+  const [editPostCreateFlow, setEditPostCreateFlow] = useState(false);
+  const [tablaSort, setTablaSort] = useState<{
+    key: ArticulosTablaSortKey;
+    dir: "asc" | "desc";
+  } | null>(null);
 
   const loadClienteFichaInto = useCallback(
     async (
@@ -1491,9 +1577,17 @@ export function ArticulosMaestroPage({
 
   // ── Filtered rows ───────────────────────────────────────────────────────────
 
+  const toggleTablaSort = useCallback((key: ArticulosTablaSortKey) => {
+    setTablaSort((prev) => {
+      if (prev?.key !== key) return { key, dir: "asc" };
+      if (prev.dir === "asc") return { key, dir: "desc" };
+      return null;
+    });
+  }, []);
+
   const rowsFiltradas = useMemo(() => {
     const q = filtroTexto.trim().toLowerCase();
-    return rows.filter((r) => {
+    const filtered = rows.filter((r) => {
       const matchTexto =
         !q ||
         r.codigo.toLowerCase().includes(q) ||
@@ -1516,7 +1610,22 @@ export function ArticulosMaestroPage({
         matchTexto && matchCliente && matchTipo && matchActivo && matchCompletitud
       );
     });
-  }, [rows, filtroTexto, filtroCliente, filtroTipo, filtroActivo, filtroCompletitud]);
+    if (!tablaSort) return filtered;
+    const sorted = [...filtered];
+    sorted.sort((a, b) => {
+      const cmp = compareArticulosSortKey(a, b, tablaSort.key);
+      return tablaSort.dir === "asc" ? cmp : -cmp;
+    });
+    return sorted;
+  }, [
+    rows,
+    filtroTexto,
+    filtroCliente,
+    filtroTipo,
+    filtroActivo,
+    filtroCompletitud,
+    tablaSort,
+  ]);
 
   const completitudCounts = useMemo(() => {
     const acc = { solo_codigo: 0, sin_tecnica: 0, parcial: 0, completa: 0 };
@@ -1571,31 +1680,31 @@ export function ArticulosMaestroPage({
     if (!createForm.codigo.trim()) return;
     setSavingCreate(true);
     try {
-      const { error: err } = await supabase
+      const { data: created, error: err } = await supabase
         .from("prod_referencias")
-        .insert(formToPayload(createForm));
+        .insert(formToPayload(createForm))
+        .select()
+        .single();
       if (err) throw err;
+      if (!created) throw new Error("No se recibió el artículo creado");
       await persistClienteFichaIfNeeded(createForm.cliente, createClienteFicha);
-      toast.success(`Artículo ${createForm.codigo} creado`);
-      if (createKeepOpen) {
-        const nextCodigo = nextCodigoMinerva([
-          ...rows.map((r) => r.codigo),
-          createForm.codigo,
-        ]);
-        const keepCliente = createForm.cliente;
-        setCreateCopyFromCodigo(null);
-        setCreateForm({
-          ...EMPTY_FORM,
-          codigo: nextCodigo,
-          cliente: keepCliente,
-        });
-        createClienteLoadedRef.current = normalizeClienteNombre(keepCliente);
-        await loadData();
-      } else {
-        setCreateCopyFromCodigo(null);
-        setCreateOpen(false);
-        await loadData();
-      }
+      const createdRow = created as ProdReferenciaRow;
+      setRows((prev) => {
+        const without = prev.filter((r) => r.id !== createdRow.id);
+        return [createdRow, ...without];
+      });
+      setCreateCopyFromCodigo(null);
+      setCreateOpen(false);
+      setEditPostCreateFlow(true);
+      setEditingRow(createdRow);
+      setEditForm(rowToForm(createdRow));
+      editClienteLoadedRef.current = normalizeClienteNombre(createdRow.cliente);
+      void loadClienteFichaInto(createdRow.cliente, setEditClienteFicha);
+      toast.success(`Artículo ${createForm.codigo} creado`, {
+        description:
+          "Sube la foto del diseño aquí. Luego «Copiar siguiente» para otro artículo.",
+      });
+      void loadData();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Error creando artículo");
     } finally {
@@ -1604,17 +1713,17 @@ export function ArticulosMaestroPage({
   }, [
     createForm,
     createClienteFicha,
-    createKeepOpen,
-    rows,
     supabase,
     loadData,
     persistClienteFichaIfNeeded,
+    loadClienteFichaInto,
   ]);
 
   // ── Editar ──────────────────────────────────────────────────────────────────
 
   const openEdit = useCallback(
     (row: ProdReferenciaRow) => {
+      setEditPostCreateFlow(false);
       setEditingRow(row);
       setEditForm(rowToForm(row));
       editClienteLoadedRef.current = normalizeClienteNombre(row.cliente);
@@ -1622,6 +1731,14 @@ export function ArticulosMaestroPage({
     },
     [loadClienteFichaInto],
   );
+
+  const handleEditCopyNext = useCallback(() => {
+    if (!editingRow) return;
+    const source = rows.find((r) => r.id === editingRow.id) ?? editingRow;
+    setEditPostCreateFlow(false);
+    setEditingRow(null);
+    openCopyFrom(source);
+  }, [editingRow, rows, openCopyFrom]);
 
   const handleSaveEdit = useCallback(async () => {
     if (!editingRow) return;
@@ -1634,6 +1751,7 @@ export function ArticulosMaestroPage({
       if (err) throw err;
       await persistClienteFichaIfNeeded(editForm.cliente, editClienteFicha);
       toast.success(`Artículo ${editingRow.codigo} actualizado`);
+      setEditPostCreateFlow(false);
       setEditingRow(null);
       await loadData();
     } catch (e) {
@@ -2213,8 +2331,24 @@ export function ArticulosMaestroPage({
                     aria-label="Seleccionar todos los filtrados"
                   />
                 </th>
-                <th className="px-3 py-2 text-left font-medium text-slate-500">Código</th>
-                <th className="px-3 py-2 text-left font-medium text-slate-500">Ref. cliente</th>
+                <th className="px-3 py-2 text-left">
+                  <ArticulosSortHeader
+                    label="Código"
+                    columnKey="codigo"
+                    sortKey={tablaSort?.key ?? null}
+                    sortDir={tablaSort?.dir ?? "asc"}
+                    onSort={toggleTablaSort}
+                  />
+                </th>
+                <th className="px-3 py-2 text-left">
+                  <ArticulosSortHeader
+                    label="Ref. cliente"
+                    columnKey="referencia_cliente"
+                    sortKey={tablaSort?.key ?? null}
+                    sortDir={tablaSort?.dir ?? "asc"}
+                    onSort={toggleTablaSort}
+                  />
+                </th>
                 <th className="px-3 py-2 text-left font-medium text-slate-500">Descripción</th>
                 <th className="px-3 py-2 text-left font-medium text-slate-500">Cliente</th>
                 <th className="px-3 py-2 text-left font-medium text-slate-500">Tipo</th>
@@ -2336,8 +2470,8 @@ export function ArticulosMaestroPage({
         }
         description={
           createCopyFromCodigo
-            ? `Copia técnica de ${createCopyFromCodigo} con código nuevo. Cambia descripción / ref. cliente y sube la foto del diseño. Las fotos del origen no se copian.`
-            : "Código Minerva obligatorio. Rellena lo que sepas; planta completará el resto."
+            ? `Copia técnica de ${createCopyFromCodigo} con código nuevo. Cambia descripción y ref. cliente, guarda, y en el siguiente paso podrás subir la foto. Las fotos del origen no se copian.`
+            : "Código Minerva obligatorio. Tras guardar podrás subir adjuntos antes del siguiente artículo."
         }
         form={createForm}
         saving={savingCreate}
@@ -2349,8 +2483,6 @@ export function ArticulosMaestroPage({
         }}
         clienteFicha={createClienteFicha}
         onClienteFichaChange={setCreateClienteFicha}
-        keepOpen={createKeepOpen}
-        onKeepOpenChange={setCreateKeepOpen}
         referenciaId={null}
         highlightFichaCliente={highlightFichaCliente}
       />
@@ -2359,11 +2491,20 @@ export function ArticulosMaestroPage({
       <ArticuloFormDialog
         open={!!editingRow}
         title={`Editar artículo · ${editingRow?.codigo ?? ""}`}
+        description={
+          editPostCreateFlow
+            ? "Artículo guardado. Sube la foto del diseño (y troquel si aplica). «Copiar siguiente» reutiliza la técnica para otro código."
+            : undefined
+        }
         form={editForm}
         saving={savingEdit}
         onFormChange={setEditForm}
         onSave={handleSaveEdit}
-        onClose={() => setEditingRow(null)}
+        onClose={() => {
+          setEditPostCreateFlow(false);
+          setEditingRow(null);
+        }}
+        onCopyNext={handleEditCopyNext}
         showCodigo={false}
         promediosRow={
           editingRow
