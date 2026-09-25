@@ -7,10 +7,12 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Sparkles,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { StockArticulosAiDialog } from "@/components/produccion/almacen/stock-articulos/stock-articulos-ai-dialog";
 import {
   ReferenciaMinervaPicker,
   type ReferenciaMinervaValue,
@@ -169,6 +171,7 @@ export function StockArticulosPage() {
   const [canWrite, setCanWrite] = useState(false);
   const [detalle, setDetalle] = useState<AtpConCritico | null>(null);
   const [altaOpen, setAltaOpen] = useState(false);
+  const [stockAiOpen, setStockAiOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -327,6 +330,16 @@ export function StockArticulosPage() {
     };
   }, [filtered, criticosCount]);
 
+  const stockAiContextHint = useMemo(() => {
+    const parts: string[] = [];
+    if (search.trim()) parts.push(`búsqueda texto: «${search.trim()}»`);
+    if (estadoFiltro !== "todos") parts.push(`filtro estado: ${estadoFiltro}`);
+    if (procesoFiltro !== "todos") parts.push(`proceso: ${procesoFiltro}`);
+    parts.push(`${filtered.length} lotes visibles en pantalla`);
+    parts.push(`${criticosCount} refs críticas (vista)`);
+    return parts.join(" · ");
+  }, [search, estadoFiltro, procesoFiltro, filtered.length, criticosCount]);
+
   return (
     <div className="space-y-4 p-4 md:p-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -344,6 +357,15 @@ export function StockArticulosPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setStockAiOpen(true)}
+            disabled={loading}
+          >
+            <Sparkles className="size-4 mr-2 text-[#C69C2B]" />
+            Asistente IA
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -570,6 +592,13 @@ export function StockArticulosPage() {
           setAltaOpen(false);
           await load();
         }}
+      />
+
+      <StockArticulosAiDialog
+        open={stockAiOpen}
+        onOpenChange={setStockAiOpen}
+        contextHint={stockAiContextHint}
+        loadingStock={loading}
       />
     </div>
   );

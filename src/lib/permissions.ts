@@ -288,7 +288,9 @@ export function canAccessApiRoute(
     if (
       pathname.startsWith("/api/gemini/produccion-externos-analyze") ||
       pathname.startsWith("/api/gemini/produccion-externos-optimus-import") ||
-      pathname.startsWith("/api/gemini/albaranes-ocr")
+      pathname.startsWith("/api/gemini/albaranes-ocr") ||
+      pathname.startsWith("/api/gemini/stock-analyze") ||
+      pathname.startsWith("/api/gemini/stock-articulos-analyze")
     ) {
       return canAccessHubModule(role, "produccion", dynamic);
     }
@@ -346,7 +348,9 @@ export function canAccessApiRoute(
   if (
     pathname.startsWith("/api/gemini/produccion-externos-analyze") ||
     pathname.startsWith("/api/gemini/produccion-externos-optimus-import") ||
-    pathname.startsWith("/api/gemini/albaranes-ocr")
+    pathname.startsWith("/api/gemini/albaranes-ocr") ||
+    pathname.startsWith("/api/gemini/stock-analyze") ||
+    pathname.startsWith("/api/gemini/stock-articulos-analyze")
   ) {
     return canAccessHubModule(role, "produccion");
   }

@@ -159,7 +159,8 @@ Detección ayuda (no exclusiva): pedido tipo `FABRICACION` / `FABRICACIÓ` → c
 Ruta propuesta: `/produccion/almacen/stock-articulos` (menú: **Stock artículos** junto a Stock material).
 
 Bandeja: cliente, ref. cliente, Minerva, descripción, proceso, físico, libre, bultos, ubicación, crítico.  
-Acciones: alta, ajuste, detalle + movimientos, **Generar OT de entrega**.
+Acciones: alta, ajuste, detalle + movimientos, **Asistente IA** (NL sobre ATP), **Generar OT de entrega**.  
+**15.1b:** plantilla Excel + import carga inicial (antes del aviso al despachar).
 
 ### 8.2 Modal ATP en despacho
 
