@@ -195,11 +195,13 @@ Acuerdo 25 sep: **PALETS general** basta; hilar fino por palet queda fuera de MV
 
 - **Plantilla generada en app** (botón «Plantilla» / «Descargar plantilla»): no hay `.xlsx` en el repo. Cabeceras = columnas del alta; si mañana se añade un campo, la plantilla se actualiza sola.  
   - Referencia: código `M-xxxxx` **o** ref. cliente + cliente.  
-  - Hoja `Stock` con 2 filas de ejemplo; hoja `Listas` con valores permitidos.  
-  - Desplegables en `unidad` (`uds`|`hojas`) y `proceso` (`terminado`|`impreso`|`troquelado`|`otro`) vía dataValidation SheetJS (best-effort) + hoja Listas.  
-- **Import:** subir Excel → **tabla de revisión** (verde OK / amarillo aviso p.ej. embalaje o archivo ya importado / rojo error: ref no encontrada o ref. cliente ambigua). Gabri confirma → `alta_lote` **fila a fila** (sin RPC batch atómica).  
-- **Anti-doble import:** fingerprint SHA del archivo en notas (`[import:…]`) + aviso si ya existe; también aviso si hay lote con misma ref+cantidad+OT origen.  
-- Sin SQL nueva (se queda con `alta_lote` por fila).
+  - Hoja `Stock` **solo cabecera**; hoja `Ejemplo` con 2 filas de muestra (no se importa); hoja `Listas`. Notas con «Ejemplo» → rojo.  
+  - Desplegables en `unidad` / `proceso` (best-effort SheetJS) + Listas.  
+- **Números:** lectura `raw: true`; enteros quitan puntos/comas de miles (`"35.900"` → 35900).  
+- **Lookup maestro:** solo códigos/refs del Excel vía `.in` + `fetchAllInChunks` (no `.limit(20000)` del maestro).  
+- **Import:** tabla semáforo → confirmar → `alta_lote` fila a fila. Diálogo **no cierra**: cada fila ✅ creada / ❌ error; reintentar solo fallidas.  
+- **Anti-doble:** tag `[import:hash]` en notas; aviso lote ref+cantidad+OT; aviso **filas repetidas en el mismo archivo**.  
+- Sin SQL nueva.
 
 ### 8.1d — Export bandeja (15.1d)
 
@@ -294,6 +296,7 @@ Orden acordado (Claude 25 sep): **picker solo buscar** → **15.1a editar_datos 
 | 25 sep 2026 | Alta: OT buscable en maestro; embalaje opc. (uds/bulto, pico, palets general, caja); Asistente IA. |
 | 25 sep 2026 | Roadmap: 15.1a editar_datos, 15.1b import review, 15.1d export; proceso DB → Claude antes de aplicar; picker sin crear. |
 | 25 sep 2026 | **15.1b:** plantilla generada en app (desplegables unidad/proceso + hoja Listas); import con semáforo; anti-doble `[import:hash]`; `alta_lote` fila a fila (sin RPC batch). |
+| 25 sep 2026 | **15.1b fix:** miles ES (`raw:true` + strip); lookup `.in` chunks; hoja Ejemplo aparte; diálogo ✅/❌ + reintento; duplicados intra-archivo. |
 
 ---
 

@@ -24,15 +24,18 @@ import {
 } from "@/components/ui/table";
 import { errorMessageFromUnknown } from "@/lib/error-message";
 import {
+  collectImportLookupKeys,
   downloadStockArticulosPlantilla,
   fingerprintStockImportFile,
   importTagFromFingerprint,
   parseStockArticulosExcel,
   validateStockArticulosImportRows,
+  type RefCatalogRow,
   type StockArticulosImportDraftRow,
   type StockArticulosImportSemaforo,
 } from "@/lib/stock-articulos-excel-import";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { fetchAllInChunks } from "@/lib/supabase-query-chunks";
 
 const supabase = createSupabaseBrowserClient();
 
@@ -52,6 +55,22 @@ function semaforoLabel(s: StockArticulosImportSemaforo): string {
   if (s === "verde") return "OK";
   if (s === "rojo") return "Error";
   return "Aviso";
+}
+
+function rowStatusLabel(r: StockArticulosImportDraftRow): string {
+  if (r.importResult === "created") return "Creada";
+  if (r.importResult === "error") return "Falló";
+  return semaforoLabel(r.semaforo);
+}
+
+function rowStatusClass(r: StockArticulosImportDraftRow): string {
+  if (r.importResult === "created") {
+    return "bg-emerald-100 text-emerald-800 border-emerald-200";
+  }
+  if (r.importResult === "error") {
+    return "bg-red-100 text-red-800 border-red-200";
+  }
+  return semaforoClass(r.semaforo);
 }
 
 export function StockArticulosImportDialog({
@@ -102,31 +121,62 @@ export function StockArticulosImportDialog({
         return;
       }
 
-      const [{ data: refs }, { data: notasRows }, { data: loteKeys }] =
-        await Promise.all([
-          supabase
-            .from("prod_referencias")
-            .select("id, codigo, referencia_cliente, cliente")
-            .limit(20000),
-          supabase
-            .from("prod_stock_articulos")
-            .select("notas")
-            .ilike("notas", "%[import:%")
-            .limit(5000),
-          supabase
-            .from("prod_stock_articulos")
-            .select("referencia_id, cantidad_actual, ot_origen")
-            .limit(8000),
-        ]);
+      const { codigos, refsCliente } = collectImportLookupKeys(parsed.rows);
 
-      const tagSet = new Set<string>();
-      for (const n of notasRows ?? []) {
-        const m = String(n.notas ?? "").match(/\[import:[a-f0-9]+\]/i);
-        if (m?.[0]) tagSet.add(m[0].toLowerCase());
+      const [byCodigo, byRefCliente] = await Promise.all([
+        codigos.length
+          ? fetchAllInChunks(codigos, 100, async (chunk) => {
+              const { data, error } = await supabase
+                .from("prod_referencias")
+                .select("id, codigo, referencia_cliente, cliente")
+                .in("codigo", chunk);
+              if (error) throw error;
+              return (data ?? []) as RefCatalogRow[];
+            })
+          : Promise.resolve([] as RefCatalogRow[]),
+        refsCliente.length
+          ? fetchAllInChunks(refsCliente, 100, async (chunk) => {
+              const { data, error } = await supabase
+                .from("prod_referencias")
+                .select("id, codigo, referencia_cliente, cliente")
+                .in("referencia_cliente", chunk);
+              if (error) throw error;
+              return (data ?? []) as RefCatalogRow[];
+            })
+          : Promise.resolve([] as RefCatalogRow[]),
+      ]);
+
+      const catalogById = new Map<string, RefCatalogRow>();
+      for (const r of [...byCodigo, ...byRefCliente]) {
+        catalogById.set(r.id, r);
       }
+      const catalog = [...catalogById.values()];
+
+      // Anti-doble: solo comprobar si ESTE tag ya aparece (no traer todas las notas).
+      const { data: tagHit, error: tagErr } = await supabase
+        .from("prod_stock_articulos")
+        .select("id")
+        .ilike("notas", `%${tag}%`)
+        .limit(1);
+      if (tagErr) throw tagErr;
+      const tagSet = new Set<string>();
+      if ((tagHit ?? []).length > 0) tagSet.add(tag.toLowerCase());
+
+      const refIds = catalog.map((c) => c.id);
+      const loteRows =
+        refIds.length > 0
+          ? await fetchAllInChunks(refIds, 100, async (chunk) => {
+              const { data, error } = await supabase
+                .from("prod_stock_articulos")
+                .select("referencia_id, cantidad_actual, ot_origen")
+                .in("referencia_id", chunk);
+              if (error) throw error;
+              return data ?? [];
+            })
+          : [];
 
       const existingLoteKeys = new Set<string>();
-      for (const l of loteKeys ?? []) {
+      for (const l of loteRows) {
         const rid = typeof l.referencia_id === "string" ? l.referencia_id : "";
         const qty =
           typeof l.cantidad_actual === "number" ? l.cantidad_actual : null;
@@ -134,20 +184,11 @@ export function StockArticulosImportDialog({
         if (rid && qty != null) existingLoteKeys.add(`${rid}|${qty}|${ot}`);
       }
 
-      const validated = validateStockArticulosImportRows(
-        parsed.rows,
-        (refs ?? []) as {
-          id: string;
-          codigo: string;
-          referencia_cliente: string | null;
-          cliente: string | null;
-        }[],
-        {
-          fileTag: tag,
-          existingImportTags: tagSet,
-          existingLoteKeys,
-        }
-      );
+      const validated = validateStockArticulosImportRows(parsed.rows, catalog, {
+        fileTag: tag,
+        existingImportTags: tagSet,
+        existingLoteKeys,
+      });
 
       setFileName(file.name);
       setFileTag(tag);
@@ -173,17 +214,36 @@ export function StockArticulosImportDialog({
     }
   }
 
-  const importables = rows.filter((r) => r.semaforo !== "rojo" && r.payload);
-  const rojos = rows.filter((r) => r.semaforo === "rojo").length;
+  const pendingImport = rows.filter(
+    (r) =>
+      r.semaforo !== "rojo" &&
+      r.payload &&
+      r.importResult !== "created"
+  );
+  const failedImport = rows.filter((r) => r.importResult === "error");
+  const createdCount = rows.filter((r) => r.importResult === "created").length;
+  const rojos = rows.filter(
+    (r) => r.semaforo === "rojo" && !r.importResult
+  ).length;
+  const isRetry = failedImport.length > 0 || createdCount > 0;
 
   async function confirmImport() {
-    if (importables.length === 0) {
-      toast.error("No hay filas válidas para importar.");
+    // Primera pasada: todas las válidas. Reintento: solo las que fallaron.
+    const toRun = isRetry
+      ? rows.filter((r) => r.importResult === "error" && r.payload)
+      : pendingImport;
+
+    if (toRun.length === 0) {
+      toast.error(
+        isRetry
+          ? "No hay filas fallidas para reintentar."
+          : "No hay filas válidas para importar."
+      );
       return;
     }
-    if (rojos > 0) {
+    if (!isRetry && rojos > 0) {
       const ok = window.confirm(
-        `Hay ${rojos} fila(s) en rojo que se omitirán. ¿Importar las ${importables.length} restantes?`
+        `Hay ${rojos} fila(s) en rojo que se omitirán. ¿Importar las ${toRun.length} restantes?`
       );
       if (!ok) return;
     }
@@ -192,30 +252,65 @@ export function StockArticulosImportDialog({
     let okCount = 0;
     let failCount = 0;
     try {
-      for (const row of importables) {
+      const next = [...rows];
+      for (const row of toRun) {
         if (!row.payload) continue;
+        const idx = next.findIndex((r) => r.rowIndex === row.rowIndex);
+        if (idx < 0) continue;
         const { error } = await supabase.rpc("prod_stock_articulos_alta_lote", {
           ...row.payload,
         });
         if (error) {
           failCount += 1;
-          toast.error(`Fila ${row.rowIndex}: ${error.message}`);
+          next[idx] = {
+            ...next[idx]!,
+            importResult: "error",
+            importError: error.message,
+            mensajes: [
+              ...next[idx]!.mensajes.filter(
+                (m) => !m.startsWith("Importación:")
+              ),
+              `Importación: ${error.message}`,
+            ],
+          };
         } else {
           okCount += 1;
+          next[idx] = {
+            ...next[idx]!,
+            importResult: "created",
+            importError: undefined,
+            mensajes: [
+              ...next[idx]!.mensajes.filter(
+                (m) => !m.startsWith("Importación:")
+              ),
+              "Importación: lote creado.",
+            ],
+          };
         }
+        setRows([...next]);
       }
+
       if (okCount > 0) {
         toast.success(`${okCount} lote(s) creados.`);
         await onImported();
-        handleClose(false);
       }
-      if (failCount > 0 && okCount === 0) {
-        toast.error("Ninguna fila se pudo importar.");
+      if (failCount > 0) {
+        toast.error(
+          `${failCount} fila(s) fallaron. Revisa la tabla y reintenta las fallidas.`
+        );
       }
+      // Diálogo permanece abierto para ver ✅/❌ y reintentar.
     } finally {
       setImporting(false);
     }
   }
+
+  const confirmLabel = isRetry
+    ? `Reintentar fallidas (${failedImport.length})`
+    : `Confirmar import (${pendingImport.length})`;
+  const confirmDisabled =
+    importing ||
+    (isRetry ? failedImport.length === 0 : pendingImport.length === 0);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -226,9 +321,9 @@ export function StockArticulosImportDialog({
             Importar stock (Excel)
           </DialogTitle>
           <DialogDescription>
-            Descarga la plantilla, rellénala y súbela. Revisa el semáforo
-            (verde OK / amarillo aviso / rojo error) y confirma. Cada fila llama
-            a alta de lote; las rojas no se importan.
+            Descarga la plantilla, rellena la hoja Stock y súbela. Semáforo
+            verde/amarillo/rojo; tras confirmar, cada fila muestra creada o
+            error (el diálogo no se cierra). Las rojas no se importan.
           </DialogDescription>
         </DialogHeader>
 
@@ -271,14 +366,17 @@ export function StockArticulosImportDialog({
             <span className="text-xs text-slate-500 self-center">
               {fileName}
               {fileTag ? ` · ${fileTag}` : ""}
+              {createdCount > 0
+                ? ` · ${createdCount} creadas`
+                : ""}
             </span>
           ) : null}
         </div>
 
         {rows.length === 0 ? (
           <p className="text-sm text-slate-500 py-8 text-center">
-            Sube un Excel o descarga la plantilla (incluye 2 filas de ejemplo y
-            listas de unidad/proceso).
+            Sube un Excel o descarga la plantilla (hoja Stock vacía + hoja
+            Ejemplo + listas de unidad/proceso).
           </p>
         ) : (
           <div className="min-h-0 flex-1 overflow-auto rounded-md border">
@@ -286,7 +384,7 @@ export function StockArticulosImportDialog({
               <TableHeader>
                 <TableRow className="bg-slate-50/80">
                   <TableHead className="w-12 text-xs">Fila</TableHead>
-                  <TableHead className="w-16 text-xs">Estado</TableHead>
+                  <TableHead className="w-20 text-xs">Estado</TableHead>
                   <TableHead className="text-xs">Ref.</TableHead>
                   <TableHead className="text-xs text-right">Cant.</TableHead>
                   <TableHead className="text-xs">Ud.</TableHead>
@@ -299,11 +397,13 @@ export function StockArticulosImportDialog({
                   <TableRow
                     key={r.rowIndex}
                     className={
-                      r.semaforo === "rojo"
-                        ? "bg-red-50/40"
-                        : r.semaforo === "amarillo"
-                          ? "bg-amber-50/30"
-                          : undefined
+                      r.importResult === "created"
+                        ? "bg-emerald-50/50"
+                        : r.importResult === "error" || r.semaforo === "rojo"
+                          ? "bg-red-50/40"
+                          : r.semaforo === "amarillo"
+                            ? "bg-amber-50/30"
+                            : undefined
                     }
                   >
                     <TableCell className="text-xs tabular-nums">
@@ -312,9 +412,13 @@ export function StockArticulosImportDialog({
                     <TableCell>
                       <Badge
                         variant="outline"
-                        className={semaforoClass(r.semaforo)}
+                        className={rowStatusClass(r)}
                       >
-                        {semaforoLabel(r.semaforo)}
+                        {r.importResult === "created"
+                          ? "Creada"
+                          : r.importResult === "error"
+                            ? "Falló"
+                            : rowStatusLabel(r)}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-xs font-mono">
@@ -329,7 +433,11 @@ export function StockArticulosImportDialog({
                     <TableCell className="text-xs">{r.unidad || "—"}</TableCell>
                     <TableCell className="text-xs">{r.proceso || "—"}</TableCell>
                     <TableCell className="text-xs text-slate-600 max-w-[280px]">
-                      {r.mensajes.length ? r.mensajes.join(" · ") : "—"}
+                      {r.importError
+                        ? r.importError
+                        : r.mensajes.length
+                          ? r.mensajes.join(" · ")
+                          : "—"}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -345,17 +453,17 @@ export function StockArticulosImportDialog({
             onClick={() => handleClose(false)}
             disabled={importing}
           >
-            Cancelar
+            {createdCount > 0 ? "Cerrar" : "Cancelar"}
           </Button>
           <Button
             type="button"
-            disabled={importing || importables.length === 0}
+            disabled={confirmDisabled}
             onClick={() => void confirmImport()}
           >
             {importing ? (
               <Loader2 className="size-4 mr-2 animate-spin" />
             ) : null}
-            Confirmar import ({importables.length})
+            {confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>
