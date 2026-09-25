@@ -9,6 +9,7 @@ Toda la documentación de producto vive bajo `.MANUALES/`. En la **raíz del rep
 | [`CONTEXTO/`](CONTEXTO/) | Maestro global, contexto técnico, roadmaps `FASES_*` |
 | [`BLOQUES/`](BLOQUES/) | Diseño y decisiones por bloque (`MINERVA_BLOQUE*`) |
 | [`SESIONES/`](SESIONES/) | Diarios de sesión (`SESION_DDMMMAAAA_*.md`) |
+| [`MENSUAL/`](MENSUAL/) | Resumen por mes para Gemma: horas + lo realizado (`MINERVA_MES_AAAA_MM_*.md`) |
 | [`BRIEFS/`](BRIEFS/) | Briefings, guías, reuniones, inventarios |
 | [`MANUALES_USUARIO/`](MANUALES_USUARIO/) | Manuales operativos para planta |
 
@@ -21,7 +22,8 @@ Toda la documentación de producto vive bajo `.MANUALES/`. En la **raíz del rep
 
 ## Convención nuevos archivos
 
-- Sesión nueva → `SESIONES/SESION_DDMMMAAAA_TEMA.md`
+- Sesión nueva → `SESIONES/SESION_DDMMMAAAA_TEMA.md` (con horario aprox. para el mensual)
+- Fin de mes → `MENSUAL/MINERVA_MES_AAAA_MM_MES.md` (ver `MENSUAL/README.md`)
 - Decisión de bloque → `BLOQUES/MINERVA_BLOQUEn_….md`
 - Brief / guía → `BRIEFS/…`
 - Manual planta → `MANUALES_USUARIO/…`

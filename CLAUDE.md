@@ -6,7 +6,8 @@ Fuente de verdad = este repo (Git), no copias subidas a un Project de claude.ai.
 El maestro indexa sesiones y briefs. Abrir `.MANUALES/CONTEXTO/MINERVA_CONTEXTO_TECNICO.md` o `.MANUALES/SESIONES/SESION_*.md`
 cuando el maestro lo cite; no hace falta pegarlos todos en cada chat.
 
-25 sep → Bloque **15** Fase A en rama `feature/bloque15-stock-articulos` · brief `.MANUALES/BLOQUES/MINERVA_BLOQUE15_STOCK_ARTICULOS.md` · Bloque **16** diseño `.MANUALES/BLOQUES/MINERVA_BLOQUE16_LISTADOS_PERSONALIZADOS.md`
+25 sep → Bloque **15** Fase A (incl. 15.2) en rama `feature/bloque15-stock-articulos` · sesión `.MANUALES/SESIONES/SESION_25SEP2026_BLOQUE15_STOCK_ARTICULOS.md` · brief `.MANUALES/BLOQUES/MINERVA_BLOQUE15_STOCK_ARTICULOS.md` · Bloque **16** diseño `.MANUALES/BLOQUES/MINERVA_BLOQUE16_LISTADOS_PERSONALIZADOS.md`
+Resumen mensual (horas + hecho, para Gemma) → `.MANUALES/MENSUAL/` · septiembre abierto `MINERVA_MES_2026_09_SEPTIEMBRE.md` · cada día de trabajo = sesión con horario aprox.
 Sesión 7 sep → Bloque 14 fichas comercial `.MANUALES/BLOQUES/MINERVA_BLOQUE14_FICHAS_COMERCIAL.md` (rama `feature/bloque14-fichas-comercial`)
 Sesión 6 sep → reunión Gemma + perf contenedor `.MANUALES/SESIONES/SESION_06SEP2026_REUNION_GEMMA_CONTENEDOR.md` · frases Albert `.MANUALES/BRIEFS/MINERVA_FRASES_ALBERT_06SEP2026.md` · Bloque 13 `.MANUALES/BLOQUES/MINERVA_BLOQUE13_VISIBILIDAD_PLANTA.md`
 Sesión OCR albaranes 2 sep → `.MANUALES/SESIONES/SESION_02SEP2026_BLOQUE9_7_OCR_ALBARANES.md`

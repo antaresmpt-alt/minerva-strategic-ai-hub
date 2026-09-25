@@ -99,7 +99,7 @@
 | Documento | Uso |
 |-----------|-----|
 | `.MANUALES/SESIONES/SESION_12SEP2026_SMOKE_GEMMA_98045.md` | Guion smoke STOP Caso B · OT 98045 |
-| `.MANUALES/BRIEFS/MINERVA_RESUMEN_AGOSTO_2026_61H.md` | Resumen trabajo **agosto ~61 h** (one-pager Gemma) |
+| `.MANUALES/MENSUAL/MINERVA_MES_2026_08_AGOSTO.md` | Resumen trabajo **agosto ~61 h** (one-pager Gemma) |
 
 ---
 
