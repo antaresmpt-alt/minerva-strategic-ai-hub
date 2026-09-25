@@ -1,25 +1,30 @@
 -- Bloque 15.0 — smoke test EN TRANSACCIÓN (siempre ROLLBACK).
--- Uso: pegar en SQL Editor de Supabase FUERA de horas de planta.
--- 1) Primero aplica (o pega) la migración 20260925140000 dentro del mismo BEGIN,
---    O aplica la migración en un entorno de prueba y aquí solo el smoke.
 --
--- Si la migración YA está aplicada en este proyecto, usa solo el bloque SMOKE.
--- Si NO está aplicada: descomenta la nota al final — mejor aplicar migración
--- en una sesión y smoke+rollback en otra NO funciona para DDL ya committed.
---
--- Recomendado para remoto aún sin aplicar:
+-- Uso recomendado (migración AÚN NO aplicada en remoto):
 --   begin;
---   -- pegar migración entera
---   -- luego pegar desde "=== SMOKE ===" hasta rollback
+--   -- 1) pegar supabase/migrations/20260925140000_bloque15_stock_articulos.sql entero
+--   -- 2) pegar este archivo desde "=== SMOKE ===" (sin el begin; ya abierto)
+--   rollback;
 --
--- Datos reales (minerva-rag, sep 2026):
+-- FUERA de horas de planta: la migración altera prod_referencias (ACCESS EXCLUSIVE
+-- al ADD COLUMN) y bloquea lecturas del maestro mientras dure la tx.
+--
+-- Tras CUALQUIER error en el editor:
+--   1) rollback;
+--   2) select to_regclass('public.prod_stock_articulos');  -- debe ser NULL si todo iba en la tx
+--   3) select pid, state, query from pg_stat_activity
+--      where datname = current_database() and state like 'idle in transaction%';
+--
+-- Datos reales (minerva-rag):
 --   ref M-01632 = 8232bd98-9a54-4447-a520-1dbd1e150a95 (CHMLAB)
---   OT num_pedido = 35519 (CHMLAB)
+--   OT 35519 / 36034 (CHMLAB) · engomado@ = tableta sin capacidad write
 
 begin;
 
 -- === SMOKE ===
--- Impersonar a Gabri (auth.uid())
+-- (La migración ya insertó stock_articulos_write para gabri@ — no repetir como authenticated)
+
+-- Impersonar Gabri
 select set_config(
   'request.jwt.claims',
   json_build_object(
@@ -30,14 +35,6 @@ select set_config(
 );
 set local role authenticated;
 
--- Asegurar capacidad (idempotente; la migración también lo hace)
-insert into public.profiles_capacidades (user_id, capacidad)
-select u.id, 'stock_articulos_write'
-from auth.users u
-where lower(u.email) = 'gabri@minervaglobal.es'
-on conflict do nothing;
-
--- 1) Alta lote TERMINADO (uds)
 do $$
 declare
   v_ref uuid := '8232bd98-9a54-4447-a520-1dbd1e150a95';
@@ -46,7 +43,11 @@ declare
   v_lote_wip uuid;
   v_lote_pt uuid;
   v_libre integer;
+  v_fisico integer;
+  v_merma integer;
+  v_engomado_id uuid;
 begin
+  -- ── Happy path ──────────────────────────────────────────
   v_lote := public.prod_stock_articulos_alta_lote(
     p_referencia_id := v_ref,
     p_cantidad := 1000,
@@ -54,124 +55,207 @@ begin
     p_estado_proceso := 'terminado',
     p_notas := 'smoke alta'
   );
-  raise notice 'alta terminado → %', v_lote;
 
-  -- 2) Reservar 400
   perform public.prod_stock_articulos_reservar(
-    p_stock_id := v_lote,
-    p_ot_numero := v_ot,
-    p_cantidad := 400,
-    p_notas := 'smoke reserva'
+    p_stock_id := v_lote, p_ot_numero := v_ot, p_cantidad := 400, p_notas := 'smoke reserva'
   );
-
-  select cantidad_libre into v_libre
-  from public.stock_articulos_atp where id = v_lote;
+  select cantidad_libre into v_libre from public.stock_articulos_atp where id = v_lote;
   if v_libre <> 600 then
     raise exception 'Tras reserva esperaba libre=600, hay %', v_libre;
   end if;
 
-  -- 3) Consumir parcial 150
   perform public.prod_stock_articulos_consumir(
-    p_stock_id := v_lote,
-    p_ot_numero := v_ot,
-    p_cantidad := 150,
-    p_notas := 'smoke consumo parcial'
+    p_stock_id := v_lote, p_ot_numero := v_ot, p_cantidad := 150, p_notas := 'parcial'
   );
-
-  -- 4) Consumir resto reserva 250
   perform public.prod_stock_articulos_consumir(
-    p_stock_id := v_lote,
-    p_ot_numero := v_ot,
-    p_cantidad := 250,
-    p_notas := 'smoke consumo resto'
+    p_stock_id := v_lote, p_ot_numero := v_ot, p_cantidad := 250, p_notas := 'resto'
   );
-
-  select cantidad_libre into v_libre
-  from public.stock_articulos_atp where id = v_lote;
+  select cantidad_libre into v_libre from public.stock_articulos_atp where id = v_lote;
   if v_libre <> 600 then
     raise exception 'Tras consumos esperaba libre=600, hay %', v_libre;
   end if;
-  raise notice 'tras consumos libre=% lote=%', v_libre, v_lote;
 
-  -- 5) Nueva reserva + liberar
   perform public.prod_stock_articulos_reservar(
-    p_stock_id := v_lote,
-    p_ot_numero := v_ot,
-    p_cantidad := 100,
-    p_notas := 'smoke reserva para liberar'
+    p_stock_id := v_lote, p_ot_numero := v_ot, p_cantidad := 100, p_notas := 'para liberar'
   );
   perform public.prod_stock_articulos_liberar(
-    p_stock_id := v_lote,
-    p_ot_numero := v_ot,
-    p_notas := 'smoke liberar'
+    p_stock_id := v_lote, p_ot_numero := v_ot, p_notas := 'liberar'
   );
 
-  -- 6) Ajuste a 580
   perform public.prod_stock_articulos_ajustar(
-    p_stock_id := v_lote,
-    p_cantidad_nueva := 580,
-    p_notas := 'smoke ajuste inventario'
+    p_stock_id := v_lote, p_cantidad_nueva := 580, p_notas := 'ajuste inventario'
   );
 
-  -- 7) Transformar hojas → uds (lote WIP nuevo)
+  -- Transform hojas → uds (poses=2 → 1900 uds ≡ 950 hojas; merma 50)
   v_lote_wip := public.prod_stock_articulos_alta_lote(
     p_referencia_id := v_ref,
     p_cantidad := 2000,
     p_unidad := 'hojas',
     p_estado_proceso := 'impreso',
     p_poses := 2,
-    p_notas := 'smoke WIP impreso'
+    p_notas := 'smoke WIP'
   );
-
   v_lote_pt := public.prod_stock_articulos_transformar(
     p_stock_origen_id := v_lote_wip,
-    p_cantidad_salida := 1000,       -- hojas
-    p_cantidad_destino := 1900,      -- uds (poses=2 → equiv 950 hojas; merma 50)
+    p_cantidad_salida := 1000,
+    p_cantidad_destino := 1900,
     p_estado_proceso_destino := 'terminado',
-    p_stock_destino_id := null,
-    p_cantidad_merma := null,        -- deriva con poses
     p_unidad_destino := 'uds',
-    p_notas := 'smoke transform hojas→uds'
+    p_notas := 'smoke transform'
   );
-  raise notice 'transform → PT %', v_lote_pt;
 
-  -- 8) Negativo esperado: consumir sin reserva por encima de libre
+  select cantidad_actual into v_fisico
+  from public.prod_stock_articulos where id = v_lote_wip;
+  if v_fisico <> 1000 then
+    raise exception 'WIP tras transform: esperaba 1000 hojas, hay %', v_fisico;
+  end if;
+
+  select cantidad_actual into v_fisico
+  from public.prod_stock_articulos where id = v_lote_pt;
+  if v_fisico <> 1900 then
+    raise exception 'PT tras transform: esperaba 1900 uds, hay %', v_fisico;
+  end if;
+  if (select unidad from public.prod_stock_articulos where id = v_lote_pt) <> 'uds' then
+    raise exception 'PT debe ser unidad uds';
+  end if;
+
+  select cantidad_merma into v_merma
+  from public.prod_stock_articulos_movimientos
+  where stock_articulo_id = v_lote_wip and tipo = 'transformacion'
+  order by created_at desc limit 1;
+  if v_merma is distinct from 50 then
+    raise exception 'Merma esperada 50, hay %', v_merma;
+  end if;
+  raise notice 'OK transform: WIP=1000 hojas, PT=1900 uds, merma=50';
+
+  -- Consumo sin reserva sobre stock comprometido (debe fallar)
   begin
     perform public.prod_stock_articulos_reservar(
-      p_stock_id := v_lote,
-      p_ot_numero := v_ot,
-      p_cantidad := 500,
-      p_notas := 'bloquear libre'
+      p_stock_id := v_lote, p_ot_numero := v_ot, p_cantidad := 500, p_notas := 'bloquear'
     );
     perform public.prod_stock_articulos_consumir(
-      p_stock_id := v_lote,
-      p_ot_numero := '36034',  -- otra OT CHMLAB
-      p_cantidad := 100,
-      p_motivo_sin_reserva := 'intento robar reservado'
+      p_stock_id := v_lote, p_ot_numero := '36034', p_cantidad := 100,
+      p_motivo_sin_reserva := 'robar reservado'
     );
-    raise exception 'FAIL: consumo sin reserva debería haber rechazado';
+    raise exception 'FAIL: debía rechazar consumo sobre reservado';
   exception
     when others then
-      if sqlerrm like '%supera libre%' or sqlerrm like '%Sin reserva%' then
-        raise notice 'OK rechazo consumo sobre reservado: %', sqlerrm;
+      if sqlerrm like '%supera libre%' then
+        raise notice 'OK rechazo consumo sobre reservado';
       else
         raise;
       end if;
   end;
 
-  raise notice 'SMOKE OK';
+  -- ── Seguridad ───────────────────────────────────────────
+
+  -- S1) UPDATE directo a la tabla (debe fallar por RLS)
+  begin
+    update public.prod_stock_articulos set cantidad_actual = 99999 where id = v_lote;
+    if found then
+      raise exception 'FAIL: UPDATE directo no debería afectar filas';
+    end if;
+    -- Si RLS silencia (0 rows) también OK; si lanza error, OK
+    raise notice 'OK UPDATE directo sin efecto (RLS)';
+  exception
+    when insufficient_privilege then
+      raise notice 'OK UPDATE directo: insufficient_privilege';
+    when others then
+      if sqlerrm ilike '%policy%' or sqlerrm ilike '%permission%' then
+        raise notice 'OK UPDATE directo bloqueado: %', sqlerrm;
+      else
+        raise;
+      end if;
+  end;
+
+  -- S2) Tableta engomado@ sin capacidad → alta_lote debe fallar
+  select id into v_engomado_id
+  from auth.users where lower(email) = 'engomado@minervaglobal.es';
+  if v_engomado_id is null then
+    raise exception 'No existe engomado@ para probar tableta';
+  end if;
+  perform set_config(
+    'request.jwt.claims',
+    json_build_object('sub', v_engomado_id::text, 'role', 'authenticated')::text,
+    true
+  );
+  begin
+    perform public.prod_stock_articulos_alta_lote(
+      p_referencia_id := v_ref,
+      p_cantidad := 10,
+      p_unidad := 'uds',
+      p_estado_proceso := 'terminado',
+      p_notas := 'tableta no debe'
+    );
+    raise exception 'FAIL: engomado@ no debería poder alta_lote';
+  exception
+    when others then
+      if sqlerrm like '%Sin permiso%' then
+        raise notice 'OK tableta sin permiso';
+      else
+        raise;
+      end if;
+  end;
+
+  -- Volver a Gabri
+  perform set_config(
+    'request.jwt.claims',
+    json_build_object(
+      'sub', (select id::text from auth.users where lower(email) = 'gabri@minervaglobal.es'),
+      'role', 'authenticated'
+    )::text,
+    true
+  );
+
+  -- S3) Ajustar bajo lo reservado sin p_forzar
+  -- v_lote tiene 500 reservados del test anterior (bloqueo); físico 580
+  begin
+    perform public.prod_stock_articulos_ajustar(
+      p_stock_id := v_lote,
+      p_cantidad_nueva := 100,
+      p_notas := 'bajar bajo reserva',
+      p_forzar := false
+    );
+    raise exception 'FAIL: ajustar bajo reservado debía rechazar';
+  exception
+    when others then
+      if sqlerrm like '%comprometido%' or sqlerrm like '%p_forzar%' then
+        raise notice 'OK rechazo ajustar bajo reservado';
+      else
+        raise;
+      end if;
+  end;
+
+  -- S4) Reservar OT inexistente
+  begin
+    perform public.prod_stock_articulos_reservar(
+      p_stock_id := v_lote,
+      p_ot_numero := '99999999',
+      p_cantidad := 1,
+      p_notas := 'ot fantasma'
+    );
+    raise exception 'FAIL: reservar OT inexistente debía rechazar';
+  exception
+    when others then
+      if sqlerrm like '%no está en Minerva%' or sqlerrm like '%99999999%' then
+        raise notice 'OK rechazo OT inexistente';
+      else
+        raise;
+      end if;
+  end;
+
+  raise notice 'SMOKE OK (happy path + seguridad)';
 end $$;
 
-select id, referencia_codigo, unidad, estado_proceso, cantidad_fisica, cantidad_libre, estado_derivado
+select id, referencia_codigo, unidad, estado_proceso,
+       cantidad_fisica, cantidad_libre, estado_derivado
 from public.stock_articulos_atp
 order by created_at desc
 limit 10;
 
--- IMPORTANTE: no dejar rastro
 rollback;
 
--- Verificación post-rollback (fuera de la tx, en otra query):
+-- Post-check (nueva query, fuera de la tx):
 -- select to_regclass('public.prod_stock_articulos');
--- Si hiciste begin+migración+smoke+rollback, debe devolver NULL.
--- Si la migración ya estaba aplicada fuera de la tx, las tablas siguen (correcto)
--- y solo se deshacen los datos del smoke.
+-- select pid, state, left(query,80) from pg_stat_activity
+--   where datname = current_database() and state like 'idle in transaction%';
