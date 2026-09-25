@@ -193,12 +193,13 @@ Acuerdo 25 sep: **PALETS general** basta; hilar fino por palet queda fuera de MV
 
 ### 8.1b — Carga inicial Excel (15.1b)
 
-- **Plantilla** = mismas columnas que el alta: referencia, cantidad, unidad, proceso, poses, bultos, uds/bulto, pico, palets, tipo embalaje, ubicación, OT origen, notas.  
+- **Plantilla generada en app** (botón «Plantilla» / «Descargar plantilla»): no hay `.xlsx` en el repo. Cabeceras = columnas del alta; si mañana se añade un campo, la plantilla se actualiza sola.  
   - Referencia: código `M-xxxxx` **o** ref. cliente + cliente.  
-  - Hoja de ejemplo con 2 filas.  
-- **Import:** subir Excel → **tabla de revisión** (verde OK / amarillo aviso p.ej. embalaje / rojo error: ref no encontrada o ref. cliente ambigua). Gabri corrige y confirma → entonces `alta_lote` fila a fila.  
-- **Anti-doble import:** avisar si el mismo archivo se sube otra vez (id en notas del lote, o match ref+cantidad+OT origen).  
-- Sin RPC nueva si se llama `alta_lote` por fila; batch atómico solo si más adelante hace falta.
+  - Hoja `Stock` con 2 filas de ejemplo; hoja `Listas` con valores permitidos.  
+  - Desplegables en `unidad` (`uds`|`hojas`) y `proceso` (`terminado`|`impreso`|`troquelado`|`otro`) vía dataValidation SheetJS (best-effort) + hoja Listas.  
+- **Import:** subir Excel → **tabla de revisión** (verde OK / amarillo aviso p.ej. embalaje o archivo ya importado / rojo error: ref no encontrada o ref. cliente ambigua). Gabri confirma → `alta_lote` **fila a fila** (sin RPC batch atómica).  
+- **Anti-doble import:** fingerprint SHA del archivo en notas (`[import:…]`) + aviso si ya existe; también aviso si hay lote con misma ref+cantidad+OT origen.  
+- Sin SQL nueva (se queda con `alta_lote` por fila).
 
 ### 8.1d — Export bandeja (15.1d)
 
@@ -262,7 +263,7 @@ FABRICACION / sobrante → proponer entrada a stock. Entrega con reserva → con
 | **15.0** | Migración: lotes + reservas + ATP/crítico + RLS SELECT + RPCs | ✅ remoto + smoke |
 | **15.1** | UI bandeja + alta/ajuste + búsqueda ref. + IA + embalaje en alta | ✅ casi; pulidos §8.1.1 |
 | **15.1a** | Editar datos (no cantidad): RPC `editar_datos` + UI detalle | ✅ |
-| **15.1b** | Plantilla Excel + import con tabla de revisión (carga inicial) | ⏳ |
+| **15.1b** | Plantilla Excel + import con tabla de revisión (carga inicial) | ✅ |
 | **15.1d** | Export PDF / Excel bandeja filtrada | ⏳ |
 | **15.3** | Reserva + consumo + liberar (vía RPC) en UI | ⏳ |
 | **15.4** | Tag `OT_ENTREGA` + reserva sobre OT Optimus | ⏳ |
@@ -292,6 +293,7 @@ Orden acordado (Claude 25 sep): **picker solo buscar** → **15.1a editar_datos 
 | 25 sep 2026 | Smoke OK remoto + 15.1 UI fixes Claude (KPI PT/WIP, ajuste nota, load límite/agotado, crítico key, alta OT origen). |
 | 25 sep 2026 | Alta: OT buscable en maestro; embalaje opc. (uds/bulto, pico, palets general, caja); Asistente IA. |
 | 25 sep 2026 | Roadmap: 15.1a editar_datos, 15.1b import review, 15.1d export; proceso DB → Claude antes de aplicar; picker sin crear. |
+| 25 sep 2026 | **15.1b:** plantilla generada en app (desplegables unidad/proceso + hoja Listas); import con semáforo; anti-doble `[import:hash]`; `alta_lote` fila a fila (sin RPC batch). |
 
 ---
 
@@ -299,9 +301,9 @@ Orden acordado (Claude 25 sep): **picker solo buscar** → **15.1a editar_datos 
 
 Rama: **`feature/bloque15-stock-articulos`**.
 
-**Siguiente:** **15.1b** plantilla + import Excel con tabla de revisión.  
-~~15.1a editar_datos~~ aplicado remoto + UI «Editar datos» en detalle.
+**Siguiente:** **15.1d** export PDF/Excel de la bandeja filtrada.  
+~~15.1a editar_datos~~ · ~~15.1b import Excel~~.
 
-Después: **15.1d** export → Gabri carga inventario → **15.3 / 15.4 / 15.2**.
+Después: Gabri carga inventario → **15.3 / 15.4 / 15.2**.
 
 Validar §10 con Gabri cuando toque UX de ubicación/mínimos.

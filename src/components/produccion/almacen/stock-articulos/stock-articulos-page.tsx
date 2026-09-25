@@ -2,6 +2,8 @@
 
 import {
   AlertTriangle,
+  Download,
+  FileSpreadsheet,
   Loader2,
   Package,
   Plus,
@@ -13,6 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { StockArticulosAiDialog } from "@/components/produccion/almacen/stock-articulos/stock-articulos-ai-dialog";
+import { StockArticulosImportDialog } from "@/components/produccion/almacen/stock-articulos/stock-articulos-import-dialog";
 import { OtDestinoSearchInput } from "@/components/produccion/almacen/ot-destino-search-input";
 import {
   ReferenciaMinervaPicker,
@@ -45,6 +48,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { downloadStockArticulosPlantilla } from "@/lib/stock-articulos-excel-import";
 import {
   canWriteStockArticulosClient,
   fetchProfileCapacidades,
@@ -175,6 +179,7 @@ export function StockArticulosPage() {
   const [canWrite, setCanWrite] = useState(false);
   const [detalle, setDetalle] = useState<AtpConCritico | null>(null);
   const [altaOpen, setAltaOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [stockAiOpen, setStockAiOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -379,11 +384,29 @@ export function StockArticulosPage() {
             <RefreshCw className={`size-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
             Actualizar
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => downloadStockArticulosPlantilla()}
+          >
+            <Download className="size-4 mr-1.5" />
+            Plantilla
+          </Button>
           {canWrite ? (
-            <Button size="sm" onClick={() => setAltaOpen(true)}>
-              <Plus className="size-4 mr-1.5" />
-              Alta lote
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setImportOpen(true)}
+              >
+                <FileSpreadsheet className="size-4 mr-1.5" />
+                Importar Excel
+              </Button>
+              <Button size="sm" onClick={() => setAltaOpen(true)}>
+                <Plus className="size-4 mr-1.5" />
+                Alta lote
+              </Button>
+            </>
           ) : null}
         </div>
       </header>
@@ -594,6 +617,14 @@ export function StockArticulosPage() {
         onOpenChange={setAltaOpen}
         onCreated={async () => {
           setAltaOpen(false);
+          await load();
+        }}
+      />
+
+      <StockArticulosImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImported={async () => {
           await load();
         }}
       />
