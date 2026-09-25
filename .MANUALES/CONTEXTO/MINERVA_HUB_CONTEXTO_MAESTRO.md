@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `.MANUALES/CONTEXTO/FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: **6 sep 2026** (reunión Gemma ~3 h · Bloque 13 visibilidad planteado · perf Iniciar contenedor).
+> Última actualización: **25 sep 2026** (Bloques **15** stock artículos + **16** listados/digests niquelados · etiquetas «Hoy» I/T/N · reunión Gemma 6 sep sigue vigente).
 
 ---
 
@@ -29,6 +29,8 @@
    - `.MANUALES/BLOQUES/MINERVA_BLOQUE12_DETALLE_DIA_MESA.md` (vista mesa detalle del día — 29 ago)
    - `.MANUALES/BLOQUES/MINERVA_BLOQUE13_VISIBILIDAD_PLANTA.md` (comerciales / pipeline / andon — 📋 6 sep)
    - `.MANUALES/BLOQUES/MINERVA_BLOQUE14_FICHAS_COMERCIAL.md` (entrada ficha maestro + PDF cliente — 🚧 7 sep)
+   - `.MANUALES/BLOQUES/MINERVA_BLOQUE15_STOCK_ARTICULOS.md` (**producto/WIP** — 📋 25 sep; ≠ material B9; ATP al **despachar** OT)
+   - `.MANUALES/BLOQUES/MINERVA_BLOQUE16_LISTADOS_PERSONALIZADOS.md` (digests mail por `clave` — 📋 25 sep; sin SQL libre)
    - `.MANUALES/BRIEFS/MINERVA_FRASES_ALBERT_06SEP2026.md` (cheat sheet 7 sep: calendario vs comercial)
 4. Añadir `.MANUALES/CONTEXTO/MINERVA_CONTEXTO_TECNICO.md` solo si la IA necesita detalles técnicos del repo.
 5. Si el tema es mesa / externos / itinerario post-despacho: `.MANUALES/SESIONES/SESION_13AGO2026_DERIVAR_EXTERNA_ITINERARIO.md`.
@@ -50,6 +52,8 @@
 | `.MANUALES/BLOQUES/MINERVA_BLOQUE12_DETALLE_DIA_MESA.md` | Vista mesa detalle del día + claim ejecución (29 ago). |
 | `.MANUALES/BLOQUES/MINERVA_BLOQUE13_VISIBILIDAD_PLANTA.md` | Comerciales / pipeline recortado / andon (📋 6 sep). |
 | `.MANUALES/BLOQUES/MINERVA_BLOQUE14_FICHAS_COMERCIAL.md` | Fichas en maestro + PDF dual + rol comercial (🚧 7 sep). |
+| `.MANUALES/BLOQUES/MINERVA_BLOQUE15_STOCK_ARTICULOS.md` | Stock **producto/WIP** (estuches, Takeit…); tablas propias; ATP en despacho OT. ≠ B9 material. ≠ B7 albarán. |
+| `.MANUALES/BLOQUES/MINERVA_BLOQUE16_LISTADOS_PERSONALIZADOS.md` | Listados por clave + digest mail 08:00; independiente de B15 en MVP. |
 | `.MANUALES/BLOQUES/MINERVA_BLOQUE10_PRESUPUESTOS.md` | Bloque futuro: presupuestos, formas, versión real al copiar. |
 | `.MANUALES/BLOQUES/MINERVA_BLOQUE11_CALENDARIO_MAESTRO_LANZAMIENTO.md` | Brainstorming Bloque 11 (calendario master). |
 | `.MANUALES/BLOQUES/MINERVA_BLOQUE11_DECISION_CALENDARIO_CONTENEDOR.md` | Diseño cerrado + contenedor/bandeja smoke · **§6.5 B** · fase 3 detalle-día. |
@@ -116,6 +120,8 @@ Software a medida para la planta de producción gráfica/impresión de la empres
 | **OT** | Orden de Trabajo. Unidad de producción. Clave de negocio: nº OT / `num_pedido`. |
 | **Despacho** | Ficha técnica inicial de la OT: material, hojas, tintas, troquel, poses, acabado y horas previstas. |
 | **Referencia Minerva** | Código canónico de artículo `M-NNNNN`, enlazado a `referencia_cliente`. |
+| **Stock material (B9)** | Palets/cartelas de papel → `prod_stock_palets`. |
+| **Stock producto (B15)** | Terminado / WIP (estuches…) — tablas propias; **no** palets de papel. |
 | **Itinerario / GPS** | Secuencia de pasos de una OT. Vive en `prod_ot_pasos`; es la fuente de verdad del progreso. |
 | **Paso** | Etapa concreta del itinerario: proceso + orden + estado + máquina. |
 | **Mesa** | Planificación drag & drop por máquina, día y turno. |
@@ -287,6 +293,10 @@ src/components/produccion/planificacion/
 | 10 | Presupuestos | ⏸ Futuro (más miga; tras Minerva estable) |
 | 11 | Calendario = master planificar / lanzar | 🔄 **Éxito de uso** (Carlos/Jordi). Ampliar con cuidado: planificar sí; lanzar suave (pool/mesa) + conflictos de máquina. Sin reordenar el menú (convive con Pool/Mesa/Pipeline) |
 | 12 | Roles, permisos, landing por perfil | 📋 **Documentado** — operario→ejecución; gestor→home rico. **14 ago:** 1 tableta/máquina (Ramón). Aparcado de código; crítico antes usuarios masivos |
+| 13 | Visibilidad planta / comercial | 📋 Diseño — pipeline recortado, no calendario; TV/andon después. `.MANUALES/BLOQUES/MINERVA_BLOQUE13_VISIBILIDAD_PLANTA.md` |
+| 14 | Fichas comercial (maestro + PDF) | 🚧 En curso — `.MANUALES/BLOQUES/MINERVA_BLOQUE14_FICHAS_COMERCIAL.md` |
+| 15 | Stock artículos (producto / WIP) | 🚧 **Fase A** — rama `feature/bloque15-stock-articulos`. Reservas aparte + ATP calc.; ref. cliente en UI; `OT_ENTREGA` desde Stock. `.MANUALES/BLOQUES/MINERVA_BLOQUE15_STOCK_ARTICULOS.md` |
+| 16 | Listados + digests mail | 📋 **Diseño 25 sep** — queries por `clave` en código; mail laborables. MVP sin esperar B15. `.MANUALES/BLOQUES/MINERVA_BLOQUE16_LISTADOS_PERSONALIZADOS.md` |
 
 Detalle 1–3.x histórico: ver commits jun / `.MANUALES/CONTEXTO/FASES_HOJA_RUTA_DIGITAL.md`.
 
@@ -347,8 +357,12 @@ Detalle 1–3.x histórico: ver commits jun / `.MANUALES/CONTEXTO/FASES_HOJA_RUT
 - [x] **Plataforma — print Electron:** migrado `useReactToPrint` → `printElementInNewWindow` (externos, fichas, tablón semanal, ventas). Ya OK: detalle-día + mesa diaria.
 - [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor; tableta = máquina — `MINERVA_BLOQUE12_…` (no abrir ya; default gestor = maestro OTs)
 - [ ] **Bloque 5 puente**: Rita lanza OTs a Hugo (no bloquea paralelo si Hugo sigue a mano)
+- [ ] **Bloque 15** (🚧): Fase A en `feature/bloque15-stock-articulos` — 15.0→15.1→15.3→15.4/15.2 — `.MANUALES/BLOQUES/MINERVA_BLOQUE15_STOCK_ARTICULOS.md`
+- [ ] **Bloque 16** (📋): validar §9 con Gemma/Carlos → Fase A (claves + UI + digest 08:00) — puede ir **en paralelo** a B15 — `.MANUALES/BLOQUES/MINERVA_BLOQUE16_LISTADOS_PERSONALIZADOS.md`
 
 ### Hecho reciente (jul–sep)
+- [x] **25 sep:** Briefs **Bloque 15/16** niquelados + **15.0** migración/tipos en rama `feature/bloque15-stock-articulos` (reservas aparte, ATP calc., tag OT_ENTREGA en diseño).
+- [x] **sep:** Etiquetas Hugo — sesiones **«Hoy»** por I/T/N (`prod_etiquetas_hoja_ruta_sesiones`) + filtro Tocadas hoy.
 - [x] **2 sep:** **9.7 OCR albaranes** — PDF/fotos → tabla revisión → recepciones en Pendientes (`0bfef6b`). No cartela automático. Pendiente: 1 partida → 2+ OTs. `.MANUALES/SESIONES/SESION_02SEP2026_BLOQUE9_7_OCR_ALBARANES.md`
 - [x] **30 ago:** Calendario **perf 3 PRs** (bandeja fantasma, batch guardar detalle-día, inputs/memo) + ejecución filtros — `.MANUALES/SESIONES/SESION_30AGO2026_CALENDARIO_PERF.md` · patrón «módulo fantasma» (ver también Compras `20a06a5`)
 - [x] **29 ago noche (impro):** Bloque 12 UI — **vista mesa** detalle del día (pool+columnas+DnD) · claim ejecución desde plan · exclusiones E (MNRV/desbroce) · sin botón pastilla — `.MANUALES/SESIONES/SESION_29AGO2026_BLOQUE12_DETALLE_DIA_MESA.md` · `.MANUALES/BLOQUES/MINERVA_BLOQUE12_DETALLE_DIA_MESA.md` · decisión §28
@@ -454,6 +468,12 @@ Detalle 1–3.x histórico: ver commits jun / `.MANUALES/CONTEXTO/FASES_HOJA_RUT
 25. **Bloque 9.8 — Reasignación / STOP (18–21 ago 2026)**: ledger ATP manda. **Cerrado en planta:** 9.8.1–6 (smoke **36112**/#10989) + sync albarán + perf Compras. Merge auto = opcional. **Handoff:** `.MANUALES/SESIONES/SESION_20AGO2026_HANDOFF_NOCHE_CLAUDE.md`.
 
 26. **Reunión Gemma 6 sep 2026:** app vista de arriba a abajo; ritmo = 4–5 OTs reales E2E. **Bloque 13** (📋): vista comercial = pipeline recortado, no el calendario; TV aeropuerto / mapa planta = después. Cierre OT ≠ albarán María José (B6+B7). Promedios siguen bajo demanda. **Perf Iniciar contenedor:** optimistic + fetch paralelo — `.MANUALES/SESIONES/SESION_06SEP2026_REUNION_GEMMA_CONTENEDOR.md`.
+
+27. **Bloque 15 — Stock de artículos / WIP (25 sep 2026):** producto/WIP en tablas propias (≠ B9 palets). Reservas en `prod_stock_articulos_reservas`; libre/estado **calculados** (vista ATP). `cliente` = texto Optimus (null = cualquiera). UI busca **ref. cliente** primero; Minerva es canónico. Flujos: OT `FABRICACION` → entrada stock; **Stock → Generar OT entrega** (tag `OT_ENTREGA`) + reserva/consumo + bultos; ATP al despachar. Rama `feature/bloque15-stock-articulos`. Brief: `.MANUALES/BLOQUES/MINERVA_BLOQUE15_STOCK_ARTICULOS.md`.
+
+28. **Bloque 16 — Listados + digests (25 sep 2026, diseño):** listados = `clave` estable + query en código + suscriptores + cron mail (~08:00 laborables). **Prohibido** SQL libre en UI/BD. Gemma = material llega hoy (+ mañana). MVP digests **no espera** B15. Brief: `.MANUALES/BLOQUES/MINERVA_BLOQUE16_LISTADOS_PERSONALIZADOS.md`.
+
+29. **Etiquetas «Hoy» I/T/N (sep 2026):** sesiones diarias en `prod_etiquetas_hoja_ruta_sesiones`; naranja = tocadas hoy; cierre OT ≠ “hoy”. Independiente de B15/16.
 
 ## 📁 Estructura de carpetas relevante
 
