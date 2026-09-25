@@ -30,7 +30,7 @@ export function canWriteStockArticulosClient(
   if (capacidades instanceof Set) {
     return capacidades.has("stock_articulos_write");
   }
-  return capacidades.includes("stock_articulos_write");
+  return Array.isArray(capacidades) && capacidades.includes("stock_articulos_write");
 }
 
 export async function fetchProfileCapacidades(

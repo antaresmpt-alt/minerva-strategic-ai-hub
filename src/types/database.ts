@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.4"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -257,6 +257,66 @@ export type Database = {
         }
         Relationships: []
       }
+      prod_calendario_detalle_dia: {
+        Row: {
+          ambito: string
+          calendario_ot_id: string
+          created_at: string
+          created_by: string | null
+          horas_planificadas_snapshot: number | null
+          id: string
+          maquina_id: string | null
+          notas: string | null
+          ot_numero: string
+          slot_orden: number
+          turno: string | null
+          updated_at: string
+        }
+        Insert: {
+          ambito: string
+          calendario_ot_id: string
+          created_at?: string
+          created_by?: string | null
+          horas_planificadas_snapshot?: number | null
+          id?: string
+          maquina_id?: string | null
+          notas?: string | null
+          ot_numero: string
+          slot_orden?: number
+          turno?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ambito?: string
+          calendario_ot_id?: string
+          created_at?: string
+          created_by?: string | null
+          horas_planificadas_snapshot?: number | null
+          id?: string
+          maquina_id?: string | null
+          notas?: string | null
+          ot_numero?: string
+          slot_orden?: number
+          turno?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prod_calendario_detalle_dia_calendario_ot_id_fkey"
+            columns: ["calendario_ot_id"]
+            isOneToOne: true
+            referencedRelation: "prod_calendario_produccion_ot"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prod_calendario_detalle_dia_maquina_id_fkey"
+            columns: ["maquina_id"]
+            isOneToOne: false
+            referencedRelation: "prod_maquinas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       prod_calendario_festivo: {
         Row: {
           activo: boolean
@@ -412,10 +472,41 @@ export type Database = {
         }
         Relationships: []
       }
+      prod_cliente_ficha: {
+        Row: {
+          cliente: string
+          created_at: string | null
+          id: string
+          notas: string | null
+          registro_sanitario: string | null
+          temperatura_conservacion: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          cliente: string
+          created_at?: string | null
+          id?: string
+          notas?: string | null
+          registro_sanitario?: string | null
+          temperatura_conservacion?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          cliente?: string
+          created_at?: string | null
+          id?: string
+          notas?: string | null
+          registro_sanitario?: string | null
+          temperatura_conservacion?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       prod_compra_material: {
         Row: {
           albaran_proveedor: string | null
           cliente_nombre: string | null
+          compra_origen_id: string | null
           created_at: string | null
           estado: string | null
           fecha_prevista_recepcion: string | null
@@ -424,6 +515,7 @@ export type Database = {
           gramaje: number | null
           id: string
           material: string | null
+          motivo: string | null
           notas: string | null
           num_compra: string | null
           num_hojas_brutas: number | null
@@ -432,11 +524,13 @@ export type Database = {
           posicion: number | null
           proveedor_id: string | null
           tamano_hoja: string | null
+          tipo: Database["public"]["Enums"]["compra_tipo"]
           trabajo_titulo: string | null
         }
         Insert: {
           albaran_proveedor?: string | null
           cliente_nombre?: string | null
+          compra_origen_id?: string | null
           created_at?: string | null
           estado?: string | null
           fecha_prevista_recepcion?: string | null
@@ -445,6 +539,7 @@ export type Database = {
           gramaje?: number | null
           id?: string
           material?: string | null
+          motivo?: string | null
           notas?: string | null
           num_compra?: string | null
           num_hojas_brutas?: number | null
@@ -453,11 +548,13 @@ export type Database = {
           posicion?: number | null
           proveedor_id?: string | null
           tamano_hoja?: string | null
+          tipo?: Database["public"]["Enums"]["compra_tipo"]
           trabajo_titulo?: string | null
         }
         Update: {
           albaran_proveedor?: string | null
           cliente_nombre?: string | null
+          compra_origen_id?: string | null
           created_at?: string | null
           estado?: string | null
           fecha_prevista_recepcion?: string | null
@@ -466,6 +563,7 @@ export type Database = {
           gramaje?: number | null
           id?: string
           material?: string | null
+          motivo?: string | null
           notas?: string | null
           num_compra?: string | null
           num_hojas_brutas?: number | null
@@ -474,9 +572,17 @@ export type Database = {
           posicion?: number | null
           proveedor_id?: string | null
           tamano_hoja?: string | null
+          tipo?: Database["public"]["Enums"]["compra_tipo"]
           trabajo_titulo?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "fk_compra_origen"
+            columns: ["compra_origen_id"]
+            isOneToOne: false
+            referencedRelation: "prod_compra_material"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "prod_compra_material_proveedor_id_fkey"
             columns: ["proveedor_id"]
@@ -798,41 +904,6 @@ export type Database = {
           id?: string
         }
         Relationships: []
-      }
-      prod_etiquetas_hoja_ruta_sesiones: {
-        Row: {
-          created_at: string
-          fecha: string
-          hoja_ruta_id: string
-          id: string
-          nota: string | null
-          proceso: string
-        }
-        Insert: {
-          created_at?: string
-          fecha: string
-          hoja_ruta_id: string
-          id?: string
-          nota?: string | null
-          proceso: string
-        }
-        Update: {
-          created_at?: string
-          fecha?: string
-          hoja_ruta_id?: string
-          id?: string
-          nota?: string | null
-          proceso?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "prod_etiquetas_hoja_ruta_sesiones_hoja_ruta_id_fkey"
-            columns: ["hoja_ruta_id"]
-            isOneToOne: false
-            referencedRelation: "prod_etiquetas_hoja_ruta"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       prod_etiquetas_hoja_ruta: {
         Row: {
@@ -1221,6 +1292,41 @@ export type Database = {
         }
         Relationships: []
       }
+      prod_etiquetas_hoja_ruta_sesiones: {
+        Row: {
+          created_at: string
+          fecha: string
+          hoja_ruta_id: string
+          id: string
+          nota: string | null
+          proceso: string
+        }
+        Insert: {
+          created_at?: string
+          fecha: string
+          hoja_ruta_id: string
+          id?: string
+          nota?: string | null
+          proceso: string
+        }
+        Update: {
+          created_at?: string
+          fecha?: string
+          hoja_ruta_id?: string
+          id?: string
+          nota?: string | null
+          proceso?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prod_etiquetas_hoja_ruta_sesiones_hoja_ruta_id_fkey"
+            columns: ["hoja_ruta_id"]
+            isOneToOne: false
+            referencedRelation: "prod_etiquetas_hoja_ruta"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       prod_etiquetas_material_catalogo: {
         Row: {
           activo: boolean
@@ -1268,6 +1374,30 @@ export type Database = {
           notes?: string | null
           price_m2?: number | null
           stock_dimensions?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      prod_etiquetas_pool_plan: {
+        Row: {
+          created_at: string
+          id: string
+          orden: number
+          ot_numero: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          orden?: number
+          ot_numero: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          orden?: number
+          ot_numero?: string
           updated_at?: string
         }
         Relationships: []
@@ -2521,16 +2651,54 @@ export type Database = {
           },
         ]
       }
+      prod_referencia_adjuntos: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          id: string
+          public_url: string | null
+          referencia_id: string
+          storage_path: string
+          tipo: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          public_url?: string | null
+          referencia_id: string
+          storage_path: string
+          tipo: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          public_url?: string | null
+          referencia_id?: string
+          storage_path?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prod_referencia_adjuntos_referencia_id_fkey"
+            columns: ["referencia_id"]
+            isOneToOne: false
+            referencedRelation: "prod_referencias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       prod_referencias: {
         Row: {
           acabado_habitual: string | null
           acabado_oficial: string | null
           acabado_promedio: string | null
           activo: boolean
+          bultos_por_palet_habitual: number | null
           caja_embalaje_habitual: string | null
           caja_embalaje_oficial: string | null
           caja_embalaje_promedio: string | null
-          bultos_por_palet_habitual: number | null
           cliente: string | null
           codigo: string
           created_at: string | null
@@ -2539,10 +2707,10 @@ export type Database = {
           formato_ancho_mm: number | null
           formato_fondo_mm: number | null
           formato_largo_mm: number | null
-          fsc: boolean
-          fsc_fecha_validacion: string | null
           foto_producto_path: string | null
           foto_troquel_path: string | null
+          fsc: boolean
+          fsc_fecha_validacion: string | null
           gramaje_habitual: number | null
           gramaje_muestra_n: number | null
           gramaje_oficial: number | null
@@ -2588,9 +2756,10 @@ export type Database = {
           promedios_basados_en_n_ots: number | null
           referencia_cliente: string | null
           ruta_habitual: string | null
+          stock_cantidad_minima: number | null
           subtipo: string | null
-          tintas_habituales: string | null
           tintas_ecologicas: boolean
+          tintas_habituales: string | null
           tintas_oficial: string | null
           tintas_promedio: string | null
           tipo_engomado_habitual: string | null
@@ -2615,10 +2784,10 @@ export type Database = {
           acabado_oficial?: string | null
           acabado_promedio?: string | null
           activo?: boolean
+          bultos_por_palet_habitual?: number | null
           caja_embalaje_habitual?: string | null
           caja_embalaje_oficial?: string | null
           caja_embalaje_promedio?: string | null
-          bultos_por_palet_habitual?: number | null
           cliente?: string | null
           codigo: string
           created_at?: string | null
@@ -2627,10 +2796,10 @@ export type Database = {
           formato_ancho_mm?: number | null
           formato_fondo_mm?: number | null
           formato_largo_mm?: number | null
-          fsc?: boolean
-          fsc_fecha_validacion?: string | null
           foto_producto_path?: string | null
           foto_troquel_path?: string | null
+          fsc?: boolean
+          fsc_fecha_validacion?: string | null
           gramaje_habitual?: number | null
           gramaje_muestra_n?: number | null
           gramaje_oficial?: number | null
@@ -2676,9 +2845,10 @@ export type Database = {
           promedios_basados_en_n_ots?: number | null
           referencia_cliente?: string | null
           ruta_habitual?: string | null
+          stock_cantidad_minima?: number | null
           subtipo?: string | null
-          tintas_habituales?: string | null
           tintas_ecologicas?: boolean
+          tintas_habituales?: string | null
           tintas_oficial?: string | null
           tintas_promedio?: string | null
           tipo_engomado_habitual?: string | null
@@ -2703,10 +2873,10 @@ export type Database = {
           acabado_oficial?: string | null
           acabado_promedio?: string | null
           activo?: boolean
+          bultos_por_palet_habitual?: number | null
           caja_embalaje_habitual?: string | null
           caja_embalaje_oficial?: string | null
           caja_embalaje_promedio?: string | null
-          bultos_por_palet_habitual?: number | null
           cliente?: string | null
           codigo?: string
           created_at?: string | null
@@ -2715,10 +2885,10 @@ export type Database = {
           formato_ancho_mm?: number | null
           formato_fondo_mm?: number | null
           formato_largo_mm?: number | null
-          fsc?: boolean
-          fsc_fecha_validacion?: string | null
           foto_producto_path?: string | null
           foto_troquel_path?: string | null
+          fsc?: boolean
+          fsc_fecha_validacion?: string | null
           gramaje_habitual?: number | null
           gramaje_muestra_n?: number | null
           gramaje_oficial?: number | null
@@ -2764,9 +2934,10 @@ export type Database = {
           promedios_basados_en_n_ots?: number | null
           referencia_cliente?: string | null
           ruta_habitual?: string | null
+          stock_cantidad_minima?: number | null
           subtipo?: string | null
-          tintas_habituales?: string | null
           tintas_ecologicas?: boolean
+          tintas_habituales?: string | null
           tintas_oficial?: string | null
           tintas_promedio?: string | null
           tipo_engomado_habitual?: string | null
@@ -2787,74 +2958,6 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
-      }
-      prod_cliente_ficha: {
-        Row: {
-          cliente: string
-          created_at: string | null
-          id: string
-          notas: string | null
-          registro_sanitario: string | null
-          temperatura_conservacion: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          cliente: string
-          created_at?: string | null
-          id?: string
-          notas?: string | null
-          registro_sanitario?: string | null
-          temperatura_conservacion?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          cliente?: string
-          created_at?: string | null
-          id?: string
-          notas?: string | null
-          registro_sanitario?: string | null
-          temperatura_conservacion?: string | null
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
-      prod_referencia_adjuntos: {
-        Row: {
-          created_at: string | null
-          created_by: string | null
-          id: string
-          public_url: string | null
-          referencia_id: string
-          storage_path: string
-          tipo: string
-        }
-        Insert: {
-          created_at?: string | null
-          created_by?: string | null
-          id?: string
-          public_url?: string | null
-          referencia_id: string
-          storage_path: string
-          tipo: string
-        }
-        Update: {
-          created_at?: string | null
-          created_by?: string | null
-          id?: string
-          public_url?: string | null
-          referencia_id?: string
-          storage_path?: string
-          tipo?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "prod_referencia_adjuntos_referencia_id_fkey"
-            columns: ["referencia_id"]
-            isOneToOne: false
-            referencedRelation: "prod_referencias"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       prod_rutas_plantilla: {
         Row: {
@@ -3033,6 +3136,226 @@ export type Database = {
             columns: ["proveedor_id"]
             isOneToOne: false
             referencedRelation: "prod_proveedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prod_stock_articulos: {
+        Row: {
+          bultos: number | null
+          cantidad_actual: number
+          cliente: string | null
+          cliente_norm: string | null
+          condicion: string | null
+          created_at: string
+          created_by: string | null
+          estado_proceso: string
+          id: string
+          notas: string | null
+          ot_origen: string | null
+          palets: number | null
+          poses: number | null
+          referencia_cliente: string | null
+          referencia_codigo: string
+          referencia_descripcion: string | null
+          referencia_id: string
+          ubicacion_fisica: string | null
+          unidad: string
+          updated_at: string
+        }
+        Insert: {
+          bultos?: number | null
+          cantidad_actual?: number
+          cliente?: string | null
+          cliente_norm?: string | null
+          condicion?: string | null
+          created_at?: string
+          created_by?: string | null
+          estado_proceso?: string
+          id?: string
+          notas?: string | null
+          ot_origen?: string | null
+          palets?: number | null
+          poses?: number | null
+          referencia_cliente?: string | null
+          referencia_codigo: string
+          referencia_descripcion?: string | null
+          referencia_id: string
+          ubicacion_fisica?: string | null
+          unidad?: string
+          updated_at?: string
+        }
+        Update: {
+          bultos?: number | null
+          cantidad_actual?: number
+          cliente?: string | null
+          cliente_norm?: string | null
+          condicion?: string | null
+          created_at?: string
+          created_by?: string | null
+          estado_proceso?: string
+          id?: string
+          notas?: string | null
+          ot_origen?: string | null
+          palets?: number | null
+          poses?: number | null
+          referencia_cliente?: string | null
+          referencia_codigo?: string
+          referencia_descripcion?: string | null
+          referencia_id?: string
+          ubicacion_fisica?: string | null
+          unidad?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prod_stock_articulos_referencia_id_fkey"
+            columns: ["referencia_id"]
+            isOneToOne: false
+            referencedRelation: "prod_referencias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prod_stock_articulos_movimientos: {
+        Row: {
+          bultos: number | null
+          cantidad: number
+          cantidad_antes: number | null
+          cantidad_despues: number | null
+          cantidad_destino: number | null
+          cantidad_merma: number | null
+          created_at: string
+          created_by: string | null
+          id: string
+          notas: string | null
+          num_pedido: string | null
+          ot_numero: string | null
+          stock_articulo_destino_id: string | null
+          stock_articulo_id: string
+          tipo: string
+        }
+        Insert: {
+          bultos?: number | null
+          cantidad: number
+          cantidad_antes?: number | null
+          cantidad_despues?: number | null
+          cantidad_destino?: number | null
+          cantidad_merma?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notas?: string | null
+          num_pedido?: string | null
+          ot_numero?: string | null
+          stock_articulo_destino_id?: string | null
+          stock_articulo_id: string
+          tipo: string
+        }
+        Update: {
+          bultos?: number | null
+          cantidad?: number
+          cantidad_antes?: number | null
+          cantidad_despues?: number | null
+          cantidad_destino?: number | null
+          cantidad_merma?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notas?: string | null
+          num_pedido?: string | null
+          ot_numero?: string | null
+          stock_articulo_destino_id?: string | null
+          stock_articulo_id?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prod_stock_articulos_movimientos_stock_articulo_destino_id_fkey"
+            columns: ["stock_articulo_destino_id"]
+            isOneToOne: false
+            referencedRelation: "prod_stock_articulos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prod_stock_articulos_movimientos_stock_articulo_destino_id_fkey"
+            columns: ["stock_articulo_destino_id"]
+            isOneToOne: false
+            referencedRelation: "stock_articulos_atp"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prod_stock_articulos_movimientos_stock_articulo_id_fkey"
+            columns: ["stock_articulo_id"]
+            isOneToOne: false
+            referencedRelation: "prod_stock_articulos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prod_stock_articulos_movimientos_stock_articulo_id_fkey"
+            columns: ["stock_articulo_id"]
+            isOneToOne: false
+            referencedRelation: "stock_articulos_atp"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prod_stock_articulos_reservas: {
+        Row: {
+          bultos_reservados: number | null
+          cantidad_consumida: number
+          cantidad_reservada: number
+          created_at: string
+          created_by: string | null
+          estado: string
+          id: string
+          notas: string | null
+          num_pedido: string | null
+          ot_numero: string
+          stock_articulo_id: string
+          updated_at: string
+        }
+        Insert: {
+          bultos_reservados?: number | null
+          cantidad_consumida?: number
+          cantidad_reservada: number
+          created_at?: string
+          created_by?: string | null
+          estado?: string
+          id?: string
+          notas?: string | null
+          num_pedido?: string | null
+          ot_numero: string
+          stock_articulo_id: string
+          updated_at?: string
+        }
+        Update: {
+          bultos_reservados?: number | null
+          cantidad_consumida?: number
+          cantidad_reservada?: number
+          created_at?: string
+          created_by?: string | null
+          estado?: string
+          id?: string
+          notas?: string | null
+          num_pedido?: string | null
+          ot_numero?: string
+          stock_articulo_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prod_stock_articulos_reservas_stock_articulo_id_fkey"
+            columns: ["stock_articulo_id"]
+            isOneToOne: false
+            referencedRelation: "prod_stock_articulos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prod_stock_articulos_reservas_stock_articulo_id_fkey"
+            columns: ["stock_articulo_id"]
+            isOneToOne: false
+            referencedRelation: "stock_articulos_atp"
             referencedColumns: ["id"]
           },
         ]
@@ -3474,6 +3797,27 @@ export type Database = {
         }
         Relationships: []
       }
+      profiles_capacidades: {
+        Row: {
+          capacidad: string
+          created_at: string
+          created_by: string | null
+          user_id: string
+        }
+        Insert: {
+          capacidad: string
+          created_at?: string
+          created_by?: string | null
+          user_id: string
+        }
+        Update: {
+          capacidad?: string
+          created_at?: string
+          created_by?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       role_permissions: {
         Row: {
           id: string
@@ -3581,6 +3925,64 @@ export type Database = {
         }
         Relationships: []
       }
+      stock_articulos_atp: {
+        Row: {
+          bultos: number | null
+          cantidad_fisica: number | null
+          cantidad_libre: number | null
+          cantidad_reservada_total: number | null
+          cliente: string | null
+          cliente_norm: string | null
+          condicion: string | null
+          created_at: string | null
+          estado_derivado: string | null
+          estado_proceso: string | null
+          id: string | null
+          notas: string | null
+          ot_origen: string | null
+          palets: number | null
+          poses: number | null
+          referencia_cliente: string | null
+          referencia_codigo: string | null
+          referencia_descripcion: string | null
+          referencia_id: string | null
+          reservas_count: number | null
+          sobre_reservado: boolean | null
+          ubicacion_fisica: string | null
+          unidad: string | null
+          updated_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prod_stock_articulos_referencia_id_fkey"
+            columns: ["referencia_id"]
+            isOneToOne: false
+            referencedRelation: "prod_referencias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stock_articulos_critico_por_ref: {
+        Row: {
+          cantidad_fisica_total: number | null
+          cantidad_libre_total: number | null
+          cliente_norm: string | null
+          es_critico: boolean | null
+          referencia_cliente: string | null
+          referencia_codigo: string | null
+          referencia_id: string | null
+          stock_cantidad_minima: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prod_stock_articulos_referencia_id_fkey"
+            columns: ["referencia_id"]
+            isOneToOne: false
+            referencedRelation: "prod_referencias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stock_palets_atp: {
         Row: {
           cantidad_fisica: number | null
@@ -3653,7 +4055,19 @@ export type Database = {
           similarity: number
         }[]
       }
+      minerva_can_write_stock_articulos: { Args: never; Returns: boolean }
+      minerva_grant_capacidad: {
+        Args: { p_capacidad: string; p_user_id: string }
+        Returns: undefined
+      }
+      minerva_is_comercial: { Args: never; Returns: boolean }
+      minerva_profile_role: { Args: never; Returns: string }
+      minerva_revoke_capacidad: {
+        Args: { p_capacidad: string; p_user_id: string }
+        Returns: undefined
+      }
       next_id_stock_sandbox: { Args: never; Returns: number }
+      prod_albaran_es_placeholder: { Args: { p_alb: string }; Returns: boolean }
       prod_ots_proximo_paso_externo_queue: {
         Args: never
         Returns: {
@@ -3669,6 +4083,73 @@ export type Database = {
       prod_stock_ajustar_cantidad: {
         Args: { p_notas?: string; p_nueva_cantidad: number; p_palet_id: string }
         Returns: undefined
+      }
+      prod_stock_articulos_ajustar: {
+        Args: {
+          p_bultos?: number
+          p_cantidad_nueva: number
+          p_forzar?: boolean
+          p_notas?: string
+          p_stock_id: string
+        }
+        Returns: undefined
+      }
+      prod_stock_articulos_alta_lote: {
+        Args: {
+          p_bultos?: number
+          p_cantidad: number
+          p_cliente?: string
+          p_condicion?: string
+          p_estado_proceso?: string
+          p_notas?: string
+          p_ot_origen?: string
+          p_palets?: number
+          p_poses?: number
+          p_referencia_id: string
+          p_ubicacion_fisica?: string
+          p_unidad?: string
+        }
+        Returns: string
+      }
+      prod_stock_articulos_consumir: {
+        Args: {
+          p_bultos?: number
+          p_cantidad: number
+          p_motivo_sin_reserva?: string
+          p_notas?: string
+          p_ot_numero: string
+          p_stock_id: string
+        }
+        Returns: undefined
+      }
+      prod_stock_articulos_liberar: {
+        Args: { p_notas?: string; p_ot_numero: string; p_stock_id: string }
+        Returns: undefined
+      }
+      prod_stock_articulos_reservar: {
+        Args: {
+          p_bultos?: number
+          p_cantidad: number
+          p_notas?: string
+          p_num_pedido?: string
+          p_ot_numero: string
+          p_stock_id: string
+        }
+        Returns: string
+      }
+      prod_stock_articulos_transformar: {
+        Args: {
+          p_cantidad_destino: number
+          p_cantidad_merma?: number
+          p_cantidad_salida: number
+          p_estado_proceso_destino: string
+          p_notas?: string
+          p_ot_numero?: string
+          p_stock_destino_id?: string
+          p_stock_origen_id: string
+          p_unidad_destino?: string
+        }
+        Returns: string
       }
       prod_stock_asignar_palet_ot: {
         Args: {
@@ -3724,6 +4205,7 @@ export type Database = {
       puede_reabrir_ot_actual: { Args: never; Returns: boolean }
     }
     Enums: {
+      compra_tipo: "normal" | "correccion"
       paso_estado:
         | "pendiente"
         | "disponible"
@@ -3760,12 +4242,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3789,11 +4271,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3814,11 +4296,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3839,11 +4321,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3856,11 +4338,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3872,6 +4354,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      compra_tipo: ["normal", "correccion"],
       paso_estado: [
         "pendiente",
         "disponible",
@@ -3898,7 +4381,3 @@ export const Constants = {
     },
   },
 } as const
-
-// ─── NOTE: helpers Tables/TablesInsert/TablesUpdate/Enums ya incluidos
-//     por el generador Supabase (líneas ~3629+). No duplicar aquí.
-

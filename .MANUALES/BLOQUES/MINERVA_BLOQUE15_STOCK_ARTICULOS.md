@@ -5,7 +5,7 @@
 > **No** es materia prima: eso sigue siendo Bloque 9 (cartelas / palets de papel).  
 > Complementa: maestro · Bloque 6 (cierre) · Bloque 8 (contenedor) · Bloque 9 (material) · Bloque 16 (digests).
 >
-> **Estado:** 🚧 Fase A — rama `feature/bloque15-stock-articulos`. Migración 15.0 reescrita (RPC + capacidades); **no aplicar remoto hasta revisión Claude**.  
+> **Estado:** 🚧 Fase A — rama `feature/bloque15-stock-articulos`. **15.0 aplicada en remoto** + smoke OK; **15.1** bandeja/alta/ajuste en curso.  
 > **Urgencia:** Gabri controla PT a ojo. Albert: al **despachar** una OT, Minerva avisa si hay stock usable.  
 > **Personas:** Gabri (PT + calendario engomado), Juan/Ramón (ubicación), oficina/Zada/Manel (OT + despacho), Albert (ATP).
 >
@@ -72,8 +72,9 @@
 | `ot_origen` | OT FABRICACION / origen; null = alta manual |
 | `bultos` / `palets` | embalaje físico |
 | `ubicacion_fisica` | texto libre MVP |
-| `cantidad_minima_alerta` | opc. |
 | `notas` / `condicion` | |
+
+**Mínimo de alerta:** no vive en el lote. El umbral crítico está en `prod_referencias.stock_cantidad_minima` (vista `stock_articulos_critico_por_ref`).
 
 **No** guardar en el lote: `ot_destino_reserva`, `cantidad_reservada`, `estado` persistido, `num_pedido_asignado` como única verdad. Eso va a **reservas** + vista ATP (mismo principio que B9).
 
@@ -95,7 +96,7 @@ Una fila = (lote, OT, cantidad [, nº pedido]). Varias OTs / 1ª–2ª–3ª sob
 
 ### Vista `stock_articulos_atp`
 
-- `cantidad_libre = cantidad_actual − sum(reservas)` (nunca &lt; 0)
+- `cantidad_libre = cantidad_actual − Σ(reservada − consumida)` de reservas en estado `activa` \| `parcial` (nunca &lt; 0)
 - `estado_derivado`: `agotado` \| `disponible` \| `reservado` \| `parcial` (**calculado**)
 - `sobre_reservado` si reservas &gt; físico
 
@@ -108,7 +109,8 @@ Una fila = (lote, OT, cantidad [, nº pedido]). Varias OTs / 1ª–2ª–3ª sob
 Tipos: `entrada` | `reserva` | `liberacion` | `consumo` | `ajuste` | `transformacion`.
 
 - **transformacion:** sale del lote A (p. ej. impreso) y entra lote B (troquelado); opcional merma en el mismo movimiento o ajuste. Pregunta §9.
-- Cantidad siempre &gt; 0; el signo lo da el tipo.
+- Cantidad siempre ≥ 0; el signo lo da el tipo.
+- En **ajustes** se registran `cantidad_antes` / `cantidad_despues` (auditoría).
 - Inmutable (no borrar filas).
 
 ---
@@ -194,7 +196,7 @@ FABRICACION / sobrante → proponer entrada a stock. Entrega con reserva → con
 8. ¿Valoración €? (después)  
 9. Si usan stock ya impreso, ¿el despacho/itinerario **empieza en troquel**?  
 10. Al transformar impreso→troquelado, ¿hay merma y cómo se registra?  
-11. ¿Crear OT entrega desde Stock escribe ya en `prod_ots_general` + tag, o MVP solo reserva contra OT existente?
+11. ✅ **Respondida:** OT de entrega nace en **Optimus**. Minerva solo tag `OT_ENTREGA` + reserva. **MVP:** no crear nº OT en `prod_ots_general`.
 
 ---
 
@@ -240,6 +242,7 @@ FABRICACION / sobrante → proponer entrada a stock. Entrega con reserva → con
 | 25 sep 2026 | Creación Claude + niquelado Cursor (despacho≠B7, claves, sin consumibles). |
 | 25 sep 2026 | Acuerdos planta + Fase A. |
 | 25 sep 2026 | 15.0 RPC/capacidades; fix Claude: libre en consumir sin reserva, crítico uds+terminado, transformar unidad/locks, num_pedido OT, ajustar p_forzar, revoke anon. |
+| 25 sep 2026 | Smoke OK remoto + 15.1 UI fixes Claude (KPI PT/WIP, ajuste nota, load límite/agotado, crítico key, alta OT origen). |
 
 ---
 

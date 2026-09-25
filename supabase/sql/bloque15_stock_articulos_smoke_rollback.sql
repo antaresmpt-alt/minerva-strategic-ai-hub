@@ -1,18 +1,18 @@
 -- Bloque 15.0 — smoke test EN TRANSACCIÓN (siempre ROLLBACK).
 --
--- Uso recomendado (migración AÚN NO aplicada en remoto):
---   begin;
---   -- 1) pegar supabase/migrations/20260925140000_bloque15_stock_articulos.sql entero
---   -- 2) pegar este archivo desde "=== SMOKE ===" (sin el begin; ya abierto)
---   rollback;
+-- Prerrequisito: migración 20260925140000 YA aplicada en remoto (tablas + RPCs).
+-- No hace falta fuera de horas: el smoke no altera el esquema; solo DML en tx
+-- que se deshace con ROLLBACK. lock_timeout evita colgarse si hay locks.
 --
--- FUERA de horas de planta: la migración altera prod_referencias (ACCESS EXCLUSIVE
--- al ADD COLUMN) y bloquea lecturas del maestro mientras dure la tx.
+-- Uso:
+--   begin;
+--   set local lock_timeout = '3s';
+--   -- pegar desde "=== SMOKE ===" (o ejecutar este archivo entero)
+--   rollback;
 --
 -- Tras CUALQUIER error en el editor:
 --   1) rollback;
---   2) select to_regclass('public.prod_stock_articulos');  -- debe ser NULL si todo iba en la tx
---   3) select pid, state, query from pg_stat_activity
+--   2) select pid, state, query from pg_stat_activity
 --      where datname = current_database() and state like 'idle in transaction%';
 --
 -- Datos reales (minerva-rag):
@@ -20,15 +20,28 @@
 --   OT 35519 / 36034 (CHMLAB) · engomado@ = tableta sin capacidad write
 
 begin;
+set local lock_timeout = '3s';
 
 -- === SMOKE ===
 -- (La migración ya insertó stock_articulos_write para gabri@ — no repetir como authenticated)
+
+-- Resolver users ANTES de set role authenticated (auth.users no es readable por authenticated)
+select set_config(
+  'app.smoke_gabri_id',
+  (select id::text from auth.users where lower(email) = 'gabri@minervaglobal.es'),
+  true
+);
+select set_config(
+  'app.smoke_engomado_id',
+  (select id::text from auth.users where lower(email) = 'engomado@minervaglobal.es'),
+  true
+);
 
 -- Impersonar Gabri
 select set_config(
   'request.jwt.claims',
   json_build_object(
-    'sub', (select id::text from auth.users where lower(email) = 'gabri@minervaglobal.es'),
+    'sub', current_setting('app.smoke_gabri_id'),
     'role', 'authenticated'
   )::text,
   true
@@ -46,6 +59,7 @@ declare
   v_fisico integer;
   v_merma integer;
   v_engomado_id uuid;
+  v_gabri_id uuid := current_setting('app.smoke_gabri_id')::uuid;
 begin
   -- ── Happy path ──────────────────────────────────────────
   v_lote := public.prod_stock_articulos_alta_lote(
@@ -171,8 +185,7 @@ begin
   end;
 
   -- S2) Tableta engomado@ sin capacidad → alta_lote debe fallar
-  select id into v_engomado_id
-  from auth.users where lower(email) = 'engomado@minervaglobal.es';
+  v_engomado_id := nullif(current_setting('app.smoke_engomado_id', true), '')::uuid;
   if v_engomado_id is null then
     raise exception 'No existe engomado@ para probar tableta';
   end if;
@@ -203,7 +216,7 @@ begin
   perform set_config(
     'request.jwt.claims',
     json_build_object(
-      'sub', (select id::text from auth.users where lower(email) = 'gabri@minervaglobal.es'),
+      'sub', v_gabri_id::text,
       'role', 'authenticated'
     )::text,
     true
