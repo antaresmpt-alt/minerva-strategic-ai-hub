@@ -137,4 +137,38 @@ describe("validateStockArticulosImportRows", () => {
     expect(rows[0]?.semaforo).not.toBe("rojo");
     expect(rows[0]?.payload?.p_cantidad).toBe(35900);
   });
+
+  it("acepta sinónimos de unidad y proceso", () => {
+    const rows = validateStockArticulosImportRows(
+      [
+        draft({
+          rowIndex: 2,
+          referencia_minerva: "M-01632",
+          cantidad: "10",
+          unidad: "unidades",
+          proceso: "acabado",
+        }),
+        draft({
+          rowIndex: 3,
+          referencia_minerva: "M-01632",
+          cantidad: "5",
+          unidad: "hoja",
+          proceso: "troquel",
+          poses: "2",
+        }),
+      ],
+      catalog,
+      {
+        fileTag: "[import:abc]",
+        existingImportTags: new Set(),
+        existingLoteKeys: new Set(),
+      }
+    );
+    expect(rows[0]?.semaforo).not.toBe("rojo");
+    expect(rows[0]?.unidad).toBe("uds");
+    expect(rows[0]?.proceso).toBe("terminado");
+    expect(rows[0]?.payload?.p_unidad).toBe("uds");
+    expect(rows[1]?.unidad).toBe("hojas");
+    expect(rows[1]?.proceso).toBe("troquelado");
+  });
 });

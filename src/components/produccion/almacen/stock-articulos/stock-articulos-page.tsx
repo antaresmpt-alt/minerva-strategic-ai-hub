@@ -17,6 +17,7 @@ import { toast } from "sonner";
 
 import { StockArticulosAiDialog } from "@/components/produccion/almacen/stock-articulos/stock-articulos-ai-dialog";
 import { StockArticulosImportDialog } from "@/components/produccion/almacen/stock-articulos/stock-articulos-import-dialog";
+import { StockArticulosReservasPanel } from "@/components/produccion/almacen/stock-articulos/stock-articulos-reservas-panel";
 import { OtDestinoSearchInput } from "@/components/produccion/almacen/ot-destino-search-input";
 import {
   ReferenciaMinervaPicker,
@@ -102,6 +103,14 @@ function friendlyStockError(msg: string): string {
   }
   if (m.includes("libera o consume reservas")) {
     return "Libera o consume las reservas vivas antes de continuar.";
+  }
+  if (
+    m.includes("no está en minerva") ||
+    m.includes("prod_ots_general") ||
+    m.includes("impórtala desde optimus") ||
+    m.includes("importala desde optimus")
+  ) {
+    return "Esa OT aún no está en Minerva. Impórtala desde Optimus antes de reservar.";
   }
   return msg;
 }
@@ -355,6 +364,12 @@ export function StockArticulosPage() {
     parts.push(`${criticosCount} refs críticas (vista)`);
     return parts.join(" · ");
   }, [search, estadoFiltro, procesoFiltro, filtered.length, criticosCount]);
+
+  /** Detalle siempre con ATP fresco tras load() (reservas/ajustes). */
+  const detalleLive = useMemo(() => {
+    if (!detalle) return null;
+    return rows.find((r) => r.id === detalle.id) ?? detalle;
+  }, [rows, detalle]);
 
   const exportFiltrosLabel = useMemo(() => {
     const parts: string[] = [];
@@ -666,7 +681,7 @@ export function StockArticulosPage() {
       )}
 
       <StockArticuloDetalleDialog
-        row={detalle}
+        row={detalleLive}
         canWrite={canWrite}
         onClose={() => setDetalle(null)}
         onChanged={async () => {
@@ -1414,6 +1429,14 @@ function StockArticuloDetalleDialog({
                   </Button>
                 </div>
               ) : null}
+
+              <StockArticulosReservasPanel
+                stockId={row.id}
+                unidad={row.unidad}
+                libre={row.cantidad_libre}
+                canWrite={canWrite}
+                onChanged={onChanged}
+              />
 
               <div className="pt-3 space-y-2">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">

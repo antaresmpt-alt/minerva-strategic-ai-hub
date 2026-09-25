@@ -95,6 +95,48 @@ const PROCESOS: StockArticuloEstadoProceso[] = [
   "otro",
 ];
 
+/** Sinónimos frecuentes Gabri → valor canónico (evita rojos por tipografía). */
+const UNIDAD_SYNONYMS: Record<string, StockArticuloUnidad> = {
+  ud: "uds",
+  uds: "uds",
+  unidad: "uds",
+  unidades: "uds",
+  u: "uds",
+  hoja: "hojas",
+  hojas: "hojas",
+};
+
+const PROCESO_SYNONYMS: Record<string, StockArticuloEstadoProceso> = {
+  terminado: "terminado",
+  term: "terminado",
+  acabado: "terminado",
+  impreso: "impreso",
+  troquelado: "troquelado",
+  troquel: "troquelado",
+  troquelada: "troquelado",
+  otro: "otro",
+};
+
+function normalizeToken(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/\.+$/, "");
+}
+
+export function normalizeStockImportUnidad(
+  raw: string
+): StockArticuloUnidad | null {
+  return UNIDAD_SYNONYMS[normalizeToken(raw)] ?? null;
+}
+
+export function normalizeStockImportProceso(
+  raw: string
+): StockArticuloEstadoProceso | null {
+  return PROCESO_SYNONYMS[normalizeToken(raw)] ?? null;
+}
+
 const SKIP_SHEETS = new Set([
   STOCK_ARTICULOS_LISTAS_SHEET.toLowerCase(),
   STOCK_ARTICULOS_EJEMPLO_SHEET.toLowerCase(),
@@ -517,20 +559,19 @@ export function validateStockArticulosImportRows(
       markRojo("cantidad debe ser un entero > 0.");
     }
 
-    let unidad: StockArticuloUnidad | null = null;
-    if (!UNIDADES.includes(row.unidad as StockArticuloUnidad)) {
+    let unidad: StockArticuloUnidad | null = normalizeStockImportUnidad(
+      row.unidad
+    );
+    if (!unidad) {
       markRojo(`unidad inválida «${row.unidad || "∅"}» (uds|hojas).`);
-    } else {
-      unidad = row.unidad as StockArticuloUnidad;
     }
 
-    let proceso: StockArticuloEstadoProceso | null = null;
-    if (!PROCESOS.includes(row.proceso as StockArticuloEstadoProceso)) {
+    let proceso: StockArticuloEstadoProceso | null =
+      normalizeStockImportProceso(row.proceso);
+    if (!proceso) {
       markRojo(
         `proceso inválido «${row.proceso || "∅"}» (terminado|impreso|troquelado|otro).`
       );
-    } else {
-      proceso = row.proceso as StockArticuloEstadoProceso;
     }
 
     const poses = parseStockImportInt(row.poses);
@@ -627,6 +668,9 @@ export function validateStockArticulosImportRows(
 
     return {
       ...row,
+      // Mostrar canónicos en la tabla de revisión (tras sinónimos).
+      unidad: unidad ?? row.unidad,
+      proceso: proceso ?? row.proceso,
       semaforo,
       mensajes,
       resolved,
