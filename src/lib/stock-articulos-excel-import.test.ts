@@ -8,15 +8,23 @@ import {
 } from "@/lib/stock-articulos-excel-import";
 
 describe("parseStockImportInt", () => {
-  it("usa number raw sin reinterpretar formato", () => {
+  it("usa number entero raw sin reinterpretar formato", () => {
     expect(parseStockImportInt(35900)).toBe(35900);
-    expect(parseStockImportInt(35.9)).toBe(35);
+    expect(Number.isNaN(parseStockImportInt(35.9)!)).toBe(true);
   });
 
-  it("quita puntos/comas de miles en texto ES/EN", () => {
+  it("quita puntos/comas de miles solo con grupos de 3", () => {
     expect(parseStockImportInt("35.900")).toBe(35900);
     expect(parseStockImportInt("35,900")).toBe(35900);
     expect(parseStockImportInt("1.000.000")).toBe(1000000);
+    expect(parseStockImportInt("1.000")).toBe(1000);
+  });
+
+  it("rechaza decimales escritos como texto (no los convierte en enteros)", () => {
+    expect(Number.isNaN(parseStockImportInt("1,5")!)).toBe(true);
+    expect(Number.isNaN(parseStockImportInt("12,5")!)).toBe(true);
+    expect(Number.isNaN(parseStockImportInt("1.5")!)).toBe(true);
+    expect(Number.isNaN(parseStockImportInt("35.90")!)).toBe(true);
   });
 
   it("vacío → undefined; basura → NaN", () => {

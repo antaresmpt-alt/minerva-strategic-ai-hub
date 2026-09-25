@@ -182,10 +182,11 @@ export function StockArticulosReservasPanel({
           .from("prod_ots_general")
           .select("cliente")
           .eq("num_pedido", n)
-          .maybeSingle();
+          .limit(1);
         if (!cancelled) {
+          const row = data?.[0];
           setOtCliente(
-            data && typeof data.cliente === "string" ? data.cliente : null
+            row && typeof row.cliente === "string" ? row.cliente : null
           );
         }
       })();
@@ -260,19 +261,16 @@ export function StockArticulosReservasPanel({
       bultosN = b;
     }
 
-    if (mode === "consumir" || mode === "consumir_sin_reserva") {
-      const ok = window.confirm(
-        `Vas a descontar ${qty.toLocaleString("es-ES")} ${unidad} del físico del lote ${referenciaCodigo} para la OT ${otN}.\n¿Confirmar?`
-      );
-      if (!ok) return;
-    }
-
     if (mode === "consumir_sin_reserva") {
       const motivo = motivoSinReserva.trim();
       if (!motivo) {
         toast.error("El motivo es obligatorio al consumir sin reserva.");
         return;
       }
+      const ok = window.confirm(
+        `Vas a descontar ${qty.toLocaleString("es-ES")} ${unidad} del físico del lote ${referenciaCodigo} para la OT ${otN} (sin reserva).\n¿Confirmar?`
+      );
+      if (!ok) return;
       setSubmitting(true);
       try {
         const { error } = await supabase.rpc("prod_stock_articulos_consumir", {
@@ -286,6 +284,35 @@ export function StockArticulosReservasPanel({
         if (error) throw error;
         toast.success(
           `Consumo sin reserva · ${qty.toLocaleString("es-ES")} ${unidad}`
+        );
+        setMode(null);
+        await load();
+        await onChanged();
+      } catch (e) {
+        toast.error(friendlyReservaError(errorMessageFromUnknown(e)));
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    if (mode === "consumir") {
+      const ok = window.confirm(
+        `Vas a descontar ${qty.toLocaleString("es-ES")} ${unidad} del físico del lote ${referenciaCodigo} para la OT ${otN}.\n¿Confirmar?`
+      );
+      if (!ok) return;
+      setSubmitting(true);
+      try {
+        const { error } = await supabase.rpc("prod_stock_articulos_consumir", {
+          p_stock_id: stockId,
+          p_ot_numero: otN,
+          p_cantidad: qty,
+          p_bultos: bultosN,
+          p_notas: notas.trim() || undefined,
+        });
+        if (error) throw error;
+        toast.success(
+          `Consumido ${qty.toLocaleString("es-ES")} ${unidad} · OT ${otN}`
         );
         setMode(null);
         await load();
@@ -331,30 +358,6 @@ export function StockArticulosReservasPanel({
         setSubmitting(false);
       }
       return;
-    }
-
-    if (mode === "consumir") {
-      setSubmitting(true);
-      try {
-        const { error } = await supabase.rpc("prod_stock_articulos_consumir", {
-          p_stock_id: stockId,
-          p_ot_numero: otN,
-          p_cantidad: qty,
-          p_bultos: bultosN,
-          p_notas: notas.trim() || undefined,
-        });
-        if (error) throw error;
-        toast.success(
-          `Consumido ${qty.toLocaleString("es-ES")} ${unidad} · OT ${otN}`
-        );
-        setMode(null);
-        await load();
-        await onChanged();
-      } catch (e) {
-        toast.error(friendlyReservaError(errorMessageFromUnknown(e)));
-      } finally {
-        setSubmitting(false);
-      }
     }
   }
 

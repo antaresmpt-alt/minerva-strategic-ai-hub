@@ -357,11 +357,12 @@ Detalle 1–3.x histórico: ver commits jun / `.MANUALES/CONTEXTO/FASES_HOJA_RUT
 - [x] **Plataforma — print Electron:** migrado `useReactToPrint` → `printElementInNewWindow` (externos, fichas, tablón semanal, ventas). Ya OK: detalle-día + mesa diaria.
 - [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor; tableta = máquina — `MINERVA_BLOQUE12_…` (no abrir ya; default gestor = maestro OTs)
 - [ ] **Bloque 5 puente**: Rita lanza OTs a Hugo (no bloquea paralelo si Hugo sigue a mano)
-- [ ] **Bloque 15** (🚧): Fase A en `feature/bloque15-stock-articulos` — 15.0→15.1→15.3→15.4/15.2 — `.MANUALES/BLOQUES/MINERVA_BLOQUE15_STOCK_ARTICULOS.md`
+- [ ] **Bloque 15** (🚧): Fase A casi lista en `feature/bloque15-stock-articulos` — ✅ 15.0–15.1d / 15.3 / 15.4 · ⏳ **15.2** ATP despacho · ⏳ 15.5 — `.MANUALES/BLOQUES/MINERVA_BLOQUE15_STOCK_ARTICULOS.md`
 - [ ] **Bloque 16** (📋): validar §9 con Gemma/Carlos → Fase A (claves + UI + digest 08:00) — puede ir **en paralelo** a B15 — `.MANUALES/BLOQUES/MINERVA_BLOQUE16_LISTADOS_PERSONALIZADOS.md`
 
 ### Hecho reciente (jul–sep)
 - [x] **25 sep:** Briefs **Bloque 15/16** niquelados + **15.0** migración/tipos en rama `feature/bloque15-stock-articulos` (reservas aparte, ATP calc., tag OT_ENTREGA en diseño).
+- [x] **25 sep (tarde):** **15.1–15.1d** UI/import/export + **15.3** reservas + **15.4** OT entrega (tag en notas reserva sobre OT Optimus existente; sin crear OT).
 - [x] **sep:** Etiquetas Hugo — sesiones **«Hoy»** por I/T/N (`prod_etiquetas_hoja_ruta_sesiones`) + filtro Tocadas hoy.
 - [x] **2 sep:** **9.7 OCR albaranes** — PDF/fotos → tabla revisión → recepciones en Pendientes (`0bfef6b`). No cartela automático. Pendiente: 1 partida → 2+ OTs. `.MANUALES/SESIONES/SESION_02SEP2026_BLOQUE9_7_OCR_ALBARANES.md`
 - [x] **30 ago:** Calendario **perf 3 PRs** (bandeja fantasma, batch guardar detalle-día, inputs/memo) + ejecución filtros — `.MANUALES/SESIONES/SESION_30AGO2026_CALENDARIO_PERF.md` · patrón «módulo fantasma» (ver también Compras `20a06a5`)
@@ -469,7 +470,7 @@ Detalle 1–3.x histórico: ver commits jun / `.MANUALES/CONTEXTO/FASES_HOJA_RUT
 
 26. **Reunión Gemma 6 sep 2026:** app vista de arriba a abajo; ritmo = 4–5 OTs reales E2E. **Bloque 13** (📋): vista comercial = pipeline recortado, no el calendario; TV aeropuerto / mapa planta = después. Cierre OT ≠ albarán María José (B6+B7). Promedios siguen bajo demanda. **Perf Iniciar contenedor:** optimistic + fetch paralelo — `.MANUALES/SESIONES/SESION_06SEP2026_REUNION_GEMMA_CONTENEDOR.md`.
 
-27. **Bloque 15 — Stock de artículos / WIP (25 sep 2026):** producto/WIP en tablas propias (≠ B9 palets). Reservas en `prod_stock_articulos_reservas`; libre/estado **calculados** (vista ATP). `cliente` = texto Optimus (null = cualquiera). UI busca **ref. cliente** primero; Minerva es canónico. Flujos: OT `FABRICACION` → entrada stock; **Stock → Generar OT entrega** (tag `OT_ENTREGA`) + reserva/consumo + bultos; ATP al despachar. Rama `feature/bloque15-stock-articulos`. Brief: `.MANUALES/BLOQUES/MINERVA_BLOQUE15_STOCK_ARTICULOS.md`.
+27. **Bloque 15 — Stock de artículos / WIP (25 sep 2026):** producto/WIP en tablas propias (≠ B9 palets). Reservas en `prod_stock_articulos_reservas`; libre/estado **calculados** (vista ATP). `cliente` = texto Optimus (null = cualquiera). UI busca **ref. cliente** primero; Minerva es canónico. Flujos: OT `FABRICACION` → entrada stock; **Stock → OT entrega sobre OT ya existente (Optimus)** (tag `[OT_ENTREGA]` en reserva) + consumo + bultos; ATP al despachar (**15.2** pendiente). Rama `feature/bloque15-stock-articulos`. Brief: `.MANUALES/BLOQUES/MINERVA_BLOQUE15_STOCK_ARTICULOS.md`.
 
 28. **Bloque 16 — Listados + digests (25 sep 2026, diseño):** listados = `clave` estable + query en código + suscriptores + cron mail (~08:00 laborables). **Prohibido** SQL libre en UI/BD. Gemma = material llega hoy (+ mañana). MVP digests **no espera** B15. Brief: `.MANUALES/BLOQUES/MINERVA_BLOQUE16_LISTADOS_PERSONALIZADOS.md`.
 

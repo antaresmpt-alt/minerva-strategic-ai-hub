@@ -149,20 +149,33 @@ function cellStr(v: unknown): string {
 }
 
 /**
- * Enteros desde Excel: si viene number (raw:true) se usa tal cual;
- * si viene texto, se quitan puntos/comas de miles ("35.900" / "35,900" → 35900).
+ * Enteros desde Excel/UI: number entero tal cual;
+ * texto solo admite separador de miles si el grupo tiene exactamente 3 dígitos
+ * (`1.000`, `35.900`, `1,000`). Decimales (`1,5`, `12,5`) → NaN.
  */
 export function parseStockImportInt(raw: unknown): number | undefined {
   if (raw == null || raw === "") return undefined;
   if (typeof raw === "number" && Number.isFinite(raw)) {
+    if (Math.abs(raw - Math.trunc(raw)) > 1e-9) return NaN;
     return Math.trunc(raw);
   }
   const s = String(raw).trim().replace(/\s/g, "");
   if (!s) return undefined;
-  const cleaned = s.replace(/[.,]/g, "");
-  if (!/^-?\d+$/.test(cleaned)) return NaN;
-  const n = Number(cleaned);
-  return Number.isFinite(n) ? n : NaN;
+  if (/^-?\d+$/.test(s)) {
+    const n = Number(s);
+    return Number.isFinite(n) ? n : NaN;
+  }
+  // Miles ES: 1.000 / 35.900 / 1.000.000
+  if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) {
+    const n = Number(s.replace(/\./g, ""));
+    return Number.isFinite(n) ? n : NaN;
+  }
+  // Miles EN: 1,000 / 35,900
+  if (/^-?\d{1,3}(,\d{3})+$/.test(s)) {
+    const n = Number(s.replace(/,/g, ""));
+    return Number.isFinite(n) ? n : NaN;
+  }
+  return NaN;
 }
 
 /** Decimales (p.ej. palets): number raw, o texto con decimal ES/EN. */

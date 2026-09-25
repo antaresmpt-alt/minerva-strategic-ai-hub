@@ -5,7 +5,7 @@
 > **No** es materia prima: eso sigue siendo Bloque 9 (cartelas / palets de papel).  
 > Complementa: maestro · Bloque 6 (cierre) · Bloque 8 (contenedor) · Bloque 9 (material) · Bloque 16 (digests).
 >
-> **Estado:** 🚧 Fase A — rama `feature/bloque15-stock-articulos`. **15.0** + embalaje `20260925150000` en remoto; **15.1** pantalla OK (pendiente pulidos §8.1.1). Siguiente: ver §14.  
+> **Estado:** 🚧 Fase A en `feature/bloque15-stock-articulos`. Hecho: **15.0–15.1d**, **15.3**, **15.4**. Pendiente: **15.2** (ATP al despachar) y **15.5** (alerta crítico).  
 > **Urgencia:** Gabri controla PT a ojo. Albert: al **despachar** una OT, Minerva avisa si hay stock usable.  
 > **Personas:** Gabri (PT + calendario engomado), Juan/Ramón (ubicación), oficina/Zada/Manel (OT + despacho), Albert (ATP).
 >
@@ -137,8 +137,8 @@ Stock `impreso` / `troquelado`, normalmente con `cliente` relleno. No ofrecer a 
 ### Caso D — Desde Stock → OT de entrega (flujo estrella Gabri/oficina)
 
 1. Abrir **Stock de artículos**; buscar por ref. cliente / cliente / Minerva.  
-2. Hay 150k, hacen falta 50k → **«Generar OT de entrega»**.  
-3. Minerva crea OT con tag **`OT_ENTREGA`** (cantidad, cliente, ref, nº pedido) + **reserva** del lote (uds + bultos).  
+2. Hay 150k, hacen falta 50k → **«OT entrega»**.  
+3. Minerva **marca** una OT ya importada de Optimus con tag **`[OT_ENTREGA]`** (en la reserva) + **reserva** del lote (uds + bultos). No crea nº OT.  
 4. Al salir / cerrar → **consumo** + reetiqueta (María José).
 
 ### Caso E — Al despachar OT de pedido (Albert)
@@ -221,7 +221,8 @@ Sin SQL nueva (RPCs ya existen). En detalle del lote:
 
 ### 8.1.4 — OT de entrega (15.4)
 
-Sin crear nº OT en Minerva. Botón **OT entrega**: elige OT ya importada de Optimus → reserva con tag `[OT_ENTREGA]` en notas + badge en lista. Tag persistente a nivel OT (tabla/columna) queda pendiente si hace falta filtrar en despacho/calendario.
+Sin crear nº OT en Minerva. Botón **OT entrega**: elige OT ya importada de Optimus → reserva con tag `[OT_ENTREGA]` en notas + badge en lista.  
+**Limitación:** si luego se amplía la reserva con otra nota vía «Reservar», `coalesce` puede sustituir las notas y **perder el tag**. Para filtrar en **15.2** hace falta campo real (`es_ot_entrega` u similar) → SQL a revisar con Claude antes de aplicar.
 
 ### 8.2 Modal ATP en despacho
 
@@ -316,6 +317,7 @@ Orden acordado (Claude 25 sep): **picker solo buscar** → **15.1a editar_datos 
 | 25 sep 2026 | **15.1b:** lookup case-insensitive (Minerva UPPER + ref. cliente `ilike`). **15.1d:** export PDF/Excel bandeja filtrada (fecha + usuario). |
 | 25 sep 2026 | **15.1b:** sinónimos unidad/proceso. **15.3:** UI reservas en detalle (lista + reservar/consumir/liberar; sin reserva aparte). Sin SQL nueva. |
 | 25 sep 2026 | **15.3 fix:** miles en cantidades UI; confirm consumir; aviso cliente OT≠lote. **15.4:** OT entrega = tag `[OT_ENTREGA]` + reserva (sin crear OT). |
+| 25 sep 2026 | Hardening: auth Gemini antes de LLM; sumas IA por unidad + count exact; parseInt miles solo grupos de 3; PDF descripción/reservado; docs Caso D / maestro. |
 
 ---
 

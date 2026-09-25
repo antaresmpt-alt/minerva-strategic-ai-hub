@@ -72,6 +72,14 @@ export async function POST(req: NextRequest) {
   const signal = req.signal;
 
   try {
+    const supabase = await createServerSupabaseClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Sesión requerida." }, { status: 401 });
+    }
+
     const body = await req.json();
     const modelId = parseModelFromBody((body as { model?: unknown }).model);
     const question = (body as { question?: unknown }).question;
@@ -126,14 +134,6 @@ export async function POST(req: NextRequest) {
 
     const { interpretacion, filtros } =
       parseStockArticulosQueryFiltersPayload(parsedRaw);
-
-    const supabase = await createServerSupabaseClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Sesión requerida." }, { status: 401 });
-    }
 
     const queryResult = await queryStockArticulosAtp(supabase, filtros);
     const resultRows = toStockArticulosQueryResultRows(queryResult.rows);
