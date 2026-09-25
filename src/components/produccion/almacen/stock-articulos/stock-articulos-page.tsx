@@ -1424,6 +1424,19 @@ function StockArticuloDetalleDialog({
     editCondicion,
   ]);
 
+  /** Total embalaje si no cuadra con el físico (solo aviso). */
+  const editEmbalajeDescuadre = useMemo(() => {
+    if (!row || row.unidad !== "uds") return null;
+    if (!editBultos.trim() || !editUdsBulto.trim()) return null;
+    const b = parseStockImportInt(editBultos);
+    const u = parseStockImportInt(editUdsBulto);
+    const p = editPico.trim() ? parseStockImportInt(editPico) : 0;
+    if (b == null || u == null || p == null) return null;
+    if (![b, u, p].every((n) => Number.isFinite(n) && n >= 0)) return null;
+    const total = b * u + p;
+    return total === row.cantidad_fisica ? null : total;
+  }, [row, editBultos, editUdsBulto, editPico]);
+
   useEffect(() => {
     if (!row) {
       setMovs([]);
@@ -1960,6 +1973,15 @@ function StockArticuloDetalleDialog({
                   />
                 </div>
               </div>
+              {editEmbalajeDescuadre != null ? (
+                <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  Bultos × uds/bulto + pico ={" "}
+                  <strong>{editEmbalajeDescuadre.toLocaleString("es-ES")}</strong>{" "}
+                  ≠ físico {row.cantidad_fisica.toLocaleString("es-ES")}. Editar
+                  datos no cambia la cantidad: si el físico real es otro, usa{" "}
+                  <strong>Ajustar cantidad</strong>.
+                </p>
+              ) : null}
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-500">Condición</Label>
                 <Input

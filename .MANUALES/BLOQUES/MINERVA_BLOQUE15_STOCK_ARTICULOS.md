@@ -5,7 +5,7 @@
 > **No** es materia prima: eso sigue siendo Bloque 9 (cartelas / palets de papel).  
 > Complementa: maestro · Bloque 6 (cierre) · Bloque 8 (contenedor) · Bloque 9 (material) · Bloque 16 (digests).
 >
-> **Estado:** 🚧 Fase A en `feature/bloque15-stock-articulos`. Hecho: **15.0–15.1d**, **15.3**, **15.4**. Pendiente: **15.2** (ATP al despachar) y **15.5** (alerta crítico).  
+> **Estado:** 🚧 Fase A en `feature/bloque15-stock-articulos`. Hecho: **15.0–15.1d**, **15.2** (UI, smoke pendiente), **15.3**, **15.4**. Pendiente: **15.5** (alerta crítico).  
 > **Urgencia:** Gabri controla PT a ojo. Albert: al **despachar** una OT, Minerva avisa si hay stock usable.  
 > **Personas:** Gabri (PT + calendario engomado), Juan/Ramón (**muelle / material B9**, no stock artículos), oficina/Zada/Manel (OT + despacho), comercial (**consulta** stock artículos para negociar surplus/liquidar antes del pedido), Albert (ATP).
 >
@@ -286,7 +286,7 @@ FABRICACION / sobrante → proponer entrada a stock. Entrega con reserva → con
 | **15.1d** | Export PDF / Excel bandeja filtrada | ✅ |
 | **15.3** | Reserva + consumo + liberar (vía RPC) en UI | ✅ |
 | **15.4** | Tag `OT_ENTREGA` + reserva sobre OT Optimus | ✅ (tag en notas reserva; sin crear OT) |
-| **15.2** | Modal ATP en despacho OT (usar / fabricar / mezclar) | ⏳ **al final** (inventario cargado) |
+| **15.2** | Modal ATP en despacho OT (usar / fabricar / mezclar) | ✅ UI (sin SQL) · smoke pendiente |
 | **15.5** | Alerta crítico agregado por referencia | ⏳ |
 
 Orden acordado (Claude 25 sep): **picker solo buscar** → **15.1a editar_datos (review DB)** → **15.1b** → **15.1d** → luego **15.3 → 15.4 → 15.2**.
@@ -320,6 +320,8 @@ Orden acordado (Claude 25 sep): **picker solo buscar** → **15.1a editar_datos 
 | 25 sep 2026 | Hardening: auth Gemini antes de LLM; sumas IA por unidad + count exact; parseInt miles solo grupos de 3; PDF descripción/reservado; docs Caso D / maestro. |
 | 25 sep 2026 | Writers: sin `almacen`/`administracion` (migración `20260925170000`). Comercial RO: path + nav stock artículos (no material). |
 | 25 sep 2026 | Bandeja: columna Pedido/OT; selección + acciones editar/ajustar/anular (→0; diseño sin hard-delete). |
+| 25 sep 2026 | **15.2:** asistente despacho (OT simple con ref. Minerva) consulta `stock_articulos_atp` (PT uds, libre>0, cliente compatible: dedicado primero, luego genérico FIFO) + reservas vivas de la OT. Aviso en cabecera + modal al pulsar Despachar sin decisión. **Usar stock** (cubre todo) = reserva multi-lote `[OT_ENTREGA]`, num_pedido = pedido cliente; no despacha. **Mezclar** (parcial) = texto para partir en Optimus (OT entrega N + OT fabricación resto), copiar; no despacha. **Fabricar completo** = despacho normal. WIP y stock de otro cliente solo informativos. Contenedor: sin ATP. Lib `stock-articulos-atp-despacho.ts` + tests. |
+| 25 sep 2026 | Smoke fixes: botones Consumir/Liberar visibles; tag `[OT_ENTREGA]` sin duplicar; overlay de diálogo apilado por orden (padre queda oscurecido, hijo con anillo); aviso no bloqueante si bultos×uds/bulto+pico ≠ físico en Editar datos. |
 
 ---
 
@@ -327,7 +329,7 @@ Orden acordado (Claude 25 sep): **picker solo buscar** → **15.1a editar_datos 
 
 Rama: **`feature/bloque15-stock-articulos`**.
 
-**Siguiente:** poner lotes `TEST_PILOTO` a 0 (liberar reservas antes si las hay) → Gabri carga real → **15.2** modal ATP despacho.  
-~~15.1a~~ · ~~15.1b~~ · ~~15.1d~~ · ~~15.3~~ · ~~15.4~~.
+**Siguiente:** smoke 15.2 (OT 98046 / M-01632 con 120 libres: pedido ≤120 → Usar stock; 300 → Mezclar) → lotes `TEST_PILOTO` a 0 → Gabri carga real → **15.5** alerta crítico.  
+~~15.1a~~ · ~~15.1b~~ · ~~15.1d~~ · ~~15.3~~ · ~~15.4~~ · ~~15.2~~ (UI).
 
 Validar §10 con Gabri cuando toque UX de ubicación/mínimos.

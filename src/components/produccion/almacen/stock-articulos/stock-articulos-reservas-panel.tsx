@@ -29,14 +29,17 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { errorMessageFromUnknown } from "@/lib/error-message";
+import {
+  buildReservaNotas,
+  OT_ENTREGA_TAG,
+} from "@/lib/stock-articulos-atp-despacho";
 import { parseStockImportInt } from "@/lib/stock-articulos-excel-import";
 import { clientesOtLoteDifieren } from "@/lib/stock-articulos-cliente-match";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 const supabase = createSupabaseBrowserClient();
 
-/** Marca en notas de reserva (15.4) hasta tag persistente en OT. */
-export const OT_ENTREGA_TAG = "[OT_ENTREGA]";
+export { OT_ENTREGA_TAG };
 
 export type StockArticuloReservaRow = {
   id: string;
@@ -383,12 +386,7 @@ export function StockArticulosReservasPanel({
     }
 
     if (mode === "reservar" || mode === "ot_entrega") {
-      const noteParts = [
-        mode === "ot_entrega" ? OT_ENTREGA_TAG : null,
-        notas.trim() || null,
-      ].filter(Boolean);
-      // Evitar duplicar tag si ya está en notas
-      const uniqueNotes = [...new Set(noteParts)].join(" ");
+      const uniqueNotes = buildReservaNotas(mode === "ot_entrega", notas);
 
       setSubmitting(true);
       try {
@@ -498,7 +496,11 @@ export function StockArticulosReservasPanel({
                 <TableHead className="text-xs text-right">Reservado</TableHead>
                 <TableHead className="text-xs text-right">Consumido</TableHead>
                 <TableHead className="text-xs">Estado</TableHead>
-                {canWrite ? <TableHead className="text-xs w-20" /> : null}
+                {canWrite ? (
+                  <TableHead className="text-xs whitespace-nowrap">
+                    Acciones
+                  </TableHead>
+                ) : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -550,24 +552,26 @@ export function StockArticulosReservasPanel({
                     {canWrite ? (
                       <TableCell className="text-xs">
                         {viva ? (
-                          <div className="flex gap-1">
+                          <div className="flex gap-1.5">
                             <Button
                               type="button"
                               size="sm"
-                              variant="ghost"
-                              className="h-7 px-1.5 text-xs"
+                              variant="outline"
+                              className="h-7 rounded-full px-2.5 text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+                              title="Consumir (baja el físico)"
                               onClick={() => openMode("consumir", r.ot_numero)}
                             >
-                              Cons.
+                              Consumir
                             </Button>
                             <Button
                               type="button"
                               size="sm"
-                              variant="ghost"
-                              className="h-7 px-1.5 text-xs text-slate-500"
+                              variant="outline"
+                              className="h-7 rounded-full px-2.5 text-xs border-slate-300 text-slate-700 hover:bg-slate-100"
+                              title="Anular reserva (vuelve a libre, no baja físico)"
                               onClick={() => openMode("liberar", r.ot_numero)}
                             >
-                              Lib.
+                              Liberar
                             </Button>
                           </div>
                         ) : null}

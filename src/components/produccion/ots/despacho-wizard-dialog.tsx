@@ -66,6 +66,12 @@ import {
   type SugerenciaFieldDiff,
 } from "@/lib/articulos-maestro-sugerencias";
 import {
+  DespachoStockAtpBanner,
+  DespachoStockAtpDialog,
+  useDespachoStockAtp,
+  type DespachoAtpDecision,
+} from "@/components/produccion/ots/despacho-stock-articulos-atp";
+import {
   buildHorasFormPatchFromMaestro,
   MAESTRO_PREFILL_REFERENCIA_SELECT,
   maestroTipoEngomadoEfectivo,
@@ -1656,8 +1662,50 @@ export function DespachoWizardDialog({
     [forceMode, userRole],
   );
 
+  // ── Bloque 15.2: ATP de producto (no aplica a contenedor multi-ref) ──────
+  const atpOt = seleccion?.num_pedido.trim() || null;
+  const atpCantidad = useMemo(() => {
+    const n = integerOrZeroForDespacho(meta.cantidad);
+    return n > 0 ? n : null;
+  }, [meta.cantidad]);
+  const stockAtp = useDespachoStockAtp({
+    supabase,
+    enabled: open && !modoContenedor && Boolean(atpOt),
+    referenciaId: form.referencia_id,
+    otNumero: atpOt,
+    otCliente: meta.cliente || null,
+    cantidadPedida: atpCantidad,
+  });
+  const [atpDecisionState, setAtpDecisionState] = useState<{
+    ot: string;
+    decision: DespachoAtpDecision;
+  } | null>(null);
+  const atpDecision =
+    atpDecisionState && atpDecisionState.ot === atpOt
+      ? atpDecisionState.decision
+      : null;
+  const [atpDialogOpen, setAtpDialogOpen] = useState(false);
+
   const submitDespacho = useCallback(async () => {
     if (!seleccion) return;
+    if (!modoContenedor && stockAtp.relevante) {
+      if (atpDecision == null) {
+        setAtpDialogOpen(true);
+        return;
+      }
+      if (atpDecision === "usar_stock") {
+        toast.error(
+          "OT de entrega: se sirve de stock y no se despacha a producción. Cambia la decisión si hay que fabricar.",
+        );
+        return;
+      }
+      if (atpDecision === "mezclar") {
+        toast.error(
+          "Pendiente de partir en Optimus (OT entrega + OT fabricación). Despacha la OT de fabricación cuando llegue.",
+        );
+        return;
+      }
+    }
     if (despachoStatus === "despachada_con_compra") {
       const canForce =
         forceMode && userRole != null && ROLES_FORZADO.has(userRole);
@@ -2048,6 +2096,7 @@ export function DespachoWizardDialog({
       setSaving(false);
     }
   }, [
+    atpDecision,
     despachoStatus,
     form,
     formas,
@@ -2059,8 +2108,23 @@ export function DespachoWizardDialog({
     procesoDatos,
     procesoIdsInRoute,
     seleccion,
+    stockAtp.relevante,
     supabase,
   ]);
+
+  const onAtpDecision = useCallback(
+    (decision: DespachoAtpDecision) => {
+      if (!atpOt) return;
+      setAtpDecisionState({ ot: atpOt, decision });
+      setAtpDialogOpen(false);
+      if (decision === "fabricar") {
+        toast.info("Fabricar completo: puedes despachar la OT.");
+      } else if (decision === "mezclar") {
+        toast.info("Parte la OT en Optimus con el texto copiado.");
+      }
+    },
+    [atpOt],
+  );
 
   const continueNextOt = useCallback(() => {
     setPostDespachoCartelita(null);
@@ -3210,6 +3274,15 @@ export function DespachoWizardDialog({
                       </p>
                     </div>
                   </div>
+                ) : null}
+
+                {seleccion && stockAtp.relevante && stockAtp.resumen ? (
+                  <DespachoStockAtpBanner
+                    resumen={stockAtp.resumen}
+                    reservadoOt={stockAtp.reservadoOt}
+                    decision={atpDecision}
+                    onOpen={() => setAtpDialogOpen(true)}
+                  />
                 ) : null}
 
                 <div className="grid gap-4 lg:grid-cols-2">
@@ -4575,6 +4648,21 @@ export function DespachoWizardDialog({
             </>
           )}
         </DialogFooter>
+        {seleccion && atpOt && stockAtp.resumen ? (
+          <DespachoStockAtpDialog
+            open={atpDialogOpen}
+            onOpenChange={setAtpDialogOpen}
+            supabase={supabase}
+            resumen={stockAtp.resumen}
+            reservadoOt={stockAtp.reservadoOt}
+            otNumero={atpOt}
+            otCliente={meta.cliente || null}
+            pedidoCliente={meta.pedido_cliente || null}
+            referenciaCodigo={form.referencia_codigo || null}
+            onDecision={onAtpDecision}
+            onReservado={stockAtp.reload}
+          />
+        ) : null}
       </DialogContent>
     </Dialog>
 
