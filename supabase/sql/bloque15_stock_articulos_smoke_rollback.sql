@@ -128,11 +128,13 @@ begin
   end if;
   raise notice 'OK transform: WIP=1000 hojas, PT=1900 uds, merma=50';
 
-  -- Consumo sin reserva sobre stock comprometido (debe fallar)
+  -- Consumo sin reserva sobre stock comprometido (debe fallar).
+  -- La reserva 500 VA FUERA del begin/exception: si va dentro, el ROLLBACK
+  -- del subbloque la deshace y S3 no tiene comprometido.
+  perform public.prod_stock_articulos_reservar(
+    p_stock_id := v_lote, p_ot_numero := v_ot, p_cantidad := 500, p_notas := 'bloquear'
+  );
   begin
-    perform public.prod_stock_articulos_reservar(
-      p_stock_id := v_lote, p_ot_numero := v_ot, p_cantidad := 500, p_notas := 'bloquear'
-    );
     perform public.prod_stock_articulos_consumir(
       p_stock_id := v_lote, p_ot_numero := '36034', p_cantidad := 100,
       p_motivo_sin_reserva := 'robar reservado'
