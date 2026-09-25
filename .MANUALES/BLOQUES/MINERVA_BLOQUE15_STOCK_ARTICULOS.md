@@ -5,9 +5,12 @@
 > **No** es materia prima: eso sigue siendo Bloque 9 (cartelas / palets de papel).  
 > Complementa: maestro · Bloque 6 (cierre) · Bloque 8 (contenedor) · Bloque 9 (material) · Bloque 16 (digests).
 >
-> **Estado:** 🚧 Fase A en código — rama `feature/bloque15-stock-articulos` (25 sep 2026).  
+> **Estado:** 🚧 Fase A — rama `feature/bloque15-stock-articulos`. Migración 15.0 reescrita (RPC + capacidades); **no aplicar remoto hasta revisión Claude**.  
 > **Urgencia:** Gabri controla PT a ojo. Albert: al **despachar** una OT, Minerva avisa si hay stock usable.  
-> **Personas:** Gabri (PT), Juan/Ramón (ubicación), oficina/Zada/Manel (OT + despacho), Albert (ATP).
+> **Personas:** Gabri (PT + calendario engomado), Juan/Ramón (ubicación), oficina/Zada/Manel (OT + despacho), Albert (ATP).
+>
+> **Permisos escritura:** roles `admin|gerencia|administracion|almacen|oficina_tecnica|logistica` **o** capacidad `profiles_capacidades.stock_articulos_write` (Gabri con rol `engomado`). Tableta `engomado@` **sin** esa capacidad.  
+> **15.4:** OT de entrega nace en **Optimus**; Minerva solo tag `OT_ENTREGA` + reserva. No crear nº OT en `prod_ots_general` mientras haya paralelo.
 
 **Tres mundos de stock (no mezclar pestañas):**
 
@@ -211,12 +214,13 @@ FABRICACION / sobrante → proponer entrada a stock. Entrega con reserva → con
 
 | ID | Entregable |
 |----|------------|
-| **15.0** | Migración: lotes + reservas + movimientos + vista ATP + RLS |
+| **15.0** | Migración: lotes + reservas (consumida) + movimientos inmutables + vistas ATP/crítico + RLS solo SELECT + RPCs |
 | **15.1** | UI Stock artículos: bandeja + alta/ajuste + búsqueda ref. cliente |
+| **15.1b** | Carga inventario inicial (Gabri / Excel) **antes** de activar aviso despacho |
 | **15.2** | Modal ATP en despacho OT (usar / fabricar / mezclar) |
-| **15.3** | Reserva + consumo + liberar; movimientos |
-| **15.4** | Acción **Generar OT de entrega** (tag `OT_ENTREGA` + reserva + bultos) |
-| **15.5** | Alerta crítico en bandeja |
+| **15.3** | Reserva + consumo + liberar (vía RPC) |
+| **15.4** | Tag `OT_ENTREGA` + reserva sobre OT ya creada en Optimus (no crear OT en Minerva) |
+| **15.5** | Alerta crítico agregado por referencia |
 
 ### Fase B
 

@@ -11,6 +11,7 @@ import {
   Home,
   LayoutList,
   MessageCircle,
+  Package,
   Stamp,
   Tag,
   Tags,
@@ -88,12 +89,22 @@ const NAV_GROUPS: NavGroup[] = [
       },
       {
         href: "/produccion/almacen/stock",
-        label: "Stock",
+        label: "Stock material",
         icon: Boxes,
         compactNavIcon: true,
         match: (p) =>
           p === "/produccion/almacen/stock" ||
-          p.startsWith("/produccion/almacen/stock/"),
+          (p.startsWith("/produccion/almacen/stock/") &&
+            !p.startsWith("/produccion/almacen/stock-articulos")),
+      },
+      {
+        href: "/produccion/almacen/stock-articulos",
+        label: "Stock artículos",
+        icon: Package,
+        compactNavIcon: true,
+        match: (p) =>
+          p === "/produccion/almacen/stock-articulos" ||
+          p.startsWith("/produccion/almacen/stock-articulos/"),
       },
     ],
   },
