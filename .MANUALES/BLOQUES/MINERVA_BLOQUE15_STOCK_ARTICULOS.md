@@ -261,7 +261,7 @@ FABRICACION / sobrante → proponer entrada a stock. Entrega con reserva → con
 |----|------------|--------|
 | **15.0** | Migración: lotes + reservas + ATP/crítico + RLS SELECT + RPCs | ✅ remoto + smoke |
 | **15.1** | UI bandeja + alta/ajuste + búsqueda ref. + IA + embalaje en alta | ✅ casi; pulidos §8.1.1 |
-| **15.1a** | Editar datos (no cantidad): RPC `editar_datos` + UI detalle | ⏳ tras picker-only |
+| **15.1a** | Editar datos (no cantidad): RPC `editar_datos` + UI detalle | ✅ |
 | **15.1b** | Plantilla Excel + import con tabla de revisión (carga inicial) | ⏳ |
 | **15.1d** | Export PDF / Excel bandeja filtrada | ⏳ |
 | **15.3** | Reserva + consumo + liberar (vía RPC) en UI | ⏳ |
@@ -299,14 +299,9 @@ Orden acordado (Claude 25 sep): **picker solo buscar** → **15.1a editar_datos 
 
 Rama: **`feature/bloque15-stock-articulos`**.
 
-**Siguiente a implementar ahora (UI, sin DB):**  
-~~§8.1.1 punto 1 — picker solo buscar~~ (hecho) + aviso embalaje en alta.  
-Borrador RPC **15.1a:** `supabase/sql/draft_prod_stock_articulos_editar_datos.sql` → **pasar a Claude; no aplicar hasta OK**.
+**Siguiente:** **15.1b** plantilla + import Excel con tabla de revisión.  
+~~15.1a editar_datos~~ aplicado remoto + UI «Editar datos» en detalle.
 
-Después:
-1. Claude OK → aplicar `editar_datos` + UI editar en detalle (**15.1a**).  
-2. **15.1b** plantilla + import con revisión.  
-3. **15.1d** export PDF/Excel.  
-4. Gabri carga inventario → **15.3 / 15.4 / 15.2**.
+Después: **15.1d** export → Gabri carga inventario → **15.3 / 15.4 / 15.2**.
 
 Validar §10 con Gabri cuando toque UX de ubicación/mínimos.

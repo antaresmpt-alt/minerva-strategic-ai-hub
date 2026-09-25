@@ -64,6 +64,9 @@ const LIST_LIMIT = 800;
 
 function friendlyStockError(msg: string): string {
   const m = msg.toLowerCase();
+  if (m.includes("sin cambios en datos")) {
+    return "No hay cambios que guardar en los datos del lote.";
+  }
   if (m.includes("sin permiso") || m.includes("stock_articulos_write")) {
     return "No tienes permiso para modificar stock de artículos.";
   }
@@ -960,7 +963,59 @@ function StockArticuloDetalleDialog({
   const [ajusteBultos, setAjusteBultos] = useState("");
   const [ajusteNotas, setAjusteNotas] = useState("");
   const [ajusteForzar, setAjusteForzar] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editUbicacion, setEditUbicacion] = useState("");
+  const [editBultos, setEditBultos] = useState("");
+  const [editUdsBulto, setEditUdsBulto] = useState("");
+  const [editPico, setEditPico] = useState("");
+  const [editPalets, setEditPalets] = useState("");
+  const [editCaja, setEditCaja] = useState("");
+  const [editNotas, setEditNotas] = useState("");
+  const [editCondicion, setEditCondicion] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  function openEditForm(r: AtpConCritico) {
+    setEditUbicacion(r.ubicacion_fisica ?? "");
+    setEditBultos(r.bultos != null ? String(r.bultos) : "");
+    setEditUdsBulto(r.unidades_por_bulto != null ? String(r.unidades_por_bulto) : "");
+    setEditPico(r.pico != null ? String(r.pico) : "");
+    setEditPalets(r.palets != null ? String(r.palets) : "");
+    setEditCaja(r.caja_embalaje ?? "");
+    setEditNotas(r.notas ?? "");
+    setEditCondicion(r.condicion ?? "");
+    setEditOpen(true);
+  }
+
+  const editHasChanges = useMemo(() => {
+    if (!row) return false;
+    const norm = (s: string) => s.trim();
+    const numEq = (form: string, cur: number | null) => {
+      if (!form.trim() && cur == null) return true;
+      if (!form.trim() && cur != null) return false;
+      const n = Number(form.replace(",", "."));
+      return Number.isFinite(n) && n === Number(cur);
+    };
+    return !(
+      norm(editUbicacion) === norm(row.ubicacion_fisica ?? "") &&
+      numEq(editBultos, row.bultos) &&
+      numEq(editUdsBulto, row.unidades_por_bulto) &&
+      numEq(editPico, row.pico) &&
+      numEq(editPalets, row.palets != null ? Number(row.palets) : null) &&
+      norm(editCaja) === norm(row.caja_embalaje ?? "") &&
+      norm(editNotas) === norm(row.notas ?? "") &&
+      norm(editCondicion) === norm(row.condicion ?? "")
+    );
+  }, [
+    row,
+    editUbicacion,
+    editBultos,
+    editUdsBulto,
+    editPico,
+    editPalets,
+    editCaja,
+    editNotas,
+    editCondicion,
+  ]);
 
   useEffect(() => {
     if (!row) {
@@ -1034,6 +1089,115 @@ function StockArticuloDetalleDialog({
     } catch (e) {
       toast.error(
         `No se pudo ajustar: ${friendlyStockError(errorMessage(e))}`
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submitEditar() {
+    if (!row || !editHasChanges) return;
+
+    const args: Record<string, unknown> = { p_stock_id: row.id };
+
+    const setText = (
+      form: string,
+      cur: string | null,
+      pKey: string,
+      clearKey: string
+    ) => {
+      const f = form.trim();
+      const c = (cur ?? "").trim();
+      if (f === c) return;
+      if (!f && c) args[clearKey] = true;
+      else args[pKey] = f;
+    };
+
+    const setNum = (
+      form: string,
+      cur: number | null,
+      pKey: string,
+      clearKey: string,
+      asInt: boolean
+    ) => {
+      const empty = !form.trim();
+      if (empty && cur == null) return;
+      if (empty && cur != null) {
+        args[clearKey] = true;
+        return;
+      }
+      const n = asInt
+        ? Math.trunc(Number(form))
+        : Number(form.replace(",", "."));
+      if (!Number.isFinite(n) || n < 0) {
+        toast.error("Hay un valor numérico no válido.");
+        throw new Error("invalid");
+      }
+      if (pKey === "p_unidades_por_bulto" && n <= 0) {
+        toast.error("Uds/bulto debe ser > 0 (o vacío para borrar).");
+        throw new Error("invalid");
+      }
+      if (cur != null && n === Number(cur)) return;
+      args[pKey] = n;
+    };
+
+    try {
+      setText(editUbicacion, row.ubicacion_fisica, "p_ubicacion_fisica", "p_clear_ubicacion");
+      setText(editCaja, row.caja_embalaje, "p_caja_embalaje", "p_clear_caja_embalaje");
+      setText(editNotas, row.notas, "p_notas", "p_clear_notas");
+      setText(editCondicion, row.condicion, "p_condicion", "p_clear_condicion");
+      setNum(editBultos, row.bultos, "p_bultos", "p_clear_bultos", true);
+      setNum(
+        editUdsBulto,
+        row.unidades_por_bulto,
+        "p_unidades_por_bulto",
+        "p_clear_unidades_por_bulto",
+        true
+      );
+      setNum(editPico, row.pico, "p_pico", "p_clear_pico", true);
+      setNum(
+        editPalets,
+        row.palets != null ? Number(row.palets) : null,
+        "p_palets",
+        "p_clear_palets",
+        false
+      );
+    } catch {
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.rpc(
+        "prod_stock_articulos_editar_datos",
+        args as {
+          p_stock_id: string;
+          p_ubicacion_fisica?: string;
+          p_bultos?: number;
+          p_unidades_por_bulto?: number;
+          p_pico?: number;
+          p_palets?: number;
+          p_caja_embalaje?: string;
+          p_notas?: string;
+          p_condicion?: string;
+          p_clear_ubicacion?: boolean;
+          p_clear_caja_embalaje?: boolean;
+          p_clear_notas?: boolean;
+          p_clear_condicion?: boolean;
+          p_clear_unidades_por_bulto?: boolean;
+          p_clear_bultos?: boolean;
+          p_clear_pico?: boolean;
+          p_clear_palets?: boolean;
+        }
+      );
+      if (error) throw error;
+      toast.success("Datos del lote actualizados.");
+      setEditOpen(false);
+      onClose();
+      await onChanged();
+    } catch (e) {
+      toast.error(
+        `No se pudo editar: ${friendlyStockError(errorMessage(e))}`
       );
     } finally {
       setSubmitting(false);
@@ -1136,6 +1300,13 @@ function StockArticuloDetalleDialog({
                   <Button
                     size="sm"
                     variant="outline"
+                    onClick={() => openEditForm(row)}
+                  >
+                    Editar datos
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
                     onClick={() => {
                       setAjusteCantidad(String(row.cantidad_fisica));
                       setAjusteBultos(
@@ -1162,26 +1333,43 @@ function StockArticuloDetalleDialog({
                 ) : (
                   <ul className="space-y-1.5 text-xs">
                     {movs.map((m) => {
+                      const esEdicionDatos =
+                        m.tipo === "ajuste" &&
+                        typeof m.notas === "string" &&
+                        m.notas.startsWith("Edición datos");
                       const ajusteRango =
+                        !esEdicionDatos &&
                         m.tipo === "ajuste" &&
                         m.cantidad_antes != null &&
                         m.cantidad_despues != null
                           ? `${m.cantidad_antes.toLocaleString("es-ES")} → ${m.cantidad_despues.toLocaleString("es-ES")}`
                           : null;
+                      const label = esEdicionDatos
+                        ? "edición"
+                        : m.tipo;
+                      const detalle = esEdicionDatos
+                        ? (m.notas ?? "").replace(/^Edición datos:\s*/i, "")
+                        : ajusteRango ?? m.cantidad.toLocaleString("es-ES");
                       return (
                         <li
                           key={m.id}
                           className="flex flex-wrap justify-between gap-2 border-b border-slate-100 pb-1"
                         >
                           <span>
-                            <span className="font-medium">{m.tipo}</span>
+                            <span className="font-medium">{label}</span>
                             {" · "}
-                            {ajusteRango ?? m.cantidad.toLocaleString("es-ES")}
-                            {m.cantidad_merma != null && m.cantidad_merma > 0
+                            {detalle}
+                            {!esEdicionDatos &&
+                            m.cantidad_merma != null &&
+                            m.cantidad_merma > 0
                               ? ` (merma ${m.cantidad_merma})`
                               : ""}
-                            {m.ot_numero ? ` · OT ${m.ot_numero}` : ""}
-                            {m.notas ? ` · ${m.notas}` : ""}
+            {!esEdicionDatos && m.ot_numero
+                              ? ` · OT ${m.ot_numero}`
+                              : ""}
+                            {!esEdicionDatos && m.notas
+                              ? ` · ${m.notas}`
+                              : ""}
                           </span>
                           <span className="text-slate-400 tabular-nums">
                             {new Date(m.created_at).toLocaleString("es-ES")}
@@ -1266,6 +1454,117 @@ function StockArticuloDetalleDialog({
                     <Loader2 className="size-4 mr-2 animate-spin" />
                   ) : null}
                   Guardar ajuste
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Editar datos · {row?.referencia_codigo ?? ""}
+            </DialogTitle>
+          </DialogHeader>
+          {row ? (
+            <div className="space-y-3">
+              <p className="text-xs text-slate-500">
+                No cambia la cantidad física (
+                <strong>
+                  {row.cantidad_fisica.toLocaleString("es-ES")} {row.unidad}
+                </strong>
+                ). Vaciar un campo lo borra del lote.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500">Ubicación</Label>
+                  <Input
+                    value={editUbicacion}
+                    onChange={(e) => setEditUbicacion(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500">Tipo embalaje</Label>
+                  <Input
+                    value={editCaja}
+                    onChange={(e) => setEditCaja(e.target.value)}
+                    placeholder="MN2L, BP1N…"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500">Bultos</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={editBultos}
+                    onChange={(e) => setEditBultos(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500">Uds / bulto</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={editUdsBulto}
+                    onChange={(e) => setEditUdsBulto(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500">Pico</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={editPico}
+                    onChange={(e) => setEditPico(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500">Palets</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.001}
+                    value={editPalets}
+                    onChange={(e) => setEditPalets(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-500">Condición</Label>
+                <Input
+                  value={editCondicion}
+                  onChange={(e) => setEditCondicion(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-500">Notas</Label>
+                <Textarea
+                  value={editNotas}
+                  onChange={(e) => setEditNotas(e.target.value)}
+                  rows={2}
+                />
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setEditOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={() => void submitEditar()}
+                  disabled={submitting || !editHasChanges}
+                >
+                  {submitting ? (
+                    <Loader2 className="size-4 mr-2 animate-spin" />
+                  ) : null}
+                  Guardar datos
                 </Button>
               </DialogFooter>
             </div>

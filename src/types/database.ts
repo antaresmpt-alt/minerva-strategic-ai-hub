@@ -4137,6 +4137,28 @@ export type Database = {
         }
         Returns: undefined
       }
+      prod_stock_articulos_editar_datos: {
+        Args: {
+          p_bultos?: number
+          p_caja_embalaje?: string
+          p_clear_bultos?: boolean
+          p_clear_caja_embalaje?: boolean
+          p_clear_condicion?: boolean
+          p_clear_notas?: boolean
+          p_clear_palets?: boolean
+          p_clear_pico?: boolean
+          p_clear_ubicacion?: boolean
+          p_clear_unidades_por_bulto?: boolean
+          p_condicion?: string
+          p_notas?: string
+          p_palets?: number
+          p_pico?: number
+          p_stock_id: string
+          p_ubicacion_fisica?: string
+          p_unidades_por_bulto?: number
+        }
+        Returns: undefined
+      }
       prod_stock_articulos_liberar: {
         Args: { p_notas?: string; p_ot_numero: string; p_stock_id: string }
         Returns: undefined
