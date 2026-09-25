@@ -74,7 +74,7 @@ Por bloque: **B14 fichas ~9,5 h** · **Compras/almacén (9.7 + 12 sep) ~8 h** ·
 
 ## Octubre (siguiente)
 
-- Smoke 15.2 + merge B15 a `main` → carga real de stock (Gabri) → **15.5** alerta de crítico.
+- B15 post-Claude: fix cliente ATP · smoke 98046 · `es_ot_entrega` · Mezclar reserva · merge `main` → carga Gabri → **15.5**.
 - **B16 Fase A:** digest mail 08:00 (material que llega hoy para Gemma, plan impresión, atrasadas).
 - Seguir con 4–5 OTs reales E2E por semana; Bloque 12 (landing por perfil) cuando entren más usuarios.
 

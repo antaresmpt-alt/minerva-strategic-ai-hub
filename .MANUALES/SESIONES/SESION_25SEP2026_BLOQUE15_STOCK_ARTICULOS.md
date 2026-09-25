@@ -60,11 +60,44 @@ Total: **22 commits** en el día. Migraciones aplicadas en Supabase remoto (15.0
 1. OT **98046** con cantidad ≤ 120 → despacho: aviso verde → **Usar stock** → reserva visible en bandeja con PC-9988; «Despachar» queda bloqueado (OT de entrega).
 2. Liberar; cantidad 300 → **Mezclar** → texto 120 + 180, copiar; no despacha.
 3. **Fabricar completo** → despacha normal.
+4. **(Claude)** Repetir paso 1 con OT cuyo **cliente** sea distinto del del lote (o vacío). Hoy el aviso **no sale** (bug diseño §abajo).
+
+---
+
+## Review Claude noche 25 sep (commits `1be214a` → `7757972`)
+
+**OK:** permisos writers · comercial RO · overlay diálogos · lógica 15.2 (dedicado→genérico FIFO, solo PT uds, multi-lote, tests).
+
+### 1. Cliente distinto → aviso desaparece ⚠️ importante · **sin SQL**
+
+`loteClienteCompatible` saca el lote si no encaja (ni approx). `alta_lote` rellena cliente del maestro → casi todos tienen cliente. Si Optimus pone «CHM LABORATORIOS» y maestro «CHMLAB» (o OT sin cliente), todo va a «otro cliente» → `relevante=false` → **ni banner ni modal** → despacho como si no hubiera stock.
+
+**Arreglo propuesto:** dentro de la misma referencia Minerva, **no excluir por cliente**. Ofrecer el lote + aviso amarillo («cliente lote ≠ OT; ¿mismo?»). Filtro duro solo si el lote está marcado a propósito para **otro** cliente (Takeit / dedicado).
+
+### 2. «Usar stock» deja la OT colgada · **SQL → Claude antes**
+
+Decisión React se pierde al cerrar (menor; al reabrir ve la reserva). **Grave:** la OT nunca se despacha → queda en pendientes (Pool / Despachadas / calendario…). Hace falta **`es_ot_entrega` en `prod_ots_general`** (no solo tag en reserva): sacar de listas de despacho y mostrar «entrega de stock». Draft SQL → Claude review → aplicar.
+
+### 3. «Mezclar» no protege stock · **decidir numeración Optimus**
+
+Hoy solo copia texto; las uds siguen libres → otra OT puede pillárselas; la OT de fabricación de 180 vuelve a ofrecer las mismas 120.
+
+- **a)** Reservar ya las N contra la OT actual (nota «pendiente partir Optimus»); al existir OT entrega, pasar reserva (liberar + reservar). Preferida.
+- **b)** Solo mensaje «si viene de partir, elige Fabricar» — frágil.
+
+**Confirmar Manel:** al partir en Optimus, ¿la OT original se convierte en entrega, en fabricación, o salen **dos números nuevos**?
+
+### Orden mañana
+
+1. Fix punto 1 (cliente) → smoke 98046 pasos 1–4.  
+2. Draft SQL `es_ot_entrega` → Claude.  
+3. Mezclar (3a) cuando esté clara la numeración Optimus.  
+4. Luego: `TEST_PILOTO` a 0 · merge · carga Gabri · 15.5.
 
 ---
 
 ## Pendiente
 
-- Smoke 15.2 · lotes `TEST_PILOTO` a 0 · carga real de Gabri · **15.5** alerta crítico.
+- Fix cliente 15.2 + smoke (+ paso 4) · `es_ot_entrega` · Mezclar reserva · lotes `TEST_PILOTO` a 0 · carga Gabri · **15.5**.
 - Merge de la rama a `main` tras smoke.
 - B16 Fase A (validar §9 con Gemma/Carlos).

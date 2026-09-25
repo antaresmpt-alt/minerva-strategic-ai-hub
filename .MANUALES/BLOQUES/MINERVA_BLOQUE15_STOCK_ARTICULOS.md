@@ -322,6 +322,7 @@ Orden acordado (Claude 25 sep): **picker solo buscar** → **15.1a editar_datos 
 | 25 sep 2026 | Bandeja: columna Pedido/OT; selección + acciones editar/ajustar/anular (→0; diseño sin hard-delete). |
 | 25 sep 2026 | **15.2:** asistente despacho (OT simple con ref. Minerva) consulta `stock_articulos_atp` (PT uds, libre>0, cliente compatible: dedicado primero, luego genérico FIFO) + reservas vivas de la OT. Aviso en cabecera + modal al pulsar Despachar sin decisión. **Usar stock** (cubre todo) = reserva multi-lote `[OT_ENTREGA]`, num_pedido = pedido cliente; no despacha. **Mezclar** (parcial) = texto para partir en Optimus (OT entrega N + OT fabricación resto), copiar; no despacha. **Fabricar completo** = despacho normal. WIP y stock de otro cliente solo informativos. Contenedor: sin ATP. Lib `stock-articulos-atp-despacho.ts` + tests. |
 | 25 sep 2026 | Smoke fixes: botones Consumir/Liberar visibles; tag `[OT_ENTREGA]` sin duplicar; overlay de diálogo apilado por orden (padre queda oscurecido, hijo con anillo); aviso no bloqueante si bultos×uds/bulto+pico ≠ físico en Editar datos. |
+| 25 sep noche | Review Claude 15.2: (1) cliente distinto silencia ATP → fix sin SQL: no excluir por cliente dentro de misma ref. + aviso amarillo; (2) falta `es_ot_entrega` en OT (SQL→Claude) o OTs «Usar stock» quedan colgadas; (3) Mezclar no reserva → preferir reservar ya; confirmar numeración Optimus al partir. Detalle: `.MANUALES/SESIONES/SESION_25SEP2026_BLOQUE15_STOCK_ARTICULOS.md`. |
 
 ---
 
@@ -329,7 +330,13 @@ Orden acordado (Claude 25 sep): **picker solo buscar** → **15.1a editar_datos 
 
 Rama: **`feature/bloque15-stock-articulos`**.
 
-**Siguiente:** smoke 15.2 (OT 98046 / M-01632 con 120 libres: pedido ≤120 → Usar stock; 300 → Mezclar) → lotes `TEST_PILOTO` a 0 → Gabri carga real → **15.5** alerta crítico.  
-~~15.1a~~ · ~~15.1b~~ · ~~15.1d~~ · ~~15.3~~ · ~~15.4~~ · ~~15.2~~ (UI).
+**Siguiente (orden):**  
+1. **Fix cliente 15.2** (no excluir dentro de misma ref. + aviso amarillo).  
+2. **Smoke** OT 98046 / M-01632 (≤120 Usar stock · 300 Mezclar · Fabricar · **paso 4** cliente distinto/vacío).  
+3. Draft SQL **`es_ot_entrega`** en `prod_ots_general` → review Claude → aplicar.  
+4. **Mezclar:** reservar ya (cuando Manel confirme cómo Optimus numera al partir).  
+5. `TEST_PILOTO` a 0 → merge `main` → carga Gabri → **15.5**.
+
+~~15.1a~~ · ~~15.1b~~ · ~~15.1d~~ · ~~15.3~~ · ~~15.4~~ · ~~15.2~~ (UI; pulidos post-Claude).
 
 Validar §10 con Gabri cuando toque UX de ubicación/mínimos.

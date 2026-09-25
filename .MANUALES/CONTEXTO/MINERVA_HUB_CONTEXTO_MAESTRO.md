@@ -359,7 +359,7 @@ Detalle 1–3.x histórico: ver commits jun / `.MANUALES/CONTEXTO/FASES_HOJA_RUT
 - [x] **Plataforma — print Electron:** migrado `useReactToPrint` → `printElementInNewWindow` (externos, fichas, tablón semanal, ventas). Ya OK: detalle-día + mesa diaria.
 - [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor; tableta = máquina — `MINERVA_BLOQUE12_…` (no abrir ya; default gestor = maestro OTs)
 - [ ] **Bloque 5 puente**: Rita lanza OTs a Hugo (no bloquea paralelo si Hugo sigue a mano)
-- [ ] **Bloque 15** (🚧): Fase A casi lista en `feature/bloque15-stock-articulos` — ✅ 15.0–15.4 + 15.2 UI (`7757972`) · ⏳ **smoke 15.2** (OT 98046) → `TEST_PILOTO` a 0 → merge `main` → carga Gabri → 15.5 — `.MANUALES/SESIONES/SESION_25SEP2026_BLOQUE15_STOCK_ARTICULOS.md`
+- [ ] **Bloque 15** (🚧): Fase A casi lista — ✅ 15.0–15.4 + 15.2 UI · ⏳ **post-Claude:** fix cliente ATP · smoke 98046 (+ paso 4) · SQL `es_ot_entrega` · Mezclar reserva · merge · Gabri · 15.5 — `.MANUALES/SESIONES/SESION_25SEP2026_BLOQUE15_STOCK_ARTICULOS.md`
 - [ ] **Resumen mensual** septiembre: cerrar a fin de mes (días 26–30) y pasar a Gemma — `.MANUALES/MENSUAL/MINERVA_MES_2026_09_SEPTIEMBRE.md`
 - [ ] **Bloque 16** (📋): validar §9 con Gemma/Carlos → Fase A (claves + UI + digest 08:00) — puede ir **en paralelo** a B15 — `.MANUALES/BLOQUES/MINERVA_BLOQUE16_LISTADOS_PERSONALIZADOS.md`
 
