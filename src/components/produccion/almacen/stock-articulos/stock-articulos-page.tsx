@@ -693,6 +693,24 @@ function AltaLoteDialog({
       return;
     }
 
+    // Aviso si embalaje no cuadra con cantidad (uds): no bloquea.
+    if (
+      unidad === "uds" &&
+      bultosN != null &&
+      udsBultoN != null &&
+      Number.isFinite(bultosN) &&
+      Number.isFinite(udsBultoN)
+    ) {
+      const picoVal = picoN ?? 0;
+      const embalajeTotal = bultosN * udsBultoN + picoVal;
+      if (embalajeTotal !== qty) {
+        const ok = window.confirm(
+          `Bultos × uds/bulto + pico = ${embalajeTotal.toLocaleString("es-ES")} ≠ ${qty.toLocaleString("es-ES")} uds.\n¿Guardar igualmente?`
+        );
+        if (!ok) return;
+      }
+    }
+
     setSubmitting(true);
     try {
       const { error } = await supabase.rpc("prod_stock_articulos_alta_lote", {
@@ -735,6 +753,7 @@ function AltaLoteDialog({
             label="Referencia (código, cliente o descripción)"
             value={refValue}
             onChange={setRefValue}
+            allowCreate={false}
             onReferenciaPicked={(row) => {
               if (row.caja_embalaje_habitual && !cajaEmbalaje.trim()) {
                 setCajaEmbalaje(String(row.caja_embalaje_habitual));

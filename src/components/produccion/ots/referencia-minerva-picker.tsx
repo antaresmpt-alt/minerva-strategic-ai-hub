@@ -28,6 +28,11 @@ type ReferenciaMinervaPickerProps = {
     descripcion?: string | null;
     referenciaCliente?: string | null;
   };
+  /**
+   * Si false, solo busca referencias existentes (Stock artículos / carga inventario).
+   * Default true para no romper despacho / otros flujos.
+   */
+  allowCreate?: boolean;
   disabled?: boolean;
   className?: string;
 };
@@ -77,6 +82,7 @@ export function ReferenciaMinervaPicker({
   onChange,
   onReferenciaPicked,
   createDefaults,
+  allowCreate = true,
   disabled,
   className,
 }: ReferenciaMinervaPickerProps) {
@@ -142,7 +148,7 @@ export function ReferenciaMinervaPicker({
   const exactMatch = hits.find(
     (h) => h.codigo.trim().toLocaleLowerCase("es") === trimmedQ.toLocaleLowerCase("es")
   );
-  const canCreate = trimmedQ.length > 0 && !exactMatch;
+  const canCreate = allowCreate && trimmedQ.length > 0 && !exactMatch;
 
   const selectExisting = useCallback(
     (row: ProdReferenciaRow) => {
@@ -195,7 +201,11 @@ export function ReferenciaMinervaPicker({
         className="h-8 text-xs font-mono"
         value={q}
         disabled={disabled || creating}
-        placeholder="Buscar o crear (ej: M-00001)…"
+        placeholder={
+          allowCreate
+            ? "Buscar o crear (ej: M-00001)…"
+            : "Buscar referencia (ej: M-00001, ref. cliente…)"
+        }
         autoComplete="off"
         onChange={(e) => {
           const v = e.target.value;
@@ -261,7 +271,11 @@ export function ReferenciaMinervaPicker({
           ) : null}
           {!loading && hits.length === 0 && !canCreate ? (
             <li className="px-2 py-1.5 text-muted-foreground">
-              Escribe un código para buscar o crear…
+              {allowCreate
+                ? "Escribe un código para buscar o crear…"
+                : trimmedQ.length > 0
+                  ? "Ninguna referencia coincide. Elige una del maestro."
+                  : "Escribe para buscar en el maestro…"}
             </li>
           ) : null}
         </ul>

@@ -5,12 +5,13 @@
 > **No** es materia prima: eso sigue siendo Bloque 9 (cartelas / palets de papel).  
 > Complementa: maestro · Bloque 6 (cierre) · Bloque 8 (contenedor) · Bloque 9 (material) · Bloque 16 (digests).
 >
-> **Estado:** 🚧 Fase A — rama `feature/bloque15-stock-articulos`. **15.0 aplicada en remoto** + smoke OK; **15.1** bandeja/alta/ajuste en curso.  
+> **Estado:** 🚧 Fase A — rama `feature/bloque15-stock-articulos`. **15.0** + embalaje `20260925150000` en remoto; **15.1** pantalla OK (pendiente pulidos §8.1.1). Siguiente: ver §14.  
 > **Urgencia:** Gabri controla PT a ojo. Albert: al **despachar** una OT, Minerva avisa si hay stock usable.  
 > **Personas:** Gabri (PT + calendario engomado), Juan/Ramón (ubicación), oficina/Zada/Manel (OT + despacho), Albert (ATP).
 >
 > **Permisos escritura:** roles `admin|gerencia|administracion|almacen|oficina_tecnica|logistica` **o** capacidad `profiles_capacidades.stock_articulos_write` (Gabri con rol `engomado`). Tableta `engomado@` **sin** esa capacidad.  
-> **15.4:** OT de entrega nace en **Optimus**; Minerva solo tag `OT_ENTREGA` + reserva. No crear nº OT en `prod_ots_general` mientras haya paralelo.
+> **15.4:** OT de entrega nace en **Optimus**; Minerva solo tag `OT_ENTREGA` + reserva. No crear nº OT en `prod_ots_general` mientras haya paralelo.  
+> **Proceso DB:** toda migración / RPC nueva → **revisión Claude antes de aplicar en remoto**. (Aviso 25 sep: `20260925150000` se aplicó sin pasar; esta vez OK porque solo columnas nullable + recreate vistas/función.)
 
 **Tres mundos de stock (no mezclar pestañas):**
 
@@ -163,8 +164,8 @@ Detección ayuda (no exclusiva): pedido tipo `FABRICACION` / `FABRICACIÓ` → c
 Ruta: `/produccion/almacen/stock-articulos` (menú: **Stock artículos** junto a Stock material).
 
 Bandeja: cliente, ref. cliente, Minerva, descripción, proceso, físico, libre, bultos, ubicación, crítico.  
-Acciones: alta, ajuste, detalle + movimientos, **Asistente IA** (NL sobre ATP), **Generar OT de entrega**.  
-**15.1b:** plantilla Excel + import carga inicial (antes del aviso al despachar).
+Acciones: alta, ajuste, detalle + movimientos, **Asistente IA** (NL sobre ATP), **Generar OT de entrega** (15.4).  
+**Referencia en alta:** solo **buscar** existentes — **no crear** ref. nueva desde esta pantalla (evitar duplicados en maestro).  
 
 #### Alta de lote — datos de embalaje (opcionales, ideal para inventario)
 
@@ -180,6 +181,28 @@ Todo **opcional**, pero conviene rellenarlo para saber qué hay físicamente:
 | **Tipo embalaje** | Código caja (`caja_embalaje`: MN2L, BP1N…). Prefill desde `caja_embalaje_habitual` del maestro. |
 
 Acuerdo 25 sep: **PALETS general** basta; hilar fino por palet queda fuera de MVP.
+
+**Aviso embalaje (UI, no bloquea):** si `bultos × uds/bulto + pico ≠ cantidad` (unidad uds), confirmar: *«Bultos × uds/bulto + pico = X ≠ Y uds. ¿Guardar igualmente?»*. Embalaje a veces aproximado.
+
+#### 8.1.1 Huecos post-15.1 (Claude 25 sep) — orden de cierre
+
+1. **Picker ref. = solo búsqueda** (UI, sin DB). Quitar «crear» en alta de stock.  
+2. **`prod_stock_articulos_editar_datos`** (DB → **revisión Claude antes de aplicar**): editar ubicación, palets, pico, uds/bulto, caja_embalaje, notas, bultos… **nunca** la cantidad. Historial: movimiento `ajuste` con cantidad 0 y nota tipo `Edición datos: ubicación A3 → B1`. Motivo: tras consumos, embalaje se desfasa; mover de sitio no cabe en `ajustar`.  
+3. **15.1b** plantilla + import Excel (revisión en tabla, como OCR 9.7).  
+4. **15.1d** export PDF / Excel de la bandeja filtrada.
+
+### 8.1b — Carga inicial Excel (15.1b)
+
+- **Plantilla** = mismas columnas que el alta: referencia, cantidad, unidad, proceso, poses, bultos, uds/bulto, pico, palets, tipo embalaje, ubicación, OT origen, notas.  
+  - Referencia: código `M-xxxxx` **o** ref. cliente + cliente.  
+  - Hoja de ejemplo con 2 filas.  
+- **Import:** subir Excel → **tabla de revisión** (verde OK / amarillo aviso p.ej. embalaje / rojo error: ref no encontrada o ref. cliente ambigua). Gabri corrige y confirma → entonces `alta_lote` fila a fila.  
+- **Anti-doble import:** avisar si el mismo archivo se sube otra vez (id en notas del lote, o match ref+cantidad+OT origen).  
+- Sin RPC nueva si se llama `alta_lote` por fila; batch atómico solo si más adelante hace falta.
+
+### 8.1d — Export bandeja (15.1d)
+
+PDF y Excel de la bandeja **con los filtros activos**, cabecera con fecha + usuario. Patrón de otras pantallas Minerva. Útil para Gabri en almacén con hoja en mano.
 
 ### 8.2 Modal ATP en despacho
 
@@ -234,15 +257,19 @@ FABRICACION / sobrante → proponer entrada a stock. Entrega con reserva → con
 
 ### Fase A — Core (esta rama)
 
-| ID | Entregable |
-|----|------------|
-| **15.0** | Migración: lotes + reservas (consumida) + movimientos inmutables + vistas ATP/crítico + RLS solo SELECT + RPCs |
-| **15.1** | UI Stock artículos: bandeja + alta/ajuste + búsqueda ref. cliente |
-| **15.1b** | Carga inventario inicial (Gabri / Excel) **antes** de activar aviso despacho |
-| **15.2** | Modal ATP en despacho OT (usar / fabricar / mezclar) |
-| **15.3** | Reserva + consumo + liberar (vía RPC) |
-| **15.4** | Tag `OT_ENTREGA` + reserva sobre OT ya creada en Optimus (no crear OT en Minerva) |
-| **15.5** | Alerta crítico agregado por referencia |
+| ID | Entregable | Estado |
+|----|------------|--------|
+| **15.0** | Migración: lotes + reservas + ATP/crítico + RLS SELECT + RPCs | ✅ remoto + smoke |
+| **15.1** | UI bandeja + alta/ajuste + búsqueda ref. + IA + embalaje en alta | ✅ casi; pulidos §8.1.1 |
+| **15.1a** | Editar datos (no cantidad): RPC `editar_datos` + UI detalle | ⏳ tras picker-only |
+| **15.1b** | Plantilla Excel + import con tabla de revisión (carga inicial) | ⏳ |
+| **15.1d** | Export PDF / Excel bandeja filtrada | ⏳ |
+| **15.3** | Reserva + consumo + liberar (vía RPC) en UI | ⏳ |
+| **15.4** | Tag `OT_ENTREGA` + reserva sobre OT Optimus | ⏳ |
+| **15.2** | Modal ATP en despacho OT (usar / fabricar / mezclar) | ⏳ **al final** (inventario cargado) |
+| **15.5** | Alerta crítico agregado por referencia | ⏳ |
+
+Orden acordado (Claude 25 sep): **picker solo buscar** → **15.1a editar_datos (review DB)** → **15.1b** → **15.1d** → luego **15.3 → 15.4 → 15.2**.
 
 ### Fase B
 
@@ -264,11 +291,22 @@ FABRICACION / sobrante → proponer entrada a stock. Entrega con reserva → con
 | 25 sep 2026 | 15.0 RPC/capacidades; fix Claude: libre en consumir sin reserva, crítico uds+terminado, transformar unidad/locks, num_pedido OT, ajustar p_forzar, revoke anon. |
 | 25 sep 2026 | Smoke OK remoto + 15.1 UI fixes Claude (KPI PT/WIP, ajuste nota, load límite/agotado, crítico key, alta OT origen). |
 | 25 sep 2026 | Alta: OT buscable en maestro; embalaje opc. (uds/bulto, pico, palets general, caja); Asistente IA. |
+| 25 sep 2026 | Roadmap: 15.1a editar_datos, 15.1b import review, 15.1d export; proceso DB → Claude antes de aplicar; picker sin crear. |
 
 ---
 
 ## 14. Próximo paso (código)
 
-Rama: **`feature/bloque15-stock-articulos`**.  
-Orden: **15.0** → **15.1** → **15.3** → **15.4** / **15.2**.  
-Validar §10 con Gabri cuando toque UX de ubicación/mínimos; no bloquea 15.0–15.1.
+Rama: **`feature/bloque15-stock-articulos`**.
+
+**Siguiente a implementar ahora (UI, sin DB):**  
+~~§8.1.1 punto 1 — picker solo buscar~~ (hecho) + aviso embalaje en alta.  
+Borrador RPC **15.1a:** `supabase/sql/draft_prod_stock_articulos_editar_datos.sql` → **pasar a Claude; no aplicar hasta OK**.
+
+Después:
+1. Claude OK → aplicar `editar_datos` + UI editar en detalle (**15.1a**).  
+2. **15.1b** plantilla + import con revisión.  
+3. **15.1d** export PDF/Excel.  
+4. Gabri carga inventario → **15.3 / 15.4 / 15.2**.
+
+Validar §10 con Gabri cuando toque UX de ubicación/mínimos.
