@@ -47,6 +47,9 @@ export type ProdStockArticuloRow = {
   ot_origen: string | null;
   bultos: number | null;
   palets: number | null;
+  unidades_por_bulto: number | null;
+  pico: number | null;
+  caja_embalaje: string | null;
   ubicacion_fisica: string | null;
   notas: string | null;
   condicion: string | null;
@@ -102,6 +105,9 @@ export type StockArticuloAtpRow = {
   ot_origen: string | null;
   bultos: number | null;
   palets: number | null;
+  unidades_por_bulto: number | null;
+  pico: number | null;
+  caja_embalaje: string | null;
   ubicacion_fisica: string | null;
   notas: string | null;
   condicion: string | null;

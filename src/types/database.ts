@@ -3143,6 +3143,7 @@ export type Database = {
       prod_stock_articulos: {
         Row: {
           bultos: number | null
+          caja_embalaje: string | null
           cantidad_actual: number
           cliente: string | null
           cliente_norm: string | null
@@ -3154,6 +3155,7 @@ export type Database = {
           notas: string | null
           ot_origen: string | null
           palets: number | null
+          pico: number | null
           poses: number | null
           referencia_cliente: string | null
           referencia_codigo: string
@@ -3161,10 +3163,12 @@ export type Database = {
           referencia_id: string
           ubicacion_fisica: string | null
           unidad: string
+          unidades_por_bulto: number | null
           updated_at: string
         }
         Insert: {
           bultos?: number | null
+          caja_embalaje?: string | null
           cantidad_actual?: number
           cliente?: string | null
           cliente_norm?: string | null
@@ -3176,6 +3180,7 @@ export type Database = {
           notas?: string | null
           ot_origen?: string | null
           palets?: number | null
+          pico?: number | null
           poses?: number | null
           referencia_cliente?: string | null
           referencia_codigo: string
@@ -3183,10 +3188,12 @@ export type Database = {
           referencia_id: string
           ubicacion_fisica?: string | null
           unidad?: string
+          unidades_por_bulto?: number | null
           updated_at?: string
         }
         Update: {
           bultos?: number | null
+          caja_embalaje?: string | null
           cantidad_actual?: number
           cliente?: string | null
           cliente_norm?: string | null
@@ -3198,6 +3205,7 @@ export type Database = {
           notas?: string | null
           ot_origen?: string | null
           palets?: number | null
+          pico?: number | null
           poses?: number | null
           referencia_cliente?: string | null
           referencia_codigo?: string
@@ -3205,6 +3213,7 @@ export type Database = {
           referencia_id?: string
           ubicacion_fisica?: string | null
           unidad?: string
+          unidades_por_bulto?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -3928,6 +3937,7 @@ export type Database = {
       stock_articulos_atp: {
         Row: {
           bultos: number | null
+          caja_embalaje: string | null
           cantidad_fisica: number | null
           cantidad_libre: number | null
           cantidad_reservada_total: number | null
@@ -3941,6 +3951,7 @@ export type Database = {
           notas: string | null
           ot_origen: string | null
           palets: number | null
+          pico: number | null
           poses: number | null
           referencia_cliente: string | null
           referencia_codigo: string | null
@@ -3950,6 +3961,7 @@ export type Database = {
           sobre_reservado: boolean | null
           ubicacion_fisica: string | null
           unidad: string | null
+          unidades_por_bulto: number | null
           updated_at: string | null
         }
         Relationships: [
@@ -4097,6 +4109,7 @@ export type Database = {
       prod_stock_articulos_alta_lote: {
         Args: {
           p_bultos?: number
+          p_caja_embalaje?: string
           p_cantidad: number
           p_cliente?: string
           p_condicion?: string
@@ -4104,10 +4117,12 @@ export type Database = {
           p_notas?: string
           p_ot_origen?: string
           p_palets?: number
+          p_pico?: number
           p_poses?: number
           p_referencia_id: string
           p_ubicacion_fisica?: string
           p_unidad?: string
+          p_unidades_por_bulto?: number
         }
         Returns: string
       }

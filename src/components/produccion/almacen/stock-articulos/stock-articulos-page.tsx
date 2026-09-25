@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { StockArticulosAiDialog } from "@/components/produccion/almacen/stock-articulos/stock-articulos-ai-dialog";
+import { OtDestinoSearchInput } from "@/components/produccion/almacen/ot-destino-search-input";
 import {
   ReferenciaMinervaPicker,
   type ReferenciaMinervaValue,
@@ -623,6 +624,10 @@ function AltaLoteDialog({
     useState<StockArticuloEstadoProceso>("terminado");
   const [poses, setPoses] = useState("");
   const [bultos, setBultos] = useState("");
+  const [unidadesPorBulto, setUnidadesPorBulto] = useState("");
+  const [pico, setPico] = useState("");
+  const [palets, setPalets] = useState("");
+  const [cajaEmbalaje, setCajaEmbalaje] = useState("");
   const [ubicacion, setUbicacion] = useState("");
   const [otOrigen, setOtOrigen] = useState("");
   const [notas, setNotas] = useState("");
@@ -636,6 +641,10 @@ function AltaLoteDialog({
     setProceso("terminado");
     setPoses("");
     setBultos("");
+    setUnidadesPorBulto("");
+    setPico("");
+    setPalets("");
+    setCajaEmbalaje("");
     setUbicacion("");
     setOtOrigen("");
     setNotas("");
@@ -666,6 +675,23 @@ function AltaLoteDialog({
       toast.error("Bultos debe ser un entero >= 0.");
       return;
     }
+    const udsBultoN = unidadesPorBulto.trim()
+      ? Math.trunc(Number(unidadesPorBulto))
+      : undefined;
+    if (udsBultoN != null && (!Number.isFinite(udsBultoN) || udsBultoN <= 0)) {
+      toast.error("Uds/bulto debe ser un entero > 0.");
+      return;
+    }
+    const picoN = pico.trim() ? Math.trunc(Number(pico)) : undefined;
+    if (picoN != null && (!Number.isFinite(picoN) || picoN < 0)) {
+      toast.error("Pico debe ser un entero >= 0.");
+      return;
+    }
+    const paletsN = palets.trim() ? Number(palets.replace(",", ".")) : undefined;
+    if (paletsN != null && (!Number.isFinite(paletsN) || paletsN < 0)) {
+      toast.error("Palets debe ser un número >= 0.");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -677,11 +703,17 @@ function AltaLoteDialog({
         p_ot_origen: otOrigen.trim() || undefined,
         p_poses: posesN,
         p_bultos: bultosN,
+        p_palets: paletsN,
+        p_unidades_por_bulto: udsBultoN,
+        p_pico: picoN,
+        p_caja_embalaje: cajaEmbalaje.trim() || undefined,
         p_ubicacion_fisica: ubicacion.trim() || undefined,
         p_notas: notas.trim() || undefined,
       });
       if (error) throw error;
-      toast.success(`Lote dado de alta: ${refValue.codigo} · ${qty.toLocaleString("es-ES")} ${unidad}`);
+      toast.success(
+        `Lote dado de alta: ${refValue.codigo} · ${qty.toLocaleString("es-ES")} ${unidad}`
+      );
       await onCreated();
     } catch (e) {
       toast.error(
@@ -703,6 +735,17 @@ function AltaLoteDialog({
             label="Referencia (código, cliente o descripción)"
             value={refValue}
             onChange={setRefValue}
+            onReferenciaPicked={(row) => {
+              if (row.caja_embalaje_habitual && !cajaEmbalaje.trim()) {
+                setCajaEmbalaje(String(row.caja_embalaje_habitual));
+              }
+              if (
+                row.unidades_por_embalaje_habitual != null &&
+                !unidadesPorBulto.trim()
+              ) {
+                setUnidadesPorBulto(String(row.unidades_por_embalaje_habitual));
+              }
+            }}
           />
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -777,6 +820,10 @@ function AltaLoteDialog({
               />
             </div>
           </div>
+
+          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400 pt-1">
+            Embalaje (opcional)
+          </p>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs text-slate-500">Bultos</Label>
@@ -786,7 +833,52 @@ function AltaLoteDialog({
                 step={1}
                 value={bultos}
                 onChange={(e) => setBultos(e.target.value)}
-                placeholder="Opcional"
+                placeholder="Cajas completas"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-slate-500">Uds / bulto</Label>
+              <Input
+                type="number"
+                min={1}
+                step={1}
+                value={unidadesPorBulto}
+                onChange={(e) => setUnidadesPorBulto(e.target.value)}
+                placeholder="Ej. 50"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-slate-500">Pico</Label>
+              <Input
+                type="number"
+                min={0}
+                step={1}
+                value={pico}
+                onChange={(e) => setPico(e.target.value)}
+                placeholder="Uds sueltas"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-slate-500">Palets</Label>
+              <Input
+                type="number"
+                min={0}
+                step={0.001}
+                value={palets}
+                onChange={(e) => setPalets(e.target.value)}
+                placeholder="Nº general"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-slate-500">Tipo embalaje</Label>
+              <Input
+                value={cajaEmbalaje}
+                onChange={(e) => setCajaEmbalaje(e.target.value)}
+                placeholder="MN2L, BP1N…"
               />
             </div>
             <div className="space-y-1.5">
@@ -798,12 +890,13 @@ function AltaLoteDialog({
               />
             </div>
           </div>
+
           <div className="space-y-1.5">
             <Label className="text-xs text-slate-500">OT origen</Label>
-            <Input
+            <OtDestinoSearchInput
               value={otOrigen}
-              onChange={(e) => setOtOrigen(e.target.value)}
-              placeholder="Opcional (FABRICACION / OT origen)"
+              onChange={setOtOrigen}
+              placeholder="Buscar OT en maestro (FABRICACION / origen)…"
             />
           </div>
           <div className="space-y-1.5">
@@ -990,6 +1083,29 @@ function StockArticuloDetalleDialog({
                       : null
                   }
                 />
+                <Campo
+                  label="Uds/bulto"
+                  value={
+                    row.unidades_por_bulto != null
+                      ? row.unidades_por_bulto.toLocaleString("es-ES")
+                      : null
+                  }
+                />
+                <Campo
+                  label="Pico"
+                  value={
+                    row.pico != null ? row.pico.toLocaleString("es-ES") : null
+                  }
+                />
+                <Campo
+                  label="Palets"
+                  value={
+                    row.palets != null
+                      ? Number(row.palets).toLocaleString("es-ES")
+                      : null
+                  }
+                />
+                <Campo label="Embalaje" value={row.caja_embalaje} />
                 <Campo label="Ubicación" value={row.ubicacion_fisica} />
                 <Campo label="OT origen" value={row.ot_origen} />
                 <Campo label="Condición" value={row.condicion} />

@@ -70,7 +70,11 @@
 | `poses` | opc.; convierte hojas → estuches en el aviso ATP |
 | `estado_proceso` | `terminado` \| `impreso` \| `troquelado` \| … |
 | `ot_origen` | OT FABRICACION / origen; null = alta manual |
-| `bultos` / `palets` | embalaje físico |
+| `bultos` | nº bultos/cajas completos (opc.) |
+| `unidades_por_bulto` | uds por bulto (opc.) |
+| `pico` | uds sueltas (opc.) |
+| `palets` | nº palets **del lote en general** (opc.; no desglose por palet) |
+| `caja_embalaje` | tipo embalaje MN2L / BP1N… (opc.) |
 | `ubicacion_fisica` | texto libre MVP |
 | `notas` / `condicion` | |
 
@@ -156,11 +160,26 @@ Detección ayuda (no exclusiva): pedido tipo `FABRICACION` / `FABRICACIÓ` → c
 
 ### 8.1 `Almacén → Stock de artículos` (hermano de Stock material)
 
-Ruta propuesta: `/produccion/almacen/stock-articulos` (menú: **Stock artículos** junto a Stock material).
+Ruta: `/produccion/almacen/stock-articulos` (menú: **Stock artículos** junto a Stock material).
 
 Bandeja: cliente, ref. cliente, Minerva, descripción, proceso, físico, libre, bultos, ubicación, crítico.  
 Acciones: alta, ajuste, detalle + movimientos, **Asistente IA** (NL sobre ATP), **Generar OT de entrega**.  
 **15.1b:** plantilla Excel + import carga inicial (antes del aviso al despachar).
+
+#### Alta de lote — datos de embalaje (opcionales, ideal para inventario)
+
+Todo **opcional**, pero conviene rellenarlo para saber qué hay físicamente:
+
+| Campo | Notas |
+|-------|--------|
+| **OT origen** | Buscador sobre maestro (`prod_ots_general` / `OtDestinoSearchInput`), no texto libre a ciegas. FABRICACION / OT de origen. |
+| **Bultos** | Nº de bultos/cajas completos. |
+| **Uds/bulto** | `unidades_por_bulto` — estuches (u otra ud) por bulto. Prefill desde maestro si hay `unidades_por_embalaje_habitual`. |
+| **Pico** | Unidades sueltas fuera de bultos completos. |
+| **Palets** | Nº de **palets en general** del lote. **MVP: no** desglose «palet 1 / palet 2…» (futuro si hace falta). |
+| **Tipo embalaje** | Código caja (`caja_embalaje`: MN2L, BP1N…). Prefill desde `caja_embalaje_habitual` del maestro. |
+
+Acuerdo 25 sep: **PALETS general** basta; hilar fino por palet queda fuera de MVP.
 
 ### 8.2 Modal ATP en despacho
 
@@ -244,6 +263,7 @@ FABRICACION / sobrante → proponer entrada a stock. Entrega con reserva → con
 | 25 sep 2026 | Acuerdos planta + Fase A. |
 | 25 sep 2026 | 15.0 RPC/capacidades; fix Claude: libre en consumir sin reserva, crítico uds+terminado, transformar unidad/locks, num_pedido OT, ajustar p_forzar, revoke anon. |
 | 25 sep 2026 | Smoke OK remoto + 15.1 UI fixes Claude (KPI PT/WIP, ajuste nota, load límite/agotado, crítico key, alta OT origen). |
+| 25 sep 2026 | Alta: OT buscable en maestro; embalaje opc. (uds/bulto, pico, palets general, caja); Asistente IA. |
 
 ---
 
