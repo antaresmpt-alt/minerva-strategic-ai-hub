@@ -7,9 +7,9 @@
 >
 > **Estado:** 🚧 Fase A en `feature/bloque15-stock-articulos`. Hecho: **15.0–15.1d**, **15.3**, **15.4**. Pendiente: **15.2** (ATP al despachar) y **15.5** (alerta crítico).  
 > **Urgencia:** Gabri controla PT a ojo. Albert: al **despachar** una OT, Minerva avisa si hay stock usable.  
-> **Personas:** Gabri (PT + calendario engomado), Juan/Ramón (ubicación), oficina/Zada/Manel (OT + despacho), Albert (ATP).
+> **Personas:** Gabri (PT + calendario engomado), Juan/Ramón (**muelle / material B9**, no stock artículos), oficina/Zada/Manel (OT + despacho), comercial (**consulta** stock artículos para negociar surplus/liquidar antes del pedido), Albert (ATP).
 >
-> **Permisos escritura:** roles `admin|gerencia|administracion|almacen|oficina_tecnica|logistica` **o** capacidad `profiles_capacidades.stock_articulos_write` (Gabri con rol `engomado`). Tableta `engomado@` **sin** esa capacidad.  
+> **Permisos escritura:** roles `admin|gerencia|oficina_tecnica|logistica` **o** capacidad `profiles_capacidades.stock_articulos_write` (Gabri con rol `engomado`). **Sin** `almacen` ni `administracion`. Tableta `engomado@` **sin** esa capacidad. Comercial = **solo lectura** (path + nav; sin Alta/Import/reservas).  
 > **15.4:** OT de entrega nace en **Optimus**; Minerva solo tag `OT_ENTREGA` + reserva. No crear nº OT en `prod_ots_general` mientras haya paralelo.  
 > **Proceso DB:** toda migración / RPC nueva → **revisión Claude antes de aplicar en remoto**. (Aviso 25 sep: `20260925150000` se aplicó sin pasar; esta vez OK porque solo columnas nullable + recreate vistas/función.)
 
@@ -163,8 +163,8 @@ Detección ayuda (no exclusiva): pedido tipo `FABRICACION` / `FABRICACIÓ` → c
 
 Ruta: `/produccion/almacen/stock-articulos` (menú: **Stock artículos** junto a Stock material).
 
-Bandeja: cliente, ref. cliente, Minerva, descripción, proceso, físico, libre, bultos, ubicación, crítico.  
-Acciones: alta, ajuste, detalle + movimientos, **Asistente IA** (NL sobre ATP), **Generar OT de entrega** (15.4).  
+Bandeja: cliente, ref. cliente, Minerva, descripción, **pedido/OT origen**, proceso, físico, libre, bultos, ubicación, crítico.  
+Acciones (escritura): selección + editar / ajustar / **anular→0** (no hard-delete; diseño de lotes). Alta, Importar, detalle + movimientos, **Asistente IA**, export.  
 **Referencia en alta:** solo **buscar** existentes — **no crear** ref. nueva desde esta pantalla (evitar duplicados en maestro).  
 
 #### Alta de lote — datos de embalaje (opcionales, ideal para inventario)
@@ -318,6 +318,8 @@ Orden acordado (Claude 25 sep): **picker solo buscar** → **15.1a editar_datos 
 | 25 sep 2026 | **15.1b:** sinónimos unidad/proceso. **15.3:** UI reservas en detalle (lista + reservar/consumir/liberar; sin reserva aparte). Sin SQL nueva. |
 | 25 sep 2026 | **15.3 fix:** miles en cantidades UI; confirm consumir; aviso cliente OT≠lote. **15.4:** OT entrega = tag `[OT_ENTREGA]` + reserva (sin crear OT). |
 | 25 sep 2026 | Hardening: auth Gemini antes de LLM; sumas IA por unidad + count exact; parseInt miles solo grupos de 3; PDF descripción/reservado; docs Caso D / maestro. |
+| 25 sep 2026 | Writers: sin `almacen`/`administracion` (migración `20260925170000`). Comercial RO: path + nav stock artículos (no material). |
+| 25 sep 2026 | Bandeja: columna Pedido/OT; selección + acciones editar/ajustar/anular (→0; diseño sin hard-delete). |
 
 ---
 

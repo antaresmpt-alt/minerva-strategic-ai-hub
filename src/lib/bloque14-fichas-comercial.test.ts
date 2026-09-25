@@ -7,20 +7,33 @@ import {
 import { normalizeClienteNombre } from "@/types/prod-cliente-ficha";
 
 describe("Bloque 14 — comercial paths", () => {
-  it("permite solo articulos y pipeline (+ hub produccion)", () => {
+  it("permite articulos, pipeline, stock articulos (+ hub produccion)", () => {
     expect(isComercialProduccionPath("/produccion")).toBe(true);
     expect(isComercialProduccionPath("/produccion/articulos")).toBe(true);
     expect(isComercialProduccionPath("/produccion/articulos/x")).toBe(true);
     expect(isComercialProduccionPath("/produccion/pipeline")).toBe(true);
+    expect(
+      isComercialProduccionPath("/produccion/almacen/stock-articulos"),
+    ).toBe(true);
+    expect(
+      isComercialProduccionPath("/produccion/almacen/stock-articulos/x"),
+    ).toBe(true);
+    expect(isComercialProduccionPath("/produccion/almacen/stock")).toBe(false);
     expect(isComercialProduccionPath("/produccion/ots")).toBe(false);
     expect(isComercialProduccionPath("/produccion/ejecucion")).toBe(false);
     expect(isComercialProduccionPath("/produccion/muelle")).toBe(false);
   });
 
-  it("canAccessPagePath comercial bloquea planta", () => {
+  it("canAccessPagePath comercial bloquea planta y stock material", () => {
     expect(canAccessPagePath("comercial", "/produccion/articulos")).toBe(true);
     expect(canAccessPagePath("comercial", "/produccion/pipeline")).toBe(true);
+    expect(
+      canAccessPagePath("comercial", "/produccion/almacen/stock-articulos"),
+    ).toBe(true);
     expect(canAccessPagePath("comercial", "/analytics/sales")).toBe(true);
+    expect(
+      canAccessPagePath("comercial", "/produccion/almacen/stock"),
+    ).toBe(false);
     expect(canAccessPagePath("comercial", "/produccion/ots")).toBe(false);
     expect(canAccessPagePath("comercial", "/produccion/ejecucion")).toBe(false);
     expect(canAccessPagePath("comercial", "/settings")).toBe(false);

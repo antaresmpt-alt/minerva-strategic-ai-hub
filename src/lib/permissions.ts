@@ -169,13 +169,15 @@ export function canAccessHubModule(
   return false;
 }
 
-/** Rutas de producción permitidas al rol comercial (Bloque 14). */
+/** Rutas de producción permitidas al rol comercial (Bloque 14 + B15 RO). */
 export function isComercialProduccionPath(pathname: string): boolean {
   const p = pathname.split("?")[0] ?? pathname;
   /** Hub `/produccion` redirige a artículos (ver `app/produccion/page.tsx`). */
   if (p === "/produccion" || p === "/produccion/") return true;
   if (p.startsWith("/produccion/articulos")) return true;
   if (p.startsWith("/produccion/pipeline")) return true;
+  /** Stock artículos solo lectura (negociar surplus / liquidar). No stock material. */
+  if (p.startsWith("/produccion/almacen/stock-articulos")) return true;
   return false;
 }
 

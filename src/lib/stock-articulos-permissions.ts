@@ -2,11 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { ProfileCapacidad } from "@/types/prod-stock-articulos";
 
+/** Escritura por rol. Sin almacen (Juan = B9) ni administracion (sin prod). */
 const WRITE_ROLES = new Set([
   "admin",
   "gerencia",
-  "administracion",
-  "almacen",
   "oficina_tecnica",
   "logistica",
 ]);

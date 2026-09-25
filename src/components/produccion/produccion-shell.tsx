@@ -177,7 +177,7 @@ export function ProduccionShell({
   hasProduccionEjecucionModule?: boolean;
   /** Acceso al departamento de etiquetas digital sin el resto de Producción. */
   hasEtiquetasDigitalModule?: boolean;
-  /** Bloque 14: comercial solo pipeline + artículos. */
+  /** Bloque 14 + B15: comercial pipeline + artículos + stock artículos (RO). */
   comercialMinimal?: boolean;
 }) {
   const pathname = usePathname();
@@ -192,7 +192,9 @@ export function ProduccionShell({
 
   const comercialNavItems = NAV_FLAT.filter(
     (i) =>
-      i.href === "/produccion/pipeline" || i.href === "/produccion/articulos",
+      i.href === "/produccion/pipeline" ||
+      i.href === "/produccion/articulos" ||
+      i.href === "/produccion/almacen/stock-articulos",
   );
 
   /** Items visibles en modo completo (excluye OTs en ejecución que va en su propio bloque) */

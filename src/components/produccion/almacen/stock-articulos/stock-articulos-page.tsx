@@ -7,10 +7,13 @@ import {
   FileSpreadsheet,
   Loader2,
   Package,
+  Pencil,
   Plus,
   RefreshCw,
+  Scale,
   Search,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -25,6 +28,7 @@ import {
 } from "@/components/produccion/ots/referencia-minerva-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -158,6 +162,28 @@ type ProcesoFiltro = "todos" | StockArticuloEstadoProceso;
 
 type AtpConCritico = StockArticuloAtpRow & { es_critico: boolean };
 
+type DetallePendingAction = "edit" | "ajuste" | null;
+
+async function anularLotesACero(
+  ids: string[],
+  nota: string
+): Promise<{ ok: number; fail: number }> {
+  let ok = 0;
+  let fail = 0;
+  for (const id of ids) {
+    const { error } = await supabase.rpc("prod_stock_articulos_ajustar", {
+      p_stock_id: id,
+      p_cantidad_nueva: 0,
+      p_notas: nota,
+      p_bultos: 0,
+      p_forzar: true,
+    });
+    if (error) fail += 1;
+    else ok += 1;
+  }
+  return { ok, fail };
+}
+
 function KpiCard({
   label,
   value,
@@ -197,6 +223,10 @@ export function StockArticulosPage() {
   const [userLabel, setUserLabel] = useState<string>("");
   const [canWrite, setCanWrite] = useState(false);
   const [detalle, setDetalle] = useState<AtpConCritico | null>(null);
+  const [detallePendingAction, setDetallePendingAction] =
+    useState<DetallePendingAction>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [bulkWorking, setBulkWorking] = useState(false);
   const [altaOpen, setAltaOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [stockAiOpen, setStockAiOpen] = useState(false);
@@ -375,6 +405,10 @@ export function StockArticulosPage() {
     return rows.find((r) => r.id === detalle.id) ?? detalle;
   }, [rows, detalle]);
 
+  const consumeDetallePendingAction = useCallback(() => {
+    setDetallePendingAction(null);
+  }, []);
+
   const exportFiltrosLabel = useMemo(() => {
     const parts: string[] = [];
     if (search.trim()) parts.push(`texto «${search.trim()}»`);
@@ -383,6 +417,103 @@ export function StockArticulosPage() {
     if (parts.length === 0) return "todos (sin filtros)";
     return parts.join(" · ");
   }, [search, estadoFiltro, procesoFiltro]);
+
+  const filteredIds = useMemo(
+    () => new Set(filtered.map((r) => r.id)),
+    [filtered]
+  );
+
+  const selectedVisibleCount = useMemo(() => {
+    let n = 0;
+    for (const id of selectedIds) {
+      if (filteredIds.has(id)) n += 1;
+    }
+    return n;
+  }, [selectedIds, filteredIds]);
+
+  const allVisibleSelected =
+    filtered.length > 0 && selectedVisibleCount === filtered.length;
+
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (rows.some((r) => r.id === id)) next.add(id);
+      }
+      return next.size === prev.size ? prev : next;
+    });
+  }, [rows]);
+
+  function openDetalle(
+    row: AtpConCritico,
+    action: DetallePendingAction = null
+  ) {
+    setDetallePendingAction(action);
+    setDetalle(row);
+  }
+
+  function toggleSelect(id: string, checked: boolean) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAllVisible(checked: boolean) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const r of filtered) {
+        if (checked) next.add(r.id);
+        else next.delete(r.id);
+      }
+      return next;
+    });
+  }
+
+  async function handleAnularIds(ids: string[]) {
+    const unique = [...new Set(ids)].filter(Boolean);
+    if (unique.length === 0) return;
+    const okConfirm = window.confirm(
+      unique.length === 1
+        ? "Anular este lote pone la cantidad a 0 (queda agotado en historial; no se borra la fila). ¿Continuar?"
+        : `Anular ${unique.length} lotes pone cada cantidad a 0 (agotados en historial; no se borran). ¿Continuar?`
+    );
+    if (!okConfirm) return;
+    setBulkWorking(true);
+    try {
+      const { ok, fail } = await anularLotesACero(
+        unique,
+        unique.length === 1
+          ? "Anulado desde bandeja"
+          : `Anulado en lote desde bandeja (${unique.length})`
+      );
+      if (ok > 0) {
+        toast.success(
+          ok === 1
+            ? "Lote anulado (cantidad 0)."
+            : `${ok} lotes anulados (cantidad 0).`
+        );
+      }
+      if (fail > 0) {
+        toast.error(`${fail} lote(s) no se pudieron anular.`);
+      }
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const id of unique) next.delete(id);
+        return next;
+      });
+      if (detalle && unique.includes(detalle.id)) {
+        setDetalle(null);
+        setDetallePendingAction(null);
+      }
+      await load();
+    } finally {
+      setBulkWorking(false);
+    }
+  }
 
   function handleExportExcel() {
     if (filtered.length === 0) {
@@ -427,6 +558,12 @@ export function StockArticulosPage() {
               </>
             ) : null}
           </p>
+          {canWrite ? (
+            <p className="text-xs text-slate-500">
+              Clic en la fila = detalle · columna Acciones = editar / ajustar /
+              anular (poner a 0). Selección múltiple para anular varios.
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -578,6 +715,9 @@ export function StockArticulosPage() {
           {loading
             ? "Cargando…"
             : `${filtered.length} lote${filtered.length !== 1 ? "s" : ""}`}
+          {!loading && canWrite && selectedVisibleCount > 0
+            ? ` · ${selectedVisibleCount} seleccionado${selectedVisibleCount !== 1 ? "s" : ""}`
+            : null}
         </p>
         {!loading && hitLimit ? (
           <p className="text-xs text-amber-700">
@@ -586,6 +726,41 @@ export function StockArticulosPage() {
           </p>
         ) : null}
       </div>
+
+      {canWrite && selectedVisibleCount > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+          <span className="text-sm text-slate-700">
+            {selectedVisibleCount} seleccionado
+            {selectedVisibleCount !== 1 ? "s" : ""}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-red-700 border-red-200 hover:bg-red-50"
+            disabled={bulkWorking}
+            onClick={() =>
+              void handleAnularIds(
+                filtered.filter((r) => selectedIds.has(r.id)).map((r) => r.id)
+              )
+            }
+          >
+            {bulkWorking ? (
+              <Loader2 className="size-4 mr-1.5 animate-spin" />
+            ) : (
+              <Trash2 className="size-4 mr-1.5" />
+            )}
+            Anular (poner a 0)
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={bulkWorking}
+            onClick={() => setSelectedIds(new Set())}
+          >
+            Limpiar selección
+          </Button>
+        </div>
+      ) : null}
 
       {loading && (
         <div className="flex justify-center py-16">
@@ -611,16 +786,31 @@ export function StockArticulosPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                {canWrite ? (
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={allVisibleSelected}
+                      onCheckedChange={(v) =>
+                        toggleSelectAllVisible(v === true)
+                      }
+                      aria-label="Seleccionar todos los visibles"
+                    />
+                  </TableHead>
+                ) : null}
                 <TableHead>Cliente</TableHead>
                 <TableHead>Ref. cliente</TableHead>
                 <TableHead>Minerva</TableHead>
                 <TableHead>Descripción</TableHead>
+                <TableHead>Pedido / OT</TableHead>
                 <TableHead>Proceso</TableHead>
                 <TableHead className="text-right">Físico</TableHead>
                 <TableHead className="text-right">Libre</TableHead>
                 <TableHead className="text-right">Bultos</TableHead>
                 <TableHead>Ubicación</TableHead>
                 <TableHead>Estado</TableHead>
+                {canWrite ? (
+                  <TableHead className="text-right w-[1%]">Acciones</TableHead>
+                ) : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -628,8 +818,22 @@ export function StockArticulosPage() {
                 <TableRow
                   key={r.id}
                   className="cursor-pointer"
-                  onClick={() => setDetalle(r)}
+                  onClick={() => openDetalle(r)}
                 >
+                  {canWrite ? (
+                    <TableCell
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-10"
+                    >
+                      <Checkbox
+                        checked={selectedIds.has(r.id)}
+                        onCheckedChange={(v) =>
+                          toggleSelect(r.id, v === true)
+                        }
+                        aria-label={`Seleccionar ${r.referencia_codigo}`}
+                      />
+                    </TableCell>
+                  ) : null}
                   <TableCell className="text-sm font-medium max-w-[140px] truncate">
                     {r.cliente ?? "—"}
                   </TableCell>
@@ -641,6 +845,12 @@ export function StockArticulosPage() {
                   </TableCell>
                   <TableCell className="max-w-[200px] truncate text-sm">
                     {r.referencia_descripcion ?? "—"}
+                  </TableCell>
+                  <TableCell
+                    className="font-mono text-xs max-w-[120px] truncate"
+                    title={r.ot_origen ?? undefined}
+                  >
+                    {r.ot_origen?.trim() || "—"}
                   </TableCell>
                   <TableCell className="text-xs">
                     {PROCESO_LABEL[r.estado_proceso] ?? r.estado_proceso}
@@ -677,6 +887,48 @@ export function StockArticulosPage() {
                       ) : null}
                     </div>
                   </TableCell>
+                  {canWrite ? (
+                    <TableCell
+                      className="text-right"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="inline-flex items-center gap-0.5">
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="size-8"
+                          title="Editar datos"
+                          disabled={bulkWorking}
+                          onClick={() => openDetalle(r, "edit")}
+                        >
+                          <Pencil className="size-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="size-8"
+                          title="Ajustar cantidad"
+                          disabled={bulkWorking}
+                          onClick={() => openDetalle(r, "ajuste")}
+                        >
+                          <Scale className="size-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="size-8 text-red-700 hover:text-red-800"
+                          title="Anular (poner a 0)"
+                          disabled={bulkWorking || r.cantidad_fisica === 0}
+                          onClick={() => void handleAnularIds([r.id])}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               ))}
             </TableBody>
@@ -687,10 +939,22 @@ export function StockArticulosPage() {
       <StockArticuloDetalleDialog
         row={detalleLive}
         canWrite={canWrite}
-        onClose={() => setDetalle(null)}
+        pendingAction={detallePendingAction}
+        onPendingActionConsumed={consumeDetallePendingAction}
+        onClose={() => {
+          setDetalle(null);
+          setDetallePendingAction(null);
+        }}
         onChanged={async () => {
           await load();
         }}
+        onAnular={
+          canWrite
+            ? async (id) => {
+                await handleAnularIds([id]);
+              }
+            : undefined
+        }
       />
 
       <AltaLoteDialog
@@ -1069,13 +1333,19 @@ function AltaLoteDialog({
 function StockArticuloDetalleDialog({
   row,
   canWrite,
+  pendingAction,
+  onPendingActionConsumed,
   onClose,
   onChanged,
+  onAnular,
 }: {
   row: AtpConCritico | null;
   canWrite: boolean;
+  pendingAction: DetallePendingAction;
+  onPendingActionConsumed: () => void;
   onClose: () => void;
   onChanged: () => Promise<void>;
+  onAnular?: (id: string) => Promise<void>;
 }) {
   const [movs, setMovs] = useState<ProdStockArticuloMovimientoRow[]>([]);
   const [loadingMovs, setLoadingMovs] = useState(false);
@@ -1106,6 +1376,21 @@ function StockArticuloDetalleDialog({
     setEditCondicion(r.condicion ?? "");
     setEditOpen(true);
   }
+
+  function openAjusteForm(r: AtpConCritico) {
+    setAjusteCantidad(String(r.cantidad_fisica));
+    setAjusteBultos(r.bultos != null ? String(r.bultos) : "");
+    setAjusteNotas("");
+    setAjusteForzar(false);
+    setAjusteOpen(true);
+  }
+
+  useEffect(() => {
+    if (!row || !pendingAction) return;
+    if (pendingAction === "edit") openEditForm(row);
+    if (pendingAction === "ajuste") openAjusteForm(row);
+    onPendingActionConsumed();
+  }, [row, pendingAction, onPendingActionConsumed]);
 
   const editHasChanges = useMemo(() => {
     if (!row) return false;
@@ -1421,7 +1706,7 @@ function StockArticuloDetalleDialog({
                 />
                 <Campo label="Embalaje" value={row.caja_embalaje} />
                 <Campo label="Ubicación" value={row.ubicacion_fisica} />
-                <Campo label="OT origen" value={row.ot_origen} />
+                <Campo label="Pedido / OT origen" value={row.ot_origen} />
                 <Campo label="Condición" value={row.condicion} />
                 <Campo label="Notas" value={row.notas} />
               </div>
@@ -1433,23 +1718,28 @@ function StockArticuloDetalleDialog({
                     variant="outline"
                     onClick={() => openEditForm(row)}
                   >
+                    <Pencil className="size-3.5 mr-1.5" />
                     Editar datos
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => {
-                      setAjusteCantidad(String(row.cantidad_fisica));
-                      setAjusteBultos(
-                        row.bultos != null ? String(row.bultos) : ""
-                      );
-                      setAjusteNotas("");
-                      setAjusteForzar(false);
-                      setAjusteOpen(true);
-                    }}
+                    onClick={() => openAjusteForm(row)}
                   >
+                    <Scale className="size-3.5 mr-1.5" />
                     Ajustar cantidad
                   </Button>
+                  {row.cantidad_fisica > 0 && onAnular ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-red-700 border-red-200 hover:bg-red-50"
+                      onClick={() => void onAnular(row.id)}
+                    >
+                      <Trash2 className="size-3.5 mr-1.5" />
+                      Anular (poner a 0)
+                    </Button>
+                  ) : null}
                 </div>
               ) : null}
 
