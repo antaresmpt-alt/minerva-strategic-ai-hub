@@ -103,28 +103,25 @@ export function OtDestinoSearchInput({
           .limit(12);
         if (masterErr) throw masterErr;
 
-        const rows: OtSugerencia[] = (
-          (masterHits ?? []) as Array<{
-            num_pedido?: string | null;
-            cliente?: string | null;
-            titulo?: string | null;
-            cantidad?: string | number | null;
-            pedido_cliente?: string | null;
-          }>
-        )
-          .map((m) => {
-            const ot = String(m.num_pedido ?? "").trim();
-            if (!ot) return null;
-            return {
-              ot_numero: ot,
-              cliente: m.cliente ?? null,
-              titulo: m.titulo ?? null,
-              pedido_cliente: m.pedido_cliente ?? null,
-              cantidad: parseOtCantidad(m.cantidad),
-              estado_material: null,
-            } satisfies OtSugerencia;
-          })
-          .filter((r): r is OtSugerencia => r != null);
+        const rows: OtSugerencia[] = [];
+        for (const m of (masterHits ?? []) as Array<{
+          num_pedido?: string | null;
+          cliente?: string | null;
+          titulo?: string | null;
+          cantidad?: string | number | null;
+          pedido_cliente?: string | null;
+        }>) {
+          const ot = String(m.num_pedido ?? "").trim();
+          if (!ot) continue;
+          rows.push({
+            ot_numero: ot,
+            cliente: m.cliente ?? null,
+            titulo: m.titulo ?? null,
+            pedido_cliente: m.pedido_cliente ?? null,
+            cantidad: parseOtCantidad(m.cantidad),
+            estado_material: null,
+          });
+        }
 
         rows.sort((a, b) => {
           const na = Number(a.ot_numero);
