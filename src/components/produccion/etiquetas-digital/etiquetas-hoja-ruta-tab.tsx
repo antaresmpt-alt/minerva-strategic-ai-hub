@@ -53,9 +53,21 @@ import {
   type MaquinaPatchExtras,
   mergeMaquinaIntoRow,
 } from "@/lib/etiquetas-hoja-ruta-maquina";
+import {
+  PROCESO_BY_MAQUINA,
+  SESIONES_TABLE,
+  filaTieneProcesoEnCursoOMultiDia,
+  getSesionHoy,
+  hasSesionHoy,
+  hojaTocadaHoy,
+  indexSesionesByHoja,
+  indexSesionesByKey,
+  procesoEsMultiDiaOEnCurso,
+} from "@/lib/etiquetas-hoja-ruta-sesiones";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { ProdEtiquetasCatalogRow } from "@/types/prod-etiquetas-catalogo";
 import type { ProdEtiquetasHojaRutaRow } from "@/types/prod-etiquetas-hoja-ruta";
+import type { ProdEtiquetasHojaRutaSesionRow } from "@/types/prod-etiquetas-hoja-ruta-sesion";
 import type { ProdEtiquetasTroquelRow } from "@/types/prod-etiquetas-troqueles";
 import { resolveTroquelDisplay } from "@/lib/etiquetas-troqueles-display";
 import { cn } from "@/lib/utils";
@@ -65,6 +77,8 @@ const CATALOG_TABLE = "prod_etiquetas_catalogo";
 const TROQUELES_TABLE = "prod_etiquetas_troqueles";
 const STORAGE_COMPACT = "etiquetas-hr-compact";
 const STORAGE_EXPORT = "etiquetas-hr-export-modal";
+const MIGRATION_HINT_SESIONES =
+  "Ejecuta la migración 20260925120000_prod_etiquetas_hoja_ruta_sesiones.sql en Supabase.";
 
 const ORDEN_OPTIONS: Option[] = [
   { value: "fecha_entrega_ot_asc", label: "Fecha entrega OT (asc)" },
@@ -299,6 +313,7 @@ export function EtiquetasHojaRutaTab() {
   const [filtroTexto, setFiltroTexto] = useState("");
   const [filtroPapel, setFiltroPapel] = useState("");
   const [ocultarFinalizadas, setOcultarFinalizadas] = useState(true);
+  const [soloTocadasHoy, setSoloTocadasHoy] = useState(false);
   const [orden, setOrden] = useState<string>("fecha_entrega_ot_asc");
   const [expressOpen, setExpressOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<ProdEtiquetasHojaRutaRow | null>(
@@ -306,7 +321,10 @@ export function EtiquetasHojaRutaTab() {
   );
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [togglingMaquina, setTogglingMaquina] = useState<string | null>(null);
+  const [togglingHoy, setTogglingHoy] = useState<string | null>(null);
   const [togglingPdfOkId, setTogglingPdfOkId] = useState<string | null>(null);
+  const [sesiones, setSesiones] = useState<ProdEtiquetasHojaRutaSesionRow[]>([]);
+  const [sesionesMissing, setSesionesMissing] = useState(false);
   const [compactMode, setCompactMode] = useState(readStoredCompactMode);
   const [muelleDetailRow, setMuelleDetailRow] =
     useState<ProdEtiquetasHojaRutaRow | null>(null);
@@ -359,7 +377,7 @@ export function EtiquetasHojaRutaTab() {
 
   const loadRows = useCallback(async () => {
     setLoading(true);
-    const [rRows, rCat, rTroqueles] = await Promise.all([
+    const [rRows, rCat, rTroqueles, rSesiones] = await Promise.all([
       supabase
         .from(TABLE)
         .select("*")
@@ -375,6 +393,10 @@ export function EtiquetasHojaRutaTab() {
         .from(TROQUELES_TABLE)
         .select("*")
         .order("codigo", { ascending: true }),
+      supabase
+        .from(SESIONES_TABLE)
+        .select("id, hoja_ruta_id, proceso, fecha, nota, created_at")
+        .order("fecha", { ascending: false }),
     ]);
     setLoading(false);
     if (rRows.error) {
@@ -396,6 +418,21 @@ export function EtiquetasHojaRutaTab() {
       setTroqueles([]);
     } else {
       setTroqueles((rTroqueles.data ?? []) as ProdEtiquetasTroquelRow[]);
+    }
+    if (rSesiones.error) {
+      const msg = rSesiones.error.message ?? "";
+      const missing =
+        msg.toLowerCase().includes("schema cache") ||
+        msg.toLowerCase().includes("does not exist") ||
+        msg.toLowerCase().includes(SESIONES_TABLE);
+      setSesionesMissing(missing);
+      setSesiones([]);
+      if (!missing) {
+        console.warn("[etiquetas sesiones]", msg);
+      }
+    } else {
+      setSesionesMissing(false);
+      setSesiones((rSesiones.data ?? []) as ProdEtiquetasHojaRutaSesionRow[]);
     }
   }, [supabase]);
 
@@ -426,7 +463,14 @@ export function EtiquetasHojaRutaTab() {
     [papelesUnicos]
   );
 
+  const sesionesByHoja = useMemo(
+    () => indexSesionesByHoja(sesiones),
+    [sesiones]
+  );
+  const sesionesByKey = useMemo(() => indexSesionesByKey(sesiones), [sesiones]);
+
   const filtradas = useMemo(() => {
+    const hoy = ymdLocal();
     let list = [...rows];
     const q = filtroTexto.trim().toLowerCase();
     if (q) {
@@ -443,6 +487,9 @@ export function EtiquetasHojaRutaTab() {
     }
     if (ocultarFinalizadas) {
       list = list.filter((r) => !r.finalizado);
+    }
+    if (soloTocadasHoy) {
+      list = list.filter((r) => hojaTocadaHoy(r.id, sesionesByKey, hoy));
     }
     const cmpStr = (a: string | null, b: string | null, asc: boolean) => {
       const av = a ?? "";
@@ -481,7 +528,15 @@ export function EtiquetasHojaRutaTab() {
         list.sort((a, b) => cmpStr(a.fecha_entrega_ot, b.fecha_entrega_ot, true));
     }
     return list;
-  }, [rows, filtroTexto, filtroPapel, ocultarFinalizadas, orden]);
+  }, [
+    rows,
+    filtroTexto,
+    filtroPapel,
+    ocultarFinalizadas,
+    soloTocadasHoy,
+    orden,
+    sesionesByKey,
+  ]);
 
   const ordenLabel = useMemo(() => {
     return ORDEN_OPTIONS.find((o) => o.value === orden)?.label ?? orden;
@@ -649,6 +704,86 @@ export function EtiquetasHojaRutaTab() {
       await commitMaquinaPatch(r, field, next);
     },
     [commitMaquinaPatch]
+  );
+
+  const toggleHoy = useCallback(
+    async (r: ProdEtiquetasHojaRutaRow, field: MaquinaHojaRutaField, next: boolean) => {
+      if (sesionesMissing) {
+        toast.error("Sesiones «Hoy» no disponibles", {
+          description: MIGRATION_HINT_SESIONES,
+        });
+        return;
+      }
+      if (r[field]) {
+        toast.message("Proceso ya terminado", {
+          description: "Desmarca Kon/Troq/Num si quieres volver a anotar días sueltos.",
+        });
+        return;
+      }
+      const proceso = PROCESO_BY_MAQUINA[field];
+      const hoy = ymdLocal();
+      const toggleKey = `${r.id}:${field}`;
+      setTogglingHoy(toggleKey);
+      const existente = getSesionHoy(sesionesByKey, r.id, proceso, hoy);
+
+      if (next) {
+        if (existente) {
+          setTogglingHoy(null);
+          return;
+        }
+        const tempId = `tmp-${r.id}-${proceso}-${hoy}`;
+        const optimistic: ProdEtiquetasHojaRutaSesionRow = {
+          id: tempId,
+          hoja_ruta_id: r.id,
+          proceso,
+          fecha: hoy,
+          nota: null,
+          created_at: new Date().toISOString(),
+        };
+        setSesiones((list) => [optimistic, ...list]);
+        const { data, error } = await supabase
+          .from(SESIONES_TABLE)
+          .insert({
+            hoja_ruta_id: r.id,
+            proceso,
+            fecha: hoy,
+          })
+          .select("id, hoja_ruta_id, proceso, fecha, nota, created_at")
+          .single();
+        setTogglingHoy(null);
+        if (error) {
+          setSesiones((list) => list.filter((s) => s.id !== tempId));
+          toast.error("No se pudo marcar «Hoy»", {
+            description: error.message,
+          });
+          return;
+        }
+        setSesiones((list) =>
+          list.map((s) =>
+            s.id === tempId ? (data as ProdEtiquetasHojaRutaSesionRow) : s
+          )
+        );
+      } else {
+        if (!existente) {
+          setTogglingHoy(null);
+          return;
+        }
+        const prev = existente;
+        setSesiones((list) => list.filter((s) => s.id !== prev.id));
+        const { error } = await supabase
+          .from(SESIONES_TABLE)
+          .delete()
+          .eq("id", prev.id);
+        setTogglingHoy(null);
+        if (error) {
+          setSesiones((list) => [prev, ...list]);
+          toast.error("No se pudo quitar «Hoy»", {
+            description: error.message,
+          });
+        }
+      }
+    },
+    [sesionesByKey, sesionesMissing, supabase]
   );
 
   const handleMetrosConfirm = useCallback(
@@ -855,6 +990,11 @@ export function EtiquetasHojaRutaTab() {
           setMuelleDetailRow(null);
           setEditingRow(row);
         }}
+        sesionesByHoja={sesionesByHoja}
+        sesionesByKey={sesionesByKey}
+        togglingHoy={togglingHoy}
+        onToggleHoy={toggleHoy}
+        sesionesMissing={sesionesMissing}
       />
       <EtiquetasMetrosImpresionDialog
         open={pendingKonicaRow != null}
@@ -1116,6 +1256,19 @@ export function EtiquetasHojaRutaTab() {
         </label>
         <label
           className="flex cursor-pointer items-center gap-2 text-xs text-slate-700 sm:pb-1"
+          title="Solo OTs con algún proceso marcado «Hoy»"
+        >
+          <input
+            type="checkbox"
+            className="size-4 rounded border-slate-300 accent-orange-500"
+            checked={soloTocadasHoy}
+            onChange={(e) => setSoloTocadasHoy(e.target.checked)}
+            disabled={sesionesMissing}
+          />
+          Tocadas hoy
+        </label>
+        <label
+          className="flex cursor-pointer items-center gap-2 text-xs text-slate-700 sm:pb-1"
           title="Oculta el resumen superior y compacta la tabla"
         >
           <input
@@ -1127,6 +1280,16 @@ export function EtiquetasHojaRutaTab() {
           Modo compacto
         </label>
       </div>
+
+      {sesionesMissing ? (
+        <Alert className="hidden border-amber-200 bg-amber-50/90 md:block">
+          <AlertTitle>Sesiones «Hoy» pendientes de migración</AlertTitle>
+          <AlertDescription className="text-sm">
+            {MIGRATION_HINT_SESIONES} Hasta entonces Kon/Troq/Num siguen
+            funcionando igual.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {!compactMode ? (
         <div className="hidden grid-cols-2 gap-2 sm:grid-cols-3 md:grid lg:grid-cols-5">
@@ -1182,6 +1345,13 @@ export function EtiquetasHojaRutaTab() {
         togglingMaquina={togglingMaquina}
         onToggleMaquina={toggleMaquina}
         onOpenDetail={setMuelleDetailRow}
+        sesionesByHoja={sesionesByHoja}
+        sesionesByKey={sesionesByKey}
+        togglingHoy={togglingHoy}
+        onToggleHoy={toggleHoy}
+        soloTocadasHoy={soloTocadasHoy}
+        onSoloTocadasHoyChange={setSoloTocadasHoy}
+        sesionesMissing={sesionesMissing}
       />
 
       {loading && rows.length === 0 ? (
@@ -1244,13 +1414,13 @@ export function EtiquetasHojaRutaTab() {
                   Plazo
                 </TableHead>
                 {MAQUINA_COLS.map(({ label, title }) => (
-                  <TableHead
-                    key={label}
-                    className="w-14 px-1 text-center text-[10px] font-semibold text-[#002147]"
-                    title={title}
-                  >
-                    {label}
-                  </TableHead>
+                <TableHead
+                  key={label}
+                  className="w-14 px-1 text-center text-[10px] font-semibold text-[#002147]"
+                  title={`${title} · debajo: Hoy = trabajé sin cerrar`}
+                >
+                  {label}
+                </TableHead>
                 ))}
                 <TableHead className="w-14 px-1 text-center text-[10px] font-semibold text-[#002147]">
                   PDF
@@ -1276,13 +1446,21 @@ export function EtiquetasHojaRutaTab() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtradas.map((r, i) => (
+              {filtradas.map((r, i) => {
+                const rowSesiones = sesionesByHoja.get(r.id);
+                const rowEnCurso = filaTieneProcesoEnCursoOMultiDia(
+                  r,
+                  rowSesiones
+                );
+                const hoy = ymdLocal();
+                return (
                 <TableRow
                   key={r.id}
                   className={cn(
                     i % 2 === 1 ? "bg-slate-50/50" : "bg-white",
                     "border-slate-100",
-                    compactMode && "h-8"
+                    compactMode && "h-8",
+                    rowEnCurso && "bg-orange-50/70 hover:bg-orange-50"
                   )}
                 >
                   <TableCell
@@ -1376,31 +1554,82 @@ export function EtiquetasHojaRutaTab() {
                       finalizado={Boolean(r.finalizado)}
                     />
                   </TableCell>
-                  {MAQUINA_COLS.map(({ field, fechaField, title }) => (
-                    <TableCell
-                      key={field}
-                      className="px-1 text-center align-middle"
-                    >
-                      <label
-                        className="inline-flex cursor-pointer flex-col items-center justify-center gap-0.5 py-0.5"
-                        title={title}
+                  {MAQUINA_COLS.map(({ field, fechaField, title }) => {
+                    const proceso = PROCESO_BY_MAQUINA[field];
+                    const enCurso = procesoEsMultiDiaOEnCurso(
+                      r,
+                      proceso,
+                      rowSesiones
+                    );
+                    const hoyOn = hasSesionHoy(
+                      sesionesByKey,
+                      r.id,
+                      proceso,
+                      hoy
+                    );
+                    const done = Boolean(r[field]);
+                    return (
+                      <TableCell
+                        key={field}
+                        className={cn(
+                          "px-1 text-center align-middle",
+                          enCurso && "bg-orange-50/90"
+                        )}
                       >
-                        <input
-                          type="checkbox"
-                          className="size-3.5 cursor-pointer rounded border-slate-300 accent-[#002147] disabled:opacity-50"
-                          checked={Boolean(r[field])}
-                          disabled={togglingMaquina === `${r.id}:${field}`}
-                          aria-label={`${title} OT ${r.ot_numero}`}
-                          onChange={(e) => {
-                            void toggleMaquina(r, field, e.target.checked);
-                          }}
-                        />
-                        <span className="min-h-3 text-[9px] leading-none text-slate-500 tabular-nums">
-                          {Boolean(r[field]) ? fmtDateShort(r[fechaField]) : ""}
-                        </span>
-                      </label>
-                    </TableCell>
-                  ))}
+                        <div className="inline-flex flex-col items-center justify-center gap-0.5 py-0.5">
+                          <label
+                            className="inline-flex cursor-pointer flex-col items-center justify-center gap-0.5"
+                            title={title}
+                          >
+                            <input
+                              type="checkbox"
+                              className="size-3.5 cursor-pointer rounded border-slate-300 accent-[#002147] disabled:opacity-50"
+                              checked={done}
+                              disabled={togglingMaquina === `${r.id}:${field}`}
+                              aria-label={`${title} OT ${r.ot_numero}`}
+                              onChange={(e) => {
+                                void toggleMaquina(r, field, e.target.checked);
+                              }}
+                            />
+                            <span className="min-h-3 text-[9px] leading-none text-slate-500 tabular-nums">
+                              {done ? fmtDateShort(r[fechaField]) : ""}
+                            </span>
+                          </label>
+                          {!sesionesMissing ? (
+                            <button
+                              type="button"
+                              disabled={
+                                done || togglingHoy === `${r.id}:${field}`
+                              }
+                              title={
+                                done
+                                  ? "Proceso ya terminado"
+                                  : hoyOn
+                                    ? "Quitar «Hoy»"
+                                    : "Hoy: trabajé este proceso sin terminarlo"
+                              }
+                              aria-label={`${title} Hoy OT ${r.ot_numero}`}
+                              aria-pressed={hoyOn}
+                              className={cn(
+                                "rounded px-1 text-[9px] font-semibold uppercase leading-none tracking-wide",
+                                hoyOn
+                                  ? "bg-orange-200 text-orange-950"
+                                  : "text-slate-500 hover:bg-orange-100 hover:text-orange-900",
+                                (done ||
+                                  togglingHoy === `${r.id}:${field}`) &&
+                                  "opacity-40"
+                              )}
+                              onClick={() => {
+                                void toggleHoy(r, field, !hoyOn);
+                              }}
+                            >
+                              Hoy
+                            </button>
+                          ) : null}
+                        </div>
+                      </TableCell>
+                    );
+                  })}
                   <TableCell className="px-1 text-center align-middle">
                     <label
                       className="inline-flex cursor-pointer flex-col items-center justify-center gap-0.5 py-0.5"
@@ -1475,7 +1704,8 @@ export function EtiquetasHojaRutaTab() {
                     />
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </div>

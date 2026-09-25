@@ -1,13 +1,18 @@
 import type { ProdEtiquetasCalendarioApunteRow } from "@/types/prod-etiquetas-calendario-apunte";
 import type { ProdEtiquetasHojaRutaRow } from "@/types/prod-etiquetas-hoja-ruta";
+import type { ProdEtiquetasHojaRutaSesionRow } from "@/types/prod-etiquetas-hoja-ruta-sesion";
 
 export type CalendarioMaquinaTipo = "I" | "T" | "N";
+
+/** cerrado = I/T/N marcado; en_curso = sesión «Hoy» sin cerrar ese día (o sin cierre aún). */
+export type CalendarioEventoEstado = "cerrado" | "en_curso";
 
 export type CalendarioEventoAuto = {
   tipo: CalendarioMaquinaTipo;
   otNumero: string;
   label: string;
   hojaRutaId: string;
+  estado?: CalendarioEventoEstado;
 };
 
 export type CalendarioDiaCelda = {
@@ -127,14 +132,36 @@ export function eventosAutoPorDiaDesdeHojaRuta(
     | "fecha_fin_konica"
     | "fecha_fin_troqueladora"
     | "fecha_fin_numeradora"
-  >[]
+  >[],
+  sesiones: Pick<
+    ProdEtiquetasHojaRutaSesionRow,
+    "hoja_ruta_id" | "proceso" | "fecha"
+  >[] = []
 ): Map<string, CalendarioEventoAuto[]> {
   const map = new Map<string, CalendarioEventoAuto[]>();
+  const otById = new Map<string, string>();
+  for (const r of rows) {
+    const ot = String(r.ot_numero ?? "").trim();
+    if (ot) otById.set(r.id, ot);
+  }
 
   const push = (ymd: string | null, ev: CalendarioEventoAuto) => {
     if (!ymd) return;
     const list = map.get(ymd) ?? [];
-    if (list.some((x) => x.tipo === ev.tipo && x.otNumero === ev.otNumero)) return;
+    const idx = list.findIndex(
+      (x) => x.tipo === ev.tipo && x.otNumero === ev.otNumero
+    );
+    if (idx >= 0) {
+      const prev = list[idx]!;
+      // Mismo día: cerrado gana; no duplicar I/T/N.
+      if (prev.estado === "cerrado") {
+        map.set(ymd, list);
+        return;
+      }
+      list[idx] = { ...prev, ...ev };
+      map.set(ymd, list);
+      return;
+    }
     list.push(ev);
     map.set(ymd, list);
   };
@@ -142,7 +169,7 @@ export function eventosAutoPorDiaDesdeHojaRuta(
   for (const r of rows) {
     const ot = String(r.ot_numero ?? "").trim();
     if (!ot) continue;
-    const base = { otNumero: ot, hojaRutaId: r.id };
+    const base = { otNumero: ot, hojaRutaId: r.id, estado: "cerrado" as const };
     const fk = ymdKey(r.fecha_fin_konica);
     if (fk) {
       push(fk, {
@@ -167,6 +194,22 @@ export function eventosAutoPorDiaDesdeHojaRuta(
         label: labelEventoAuto("N", ot),
       });
     }
+  }
+
+  for (const s of sesiones) {
+    const ymd = ymdKey(s.fecha);
+    if (!ymd) continue;
+    const ot = otById.get(s.hoja_ruta_id);
+    if (!ot) continue;
+    const tipo = s.proceso as CalendarioMaquinaTipo;
+    if (tipo !== "I" && tipo !== "T" && tipo !== "N") continue;
+    push(ymd, {
+      tipo,
+      otNumero: ot,
+      hojaRutaId: s.hoja_ruta_id,
+      label: labelEventoAuto(tipo, ot),
+      estado: "en_curso",
+    });
   }
 
   for (const list of map.values()) {
@@ -253,9 +296,21 @@ export function filasHojaRutaEnMes(
     | "fecha_fin_numeradora"
   >[],
   start: string,
-  end: string
+  end: string,
+  sesiones: Pick<
+    ProdEtiquetasHojaRutaSesionRow,
+    "hoja_ruta_id" | "fecha"
+  >[] = []
 ): typeof rows {
+  const idsConSesion = new Set<string>();
+  for (const s of sesiones) {
+    const f = ymdKey(s.fecha);
+    if (f != null && f >= start && f <= end) {
+      idsConSesion.add(s.hoja_ruta_id);
+    }
+  }
   return rows.filter((r) => {
+    if (idsConSesion.has(r.id)) return true;
     const fechas = [
       ymdKey(r.fecha_fin_konica),
       ymdKey(r.fecha_fin_troqueladora),

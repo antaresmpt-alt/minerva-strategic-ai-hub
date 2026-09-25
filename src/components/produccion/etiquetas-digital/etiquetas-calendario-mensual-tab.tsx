@@ -57,12 +57,14 @@ import {
   splitLineasDosColumnas,
 } from "@/lib/etiquetas-calendario-mensual";
 import { exportEtiquetasCalendarioMensualPdf } from "@/lib/etiquetas-calendario-mensual-export";
+import { SESIONES_TABLE } from "@/lib/etiquetas-hoja-ruta-sesiones";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { ProdCalendarioFestivoRow } from "@/types/prod-calendario-festivo";
 import type { CalendarioFestivoAmbito } from "@/types/prod-calendario-festivo";
 import type { ProdEtiquetasCalendarioApunteRow } from "@/types/prod-etiquetas-calendario-apunte";
 import type { ProdEtiquetasCatalogRow } from "@/types/prod-etiquetas-catalogo";
 import type { ProdEtiquetasHojaRutaRow } from "@/types/prod-etiquetas-hoja-ruta";
+import type { ProdEtiquetasHojaRutaSesionRow } from "@/types/prod-etiquetas-hoja-ruta-sesion";
 import type { ProdEtiquetasTroquelRow } from "@/types/prod-etiquetas-troqueles";
 import { cn } from "@/lib/utils";
 
@@ -76,6 +78,8 @@ const MIGRATION_HINT_APUNTE =
   "Ejecuta la migraciÃ³n 20260517160000_prod_etiquetas_calendario_apunte.sql en Supabase.";
 const MIGRATION_HINT_FESTIVO =
   "Ejecuta la migraciÃ³n 20260519120000_prod_calendario_festivo.sql en Supabase.";
+const MIGRATION_HINT_SESIONES =
+  "Ejecuta la migración 20260925120000_prod_etiquetas_hoja_ruta_sesiones.sql en Supabase.";
 
 const STORAGE_SHOW_SATURDAY = "etiquetas-cal-show-saturday";
 const STORAGE_FESTIVO_CAPAS = "etq-cal-festivo-capas";
@@ -131,14 +135,21 @@ function LineaContenido({
   onOpenHojaRuta?: (id: string) => void;
 }) {
   if (linea.kind === "evento") {
+    const enCurso = linea.ev.estado === "en_curso";
     return (
       <button
         type="button"
         className={cn(
           "w-full break-words text-left leading-tight underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#002147]/40",
-          TIPO_CLASS[linea.ev.tipo]
+          enCurso
+            ? "rounded-sm bg-orange-100/90 px-0.5 font-medium text-orange-950"
+            : TIPO_CLASS[linea.ev.tipo]
         )}
-        title={`${linea.ev.label} — abrir hoja de ruta`}
+        title={
+          enCurso
+            ? `${linea.ev.label} — en curso (sesión Hoy)`
+            : `${linea.ev.label} — abrir hoja de ruta`
+        }
         onClick={() => onOpenHojaRuta?.(linea.ev.hojaRutaId)}
       >
         {linea.ev.label}
@@ -512,6 +523,7 @@ export function EtiquetasCalendarioMensualTab() {
   const [year, setYear] = useState(now.getFullYear());
   const [monthIndex, setMonthIndex] = useState(now.getMonth());
   const [hojaRuta, setHojaRuta] = useState<ProdEtiquetasHojaRutaRow[]>([]);
+  const [sesiones, setSesiones] = useState<ProdEtiquetasHojaRutaSesionRow[]>([]);
   const [catalog, setCatalog] = useState<ProdEtiquetasCatalogRow[]>([]);
   const [troqueles, setTroqueles] = useState<ProdEtiquetasTroquelRow[]>([]);
   const [apuntes, setApuntes] = useState<ProdEtiquetasCalendarioApunteRow[]>([]);
@@ -581,9 +593,9 @@ export function EtiquetasCalendarioMensualTab() {
   const numCols = numColumnasCalendario(showSaturday);
 
   const eventosMapRaw = useMemo(() => {
-    const enMes = filasHojaRutaEnMes(hojaRuta, start, end);
-    return eventosAutoPorDiaDesdeHojaRuta(enMes);
-  }, [hojaRuta, start, end]);
+    const enMes = filasHojaRutaEnMes(hojaRuta, start, end, sesiones);
+    return eventosAutoPorDiaDesdeHojaRuta(enMes, sesiones);
+  }, [hojaRuta, sesiones, start, end]);
 
   const apuntesMapRaw = useMemo(() => apuntesPorDia(apuntes), [apuntes]);
 
@@ -629,7 +641,7 @@ export function EtiquetasCalendarioMensualTab() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [rHr, rAp, rFest, rCat, rTroqueles] = await Promise.all([
+    const [rHr, rAp, rFest, rCat, rTroqueles, rSes] = await Promise.all([
       supabase.from(TABLE_HR).select("*").order("ot_numero"),
       supabase
         .from(TABLE_APUNTE)
@@ -648,6 +660,12 @@ export function EtiquetasCalendarioMensualTab() {
         .order("fecha"),
       supabase.from(CATALOG_TABLE).select("*").order("orden"),
       supabase.from(TROQUELES_TABLE).select("*").order("codigo"),
+      supabase
+        .from(SESIONES_TABLE)
+        .select("id, hoja_ruta_id, proceso, fecha, nota, created_at")
+        .gte("fecha", start)
+        .lte("fecha", end)
+        .order("fecha"),
     ]);
     setLoading(false);
 
@@ -694,6 +712,21 @@ export function EtiquetasCalendarioMensualTab() {
 
     if (!rTroqueles.error) {
       setTroqueles((rTroqueles.data ?? []) as ProdEtiquetasTroquelRow[]);
+    }
+
+    if (rSes.error) {
+      setSesiones([]);
+      if (
+        isMissingTable(rSes.error.message, SESIONES_TABLE) ||
+        rSes.error.message.toLowerCase().includes("does not exist")
+      ) {
+        toast.error("Falta la tabla de sesiones «Hoy»", {
+          id: "etq-cal-sesiones-missing",
+          description: MIGRATION_HINT_SESIONES,
+        });
+      }
+    } else {
+      setSesiones((rSes.data ?? []) as ProdEtiquetasHojaRutaSesionRow[]);
     }
   }, [end, start, supabase]);
 
@@ -1091,9 +1124,10 @@ export function EtiquetasCalendarioMensualTab() {
       </Dialog>
 
       <p className="text-[11px] text-slate-500">
-        Las lÃ­neas <strong>I-</strong>, <strong>T-</strong> y <strong>N-</strong>{" "}
-        se generan al marcar Kon / Troq / Num en hoja de ruta. El PDF respeta los
-        mismos filtros que la pantalla.
+        Las líneas <strong>I-</strong>, <strong>T-</strong> y <strong>N-</strong>{" "}
+        se generan al marcar Kon / Troq / Num (cerrado) o <strong>Hoy</strong>{" "}
+        (en curso, naranja) en hoja de ruta. El PDF respeta los mismos filtros
+        que la pantalla.
       </p>
     </div>
   );

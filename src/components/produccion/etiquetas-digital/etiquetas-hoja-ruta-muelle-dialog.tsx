@@ -14,7 +14,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { MaquinaHojaRutaField } from "@/lib/etiquetas-hoja-ruta-maquina";
+import {
+  hasSesionHoy,
+  procesoEsMultiDiaOEnCurso,
+} from "@/lib/etiquetas-hoja-ruta-sesiones";
+import { todayYmdLocal } from "@/lib/etiquetas-hoja-ruta-plazo";
 import type { ProdEtiquetasHojaRutaRow } from "@/types/prod-etiquetas-hoja-ruta";
+import type { ProdEtiquetasHojaRutaSesionRow } from "@/types/prod-etiquetas-hoja-ruta-sesion";
 
 type Props = {
   row: ProdEtiquetasHojaRutaRow | null;
@@ -27,6 +33,15 @@ type Props = {
     next: boolean
   ) => void;
   onEdit: (row: ProdEtiquetasHojaRutaRow) => void;
+  sesionesByHoja?: Map<string, ProdEtiquetasHojaRutaSesionRow[]>;
+  sesionesByKey?: Map<string, ProdEtiquetasHojaRutaSesionRow>;
+  togglingHoy?: string | null;
+  onToggleHoy?: (
+    row: ProdEtiquetasHojaRutaRow,
+    field: MaquinaHojaRutaField,
+    next: boolean
+  ) => void;
+  sesionesMissing?: boolean;
 };
 
 export function EtiquetasHojaRutaMuelleDialog({
@@ -36,6 +51,11 @@ export function EtiquetasHojaRutaMuelleDialog({
   togglingMaquina,
   onToggleMaquina,
   onEdit,
+  sesionesByHoja,
+  sesionesByKey,
+  togglingHoy,
+  onToggleHoy,
+  sesionesMissing,
 }: Props) {
   if (!row) return null;
 
@@ -43,6 +63,21 @@ export function EtiquetasHojaRutaMuelleDialog({
     row.cantidad != null && Number(row.cantidad) > 0
       ? Number(row.cantidad).toLocaleString("es-ES")
       : "—";
+
+  const hoy = todayYmdLocal();
+  const rowSesiones = sesionesByHoja?.get(row.id);
+  const hoyByField = sesionesByKey
+    ? {
+        konica: hasSesionHoy(sesionesByKey, row.id, "I", hoy),
+        troqueladora: hasSesionHoy(sesionesByKey, row.id, "T", hoy),
+        numeradora: hasSesionHoy(sesionesByKey, row.id, "N", hoy),
+      }
+    : undefined;
+  const enCursoByField = {
+    konica: procesoEsMultiDiaOEnCurso(row, "I", rowSesiones),
+    troqueladora: procesoEsMultiDiaOEnCurso(row, "T", rowSesiones),
+    numeradora: procesoEsMultiDiaOEnCurso(row, "N", rowSesiones),
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -76,7 +111,18 @@ export function EtiquetasHojaRutaMuelleDialog({
             numeradora={Boolean(row.numeradora)}
             togglingMaquina={togglingMaquina}
             onToggle={(field, next) => onToggleMaquina(row, field, next)}
+            hoyByField={hoyByField}
+            enCursoByField={enCursoByField}
+            togglingHoy={togglingHoy}
+            onToggleHoy={
+              sesionesMissing || !onToggleHoy
+                ? undefined
+                : (field, next) => onToggleHoy(row, field, next)
+            }
           />
+          <p className="text-[10px] text-muted-foreground">
+            Check = terminado · Hoy = trabajé sin cerrar
+          </p>
         </div>
 
         <DialogFooter className="flex-row gap-2 sm:justify-between">

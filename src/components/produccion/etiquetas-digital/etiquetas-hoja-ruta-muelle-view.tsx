@@ -15,12 +15,19 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, type Option } from "@/components/ui/select-native";
-import { entregaPlazoSemaforo } from "@/lib/etiquetas-hoja-ruta-plazo";
+import { entregaPlazoSemaforo, todayYmdLocal } from "@/lib/etiquetas-hoja-ruta-plazo";
 import type { MaquinaHojaRutaField } from "@/lib/etiquetas-hoja-ruta-maquina";
+import {
+  filaTieneProcesoEnCursoOMultiDia,
+  hasSesionHoy,
+  hojaTocadaHoy,
+  procesoEsMultiDiaOEnCurso,
+} from "@/lib/etiquetas-hoja-ruta-sesiones";
 import type { ProdEtiquetasHojaRutaRow } from "@/types/prod-etiquetas-hoja-ruta";
+import type { ProdEtiquetasHojaRutaSesionRow } from "@/types/prod-etiquetas-hoja-ruta-sesion";
 import { cn } from "@/lib/utils";
 
-type ChipId = "sinKon" | "sinTroq" | "sinNum" | "urgente" | "plazoRojo";
+type ChipId = "sinKon" | "sinTroq" | "sinNum" | "urgente" | "plazoRojo" | "tocadasHoy";
 
 const CHIPS: { id: ChipId; label: string }[] = [
   { id: "sinKon", label: "Sin impresión" },
@@ -28,6 +35,7 @@ const CHIPS: { id: ChipId; label: string }[] = [
   { id: "sinNum", label: "Sin numerar" },
   { id: "urgente", label: "Urgente" },
   { id: "plazoRojo", label: "Plazo ≤ 4 d" },
+  { id: "tocadasHoy", label: "Tocadas hoy" },
 ];
 
 const ORDEN_OPTIONS: Option[] = [
@@ -51,6 +59,17 @@ type Props = {
     next: boolean
   ) => void;
   onOpenDetail: (row: ProdEtiquetasHojaRutaRow) => void;
+  sesionesByHoja: Map<string, ProdEtiquetasHojaRutaSesionRow[]>;
+  sesionesByKey: Map<string, ProdEtiquetasHojaRutaSesionRow>;
+  togglingHoy: string | null;
+  onToggleHoy: (
+    row: ProdEtiquetasHojaRutaRow,
+    field: MaquinaHojaRutaField,
+    next: boolean
+  ) => void;
+  soloTocadasHoy: boolean;
+  onSoloTocadasHoyChange: (next: boolean) => void;
+  sesionesMissing: boolean;
 };
 
 function sortRows(list: ProdEtiquetasHojaRutaRow[], orden: string): ProdEtiquetasHojaRutaRow[] {
@@ -107,12 +126,23 @@ export function EtiquetasHojaRutaMuelleView({
   togglingMaquina,
   onToggleMaquina,
   onOpenDetail,
+  sesionesByHoja,
+  sesionesByKey,
+  togglingHoy,
+  onToggleHoy,
+  soloTocadasHoy,
+  onSoloTocadasHoyChange,
+  sesionesMissing,
 }: Props) {
   const [buscar, setBuscar] = useState("");
   const [orden, setOrden] = useState("fecha_entrega_ot_asc");
   const [chips, setChips] = useState<Set<ChipId>>(new Set());
 
   const toggleChip = (id: ChipId) => {
+    if (id === "tocadasHoy") {
+      onSoloTocadasHoyChange(!soloTocadasHoy);
+      return;
+    }
     setChips((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -127,6 +157,7 @@ export function EtiquetasHojaRutaMuelleView({
   );
 
   const filtradas = useMemo(() => {
+    const hoy = todayYmdLocal();
     let list = activas;
     const q = buscar.trim().toLowerCase();
     if (q) {
@@ -147,8 +178,11 @@ export function EtiquetasHojaRutaMuelleView({
     if (chips.has("plazoRojo")) {
       list = list.filter((r) => entregaPlazoSemaforo(r.fecha_entrega_ot) === "rojo");
     }
+    if (soloTocadasHoy) {
+      list = list.filter((r) => hojaTocadaHoy(r.id, sesionesByKey, hoy));
+    }
     return sortRows(list, orden);
-  }, [activas, buscar, chips, orden]);
+  }, [activas, buscar, chips, orden, soloTocadasHoy, sesionesByKey]);
 
   if (loading && rows.length === 0) {
     return (
@@ -214,17 +248,22 @@ export function EtiquetasHojaRutaMuelleView({
 
       <div className="flex flex-wrap gap-1.5">
         {CHIPS.map(({ id, label }) => {
-          const on = chips.has(id);
+          const on = id === "tocadasHoy" ? soloTocadasHoy : chips.has(id);
+          const disabled = id === "tocadasHoy" && sesionesMissing;
           return (
             <button
               key={id}
               type="button"
+              disabled={disabled}
               onClick={() => toggleChip(id)}
               className={cn(
                 "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors touch-manipulation",
                 on
-                  ? "border-[#002147] bg-[#002147] text-white"
-                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                  ? id === "tocadasHoy"
+                    ? "border-orange-500 bg-orange-500 text-white"
+                    : "border-[#002147] bg-[#002147] text-white"
+                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
+                disabled && "opacity-40"
               )}
             >
               {label}
@@ -239,10 +278,27 @@ export function EtiquetasHojaRutaMuelleView({
         </div>
       ) : (
         <div className="grid gap-3">
-          {filtradas.map((r) => (
+          {filtradas.map((r) => {
+            const rowSesiones = sesionesByHoja.get(r.id);
+            const hoy = todayYmdLocal();
+            const hoyByField = {
+              konica: hasSesionHoy(sesionesByKey, r.id, "I", hoy),
+              troqueladora: hasSesionHoy(sesionesByKey, r.id, "T", hoy),
+              numeradora: hasSesionHoy(sesionesByKey, r.id, "N", hoy),
+            };
+            const enCursoByField = {
+              konica: procesoEsMultiDiaOEnCurso(r, "I", rowSesiones),
+              troqueladora: procesoEsMultiDiaOEnCurso(r, "T", rowSesiones),
+              numeradora: procesoEsMultiDiaOEnCurso(r, "N", rowSesiones),
+            };
+            const rowEnCurso = filaTieneProcesoEnCursoOMultiDia(r, rowSesiones);
+            return (
             <Card
               key={r.id}
-              className="min-h-[11rem] border-slate-200/90 bg-white shadow-sm"
+              className={cn(
+                "min-h-[11rem] border-slate-200/90 bg-white shadow-sm",
+                rowEnCurso && "border-orange-200 bg-orange-50/40"
+              )}
             >
               <CardHeader
                 className="cursor-pointer space-y-2 pb-2 transition hover:bg-slate-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#002147]/30 focus-visible:ring-inset"
@@ -301,13 +357,22 @@ export function EtiquetasHojaRutaMuelleView({
                     numeradora={Boolean(r.numeradora)}
                     togglingMaquina={togglingMaquina}
                     onToggle={(field, next) => onToggleMaquina(r, field, next)}
+                    hoyByField={hoyByField}
+                    enCursoByField={enCursoByField}
+                    togglingHoy={togglingHoy}
+                    onToggleHoy={
+                      sesionesMissing
+                        ? undefined
+                        : (field, next) => onToggleHoy(r, field, next)
+                    }
                   />
                 <p className="text-center text-[10px] text-muted-foreground">
-                  Toca la cabecera para editar cantidad o abrir ficha
+                  I/T/N = terminado · Hoy = trabajé sin cerrar
                 </p>
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

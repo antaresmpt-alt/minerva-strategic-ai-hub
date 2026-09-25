@@ -799,6 +799,41 @@ export type Database = {
         }
         Relationships: []
       }
+      prod_etiquetas_hoja_ruta_sesiones: {
+        Row: {
+          created_at: string
+          fecha: string
+          hoja_ruta_id: string
+          id: string
+          nota: string | null
+          proceso: string
+        }
+        Insert: {
+          created_at?: string
+          fecha: string
+          hoja_ruta_id: string
+          id?: string
+          nota?: string | null
+          proceso: string
+        }
+        Update: {
+          created_at?: string
+          fecha?: string
+          hoja_ruta_id?: string
+          id?: string
+          nota?: string | null
+          proceso?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prod_etiquetas_hoja_ruta_sesiones_hoja_ruta_id_fkey"
+            columns: ["hoja_ruta_id"]
+            isOneToOne: false
+            referencedRelation: "prod_etiquetas_hoja_ruta"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       prod_etiquetas_hoja_ruta: {
         Row: {
           bobinas: number | null
