@@ -149,10 +149,19 @@ function KpiCard({
   );
 }
 
+function criticoKey(
+  referenciaId: string | null | undefined,
+  clienteNorm: string | null | undefined
+): string {
+  return `${referenciaId ?? ""}|${clienteNorm ?? ""}`;
+}
+
 export function StockArticulosPage() {
   const [rows, setRows] = useState<AtpConCritico[]>([]);
   const [loading, setLoading] = useState(true);
   const [hitLimit, setHitLimit] = useState(false);
+  /** Conteo global desde la vista (incluye refs con solo lotes a 0). */
+  const [criticosCount, setCriticosCount] = useState(0);
   const [search, setSearch] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoFiltro>("todos");
   const [procesoFiltro, setProcesoFiltro] = useState<ProcesoFiltro>("todos");
@@ -164,6 +173,25 @@ export function StockArticulosPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      const { data: criticoRaw, error: criticoError } = await supabase
+        .from("stock_articulos_critico_por_ref")
+        .select("referencia_id, cliente_norm, es_critico")
+        .eq("es_critico", true);
+      if (criticoError) throw criticoError;
+
+      const criticoKeys = new Set(
+        (criticoRaw ?? [])
+          .filter((c) => c && c.es_critico === true)
+          .map((c) =>
+            criticoKey(
+              typeof c.referencia_id === "string" ? c.referencia_id : null,
+              typeof c.cliente_norm === "string" ? c.cliente_norm : null
+            )
+          )
+          .filter((k) => k !== "|")
+      );
+      setCriticosCount(criticoKeys.size);
+
       let atpQuery = supabase
         .from("stock_articulos_atp")
         .select("*")
@@ -172,35 +200,34 @@ export function StockArticulosPage() {
 
       if (estadoFiltro === "agotado") {
         atpQuery = atpQuery.eq("estado_derivado", "agotado");
+      } else if (estadoFiltro === "critico") {
+        // Incluye lotes a 0: la rotura total también debe verse.
+        const refIds = [
+          ...new Set(
+            (criticoRaw ?? [])
+              .map((c) =>
+                typeof c.referencia_id === "string" ? c.referencia_id : ""
+              )
+              .filter(Boolean)
+          ),
+        ];
+        if (refIds.length === 0) {
+          setRows([]);
+          setHitLimit(false);
+          return;
+        }
+        atpQuery = atpQuery.in("referencia_id", refIds);
       } else {
         atpQuery = atpQuery.gt("cantidad_fisica", 0);
       }
 
-      const [{ data: viewRaw, error }, { data: criticoRaw }] = await Promise.all([
-        atpQuery,
-        supabase
-          .from("stock_articulos_critico_por_ref")
-          .select("referencia_id, cliente_norm, es_critico")
-          .eq("es_critico", true),
-      ]);
+      const { data: viewRaw, error } = await atpQuery;
       if (error) throw error;
-      const criticoKeys = new Set(
-        (criticoRaw ?? [])
-          .filter((c) => c && c.es_critico === true)
-          .map((c) => {
-            const refId =
-              typeof c.referencia_id === "string" ? c.referencia_id : "";
-            const clienteNorm =
-              typeof c.cliente_norm === "string" ? c.cliente_norm : "";
-            return `${refId}|${clienteNorm}`;
-          })
-          .filter((k) => k !== "|")
-      );
       const view = (viewRaw ?? []) as StockArticuloAtpRow[];
       setHitLimit(view.length >= LIST_LIMIT);
       setRows(
         view.map((r) => {
-          const key = `${r.referencia_id}|${r.cliente_norm ?? ""}`;
+          const key = criticoKey(r.referencia_id, r.cliente_norm);
           const es_critico =
             r.unidad === "uds" &&
             r.estado_proceso === "terminado" &&
@@ -281,8 +308,6 @@ export function StockArticulosPage() {
     let librePt = 0;
     let libreWip = 0;
     let reservado = 0;
-    let criticos = 0;
-    const refsCrit = new Set<string>();
     for (const r of filtered) {
       if (r.estado_proceso === "terminado" && r.unidad === "uds") {
         librePt += r.cantidad_libre;
@@ -291,19 +316,16 @@ export function StockArticulosPage() {
       if (r.unidad === "hojas") {
         libreWip += r.cantidad_libre;
       }
-      if (r.es_critico && !refsCrit.has(r.referencia_id)) {
-        refsCrit.add(r.referencia_id);
-        criticos += 1;
-      }
     }
     return {
       lotes: filtered.length,
       librePt,
       libreWip,
       reservado,
-      criticos,
+      /** Vista critica_por_ref, no los lotes cargados (incluye rotura total). */
+      criticos: criticosCount,
     };
-  }, [filtered]);
+  }, [filtered, criticosCount]);
 
   return (
     <div className="space-y-4 p-4 md:p-6">
