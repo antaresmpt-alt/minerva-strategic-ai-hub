@@ -123,9 +123,20 @@ export function StockArticulosImportDialog({
 
       const { codigos, refsCliente } = collectImportLookupKeys(parsed.rows);
 
+      // Minerva: .in distingue mayúsculas → normalizar a UPPER (M-01632).
+      const codigosLookup = [
+        ...new Set(
+          codigos.flatMap((c) => {
+            const t = c.trim();
+            if (!t) return [];
+            return [t, t.toUpperCase()];
+          })
+        ),
+      ];
+
       const [byCodigo, byRefCliente] = await Promise.all([
-        codigos.length
-          ? fetchAllInChunks(codigos, 100, async (chunk) => {
+        codigosLookup.length
+          ? fetchAllInChunks(codigosLookup, 100, async (chunk) => {
               const { data, error } = await supabase
                 .from("prod_referencias")
                 .select("id, codigo, referencia_cliente, cliente")
@@ -134,12 +145,21 @@ export function StockArticulosImportDialog({
               return (data ?? []) as RefCatalogRow[];
             })
           : Promise.resolve([] as RefCatalogRow[]),
+        // Ref. cliente: ilike exacto (sin %) = case-insensitive.
         refsCliente.length
-          ? fetchAllInChunks(refsCliente, 100, async (chunk) => {
+          ? fetchAllInChunks(refsCliente, 40, async (chunk) => {
+              const orFilter = chunk
+                .map((rc) => {
+                  const escaped = rc.trim().replace(/[%(),]/g, "");
+                  return `referencia_cliente.ilike.${escaped}`;
+                })
+                .filter((p) => !p.endsWith("."))
+                .join(",");
+              if (!orFilter) return [] as RefCatalogRow[];
               const { data, error } = await supabase
                 .from("prod_referencias")
                 .select("id, codigo, referencia_cliente, cliente")
-                .in("referencia_cliente", chunk);
+                .or(orFilter);
               if (error) throw error;
               return (data ?? []) as RefCatalogRow[];
             })

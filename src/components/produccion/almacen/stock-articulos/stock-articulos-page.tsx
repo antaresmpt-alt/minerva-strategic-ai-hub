@@ -3,6 +3,7 @@
 import {
   AlertTriangle,
   Download,
+  FileDown,
   FileSpreadsheet,
   Loader2,
   Package,
@@ -49,6 +50,10 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { downloadStockArticulosPlantilla } from "@/lib/stock-articulos-excel-import";
+import {
+  exportStockArticulosExcel,
+  exportStockArticulosPdf,
+} from "@/lib/stock-articulos-export";
 import {
   canWriteStockArticulosClient,
   fetchProfileCapacidades,
@@ -176,6 +181,7 @@ export function StockArticulosPage() {
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoFiltro>("todos");
   const [procesoFiltro, setProcesoFiltro] = useState<ProcesoFiltro>("todos");
   const [role, setRole] = useState<string | null>(null);
+  const [userLabel, setUserLabel] = useState<string>("");
   const [canWrite, setCanWrite] = useState(false);
   const [detalle, setDetalle] = useState<AtpConCritico | null>(null);
   const [altaOpen, setAltaOpen] = useState(false);
@@ -267,6 +273,7 @@ export function StockArticulosPage() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user || !mounted) return;
+      setUserLabel(user.email?.trim() || user.id);
       const { data: prof } = await supabase
         .from("profiles")
         .select("role")
@@ -349,6 +356,43 @@ export function StockArticulosPage() {
     return parts.join(" · ");
   }, [search, estadoFiltro, procesoFiltro, filtered.length, criticosCount]);
 
+  const exportFiltrosLabel = useMemo(() => {
+    const parts: string[] = [];
+    if (search.trim()) parts.push(`texto «${search.trim()}»`);
+    if (estadoFiltro !== "todos") parts.push(`estado=${estadoFiltro}`);
+    if (procesoFiltro !== "todos") parts.push(`proceso=${procesoFiltro}`);
+    if (parts.length === 0) return "todos (sin filtros)";
+    return parts.join(" · ");
+  }, [search, estadoFiltro, procesoFiltro]);
+
+  function handleExportExcel() {
+    if (filtered.length === 0) {
+      toast.error("No hay filas para exportar con los filtros actuales.");
+      return;
+    }
+    exportStockArticulosExcel(filtered, {
+      filtrosLabel: exportFiltrosLabel,
+      usuario: userLabel,
+    });
+    toast.success(
+      `Excel descargado (${filtered.length} lote(s) de la vista actual).`
+    );
+  }
+
+  function handleExportPdf() {
+    if (filtered.length === 0) {
+      toast.error("No hay filas para exportar con los filtros actuales.");
+      return;
+    }
+    exportStockArticulosPdf(filtered, {
+      filtrosLabel: exportFiltrosLabel,
+      usuario: userLabel,
+    });
+    toast.success(
+      `PDF descargado (${filtered.length} lote(s) de la vista actual).`
+    );
+  }
+
   return (
     <div className="space-y-4 p-4 md:p-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -383,6 +427,24 @@ export function StockArticulosPage() {
           >
             <RefreshCw className={`size-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
             Actualizar
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportExcel}
+            disabled={loading || filtered.length === 0}
+          >
+            <FileSpreadsheet className="size-4 mr-1.5" />
+            Excel ({filtered.length})
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportPdf}
+            disabled={loading || filtered.length === 0}
+          >
+            <FileDown className="size-4 mr-1.5" />
+            PDF
           </Button>
           <Button
             variant="outline"

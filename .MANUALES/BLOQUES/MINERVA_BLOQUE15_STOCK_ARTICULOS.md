@@ -198,14 +198,15 @@ Acuerdo 25 sep: **PALETS general** basta; hilar fino por palet queda fuera de MV
   - Hoja `Stock` **solo cabecera**; hoja `Ejemplo` con 2 filas de muestra (no se importa); hoja `Listas`. Notas con «Ejemplo» → rojo.  
   - Desplegables en `unidad` / `proceso` (best-effort SheetJS) + Listas.  
 - **Números:** lectura `raw: true`; enteros quitan puntos/comas de miles (`"35.900"` → 35900).  
-- **Lookup maestro:** solo códigos/refs del Excel vía `.in` + `fetchAllInChunks` (no `.limit(20000)` del maestro).  
+- **Lookup maestro:** solo códigos/refs del Excel vía `.in` / `ilike` + `fetchAllInChunks` (no `.limit(20000)` del maestro). Códigos Minerva en mayúsculas; ref. cliente case-insensitive.  
 - **Import:** tabla semáforo → confirmar → `alta_lote` fila a fila. Diálogo **no cierra**: cada fila ✅ creada / ❌ error; reintentar solo fallidas.  
 - **Anti-doble:** tag `[import:hash]` en notas; aviso lote ref+cantidad+OT; aviso **filas repetidas en el mismo archivo**.  
+- **Carga real:** empezar con 5–10 filas conocidas, validar en bandeja, luego el inventario completo.  
 - Sin SQL nueva.
 
 ### 8.1d — Export bandeja (15.1d)
 
-PDF y Excel de la bandeja **con los filtros activos**, cabecera con fecha + usuario. Patrón de otras pantallas Minerva. Útil para Gabri en almacén con hoja en mano.
+PDF y Excel de la bandeja **con los filtros activos**, cabecera con fecha + usuario (email). Patrón compras/residuos (jsPDF + SheetJS). Útil para Gabri en almacén con hoja en mano.
 
 ### 8.2 Modal ATP en despacho
 
@@ -266,7 +267,7 @@ FABRICACION / sobrante → proponer entrada a stock. Entrega con reserva → con
 | **15.1** | UI bandeja + alta/ajuste + búsqueda ref. + IA + embalaje en alta | ✅ casi; pulidos §8.1.1 |
 | **15.1a** | Editar datos (no cantidad): RPC `editar_datos` + UI detalle | ✅ |
 | **15.1b** | Plantilla Excel + import con tabla de revisión (carga inicial) | ✅ |
-| **15.1d** | Export PDF / Excel bandeja filtrada | ⏳ |
+| **15.1d** | Export PDF / Excel bandeja filtrada | ✅ |
 | **15.3** | Reserva + consumo + liberar (vía RPC) en UI | ⏳ |
 | **15.4** | Tag `OT_ENTREGA` + reserva sobre OT Optimus | ⏳ |
 | **15.2** | Modal ATP en despacho OT (usar / fabricar / mezclar) | ⏳ **al final** (inventario cargado) |
@@ -297,6 +298,7 @@ Orden acordado (Claude 25 sep): **picker solo buscar** → **15.1a editar_datos 
 | 25 sep 2026 | Roadmap: 15.1a editar_datos, 15.1b import review, 15.1d export; proceso DB → Claude antes de aplicar; picker sin crear. |
 | 25 sep 2026 | **15.1b:** plantilla generada en app (desplegables unidad/proceso + hoja Listas); import con semáforo; anti-doble `[import:hash]`; `alta_lote` fila a fila (sin RPC batch). |
 | 25 sep 2026 | **15.1b fix:** miles ES (`raw:true` + strip); lookup `.in` chunks; hoja Ejemplo aparte; diálogo ✅/❌ + reintento; duplicados intra-archivo. |
+| 25 sep 2026 | **15.1b:** lookup case-insensitive (Minerva UPPER + ref. cliente `ilike`). **15.1d:** export PDF/Excel bandeja filtrada (fecha + usuario). |
 
 ---
 
@@ -304,9 +306,7 @@ Orden acordado (Claude 25 sep): **picker solo buscar** → **15.1a editar_datos 
 
 Rama: **`feature/bloque15-stock-articulos`**.
 
-**Siguiente:** **15.1d** export PDF/Excel de la bandeja filtrada.  
-~~15.1a editar_datos~~ · ~~15.1b import Excel~~.
-
-Después: Gabri carga inventario → **15.3 / 15.4 / 15.2**.
+**Siguiente:** Gabri carga inventario (piloto 5–10 filas) → luego **15.3 / 15.4 / 15.2**.  
+~~15.1a~~ · ~~15.1b~~ · ~~15.1d~~.
 
 Validar §10 con Gabri cuando toque UX de ubicación/mínimos.
