@@ -238,7 +238,8 @@ FABRICACION / sobrante → proponer entrada a stock. Entrega con reserva → con
 | Fecha | Cambio |
 |-------|--------|
 | 25 sep 2026 | Creación Claude + niquelado Cursor (despacho≠B7, claves, sin consumibles). |
-| 25 sep 2026 | Acuerdos planta: reservas tabla aparte; cliente texto; ref. cliente en UI; `OT_ENTREGA`; Stock→generar entrega; FABRICACION vs entregas; fase A en rama. |
+| 25 sep 2026 | Acuerdos planta + Fase A. |
+| 25 sep 2026 | 15.0 RPC/capacidades; fix Claude: libre en consumir sin reserva, crítico uds+terminado, transformar unidad/locks, num_pedido OT, ajustar p_forzar, revoke anon. |
 
 ---
 

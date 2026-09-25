@@ -279,8 +279,8 @@ create table if not exists public.prod_stock_articulos_movimientos (
     check (tipo in (
       'entrada', 'reserva', 'liberacion', 'consumo', 'ajuste', 'transformacion'
     )),
-  -- Magnitud siempre > 0 para tipos con cantidad operativa; ajuste usa antes/despues.
-  cantidad integer not null check (cantidad > 0),
+  -- Magnitud >= 0 (0 permitido p.ej. ajuste solo bultos / liberación ya consumida).
+  cantidad integer not null check (cantidad >= 0),
   cantidad_antes integer,
   cantidad_despues integer,
   cantidad_destino integer check (
@@ -399,14 +399,15 @@ comment on view public.stock_articulos_atp is
 
 grant select on public.stock_articulos_atp to authenticated;
 
--- Crítico agregado por referencia (+ cliente_norm)
+-- Crítico agregado: solo PT en uds; agrupa por referencia_id (+ cliente_norm).
+-- referencia_cliente sale del maestro, no del lote.
 create or replace view public.stock_articulos_critico_por_ref
 with (security_invoker = on)
 as
 select
   a.referencia_id,
-  a.referencia_codigo,
-  a.referencia_cliente,
+  ref.codigo as referencia_codigo,
+  ref.referencia_cliente,
   a.cliente_norm,
   ref.stock_cantidad_minima,
   sum(a.cantidad_fisica) as cantidad_fisica_total,
@@ -415,15 +416,18 @@ select
     and sum(a.cantidad_libre) <= ref.stock_cantidad_minima) as es_critico
 from public.stock_articulos_atp a
 join public.prod_referencias ref on ref.id = a.referencia_id
+where a.unidad = 'uds'
+  and a.estado_proceso = 'terminado'
 group by
   a.referencia_id,
-  a.referencia_codigo,
-  a.referencia_cliente,
+  ref.codigo,
+  ref.referencia_cliente,
   a.cliente_norm,
   ref.stock_cantidad_minima;
 
 comment on view public.stock_articulos_critico_por_ref is
-  'Alerta mínima a nivel artículo (suma libres), no por lote.';
+  'Alerta mínima por artículo (suma libres uds terminado). '
+  'No mezcla hojas/WIP. referencia_cliente del maestro.';
 
 grant select on public.stock_articulos_critico_por_ref to authenticated;
 
@@ -438,6 +442,10 @@ alter table public.prod_stock_articulos_movimientos enable row level security;
 revoke all on public.prod_stock_articulos from authenticated;
 revoke all on public.prod_stock_articulos_reservas from authenticated;
 revoke all on public.prod_stock_articulos_movimientos from authenticated;
+revoke all on public.prod_stock_articulos from anon;
+revoke all on public.prod_stock_articulos_reservas from anon;
+revoke all on public.prod_stock_articulos_movimientos from anon;
+revoke all on public.profiles_capacidades from anon;
 grant select on public.prod_stock_articulos to authenticated;
 grant select on public.prod_stock_articulos_reservas to authenticated;
 grant select on public.prod_stock_articulos_movimientos to authenticated;
@@ -584,7 +592,8 @@ create or replace function public.prod_stock_articulos_ajustar(
   p_stock_id uuid,
   p_cantidad_nueva integer,
   p_notas text default null,
-  p_bultos integer default null
+  p_bultos integer default null,
+  p_forzar boolean default false
 )
 returns void
 language plpgsql
@@ -594,6 +603,7 @@ as $$
 declare
   v_antes integer;
   v_delta integer;
+  v_comprometida integer;
 begin
   if not public.minerva_can_write_stock_articulos() then
     raise exception 'Sin permiso stock_articulos_write';
@@ -614,6 +624,18 @@ begin
     raise exception 'Lote no encontrado: %', p_stock_id;
   end if;
 
+  select coalesce(sum(cantidad_reservada - cantidad_consumida), 0)
+  into v_comprometida
+  from public.prod_stock_articulos_reservas
+  where stock_articulo_id = p_stock_id
+    and estado in ('activa', 'parcial');
+
+  if p_cantidad_nueva < v_comprometida and not coalesce(p_forzar, false) then
+    raise exception
+      'Ajuste dejaría físico (%) bajo lo comprometido (%). Libera reservas o usa p_forzar=true con nota.',
+      p_cantidad_nueva, v_comprometida;
+  end if;
+
   v_delta := abs(p_cantidad_nueva - v_antes);
   if v_delta = 0 and p_bultos is null then
     return;
@@ -629,7 +651,7 @@ begin
     stock_articulo_id, tipo, cantidad, cantidad_antes, cantidad_despues,
     bultos, notas, created_by
   ) values (
-    p_stock_id, 'ajuste', greatest(v_delta, 1), v_antes, p_cantidad_nueva,
+    p_stock_id, 'ajuste', v_delta, v_antes, p_cantidad_nueva,
     p_bultos, btrim(p_notas), auth.uid()
   );
 end;
@@ -641,8 +663,7 @@ create or replace function public.prod_stock_articulos_reservar(
   p_cantidad integer,
   p_num_pedido text default null,
   p_bultos integer default null,
-  p_notas text default null,
-  p_require_ot boolean default true
+  p_notas text default null
 )
 returns uuid
 language plpgsql
@@ -670,11 +691,12 @@ begin
     raise exception 'p_cantidad debe ser > 0';
   end if;
 
-  if p_require_ot and not exists (
-    select 1 from public.prod_ots_general where id = v_ot
+  -- nº OT de planta = prod_ots_general.num_pedido (id es uuid)
+  if not exists (
+    select 1 from public.prod_ots_general where num_pedido = v_ot
   ) then
     raise exception
-      'OT % no está en Minerva. Impórtala desde Optimus antes de reservar.',
+      'OT % no está en Minerva (prod_ots_general.num_pedido). Impórtala desde Optimus antes de reservar.',
       v_ot;
   end if;
 
@@ -799,7 +821,7 @@ begin
     stock_articulo_id, tipo, cantidad, cantidad_antes, cantidad_despues,
     ot_numero, num_pedido, notas, created_by
   ) values (
-    p_stock_id, 'liberacion', greatest(v_pendiente, 1), v_fisico, v_fisico,
+    p_stock_id, 'liberacion', v_pendiente, v_fisico, v_fisico,
     v_ot, v_res.num_pedido,
     coalesce(nullif(btrim(p_notas), ''), 'Liberación reserva OT ' || v_ot),
     auth.uid()
@@ -827,6 +849,9 @@ declare
   v_res public.prod_stock_articulos_reservas%rowtype;
   v_pendiente integer;
   v_nueva_consumida integer;
+  v_comprometida integer;
+  v_libre integer;
+  v_found boolean := false;
 begin
   if not public.minerva_can_write_stock_articulos() then
     raise exception 'Sin permiso stock_articulos_write';
@@ -860,11 +885,25 @@ begin
     and estado in ('activa', 'parcial')
   for update;
 
-  if not found then
+  v_found := found;
+
+  if not v_found then
     if nullif(btrim(p_motivo_sin_reserva), '') is null then
       raise exception
         'No hay reserva viva para OT %. Pasa p_motivo_sin_reserva para forzar consumo.',
         v_ot;
+    end if;
+    -- Sin reserva: solo se puede gastar lo LIBRE (no lo comprometido a otras OTs)
+    select coalesce(sum(cantidad_reservada - cantidad_consumida), 0)
+    into v_comprometida
+    from public.prod_stock_articulos_reservas
+    where stock_articulo_id = p_stock_id
+      and estado in ('activa', 'parcial');
+    v_libre := greatest(v_fisico - v_comprometida, 0);
+    if p_cantidad > v_libre then
+      raise exception
+        'Sin reserva: consumo % supera libre % (hay % comprometidos a otras OTs)',
+        p_cantidad, v_libre, v_comprometida;
     end if;
   else
     v_pendiente := v_res.cantidad_reservada - v_res.cantidad_consumida;
@@ -900,7 +939,7 @@ begin
     ot_numero, num_pedido, bultos, notas, created_by
   ) values (
     p_stock_id, 'consumo', p_cantidad, v_fisico, v_despues,
-    v_ot, v_res.num_pedido, p_bultos,
+    v_ot, case when v_found then v_res.num_pedido else null end, p_bultos,
     coalesce(
       nullif(btrim(p_notas), ''),
       nullif(btrim(p_motivo_sin_reserva), ''),
@@ -918,6 +957,7 @@ create or replace function public.prod_stock_articulos_transformar(
   p_estado_proceso_destino text,
   p_stock_destino_id uuid default null,
   p_cantidad_merma integer default null,
+  p_unidad_destino text default null,
   p_ot_numero text default null,
   p_notas text default null
 )
@@ -928,11 +968,16 @@ set search_path = public
 as $$
 declare
   v_origen public.prod_stock_articulos%rowtype;
+  v_destino public.prod_stock_articulos%rowtype;
   v_destino_id uuid;
   v_despues_origen integer;
   v_merma integer;
   v_antes_destino integer;
   v_despues_destino integer;
+  v_unidad_dest text;
+  v_id_a uuid;
+  v_id_b uuid;
+  v_equiv_hojas numeric;
 begin
   if not public.minerva_can_write_stock_articulos() then
     raise exception 'Sin permiso stock_articulos_write';
@@ -943,16 +988,24 @@ begin
   if p_cantidad_destino is null or p_cantidad_destino < 0 then
     raise exception 'p_cantidad_destino debe ser >= 0';
   end if;
-  if p_cantidad_destino > p_cantidad_salida then
-    raise exception 'cantidad_destino no puede superar cantidad_salida';
-  end if;
   if nullif(btrim(p_estado_proceso_destino), '') is null then
     raise exception 'p_estado_proceso_destino obligatorio';
   end if;
+  if p_stock_destino_id is not null and p_stock_destino_id = p_stock_origen_id then
+    raise exception 'Origen y destino no pueden ser el mismo lote';
+  end if;
 
-  v_merma := coalesce(p_cantidad_merma, p_cantidad_salida - p_cantidad_destino);
-  if v_merma <> (p_cantidad_salida - p_cantidad_destino) then
-    raise exception 'cantidad_merma debe ser salida − destino';
+  -- Lock en orden de id (evita deadlock A→B / B→A)
+  if p_stock_destino_id is not null then
+    if p_stock_origen_id < p_stock_destino_id then
+      v_id_a := p_stock_origen_id;
+      v_id_b := p_stock_destino_id;
+    else
+      v_id_a := p_stock_destino_id;
+      v_id_b := p_stock_origen_id;
+    end if;
+    perform 1 from public.prod_stock_articulos where id = v_id_a for update;
+    perform 1 from public.prod_stock_articulos where id = v_id_b for update;
   end if;
 
   select * into v_origen
@@ -967,7 +1020,40 @@ begin
     raise exception 'Físico origen insuficiente';
   end if;
 
-  -- No transformar si hay compromiso vivo (simplificación MVP)
+  v_unidad_dest := coalesce(nullif(btrim(p_unidad_destino), ''), v_origen.unidad);
+  if v_unidad_dest not in ('uds', 'hojas') then
+    raise exception 'p_unidad_destino debe ser uds u hojas';
+  end if;
+
+  if v_unidad_dest = v_origen.unidad then
+    if p_cantidad_destino > p_cantidad_salida then
+      raise exception 'Misma unidad: destino no puede superar salida';
+    end if;
+    v_merma := coalesce(p_cantidad_merma, p_cantidad_salida - p_cantidad_destino);
+    if v_merma <> (p_cantidad_salida - p_cantidad_destino) then
+      raise exception 'cantidad_merma debe ser salida − destino (misma unidad)';
+    end if;
+  else
+    -- Cambio de unidad (p.ej. hojas → uds): merma en unidad de origen
+    if p_cantidad_merma is not null then
+      v_merma := p_cantidad_merma;
+    elsif v_origen.unidad = 'hojas'
+      and v_unidad_dest = 'uds'
+      and v_origen.poses is not null
+      and v_origen.poses > 0
+    then
+      v_equiv_hojas := ceil(p_cantidad_destino::numeric / v_origen.poses);
+      v_merma := p_cantidad_salida - v_equiv_hojas::integer;
+    else
+      raise exception
+        'Cambio de unidad (%)→(%) requiere p_cantidad_merma (o poses en hojas→uds)',
+        v_origen.unidad, v_unidad_dest;
+    end if;
+    if v_merma < 0 then
+      raise exception 'Merma negativa: salida insuficiente para el destino indicado';
+    end if;
+  end if;
+
   if exists (
     select 1 from public.prod_stock_articulos_reservas
     where stock_articulo_id = p_stock_origen_id
@@ -983,18 +1069,32 @@ begin
   where id = p_stock_origen_id;
 
   if p_stock_destino_id is not null then
-    select id, cantidad_actual into v_destino_id, v_antes_destino
+    select * into v_destino
     from public.prod_stock_articulos
     where id = p_stock_destino_id
     for update;
     if not found then
       raise exception 'Lote destino no encontrado';
     end if;
+    if v_destino.referencia_id <> v_origen.referencia_id then
+      raise exception 'Destino debe ser misma referencia';
+    end if;
+    if coalesce(v_destino.cliente_norm, '') <> coalesce(v_origen.cliente_norm, '') then
+      raise exception 'Destino debe ser mismo cliente_norm';
+    end if;
+    if v_destino.unidad <> v_unidad_dest then
+      raise exception 'Destino tiene unidad %, se pidió %', v_destino.unidad, v_unidad_dest;
+    end if;
+    if v_destino.estado_proceso <> p_estado_proceso_destino then
+      raise exception
+        'Destino ya es estado_proceso=%; no se cambia. Debe coincidir con %',
+        v_destino.estado_proceso, p_estado_proceso_destino;
+    end if;
+    v_destino_id := v_destino.id;
+    v_antes_destino := v_destino.cantidad_actual;
     v_despues_destino := v_antes_destino + p_cantidad_destino;
     update public.prod_stock_articulos
-    set
-      cantidad_actual = v_despues_destino,
-      estado_proceso = p_estado_proceso_destino
+    set cantidad_actual = v_despues_destino
     where id = v_destino_id;
   else
     v_antes_destino := 0;
@@ -1005,7 +1105,7 @@ begin
     ) values (
       v_origen.referencia_id, v_origen.referencia_codigo,
       v_origen.referencia_descripcion, v_origen.referencia_cliente,
-      v_origen.cliente, p_cantidad_destino, v_origen.unidad, v_origen.poses,
+      v_origen.cliente, p_cantidad_destino, v_unidad_dest, v_origen.poses,
       p_estado_proceso_destino, v_origen.ot_origen,
       v_origen.ubicacion_fisica,
       coalesce(nullif(btrim(p_notas), ''), 'Transformación desde lote ' || p_stock_origen_id::text),
@@ -1028,7 +1128,7 @@ begin
     auth.uid()
   );
 
-  if p_cantidad_destino > 0 and p_stock_destino_id is not null then
+  if p_cantidad_destino > 0 then
     insert into public.prod_stock_articulos_movimientos (
       stock_articulo_id, tipo, cantidad, cantidad_antes, cantidad_despues,
       ot_numero, notas, created_by
@@ -1036,17 +1136,10 @@ begin
       v_destino_id, 'entrada', p_cantidad_destino,
       v_antes_destino, v_despues_destino,
       nullif(btrim(p_ot_numero), ''),
-      'Entrada por transformación desde ' || p_stock_origen_id::text,
-      auth.uid()
-    );
-  elsif p_cantidad_destino > 0 and p_stock_destino_id is null then
-    insert into public.prod_stock_articulos_movimientos (
-      stock_articulo_id, tipo, cantidad, cantidad_antes, cantidad_despues,
-      ot_numero, notas, created_by
-    ) values (
-      v_destino_id, 'entrada', p_cantidad_destino, 0, p_cantidad_destino,
-      nullif(btrim(p_ot_numero), ''),
-      'Alta lote destino por transformación',
+      case
+        when p_stock_destino_id is null then 'Alta lote destino por transformación'
+        else 'Entrada por transformación desde ' || p_stock_origen_id::text
+      end,
       auth.uid()
     );
   end if;
@@ -1055,28 +1148,50 @@ begin
 end;
 $$;
 
+-- Revoke firmas antiguas por si se recrea en entornos con la versión previa
+drop function if exists public.prod_stock_articulos_ajustar(uuid, integer, text, integer);
+drop function if exists public.prod_stock_articulos_reservar(uuid, text, integer, text, integer, text, boolean);
+drop function if exists public.prod_stock_articulos_transformar(uuid, integer, integer, text, uuid, integer, text, text);
+
 revoke all on function public.prod_stock_articulos_alta_lote(
   uuid, integer, text, text, text, text, numeric, integer, numeric, text, text, text
 ) from public;
-revoke all on function public.prod_stock_articulos_ajustar(uuid, integer, text, integer) from public;
+revoke all on function public.prod_stock_articulos_alta_lote(
+  uuid, integer, text, text, text, text, numeric, integer, numeric, text, text, text
+) from anon;
+revoke all on function public.prod_stock_articulos_ajustar(uuid, integer, text, integer, boolean) from public;
+revoke all on function public.prod_stock_articulos_ajustar(uuid, integer, text, integer, boolean) from anon;
 revoke all on function public.prod_stock_articulos_reservar(
-  uuid, text, integer, text, integer, text, boolean
+  uuid, text, integer, text, integer, text
 ) from public;
+revoke all on function public.prod_stock_articulos_reservar(
+  uuid, text, integer, text, integer, text
+) from anon;
 revoke all on function public.prod_stock_articulos_liberar(uuid, text, text) from public;
+revoke all on function public.prod_stock_articulos_liberar(uuid, text, text) from anon;
 revoke all on function public.prod_stock_articulos_consumir(
   uuid, text, integer, integer, text, text
 ) from public;
+revoke all on function public.prod_stock_articulos_consumir(
+  uuid, text, integer, integer, text, text
+) from anon;
 revoke all on function public.prod_stock_articulos_transformar(
-  uuid, integer, integer, text, uuid, integer, text, text
+  uuid, integer, integer, text, uuid, integer, text, text, text
 ) from public;
+revoke all on function public.prod_stock_articulos_transformar(
+  uuid, integer, integer, text, uuid, integer, text, text, text
+) from anon;
+revoke all on function public.minerva_can_write_stock_articulos() from anon;
+revoke all on function public.minerva_grant_capacidad(uuid, text) from anon;
+revoke all on function public.minerva_revoke_capacidad(uuid, text) from anon;
 
 grant execute on function public.prod_stock_articulos_alta_lote(
   uuid, integer, text, text, text, text, numeric, integer, numeric, text, text, text
 ) to authenticated;
-grant execute on function public.prod_stock_articulos_ajustar(uuid, integer, text, integer)
+grant execute on function public.prod_stock_articulos_ajustar(uuid, integer, text, integer, boolean)
   to authenticated;
 grant execute on function public.prod_stock_articulos_reservar(
-  uuid, text, integer, text, integer, text, boolean
+  uuid, text, integer, text, integer, text
 ) to authenticated;
 grant execute on function public.prod_stock_articulos_liberar(uuid, text, text)
   to authenticated;
@@ -1084,7 +1199,7 @@ grant execute on function public.prod_stock_articulos_consumir(
   uuid, text, integer, integer, text, text
 ) to authenticated;
 grant execute on function public.prod_stock_articulos_transformar(
-  uuid, integer, integer, text, uuid, integer, text, text
+  uuid, integer, integer, text, uuid, integer, text, text, text
 ) to authenticated;
 
 -- Seed capacidad Gabri si el usuario ya existe (idempotente)
