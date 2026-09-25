@@ -111,6 +111,26 @@ function parseEnteroCampo(
   return { ok: true, value: n };
 }
 
+function parseOtCantidadMaestro(raw: unknown): number | null {
+  if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+    return Math.trunc(raw);
+  }
+  if (typeof raw === "string") {
+    const cleaned = raw.replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
+    const n = Number(cleaned);
+    if (Number.isFinite(n) && n > 0) return Math.trunc(n);
+  }
+  return null;
+}
+
+/** Prefill nº pedido: pedido_cliente Optimus (p. ej. PC-9988); título es descripción/ref. */
+function pedidoPrefillFromOt(s: {
+  pedido_cliente?: string | null;
+  titulo?: string | null;
+}): string {
+  return s.pedido_cliente?.trim() || "";
+}
+
 type Props = {
   stockId: string;
   referenciaCodigo: string;
@@ -135,6 +155,7 @@ export function StockArticulosReservasPanel({
   const [mode, setMode] = useState<Mode>(null);
   const [ot, setOt] = useState("");
   const [otCliente, setOtCliente] = useState<string | null>(null);
+  const [otTitulo, setOtTitulo] = useState<string | null>(null);
   const [cantidad, setCantidad] = useState("");
   const [bultos, setBultos] = useState("");
   const [numPedido, setNumPedido] = useState("");
@@ -168,11 +189,12 @@ export function StockArticulosReservasPanel({
     void load();
   }, [load]);
 
-  // Si escribe OT a mano, intentar resolver cliente del maestro.
+  // Si escribe OT a mano (match exacto), resolver cliente + título + prefill.
   useEffect(() => {
     const n = ot.trim();
     if (n.length < 2) {
       setOtCliente(null);
+      setOtTitulo(null);
       return;
     }
     let cancelled = false;
@@ -180,14 +202,40 @@ export function StockArticulosReservasPanel({
       void (async () => {
         const { data } = await supabase
           .from("prod_ots_general")
-          .select("cliente")
+          .select("cliente, cantidad, pedido_cliente, titulo")
           .eq("num_pedido", n)
           .limit(1);
-        if (!cancelled) {
-          const row = data?.[0];
-          setOtCliente(
-            row && typeof row.cliente === "string" ? row.cliente : null
-          );
+        if (cancelled) return;
+        const row = data?.[0] as
+          | {
+              cliente?: string | null;
+              cantidad?: string | number | null;
+              pedido_cliente?: string | null;
+              titulo?: string | null;
+            }
+          | undefined;
+        if (!row) {
+          setOtCliente(null);
+          setOtTitulo(null);
+          return;
+        }
+        setOtCliente(
+          typeof row.cliente === "string" ? row.cliente : null
+        );
+        setOtTitulo(
+          typeof row.titulo === "string" && row.titulo.trim()
+            ? row.titulo.trim()
+            : null
+        );
+        if (mode === "reservar" || mode === "ot_entrega") {
+          const qty = parseOtCantidadMaestro(row.cantidad);
+          if (qty != null) {
+            setCantidad((prev) => (prev.trim() ? prev : String(qty)));
+          }
+          const pedido = pedidoPrefillFromOt(row);
+          if (pedido) {
+            setNumPedido((prev) => (prev.trim() ? prev : pedido));
+          }
         }
       })();
     }, 300);
@@ -195,7 +243,7 @@ export function StockArticulosReservasPanel({
       cancelled = true;
       clearTimeout(t);
     };
-  }, [ot]);
+  }, [ot, mode]);
 
   const vivas = reservas.filter(
     (r) => r.estado === "activa" || r.estado === "parcial"
@@ -206,6 +254,7 @@ export function StockArticulosReservasPanel({
     setMode(m);
     setOt(presetOt ?? "");
     setOtCliente(null);
+    setOtTitulo(null);
     setCantidad("");
     setBultos("");
     setNumPedido("");
@@ -216,6 +265,14 @@ export function StockArticulosReservasPanel({
   function onSelectOt(s: OtSugerencia) {
     setOt(s.ot_numero);
     setOtCliente(s.cliente);
+    setOtTitulo(s.titulo?.trim() || null);
+    if (mode === "reservar" || mode === "ot_entrega") {
+      if (s.cantidad != null && s.cantidad > 0) {
+        setCantidad(String(s.cantidad));
+      }
+      const pedido = pedidoPrefillFromOt(s);
+      if (pedido) setNumPedido(pedido);
+    }
   }
 
   async function submit() {
@@ -562,7 +619,8 @@ export function StockArticulosReservasPanel({
                   setOt(v);
                 }}
                 onSelectSuggestion={onSelectOt}
-                placeholder="Buscar OT en Minerva…"
+                source="maestro"
+                placeholder="OT, pedido cliente, título…"
               />
               {otCliente ? (
                 <p className="text-[11px] text-slate-500">
@@ -573,6 +631,12 @@ export function StockArticulosReservasPanel({
                       · Lote: <span className="font-medium">{loteCliente}</span>
                     </>
                   ) : null}
+                </p>
+              ) : null}
+              {otTitulo ? (
+                <p className="text-[11px] text-slate-600 bg-slate-50 border border-slate-100 rounded-md px-2 py-1.5 leading-snug">
+                  <span className="text-slate-400">Texto OT · </span>
+                  {otTitulo}
                 </p>
               ) : null}
               {clienteMismatch ? (
@@ -595,7 +659,7 @@ export function StockArticulosReservasPanel({
                   onChange={(e) => setCantidad(e.target.value)}
                   placeholder={
                     mode === "reservar" || mode === "ot_entrega"
-                      ? `Máx. libre ${libre.toLocaleString("es-ES")} (ej. 1.000)`
+                      ? `Prefill = pedido OT · máx. libre ${libre.toLocaleString("es-ES")}`
                       : "Ej. 5.000"
                   }
                 />
@@ -614,11 +678,13 @@ export function StockArticulosReservasPanel({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500">Nº pedido</Label>
+                  <Label className="text-xs text-slate-500">
+                    Nº pedido (editable)
+                  </Label>
                   <Input
                     value={numPedido}
                     onChange={(e) => setNumPedido(e.target.value)}
-                    placeholder="Opcional"
+                    placeholder="Prefill = pedido cliente (p. ej. PC-9988)"
                   />
                 </div>
               </>

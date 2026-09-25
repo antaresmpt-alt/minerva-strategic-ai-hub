@@ -1303,6 +1303,7 @@ function AltaLoteDialog({
             <OtDestinoSearchInput
               value={otOrigen}
               onChange={setOtOrigen}
+              source="maestro"
               placeholder="Buscar OT en maestro (FABRICACION / origen)…"
             />
           </div>

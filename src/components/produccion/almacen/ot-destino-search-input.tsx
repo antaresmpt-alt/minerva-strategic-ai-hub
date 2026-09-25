@@ -9,6 +9,10 @@ export interface OtSugerencia {
   ot_numero: string;
   cliente: string | null;
   titulo: string | null;
+  /** Pedido cliente Optimus (p. ej. 3310017), si existe en maestro. */
+  pedido_cliente?: string | null;
+  /** Cantidad pedida de la OT en maestro (`prod_ots_general.cantidad`). */
+  cantidad?: number | null;
   estado_material: string | null;
   material?: string | null;
   gramaje?: number | null;
@@ -27,6 +31,23 @@ interface OtDestinoSearchInputProps {
   placeholder?: string;
   inputRef?: React.RefObject<HTMLInputElement | null>;
   className?: string;
+  /**
+   * `maestro`: busca en `prod_ots_general` (OT entrega / reservas B15; no exige despacho).
+   * `despachadas` (default): solo OTs en `produccion_ot_despachadas` (cartelas / material).
+   */
+  source?: "despachadas" | "maestro";
+}
+
+function parseOtCantidad(raw: unknown): number | null {
+  if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+    return Math.trunc(raw);
+  }
+  if (typeof raw === "string") {
+    const cleaned = raw.replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
+    const n = Number(cleaned);
+    if (Number.isFinite(n) && n > 0) return Math.trunc(n);
+  }
+  return null;
 }
 
 const supabase = createSupabaseBrowserClient();
@@ -45,6 +66,7 @@ export function OtDestinoSearchInput({
   placeholder = "OT, cliente, título o ref…",
   inputRef: externalRef,
   className,
+  source = "despachadas",
 }: OtDestinoSearchInputProps) {
   const [sugerencias, setSugerencias] = useState<OtSugerencia[]>([]);
   const [open, setOpen] = useState(false);
@@ -64,6 +86,58 @@ export function OtDestinoSearchInput({
     setLoading(true);
     try {
       const pattern = `%${q.replace(/[%_,]/g, "")}%`;
+
+      if (source === "maestro") {
+        const orFilter = [
+          `num_pedido.ilike."${pattern}"`,
+          `cliente.ilike."${pattern}"`,
+          `titulo.ilike."${pattern}"`,
+          `pedido_cliente.ilike."${pattern}"`,
+        ].join(",");
+
+        const { data: masterHits, error: masterErr } = await supabase
+          .from("prod_ots_general")
+          .select("num_pedido, cliente, titulo, cantidad, pedido_cliente")
+          .or(orFilter)
+          .order("num_pedido", { ascending: false })
+          .limit(12);
+        if (masterErr) throw masterErr;
+
+        const rows: OtSugerencia[] = (
+          (masterHits ?? []) as Array<{
+            num_pedido?: string | null;
+            cliente?: string | null;
+            titulo?: string | null;
+            cantidad?: string | number | null;
+            pedido_cliente?: string | null;
+          }>
+        )
+          .map((m) => {
+            const ot = String(m.num_pedido ?? "").trim();
+            if (!ot) return null;
+            return {
+              ot_numero: ot,
+              cliente: m.cliente ?? null,
+              titulo: m.titulo ?? null,
+              pedido_cliente: m.pedido_cliente ?? null,
+              cantidad: parseOtCantidad(m.cantidad),
+              estado_material: null,
+            } satisfies OtSugerencia;
+          })
+          .filter((r): r is OtSugerencia => r != null);
+
+        rows.sort((a, b) => {
+          const na = Number(a.ot_numero);
+          const nb = Number(b.ot_numero);
+          if (Number.isFinite(na) && Number.isFinite(nb)) return nb - na;
+          return b.ot_numero.localeCompare(a.ot_numero);
+        });
+
+        setSugerencias(rows);
+        setOpen(rows.length > 0);
+        return;
+      }
+
       const orFilter = [
         `num_pedido.ilike."${pattern}"`,
         `cliente.ilike."${pattern}"`,
@@ -73,7 +147,7 @@ export function OtDestinoSearchInput({
       // 1) Maestro: cliente / título / num_pedido (ref EU514, «doble accion», ANUR…)
       const { data: masterHits, error: masterErr } = await supabase
         .from("prod_ots_general")
-        .select("num_pedido, cliente, titulo")
+        .select("num_pedido, cliente, titulo, cantidad, pedido_cliente")
         .or(orFilter)
         .order("num_pedido", { ascending: false })
         .limit(12);
@@ -83,6 +157,8 @@ export function OtDestinoSearchInput({
         num_pedido?: string | null;
         cliente?: string | null;
         titulo?: string | null;
+        cantidad?: string | number | null;
+        pedido_cliente?: string | null;
       }>;
 
       // 2) Despachadas por número OT (por si no está en el hit de maestro)
@@ -165,23 +241,32 @@ export function OtDestinoSearchInput({
       // Maestro completo para los OTs del set (por si el hit vino solo de despachadas)
       const { data: masterFull } = await supabase
         .from("prod_ots_general")
-        .select("num_pedido, cliente, titulo")
+        .select("num_pedido, cliente, titulo, cantidad, pedido_cliente")
         .in("num_pedido", otsTop);
 
       const masterByOt = new Map<
         string,
-        { cliente: string | null; titulo: string | null }
+        {
+          cliente: string | null;
+          titulo: string | null;
+          cantidad: number | null;
+          pedido_cliente: string | null;
+        }
       >();
       for (const m of (masterFull ?? []) as Array<{
         num_pedido?: string | null;
         cliente?: string | null;
         titulo?: string | null;
+        cantidad?: string | number | null;
+        pedido_cliente?: string | null;
       }>) {
         const ot = String(m.num_pedido ?? "").trim();
         if (!ot) continue;
         masterByOt.set(ot, {
           cliente: m.cliente ?? null,
           titulo: m.titulo ?? null,
+          cantidad: parseOtCantidad(m.cantidad),
+          pedido_cliente: m.pedido_cliente ?? null,
         });
       }
       for (const m of masterRows) {
@@ -190,6 +275,8 @@ export function OtDestinoSearchInput({
         masterByOt.set(ot, {
           cliente: m.cliente ?? null,
           titulo: m.titulo ?? null,
+          cantidad: parseOtCantidad(m.cantidad),
+          pedido_cliente: m.pedido_cliente ?? null,
         });
       }
 
@@ -204,6 +291,8 @@ export function OtDestinoSearchInput({
             estado_material: desp.estado_material,
             cliente: master?.cliente ?? null,
             titulo: master?.titulo ?? null,
+            pedido_cliente: master?.pedido_cliente ?? null,
+            cantidad: master?.cantidad ?? null,
             material: desp.material,
             gramaje: desp.gramaje,
             tamano_hoja: desp.tamano_hoja,
@@ -220,7 +309,7 @@ export function OtDestinoSearchInput({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [source]);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const v = e.target.value;
@@ -288,15 +377,21 @@ export function OtDestinoSearchInput({
                       {s.cliente}
                     </span>
                   )}
-                  {s.estado_material && (
+                  {s.cantidad != null ? (
+                    <span className="ml-auto shrink-0 tabular-nums text-[10px] text-slate-400">
+                      {s.cantidad.toLocaleString("es-ES")} uds
+                    </span>
+                  ) : s.estado_material ? (
                     <span className="ml-auto max-w-[110px] shrink-0 truncate text-[10px] text-slate-400">
                       {s.estado_material}
                     </span>
-                  )}
+                  ) : null}
                 </div>
-                {s.titulo && (
+                {(s.pedido_cliente || s.titulo) && (
                   <span className="truncate text-[11px] leading-snug text-slate-500">
-                    {s.titulo}
+                    {s.pedido_cliente && s.titulo && !s.titulo.includes(s.pedido_cliente)
+                      ? `${s.pedido_cliente} · ${s.titulo}`
+                      : s.titulo || s.pedido_cliente}
                   </span>
                 )}
               </button>
