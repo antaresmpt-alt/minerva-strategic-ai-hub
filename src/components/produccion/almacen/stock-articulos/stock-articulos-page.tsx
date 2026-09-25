@@ -50,7 +50,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { downloadStockArticulosPlantilla } from "@/lib/stock-articulos-excel-import";
+import {
+  downloadStockArticulosPlantilla,
+  parseStockImportInt,
+  parseStockImportNum,
+} from "@/lib/stock-articulos-excel-import";
 import {
   exportStockArticulosExcel,
   exportStockArticulosPdf,
@@ -766,40 +770,60 @@ function AltaLoteDialog({
       toast.error("Elige una referencia Minerva.");
       return;
     }
-    const qty = Math.trunc(Number(cantidad));
-    if (!Number.isFinite(qty) || qty <= 0) {
-      toast.error("La cantidad debe ser un entero > 0.");
+    const qty = parseStockImportInt(cantidad);
+    if (qty == null || !Number.isFinite(qty) || Number.isNaN(qty) || qty <= 0) {
+      toast.error("La cantidad debe ser un entero > 0 (admite 1.000 / 35.900).");
       return;
     }
-    const posesN = poses.trim() ? Math.trunc(Number(poses)) : undefined;
+    const posesN = poses.trim() ? parseStockImportInt(poses) : undefined;
     if (unidad === "hojas") {
-      if (posesN == null || !Number.isFinite(posesN) || posesN <= 0) {
+      if (
+        posesN == null ||
+        !Number.isFinite(posesN) ||
+        Number.isNaN(posesN) ||
+        posesN <= 0
+      ) {
         toast.error("Con unidad hojas, poses debe ser un entero > 0.");
         return;
       }
-    } else if (posesN != null && (!Number.isFinite(posesN) || posesN <= 0)) {
+    } else if (
+      posesN != null &&
+      (!Number.isFinite(posesN) || Number.isNaN(posesN) || posesN <= 0)
+    ) {
       toast.error("Poses debe ser un entero > 0.");
       return;
     }
-    const bultosN = bultos.trim() ? Math.trunc(Number(bultos)) : undefined;
-    if (bultosN != null && (!Number.isFinite(bultosN) || bultosN < 0)) {
+    const bultosN = bultos.trim() ? parseStockImportInt(bultos) : undefined;
+    if (
+      bultosN != null &&
+      (!Number.isFinite(bultosN) || Number.isNaN(bultosN) || bultosN < 0)
+    ) {
       toast.error("Bultos debe ser un entero >= 0.");
       return;
     }
     const udsBultoN = unidadesPorBulto.trim()
-      ? Math.trunc(Number(unidadesPorBulto))
+      ? parseStockImportInt(unidadesPorBulto)
       : undefined;
-    if (udsBultoN != null && (!Number.isFinite(udsBultoN) || udsBultoN <= 0)) {
+    if (
+      udsBultoN != null &&
+      (!Number.isFinite(udsBultoN) || Number.isNaN(udsBultoN) || udsBultoN <= 0)
+    ) {
       toast.error("Uds/bulto debe ser un entero > 0.");
       return;
     }
-    const picoN = pico.trim() ? Math.trunc(Number(pico)) : undefined;
-    if (picoN != null && (!Number.isFinite(picoN) || picoN < 0)) {
+    const picoN = pico.trim() ? parseStockImportInt(pico) : undefined;
+    if (
+      picoN != null &&
+      (!Number.isFinite(picoN) || Number.isNaN(picoN) || picoN < 0)
+    ) {
       toast.error("Pico debe ser un entero >= 0.");
       return;
     }
-    const paletsN = palets.trim() ? Number(palets.replace(",", ".")) : undefined;
-    if (paletsN != null && (!Number.isFinite(paletsN) || paletsN < 0)) {
+    const paletsN = palets.trim() ? parseStockImportNum(palets) : undefined;
+    if (
+      paletsN != null &&
+      (!Number.isFinite(paletsN) || Number.isNaN(paletsN) || paletsN < 0)
+    ) {
       toast.error("Palets debe ser un número >= 0.");
       return;
     }
@@ -881,11 +905,10 @@ function AltaLoteDialog({
             <div className="space-y-1.5">
               <Label className="text-xs text-slate-500">Cantidad</Label>
               <Input
-                type="number"
-                min={1}
-                step={1}
+                inputMode="numeric"
                 value={cantidad}
                 onChange={(e) => setCantidad(e.target.value)}
+                placeholder="Ej. 1.000"
               />
             </div>
             <div className="space-y-1.5">
@@ -941,9 +964,7 @@ function AltaLoteDialog({
                 Poses{unidad === "hojas" ? " *" : " (si hojas)"}
               </Label>
               <Input
-                type="number"
-                min={1}
-                step={1}
+                inputMode="numeric"
                 value={poses}
                 onChange={(e) => setPoses(e.target.value)}
                 placeholder={unidad === "hojas" ? "Obligatorio" : "Opcional"}
@@ -958,9 +979,7 @@ function AltaLoteDialog({
             <div className="space-y-1.5">
               <Label className="text-xs text-slate-500">Bultos</Label>
               <Input
-                type="number"
-                min={0}
-                step={1}
+                inputMode="numeric"
                 value={bultos}
                 onChange={(e) => setBultos(e.target.value)}
                 placeholder="Cajas completas"
@@ -969,9 +988,7 @@ function AltaLoteDialog({
             <div className="space-y-1.5">
               <Label className="text-xs text-slate-500">Uds / bulto</Label>
               <Input
-                type="number"
-                min={1}
-                step={1}
+                inputMode="numeric"
                 value={unidadesPorBulto}
                 onChange={(e) => setUnidadesPorBulto(e.target.value)}
                 placeholder="Ej. 50"
@@ -982,9 +999,7 @@ function AltaLoteDialog({
             <div className="space-y-1.5">
               <Label className="text-xs text-slate-500">Pico</Label>
               <Input
-                type="number"
-                min={0}
-                step={1}
+                inputMode="numeric"
                 value={pico}
                 onChange={(e) => setPico(e.target.value)}
                 placeholder="Uds sueltas"
@@ -993,12 +1008,10 @@ function AltaLoteDialog({
             <div className="space-y-1.5">
               <Label className="text-xs text-slate-500">Palets</Label>
               <Input
-                type="number"
-                min={0}
-                step={0.001}
+                inputMode="decimal"
                 value={palets}
                 onChange={(e) => setPalets(e.target.value)}
-                placeholder="Nº general"
+                placeholder="Ej. 1,5"
               />
             </div>
           </div>
@@ -1156,17 +1169,27 @@ function StockArticuloDetalleDialog({
       toast.error("La nota es obligatoria en un ajuste.");
       return;
     }
-    const nueva = Math.trunc(Number(ajusteCantidad));
-    if (!Number.isFinite(nueva) || nueva < 0) {
-      toast.error("La nueva cantidad debe ser un entero >= 0.");
+    const nueva = parseStockImportInt(ajusteCantidad);
+    if (
+      nueva == null ||
+      !Number.isFinite(nueva) ||
+      Number.isNaN(nueva) ||
+      nueva < 0
+    ) {
+      toast.error(
+        "La nueva cantidad debe ser un entero >= 0 (admite 1.000 / 35.900)."
+      );
       return;
     }
     const bultosN = ajusteBultos.trim()
-      ? Math.trunc(Number(ajusteBultos))
+      ? parseStockImportInt(ajusteBultos)
       : null;
     if (
       ajusteBultos.trim() &&
-      (bultosN == null || !Number.isFinite(bultosN) || bultosN < 0)
+      (bultosN == null ||
+        !Number.isFinite(bultosN) ||
+        Number.isNaN(bultosN) ||
+        bultosN < 0)
     ) {
       toast.error("Bultos debe ser un entero >= 0.");
       return;
@@ -1235,9 +1258,9 @@ function StockArticuloDetalleDialog({
         return;
       }
       const n = asInt
-        ? Math.trunc(Number(form))
-        : Number(form.replace(",", "."));
-      if (!Number.isFinite(n) || n < 0) {
+        ? parseStockImportInt(form)
+        : parseStockImportNum(form);
+      if (n == null || !Number.isFinite(n) || Number.isNaN(n) || n < 0) {
         toast.error("Hay un valor numérico no válido.");
         throw new Error("invalid");
       }
@@ -1432,6 +1455,8 @@ function StockArticuloDetalleDialog({
 
               <StockArticulosReservasPanel
                 stockId={row.id}
+                referenciaCodigo={row.referencia_codigo}
+                loteCliente={row.cliente}
                 unidad={row.unidad}
                 libre={row.cantidad_libre}
                 canWrite={canWrite}
@@ -1524,19 +1549,16 @@ function StockArticuloDetalleDialog({
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-500">Nueva cantidad</Label>
                 <Input
-                  type="number"
-                  min={0}
-                  step={1}
+                  inputMode="numeric"
                   value={ajusteCantidad}
                   onChange={(e) => setAjusteCantidad(e.target.value)}
+                  placeholder="Ej. 1.000"
                 />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-500">Bultos (opcional)</Label>
                 <Input
-                  type="number"
-                  min={0}
-                  step={1}
+                  inputMode="numeric"
                   value={ajusteBultos}
                   onChange={(e) => setAjusteBultos(e.target.value)}
                 />
@@ -1614,9 +1636,7 @@ function StockArticuloDetalleDialog({
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-500">Bultos</Label>
                   <Input
-                    type="number"
-                    min={0}
-                    step={1}
+                    inputMode="numeric"
                     value={editBultos}
                     onChange={(e) => setEditBultos(e.target.value)}
                   />
@@ -1624,9 +1644,7 @@ function StockArticuloDetalleDialog({
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-500">Uds / bulto</Label>
                   <Input
-                    type="number"
-                    min={1}
-                    step={1}
+                    inputMode="numeric"
                     value={editUdsBulto}
                     onChange={(e) => setEditUdsBulto(e.target.value)}
                   />
@@ -1636,9 +1654,7 @@ function StockArticuloDetalleDialog({
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-500">Pico</Label>
                   <Input
-                    type="number"
-                    min={0}
-                    step={1}
+                    inputMode="numeric"
                     value={editPico}
                     onChange={(e) => setEditPico(e.target.value)}
                   />
@@ -1646,11 +1662,10 @@ function StockArticuloDetalleDialog({
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-500">Palets</Label>
                   <Input
-                    type="number"
-                    min={0}
-                    step={0.001}
+                    inputMode="decimal"
                     value={editPalets}
                     onChange={(e) => setEditPalets(e.target.value)}
+                    placeholder="Ej. 1,5"
                   />
                 </div>
               </div>

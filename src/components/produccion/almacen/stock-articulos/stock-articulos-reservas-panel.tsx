@@ -4,7 +4,10 @@ import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { OtDestinoSearchInput } from "@/components/produccion/almacen/ot-destino-search-input";
+import {
+  OtDestinoSearchInput,
+  type OtSugerencia,
+} from "@/components/produccion/almacen/ot-destino-search-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,9 +29,14 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { errorMessageFromUnknown } from "@/lib/error-message";
+import { parseStockImportInt } from "@/lib/stock-articulos-excel-import";
+import { clientesOtLoteDifieren } from "@/lib/stock-articulos-cliente-match";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 const supabase = createSupabaseBrowserClient();
+
+/** Marca en notas de reserva (15.4) hasta tag persistente en OT. */
+export const OT_ENTREGA_TAG = "[OT_ENTREGA]";
 
 export type StockArticuloReservaRow = {
   id: string;
@@ -41,7 +49,13 @@ export type StockArticuloReservaRow = {
   created_at: string;
 };
 
-type Mode = "reservar" | "consumir" | "liberar" | "consumir_sin_reserva" | null;
+type Mode =
+  | "reservar"
+  | "consumir"
+  | "liberar"
+  | "consumir_sin_reserva"
+  | "ot_entrega"
+  | null;
 
 const ESTADO_RESERVA: Record<string, string> = {
   activa: "bg-blue-100 text-blue-800 border-blue-200",
@@ -81,17 +95,36 @@ function friendlyReservaError(msg: string): string {
   return msg;
 }
 
+function parseEnteroCampo(
+  raw: string,
+  label: string
+): { ok: true; value: number } | { ok: false } {
+  const n = parseStockImportInt(raw);
+  if (n == null) {
+    toast.error(`${label} es obligatorio.`);
+    return { ok: false };
+  }
+  if (!Number.isFinite(n) || Number.isNaN(n) || n <= 0) {
+    toast.error(`${label} debe ser un entero > 0 (admite 1.000 / 35.900).`);
+    return { ok: false };
+  }
+  return { ok: true, value: n };
+}
+
 type Props = {
   stockId: string;
+  referenciaCodigo: string;
+  loteCliente: string | null;
   unidad: string;
   libre: number;
   canWrite: boolean;
-  /** Tras mutación RPC: refrescar ATP + esta lista. */
   onChanged: () => Promise<void>;
 };
 
 export function StockArticulosReservasPanel({
   stockId,
+  referenciaCodigo,
+  loteCliente,
   unidad,
   libre,
   canWrite,
@@ -101,7 +134,9 @@ export function StockArticulosReservasPanel({
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<Mode>(null);
   const [ot, setOt] = useState("");
+  const [otCliente, setOtCliente] = useState<string | null>(null);
   const [cantidad, setCantidad] = useState("");
+  const [bultos, setBultos] = useState("");
   const [numPedido, setNumPedido] = useState("");
   const [notas, setNotas] = useState("");
   const [motivoSinReserva, setMotivoSinReserva] = useState("");
@@ -133,17 +168,53 @@ export function StockArticulosReservasPanel({
     void load();
   }, [load]);
 
+  // Si escribe OT a mano, intentar resolver cliente del maestro.
+  useEffect(() => {
+    const n = ot.trim();
+    if (n.length < 2) {
+      setOtCliente(null);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      void (async () => {
+        const { data } = await supabase
+          .from("prod_ots_general")
+          .select("cliente")
+          .eq("num_pedido", n)
+          .maybeSingle();
+        if (!cancelled) {
+          setOtCliente(
+            data && typeof data.cliente === "string" ? data.cliente : null
+          );
+        }
+      })();
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [ot]);
+
   const vivas = reservas.filter(
     (r) => r.estado === "activa" || r.estado === "parcial"
   );
+  const clienteMismatch = clientesOtLoteDifieren(loteCliente, otCliente);
 
   function openMode(m: Mode, presetOt?: string) {
     setMode(m);
     setOt(presetOt ?? "");
+    setOtCliente(null);
     setCantidad("");
+    setBultos("");
     setNumPedido("");
-    setNotas("");
+    setNotas(m === "ot_entrega" ? OT_ENTREGA_TAG : "");
     setMotivoSinReserva("");
+  }
+
+  function onSelectOt(s: OtSugerencia) {
+    setOt(s.ot_numero);
+    setOtCliente(s.cliente);
   }
 
   async function submit() {
@@ -168,19 +239,32 @@ export function StockArticulosReservasPanel({
         await load();
         await onChanged();
       } catch (e) {
-        toast.error(
-          friendlyReservaError(errorMessageFromUnknown(e))
-        );
+        toast.error(friendlyReservaError(errorMessageFromUnknown(e)));
       } finally {
         setSubmitting(false);
       }
       return;
     }
 
-    const qty = Math.trunc(Number(cantidad));
-    if (!Number.isFinite(qty) || qty <= 0) {
-      toast.error("La cantidad debe ser un entero > 0.");
-      return;
+    const parsed = parseEnteroCampo(cantidad, "Cantidad");
+    if (!parsed.ok) return;
+    const qty = parsed.value;
+
+    let bultosN: number | undefined;
+    if (bultos.trim()) {
+      const b = parseStockImportInt(bultos);
+      if (b == null || !Number.isFinite(b) || Number.isNaN(b) || b < 0) {
+        toast.error("Bultos debe ser un entero >= 0.");
+        return;
+      }
+      bultosN = b;
+    }
+
+    if (mode === "consumir" || mode === "consumir_sin_reserva") {
+      const ok = window.confirm(
+        `Vas a descontar ${qty.toLocaleString("es-ES")} ${unidad} del físico del lote ${referenciaCodigo} para la OT ${otN}.\n¿Confirmar?`
+      );
+      if (!ok) return;
     }
 
     if (mode === "consumir_sin_reserva") {
@@ -195,11 +279,14 @@ export function StockArticulosReservasPanel({
           p_stock_id: stockId,
           p_ot_numero: otN,
           p_cantidad: qty,
+          p_bultos: bultosN,
           p_notas: notas.trim() || undefined,
           p_motivo_sin_reserva: motivo,
         });
         if (error) throw error;
-        toast.success(`Consumo sin reserva · ${qty.toLocaleString("es-ES")} ${unidad}`);
+        toast.success(
+          `Consumo sin reserva · ${qty.toLocaleString("es-ES")} ${unidad}`
+        );
         setMode(null);
         await load();
         await onChanged();
@@ -211,7 +298,14 @@ export function StockArticulosReservasPanel({
       return;
     }
 
-    if (mode === "reservar") {
+    if (mode === "reservar" || mode === "ot_entrega") {
+      const noteParts = [
+        mode === "ot_entrega" ? OT_ENTREGA_TAG : null,
+        notas.trim() || null,
+      ].filter(Boolean);
+      // Evitar duplicar tag si ya está en notas
+      const uniqueNotes = [...new Set(noteParts)].join(" ");
+
       setSubmitting(true);
       try {
         const { error } = await supabase.rpc("prod_stock_articulos_reservar", {
@@ -219,11 +313,14 @@ export function StockArticulosReservasPanel({
           p_ot_numero: otN,
           p_cantidad: qty,
           p_num_pedido: numPedido.trim() || undefined,
-          p_notas: notas.trim() || undefined,
+          p_bultos: bultosN,
+          p_notas: uniqueNotes || undefined,
         });
         if (error) throw error;
         toast.success(
-          `Reservado ${qty.toLocaleString("es-ES")} ${unidad} · OT ${otN}`
+          mode === "ot_entrega"
+            ? `OT entrega ${otN}: reservados ${qty.toLocaleString("es-ES")} ${unidad}`
+            : `Reservado ${qty.toLocaleString("es-ES")} ${unidad} · OT ${otN}`
         );
         setMode(null);
         await load();
@@ -243,6 +340,7 @@ export function StockArticulosReservasPanel({
           p_stock_id: stockId,
           p_ot_numero: otN,
           p_cantidad: qty,
+          p_bultos: bultosN,
           p_notas: notas.trim() || undefined,
         });
         if (error) throw error;
@@ -269,7 +367,9 @@ export function StockArticulosReservasPanel({
           ? "Liberar reserva"
           : mode === "consumir_sin_reserva"
             ? "Consumir sin reserva"
-            : "";
+            : mode === "ot_entrega"
+              ? "OT de entrega (tag + reserva)"
+              : "";
 
   return (
     <div className="pt-3 space-y-2 border-t border-slate-100">
@@ -279,6 +379,15 @@ export function StockArticulosReservasPanel({
         </p>
         {canWrite ? (
           <div className="flex flex-wrap gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={libre <= 0}
+              onClick={() => openMode("ot_entrega")}
+            >
+              OT entrega
+            </Button>
             <Button
               type="button"
               size="sm"
@@ -311,7 +420,8 @@ export function StockArticulosReservasPanel({
       </div>
       <p className="text-[11px] text-slate-400">
         Libre: {libre.toLocaleString("es-ES")} {unidad}. La OT debe existir ya
-        en Minerva (importada de Optimus).
+        en Minerva (importada de Optimus). «OT entrega» = tag {OT_ENTREGA_TAG} +
+        reserva (sin crear nº OT).
       </p>
 
       {loading ? (
@@ -328,19 +438,28 @@ export function StockArticulosReservasPanel({
                 <TableHead className="text-xs text-right">Reservado</TableHead>
                 <TableHead className="text-xs text-right">Consumido</TableHead>
                 <TableHead className="text-xs">Estado</TableHead>
-                {canWrite ? (
-                  <TableHead className="text-xs w-20" />
-                ) : null}
+                {canWrite ? <TableHead className="text-xs w-20" /> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
               {reservas.map((r) => {
                 const viva = r.estado === "activa" || r.estado === "parcial";
                 const pendiente = r.cantidad_reservada - r.cantidad_consumida;
+                const esEntrega = (r.notas ?? "").includes(OT_ENTREGA_TAG);
                 return (
                   <TableRow key={r.id}>
                     <TableCell className="text-xs font-mono">
-                      {r.ot_numero}
+                      <span className="inline-flex flex-wrap items-center gap-1">
+                        {r.ot_numero}
+                        {esEntrega ? (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] bg-[#002147]/10 text-[#002147] border-[#002147]/20"
+                          >
+                            entrega
+                          </Badge>
+                        ) : null}
+                      </span>
                     </TableCell>
                     <TableCell className="text-xs text-slate-500">
                       {r.num_pedido ?? "—"}
@@ -413,6 +532,12 @@ export function StockArticulosReservasPanel({
             <DialogTitle>{title}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            {mode === "ot_entrega" ? (
+              <p className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5">
+                La OT nace en Optimus. Aquí solo se marca {OT_ENTREGA_TAG} y se
+                reserva stock (no se crea nº OT en Minerva).
+              </p>
+            ) : null}
             {mode === "consumir_sin_reserva" ? (
               <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5">
                 Uso excepcional: gasta libre sin reserva previa. Exige motivo y
@@ -430,9 +555,30 @@ export function StockArticulosReservasPanel({
               <Label className="text-xs text-slate-500">OT *</Label>
               <OtDestinoSearchInput
                 value={ot}
-                onChange={setOt}
+                onChange={(v) => {
+                  setOt(v);
+                }}
+                onSelectSuggestion={onSelectOt}
                 placeholder="Buscar OT en Minerva…"
               />
+              {otCliente ? (
+                <p className="text-[11px] text-slate-500">
+                  Cliente OT: <span className="font-medium">{otCliente}</span>
+                  {loteCliente ? (
+                    <>
+                      {" "}
+                      · Lote: <span className="font-medium">{loteCliente}</span>
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
+              {clienteMismatch ? (
+                <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5">
+                  Aviso: el cliente de la OT no coincide con el del lote. Puedes
+                  seguir (útil para comprobar textos Optimus ↔ maestro); revisa
+                  antes de confirmar.
+                </p>
+              ) : null}
             </div>
 
             {mode !== "liberar" ? (
@@ -445,23 +591,34 @@ export function StockArticulosReservasPanel({
                   value={cantidad}
                   onChange={(e) => setCantidad(e.target.value)}
                   placeholder={
-                    mode === "reservar"
-                      ? `Máx. libre ${libre.toLocaleString("es-ES")}`
-                      : "Entero > 0"
+                    mode === "reservar" || mode === "ot_entrega"
+                      ? `Máx. libre ${libre.toLocaleString("es-ES")} (ej. 1.000)`
+                      : "Ej. 5.000"
                   }
                 />
               </div>
             ) : null}
 
-            {mode === "reservar" ? (
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Nº pedido</Label>
-                <Input
-                  value={numPedido}
-                  onChange={(e) => setNumPedido(e.target.value)}
-                  placeholder="Opcional"
-                />
-              </div>
+            {mode === "reservar" || mode === "ot_entrega" ? (
+              <>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500">Bultos</Label>
+                  <Input
+                    inputMode="numeric"
+                    value={bultos}
+                    onChange={(e) => setBultos(e.target.value)}
+                    placeholder="Opcional"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500">Nº pedido</Label>
+                  <Input
+                    value={numPedido}
+                    onChange={(e) => setNumPedido(e.target.value)}
+                    placeholder="Opcional"
+                  />
+                </div>
+              </>
             ) : null}
 
             {mode === "consumir_sin_reserva" ? (
@@ -482,7 +639,11 @@ export function StockArticulosReservasPanel({
                 value={notas}
                 onChange={(e) => setNotas(e.target.value)}
                 rows={2}
-                placeholder="Opcional"
+                placeholder={
+                  mode === "ot_entrega"
+                    ? `${OT_ENTREGA_TAG} se añade solo`
+                    : "Opcional"
+                }
               />
             </div>
           </div>

@@ -214,7 +214,14 @@ PDF y Excel de la bandeja **con los filtros activos**, cabecera con fecha + usua
 Sin SQL nueva (RPCs ya existen). En detalle del lote:
 - Lista de reservas (OT, pedido, reservado, consumido, estado).
 - Reservar / consumir / liberar; **consumir sin reserva** en flujo aparte con motivo obligatorio.
+- Confirmación antes de consumir (baja físico).
+- Aviso amarillo si cliente OT ≠ cliente lote (no bloquea; datos para validar 15.2).
+- Cantidades con `parseStockImportInt` (miles ES).
 - Error claro si la OT no está en Minerva (`prod_ots_general`).
+
+### 8.1.4 — OT de entrega (15.4)
+
+Sin crear nº OT en Minerva. Botón **OT entrega**: elige OT ya importada de Optimus → reserva con tag `[OT_ENTREGA]` en notas + badge en lista. Tag persistente a nivel OT (tabla/columna) queda pendiente si hace falta filtrar en despacho/calendario.
 
 ### 8.2 Modal ATP en despacho
 
@@ -277,7 +284,7 @@ FABRICACION / sobrante → proponer entrada a stock. Entrega con reserva → con
 | **15.1b** | Plantilla Excel + import con tabla de revisión (carga inicial) | ✅ |
 | **15.1d** | Export PDF / Excel bandeja filtrada | ✅ |
 | **15.3** | Reserva + consumo + liberar (vía RPC) en UI | ✅ |
-| **15.4** | Tag `OT_ENTREGA` + reserva sobre OT Optimus | ⏳ |
+| **15.4** | Tag `OT_ENTREGA` + reserva sobre OT Optimus | ✅ (tag en notas reserva; sin crear OT) |
 | **15.2** | Modal ATP en despacho OT (usar / fabricar / mezclar) | ⏳ **al final** (inventario cargado) |
 | **15.5** | Alerta crítico agregado por referencia | ⏳ |
 
@@ -308,6 +315,7 @@ Orden acordado (Claude 25 sep): **picker solo buscar** → **15.1a editar_datos 
 | 25 sep 2026 | **15.1b fix:** miles ES (`raw:true` + strip); lookup `.in` chunks; hoja Ejemplo aparte; diálogo ✅/❌ + reintento; duplicados intra-archivo. |
 | 25 sep 2026 | **15.1b:** lookup case-insensitive (Minerva UPPER + ref. cliente `ilike`). **15.1d:** export PDF/Excel bandeja filtrada (fecha + usuario). |
 | 25 sep 2026 | **15.1b:** sinónimos unidad/proceso. **15.3:** UI reservas en detalle (lista + reservar/consumir/liberar; sin reserva aparte). Sin SQL nueva. |
+| 25 sep 2026 | **15.3 fix:** miles en cantidades UI; confirm consumir; aviso cliente OT≠lote. **15.4:** OT entrega = tag `[OT_ENTREGA]` + reserva (sin crear OT). |
 
 ---
 
@@ -315,7 +323,7 @@ Orden acordado (Claude 25 sep): **picker solo buscar** → **15.1a editar_datos 
 
 Rama: **`feature/bloque15-stock-articulos`**.
 
-**Siguiente:** Gabri piloto import → **15.4** tag `OT_ENTREGA` + reserva · luego **15.2** modal ATP despacho.  
-~~15.1a~~ · ~~15.1b~~ · ~~15.1d~~ · ~~15.3~~.
+**Siguiente:** poner lotes `TEST_PILOTO` a 0 (liberar reservas antes si las hay) → Gabri carga real → **15.2** modal ATP despacho.  
+~~15.1a~~ · ~~15.1b~~ · ~~15.1d~~ · ~~15.3~~ · ~~15.4~~.
 
 Validar §10 con Gabri cuando toque UX de ubicación/mínimos.
