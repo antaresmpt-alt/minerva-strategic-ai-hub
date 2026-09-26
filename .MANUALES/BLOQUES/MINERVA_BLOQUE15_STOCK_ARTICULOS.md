@@ -333,7 +333,7 @@ Orden acordado (Claude 25 sep): **picker solo buscar** → **15.1a editar_datos 
 
 Rama: **`feature/bloque15-stock-articulos`**.
 
-**Siguiente (orden, 26 sep):** ver prompt en `.MANUALES/SESIONES/SESION_26SEP2026_BLOQUE15_DECISIONES.md`.
+**En `main` desde el 26 sep noche.** Manual: `.MANUALES/MANUALES_USUARIO/MINERVA_MANUAL_STOCK_ARTICULOS.md`.
 
 1. ~~No esconder stock~~ (hecho).  
 2. Limpieza de grafías hecha salvo conflictos. Blanxart: Excel para Zaida, sin borrar.  

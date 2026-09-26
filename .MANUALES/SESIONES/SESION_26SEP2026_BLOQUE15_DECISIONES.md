@@ -1,10 +1,10 @@
-# Sesión 26 sep 2026 — Bloque 15: decisiones de cierre (sin código)
+# Sesión 26 sep 2026 — Bloque 15: decisiones y cierre
 
-> **Rama:** `feature/bloque15-stock-articulos` (sin merge)  
-> **Horario aprox.:** 17:00 → 18:30 (~1,5 h)  
-> **Quién:** Manel (decisiones) · Cursor (aclaraciones)  
-> **Código:** ninguno. Sustituye el «orden mañana» de `.MANUALES/SESIONES/SESION_25SEP2026_BLOQUE15_STOCK_ARTICULOS.md`.  
-> **Brief:** `.MANUALES/BLOQUES/MINERVA_BLOQUE15_STOCK_ARTICULOS.md`
+> **Rama:** `feature/bloque15-stock-articulos` → merge a `main` el mismo día.  
+> **Horario aprox.:** 17:00 → 20:00 (~3,5 h)  
+> **Quién:** Manel (decisiones y smoke) · Cursor (código y manual)  
+> **Brief:** `.MANUALES/BLOQUES/MINERVA_BLOQUE15_STOCK_ARTICULOS.md`  
+> **Manual:** `.MANUALES/MANUALES_USUARIO/MINERVA_MANUAL_STOCK_ARTICULOS.md`
 
 ---
 
@@ -62,7 +62,9 @@ Pendiente de esta tanda: punto 7 (smoke formal). Puntos 4 y 5 hechos el 26 sep n
 4. **`es_ot_entrega`** en `prod_ots_general`. Checkbox en el maestro. El botón **OT entrega** lo marca al reservar y crea un solo paso **Entrega** (proceso de catálogo, no de planta). El filtro «No» de despachadas no las enseña. El asistente de despacho no las manda a planta.
 5. **Consumir** al agotar la última reserva viva de esa OT: cierra el paso y la archiva en histórico, excluida de promedios (sin horas). Un consumo parcial no cierra. Consumir sin reserva no cierra.
 
-Excel de las 15 parejas Blanxart para Zaida: `.MANUALES/DUDAS/BLANXART_PAREJAS_ZAIDA_2026-09-26.xlsx`. No se ha borrado ninguna ficha.
+Excel de las 15 parejas Blanxart para Zaida: `.MANUALES/DUDAS/BLANXART_PAREJAS_ZAIDA_2026-09-26.xlsx` (el `.xlsx` no entra en git). No se ha borrado ninguna ficha.
+
+Manual de uso: `.MANUALES/MANUALES_USUARIO/MINERVA_MANUAL_STOCK_ARTICULOS.md`. Lunes: minidemo a Gabri y Zaida. Los lotes `TEST_PILOTO` se anulan hoy o el lunes, después de enseñarlos. Smoke 98046 lo hace Manel en la app (checkbox, reserva de 1, Consumir).
 
 ---
 

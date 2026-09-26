@@ -6,7 +6,7 @@ Fuente de verdad = este repo (Git), no copias subidas a un Project de claude.ai.
 El maestro indexa sesiones y briefs. Abrir `.MANUALES/CONTEXTO/MINERVA_CONTEXTO_TECNICO.md` o `.MANUALES/SESIONES/SESION_*.md`
 cuando el maestro lo cite; no hace falta pegarlos todos en cada chat.
 
-26 sep → Bloque **15** decisiones de cierre (sin código) · sesión `.MANUALES/SESIONES/SESION_26SEP2026_BLOQUE15_DECISIONES.md` (prompt: no esconder stock, limpieza clientes, `es_ot_entrega`, Consumir cierra, Ajustar) · 25 sep construcción `.MANUALES/SESIONES/SESION_25SEP2026_BLOQUE15_STOCK_ARTICULOS.md` · brief `.MANUALES/BLOQUES/MINERVA_BLOQUE15_STOCK_ARTICULOS.md` · Bloque **16** diseño `.MANUALES/BLOQUES/MINERVA_BLOQUE16_LISTADOS_PERSONALIZADOS.md`
+26 sep → Bloque **15** cerrado y en `main` · sesión `.MANUALES/SESIONES/SESION_26SEP2026_BLOQUE15_DECISIONES.md` · manual `.MANUALES/MANUALES_USUARIO/MINERVA_MANUAL_STOCK_ARTICULOS.md` · 25 sep construcción `.MANUALES/SESIONES/SESION_25SEP2026_BLOQUE15_STOCK_ARTICULOS.md` · brief `.MANUALES/BLOQUES/MINERVA_BLOQUE15_STOCK_ARTICULOS.md` · Bloque **16** diseño `.MANUALES/BLOQUES/MINERVA_BLOQUE16_LISTADOS_PERSONALIZADOS.md`
 Resumen mensual (horas + hecho, para Gemma) → `.MANUALES/MENSUAL/` · septiembre abierto `MINERVA_MES_2026_09_SEPTIEMBRE.md` · cada día de trabajo = sesión con horario aprox.
 Sesión 7 sep → Bloque 14 fichas comercial `.MANUALES/BLOQUES/MINERVA_BLOQUE14_FICHAS_COMERCIAL.md` (rama `feature/bloque14-fichas-comercial`)
 Sesión 6 sep → reunión Gemma + perf contenedor `.MANUALES/SESIONES/SESION_06SEP2026_REUNION_GEMMA_CONTENEDOR.md` · frases Albert `.MANUALES/BRIEFS/MINERVA_FRASES_ALBERT_06SEP2026.md` · Bloque 13 `.MANUALES/BLOQUES/MINERVA_BLOQUE13_VISIBILIDAD_PLANTA.md`
