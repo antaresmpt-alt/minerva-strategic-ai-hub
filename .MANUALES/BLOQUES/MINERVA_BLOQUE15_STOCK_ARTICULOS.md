@@ -346,6 +346,8 @@ Rama: **`feature/bloque15-stock-articulos`**.
 
 **Fuera de esta tanda:** reservar al Mezclar. Después: anular `TEST_PILOTO` · carga Gabri · **15.5**. Lunes: borrar FICT-98001 de la hoja de ruta (dejar el apunte PUENTE del 24).
 
+**Próxima sesión (review Claude `c398f19`):** quitar marcar OT en el `catch` de «Usar stock» si la reserva fue parcial; afinar badge Entrega en Producidas (motivo exacto, no grep «entrega»). Mejora futura: no cerrar OT si lo consumido < pedida.
+
 ~~15.1a~~ · ~~15.1b~~ · ~~15.1d~~ · ~~15.3~~ · ~~15.4~~ · ~~15.2~~ (UI; pulidos post-Claude).
 
 Validar §10 con Gabri cuando toque UX de ubicación/mínimos.

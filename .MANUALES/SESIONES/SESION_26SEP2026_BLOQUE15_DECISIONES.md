@@ -82,9 +82,31 @@ La migración `20260926193000` dejó `prod_ot_entrega_marcar` solo mirando la se
 En código, en `main`:
 
 - Reservar primero y marcar después. Si la reserva falla, no se quita una marca que ya estaba.
-- «Usar stock» del despacho marca la OT cuando la reserva sale bien (también si ya estaba cubierta). Si un lote falla a medias, no desmarca.
+- «Usar stock» del despacho marca la OT cuando la reserva sale bien (también si ya estaba cubierta). **Bug pendiente:** si falla a medias, el `catch` aún llama a marcar → ver abajo.
 - El checkbox del maestro solo llama a marcar si la casilla ha cambiado.
 - «Poner el cliente de la OT» solo si se puede escribir stock.
 - Histórico: fecha, rol de quien cerró (si el perfil se puede leer) y la nota «Entrega de stock».
 
 Reimportar Optimus no toca OTs que ya existen: solo inserta las nuevas. El upsert de la hija no manda `es_ot_entrega`.
+
+---
+
+## Próxima sesión — review Claude del `c398f19` (27 sep o cuando toque)
+
+Claude revisó el commit en GitHub. **Casi todo OK.** Dos tareas:
+
+### P0 — corregir (sin SQL, ~2 líneas)
+
+**«Usar stock» a medias no debe marcar la OT.** Hoy, si reserva 2 de 3 lotes y el tercero falla, el `catch` de `despacho-stock-articulos-atp.tsx` llama igual a `marcarEntrega()`. La OT sale de pendientes, se consumen solo los lotes reservados y `cerrar_si_consumida` cierra cuando no queda reserva viva, **aunque la pedida no esté cubierta**.
+
+→ Quitar `marcarEntrega()` del `catch`. Toast del estilo: «Reservado parcialmente; vuelve a pulsar Usar stock». Al repetir, solo falta lo pendiente; marcar cuando el plan completo termine bien.
+
+### P2 — menor (UI)
+
+**Etiqueta «Entrega» en Producidas.** `esCierreEntrega` busca la palabra «entrega» en observaciones; una OT normal con «cliente adelantó la entrega» podría salir en verde.
+
+→ Mejor: `motivo_exclusion === 'OT de entrega: cierre por Consumir, sin horas de planta.'` (texto fijo de la migración `193000`) o comprobar snapshot con un solo paso «Entrega».
+
+### Mejora futura (no ahora)
+
+**Cierre al consumir vs cantidad pedida.** Si alguien consume reservas parciales sin cubrir la OT (flujo acordado = reservar todo y luego consumir), el cierre automático igual archiva. A futuro: comparar consumido acumulado con pedida antes de cerrar; si falta, aviso y no histórico.
