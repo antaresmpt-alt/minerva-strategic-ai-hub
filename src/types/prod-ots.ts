@@ -41,6 +41,8 @@ export type ProdOtsGeneralRow = {
   pdf_ok: string | null;
   muestra_ok: string | null;
   despachado?: boolean | null;
+  /** Entrega de stock: no se fabrica. Consumir la cierra. */
+  es_ot_entrega?: boolean | null;
   created_at: string | null;
   updated_at: string | null;
 };

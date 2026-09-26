@@ -2311,6 +2311,7 @@ export type Database = {
           cliente: string | null
           created_at: string | null
           despachado: boolean | null
+          es_ot_entrega: boolean
           estado_cod: number | null
           estado_desc: string | null
           familia: string | null
@@ -2341,6 +2342,7 @@ export type Database = {
           cliente?: string | null
           created_at?: string | null
           despachado?: boolean | null
+          es_ot_entrega?: boolean
           estado_cod?: number | null
           estado_desc?: string | null
           familia?: string | null
@@ -2371,6 +2373,7 @@ export type Database = {
           cliente?: string | null
           created_at?: string | null
           despachado?: boolean | null
+          es_ot_entrega?: boolean
           estado_cod?: number | null
           estado_desc?: string | null
           familia?: string | null
@@ -4126,6 +4129,13 @@ export type Database = {
         }
         Returns: string
       }
+      prod_ot_entrega_marcar: {
+        Args: {
+          p_marcar: boolean
+          p_num_pedido: string
+        }
+        Returns: undefined
+      }
       prod_stock_articulos_consumir: {
         Args: {
           p_bultos?: number
@@ -4135,7 +4145,7 @@ export type Database = {
           p_ot_numero: string
           p_stock_id: string
         }
-        Returns: undefined
+        Returns: boolean
       }
       prod_stock_articulos_editar_datos: {
         Args: {

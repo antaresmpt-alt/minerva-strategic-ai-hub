@@ -333,6 +333,7 @@ export function DespachoWizardDialog({
   const [seleccion, setSeleccion] = useState<DespachoSeleccion | null>(null);
   const [meta, setMeta] = useState<DespachoMeta>(emptyDespachoMeta);
   const [yaDespachada, setYaDespachada] = useState(false);
+  const [esOtEntrega, setEsOtEntrega] = useState(false);
   const [compraGenerada, setCompraGenerada] = useState(false);
   const [loadingOt, setLoadingOt] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -417,6 +418,7 @@ export function DespachoWizardDialog({
     setSeleccion(null);
     setMeta(emptyDespachoMeta());
     setYaDespachada(false);
+    setEsOtEntrega(false);
     setCompraGenerada(false);
     setOtTipo("simple");
     setModoContenedor(false);
@@ -449,7 +451,7 @@ export function DespachoWizardDialog({
         const { data: masterRow, error: masterErr } = await supabase
           .from(TABLE_OTS)
           .select(
-            "id, num_pedido, despachado, cliente, titulo, cantidad, pedido_cliente, fecha_entrega, ot_tipo"
+            "id, num_pedido, despachado, es_ot_entrega, cliente, titulo, cantidad, pedido_cliente, fecha_entrega, ot_tipo"
           )
           .eq("num_pedido", ot)
           .maybeSingle();
@@ -458,6 +460,7 @@ export function DespachoWizardDialog({
           toast.error(`No existe la OT ${ot} en maestro.`);
           setSeleccion(null);
           setYaDespachada(false);
+          setEsOtEntrega(false);
           setCompraGenerada(false);
           setMeta(emptyDespachoMeta());
           setItinerarioSlots([]);
@@ -527,6 +530,9 @@ export function DespachoWizardDialog({
           Boolean((masterRow as { despachado?: boolean | null }).despachado) ||
           despachoRow != null;
         setYaDespachada(yaDesp);
+        setEsOtEntrega(
+          Boolean((masterRow as { es_ot_entrega?: boolean | null }).es_ot_entrega),
+        );
         setCompraGenerada(Boolean((compraRows ?? []).length > 0));
 
         guillotinaInicialesAutoRef.current = true;
@@ -1688,6 +1694,12 @@ export function DespachoWizardDialog({
 
   const submitDespacho = useCallback(async () => {
     if (!seleccion) return;
+    if (esOtEntrega) {
+      toast.error(
+        "OT de entrega: sale de stock. María José la cierra con Consumir, no se despacha a planta.",
+      );
+      return;
+    }
     if (!modoContenedor && stockAtp.relevante) {
       if (atpDecision == null) {
         setAtpDialogOpen(true);
@@ -2098,6 +2110,7 @@ export function DespachoWizardDialog({
   }, [
     atpDecision,
     despachoStatus,
+    esOtEntrega,
     form,
     formas,
     itinerarioOverrides,
@@ -2131,6 +2144,7 @@ export function DespachoWizardDialog({
     setForm(emptyDespachoForm());
     setSeleccion(null);
     setYaDespachada(false);
+    setEsOtEntrega(false);
     setCompraGenerada(false);
     setMeta(emptyDespachoMeta());
     setOtInput("");
@@ -3125,6 +3139,12 @@ export function DespachoWizardDialog({
             Wizard de despacho — cabecera, material, itinerario y datos por
             proceso. Ctrl+Enter guarda en la pestaña Resumen.
           </DialogDescription>
+          {esOtEntrega ? (
+            <p className="text-xs text-amber-800">
+              OT de entrega. No se despacha a planta. María José la cierra con
+              Consumir en Stock artículos.
+            </p>
+          ) : null}
         </DialogHeader>
 
         <Tabs

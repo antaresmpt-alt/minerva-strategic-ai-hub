@@ -363,7 +363,7 @@ export function StockArticulosReservasPanel({
       if (!ok) return;
       setSubmitting(true);
       try {
-        const { error } = await supabase.rpc("prod_stock_articulos_consumir", {
+        const { data: cerro, error } = await supabase.rpc("prod_stock_articulos_consumir", {
           p_stock_id: stockId,
           p_ot_numero: otN,
           p_cantidad: qty,
@@ -372,7 +372,9 @@ export function StockArticulosReservasPanel({
         });
         if (error) throw error;
         toast.success(
-          `Consumido ${qty.toLocaleString("es-ES")} ${unidad} · OT ${otN}`
+          cerro === true
+            ? `Consumido ${qty.toLocaleString("es-ES")} ${unidad}. OT ${otN} cerrada y en histórico.`
+            : `Consumido ${qty.toLocaleString("es-ES")} ${unidad} · OT ${otN}`
         );
         setMode(null);
         await load();
@@ -390,6 +392,13 @@ export function StockArticulosReservasPanel({
 
       setSubmitting(true);
       try {
+        if (mode === "ot_entrega") {
+          const { error: marcaErr } = await supabase.rpc("prod_ot_entrega_marcar", {
+            p_num_pedido: otN,
+            p_marcar: true,
+          });
+          if (marcaErr) throw marcaErr;
+        }
         const { error } = await supabase.rpc("prod_stock_articulos_reservar", {
           p_stock_id: stockId,
           p_ot_numero: otN,
@@ -398,10 +407,18 @@ export function StockArticulosReservasPanel({
           p_bultos: bultosN,
           p_notas: uniqueNotes || undefined,
         });
-        if (error) throw error;
+        if (error) {
+          if (mode === "ot_entrega") {
+            await supabase.rpc("prod_ot_entrega_marcar", {
+              p_num_pedido: otN,
+              p_marcar: false,
+            });
+          }
+          throw error;
+        }
         toast.success(
           mode === "ot_entrega"
-            ? `OT entrega ${otN}: reservados ${qty.toLocaleString("es-ES")} ${unidad}`
+            ? `OT entrega ${otN}: reservados ${qty.toLocaleString("es-ES")} ${unidad}. Paso Entrega en el pipeline.`
             : `Reservado ${qty.toLocaleString("es-ES")} ${unidad} · OT ${otN}`
         );
         setMode(null);
@@ -478,8 +495,8 @@ export function StockArticulosReservasPanel({
       </div>
       <p className="text-[11px] text-slate-400">
         Libre: {libre.toLocaleString("es-ES")} {unidad}. La OT debe existir ya
-        en Minerva (importada de Optimus). «OT entrega» = tag {OT_ENTREGA_TAG} +
-        reserva (sin crear nº OT).
+        en Minerva (importada de Optimus). «OT entrega» marca la OT, reserva el
+        lote y deja un paso Entrega. Consumir, al agotar la reserva, la cierra.
       </p>
 
       {loading ? (
@@ -598,8 +615,8 @@ export function StockArticulosReservasPanel({
           <div className="space-y-3">
             {mode === "ot_entrega" ? (
               <p className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5">
-                La OT nace en Optimus. Aquí solo se marca {OT_ENTREGA_TAG} y se
-                reserva stock (no se crea nº OT en Minerva).
+                La OT nace en Optimus. Se marca como entrega, se reserva el stock
+                y queda el paso Entrega. No se crea otro número de OT.
               </p>
             ) : null}
             {mode === "consumir_sin_reserva" ? (

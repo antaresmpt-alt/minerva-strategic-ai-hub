@@ -285,7 +285,9 @@ export function MasterOtsPage() {
       if (despachadoFilter === "si") {
         query = query.eq("despachado", true);
       } else if (despachadoFilter === "no") {
-        query = query.or("despachado.is.null,despachado.eq.false");
+        query = query
+          .or("despachado.is.null,despachado.eq.false")
+          .eq("es_ot_entrega", false);
       }
       query = applyMasterOtsOtTipoServerFilter(query, otTipoFilter);
       return query;
@@ -682,6 +684,11 @@ export function MasterOtsPage() {
         .update(payload)
         .eq("id", editing.id);
       if (error) throw error;
+      const { error: marcaErr } = await supabase.rpc("prod_ot_entrega_marcar", {
+        p_num_pedido: editing.num_pedido,
+        p_marcar: Boolean(editing.es_ot_entrega),
+      });
+      if (marcaErr) throw marcaErr;
       toast.success("OT actualizada.");
       setEditOpen(false);
       setEditing(null);
@@ -1275,6 +1282,20 @@ ${otsContextJson}
                       });
                     }}
                   />
+                </div>
+                <div className="flex items-start gap-2 sm:col-span-2">
+                  <Checkbox
+                    id="es-ot-entrega"
+                    checked={Boolean(editing.es_ot_entrega)}
+                    onCheckedChange={(v) =>
+                      setEditing({ ...editing, es_ot_entrega: v === true })
+                    }
+                  />
+                  <Label htmlFor="es-ot-entrega" className="text-xs leading-snug">
+                    OT de entrega. Sale de stock y no se fabrica. Queda fuera de
+                    las no despachadas, con un solo paso Entrega en el pipeline.
+                    María José la cierra con Consumir.
+                  </Label>
                 </div>
                 <div className="grid gap-1 sm:col-span-2">
                   <Label className="text-xs">Familia (análisis ventas)</Label>

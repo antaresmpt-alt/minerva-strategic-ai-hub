@@ -233,6 +233,41 @@ function mapSlaStatus(riesgo: PipelineRowView["riesgo"]): PipelineRowView["analy
 const DESP_SELECT =
   "ot_numero, despachado_at, material, gramaje, tamano_hoja, num_hojas_brutas, horas_entrada, horas_tiraje, tintas, troquel, poses, acabado_pral, horas_estimadas_troquelado, horas_estimadas_engomado";
 
+/** OTs de entrega aún no archivadas. No pasan por el despacho de planta. */
+async function fetchOtEntregaSinArchivar(
+  supabase: SupabaseClient,
+  already: Set<string>,
+  limit: number,
+): Promise<string[]> {
+  const { data, error } = await supabase
+    .from(TABLE_OTS)
+    .select("num_pedido")
+    .eq("es_ot_entrega", true)
+    .limit(limit);
+  if (error) throw error;
+  const nums = [
+    ...new Set(
+      (data ?? [])
+        .map((r) => str((r as { num_pedido?: string | null }).num_pedido))
+        .filter((n): n is string => n != null && !already.has(n)),
+    ),
+  ];
+  if (nums.length === 0) return [];
+  const cerradas = await fetchAllInChunks(nums, 100, async (chunk) => {
+    const { data: rows, error: cerrErr } = await supabase
+      .from(TABLE_PRODUCIDAS)
+      .select("ot_numero")
+      .in("ot_numero", chunk)
+      .is("reabierta_at", null);
+    if (cerrErr) throw cerrErr;
+    return (rows ?? []) as { ot_numero: string }[];
+  });
+  const cerradasSet = new Set(
+    cerradas.map((r) => str(r.ot_numero)).filter((n): n is string => Boolean(n)),
+  );
+  return nums.filter((n) => !cerradasSet.has(n));
+}
+
 export async function fetchPipelineRows(
   supabase: SupabaseClient,
   filters: FetchPipelineFilters = {},
@@ -265,6 +300,12 @@ export async function fetchPipelineRows(
     if (despErr) throw despErr;
     despRows = (despData ?? []) as DespRow[];
     otNumeros = [...new Set(despRows.map((r) => str(r.ot_numero)).filter(Boolean))] as string[];
+    const entregaVivas = await fetchOtEntregaSinArchivar(
+      supabase,
+      new Set(otNumeros),
+      limit,
+    );
+    otNumeros = [...otNumeros, ...entregaVivas];
   }
 
   if (otNumeros.length === 0) return [];
