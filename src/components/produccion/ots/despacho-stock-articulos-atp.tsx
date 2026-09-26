@@ -142,10 +142,36 @@ export function DespachoStockAtpBanner({
         : decision === "fabricar"
           ? "Fabricar completo"
           : null;
+  const nombresDistintos = [
+    ...new Set(
+      resumen.clienteDistinto
+        .map((l) => (l.cliente ?? "").trim())
+        .filter(Boolean)
+    ),
+  ];
+  const avisoCliente = nombresDistintos.length > 0;
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3">
-      <Boxes className="size-5 shrink-0 text-emerald-700" />
-      <div className="min-w-0 flex-1 text-sm text-emerald-950">
+    <div
+      className={
+        avisoCliente
+          ? "flex flex-wrap items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3"
+          : "flex flex-wrap items-center gap-3 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3"
+      }
+    >
+      <Boxes
+        className={
+          avisoCliente
+            ? "size-5 shrink-0 text-amber-700"
+            : "size-5 shrink-0 text-emerald-700"
+        }
+      />
+      <div
+        className={
+          avisoCliente
+            ? "min-w-0 flex-1 text-sm text-amber-950"
+            : "min-w-0 flex-1 text-sm text-emerald-950"
+        }
+      >
         {resumen.librePtUsable > 0 ? (
           <p>
             Hay <strong>{fmt(resumen.librePtUsable)} uds</strong> terminadas
@@ -162,12 +188,30 @@ export function DespachoStockAtpBanner({
             de stock.
           </p>
         ) : null}
+        {avisoCliente ? (
+          <p className="mt-0.5 text-xs text-amber-900">
+            El lote dice <strong>{nombresDistintos.join(", ")}</strong> y no
+            coincide con el cliente de la OT. El stock se ofrece igual.
+          </p>
+        ) : null}
         {decisionLabel ? (
-          <p className="mt-0.5 text-xs font-semibold text-emerald-800">
+          <p
+            className={
+              avisoCliente
+                ? "mt-0.5 text-xs font-semibold text-amber-800"
+                : "mt-0.5 text-xs font-semibold text-emerald-800"
+            }
+          >
             Decisión: {decisionLabel}
           </p>
         ) : (
-          <p className="mt-0.5 text-xs text-emerald-800">
+          <p
+            className={
+              avisoCliente
+                ? "mt-0.5 text-xs text-amber-800"
+                : "mt-0.5 text-xs text-emerald-800"
+            }
+          >
             Antes de despachar, decide si se sirve de stock.
           </p>
         )}
@@ -176,7 +220,11 @@ export function DespachoStockAtpBanner({
         type="button"
         size="sm"
         variant="outline"
-        className="border-emerald-400 bg-white text-emerald-900 hover:bg-emerald-100"
+        className={
+          avisoCliente
+            ? "border-amber-400 bg-white text-amber-950 hover:bg-amber-100"
+            : "border-emerald-400 bg-white text-emerald-900 hover:bg-emerald-100"
+        }
         onClick={onOpen}
       >
         {decision ? "Cambiar decisión" : "Ver opciones"}
@@ -194,6 +242,7 @@ export function DespachoStockAtpDialog({
   otNumero,
   otCliente,
   pedidoCliente,
+  referenciaId,
   referenciaCodigo,
   onDecision,
   onReservado,
@@ -206,11 +255,20 @@ export function DespachoStockAtpDialog({
   otNumero: string;
   otCliente: string | null;
   pedidoCliente: string | null;
+  referenciaId: string | null;
   referenciaCodigo: string | null;
   onDecision: (d: DespachoAtpDecision) => void;
   onReservado: () => void;
 }) {
   const [reservando, setReservando] = useState(false);
+  const [copiandoCliente, setCopiandoCliente] = useState(false);
+  const nombresDistintos = [
+    ...new Set(
+      resumen.clienteDistinto
+        .map((l) => (l.cliente ?? "").trim())
+        .filter(Boolean)
+    ),
+  ];
   const pedida = resumen.cantidadPedida;
   const pendienteReservar =
     pedida == null ? 0 : Math.max(0, pedida - reservadoOt);
@@ -267,6 +325,42 @@ export function DespachoStockAtpDialog({
       if (hechas > 0) onReservado();
     } finally {
       setReservando(false);
+    }
+  }
+
+  async function copiarClienteOt() {
+    const nombre = (otCliente ?? "").trim();
+    if (!nombre || !referenciaId) return;
+    setCopiandoCliente(true);
+    try {
+      const { error: refErr } = await supabase
+        .from("prod_referencias")
+        .update({ cliente: nombre })
+        .eq("id", referenciaId);
+      if (refErr) throw refErr;
+
+      const ids = resumen.clienteDistinto.map((l) => l.id);
+      let lotesOk = ids.length === 0;
+      if (ids.length > 0) {
+        const { error: lotErr } = await supabase
+          .from("prod_stock_articulos")
+          .update({ cliente: nombre })
+          .in("id", ids);
+        lotesOk = !lotErr;
+      }
+      if (lotesOk) {
+        toast.success(`Cliente del artículo y de los lotes: ${nombre}`);
+      } else {
+        toast.success(`Cliente del artículo: ${nombre}`, {
+          description:
+            "Los lotes ya creados conservan el texto anterior. La limpieza de lotes va en la pasada siguiente.",
+        });
+      }
+      onReservado();
+    } catch (e) {
+      toast.error(errorMessageFromUnknown(e));
+    } finally {
+      setCopiandoCliente(false);
     }
   }
 
@@ -355,12 +449,32 @@ export function DespachoStockAtpDialog({
               ): puede acortar la ruta, pero no se reserva desde aquí.
             </p>
           ) : null}
-          {resumen.otrosClientes.length > 0 ? (
-            <p className="text-xs text-slate-500">
-              Hay stock dedicado a otro cliente (
-              {resumen.otrosClientes.map((l) => l.cliente).join(", ")}) que no se
-              ofrece.
-            </p>
+          {nombresDistintos.length > 0 ? (
+            <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+              <p>
+                El lote dice <strong>{nombresDistintos.join(", ")}</strong>
+                {otCliente?.trim()
+                  ? ` y la OT dice ${otCliente.trim()}.`
+                  : " y la OT no trae cliente."}{" "}
+                Es la misma referencia: el stock se ofrece. El nombre bueno es el
+                de la OT.
+              </p>
+              {otCliente?.trim() && referenciaId ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 border-amber-400 bg-white text-xs text-amber-950 hover:bg-amber-100"
+                  disabled={copiandoCliente || reservando}
+                  onClick={() => void copiarClienteOt()}
+                >
+                  {copiandoCliente ? (
+                    <Loader2 className="mr-1 size-3.5 animate-spin" />
+                  ) : null}
+                  Poner «{otCliente.trim()}» en el artículo y en estos lotes
+                </Button>
+              ) : null}
+            </div>
           ) : null}
 
           {pedida == null ? (

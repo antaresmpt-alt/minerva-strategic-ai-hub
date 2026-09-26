@@ -64,19 +64,33 @@ describe("resumenAtpDespacho", () => {
     expect(r.faltan).toBe(0);
   });
 
-  it("separa WIP y otros clientes; no cuentan como PT usable", () => {
+  it("cliente distinto de la misma referencia se ofrece y se avisa", () => {
     const r = resumenAtpDespacho(
       [
         lote({ id: "wip", unidad: "hojas", estado_proceso: "impreso" }),
-        lote({ id: "otro", cliente: "TAKEIT" }),
+        lote({ id: "otro", cliente: "TAKEIT", cantidad_libre: 40 }),
         lote({ id: "cero", cantidad_libre: 0 }),
       ],
       "CHMLAB",
       50
     );
-    expect(r.cobertura).toBe("sin_stock");
+    expect(r.cobertura).toBe("parcial");
+    expect(r.ptUsables.map((l) => l.id)).toEqual(["otro"]);
+    expect(r.clienteDistinto.map((l) => l.id)).toEqual(["otro"]);
+    expect(r.otrosClientes).toEqual([]);
     expect(r.wipUsables.map((l) => l.id)).toEqual(["wip"]);
-    expect(r.otrosClientes.map((l) => l.id)).toEqual(["otro"]);
+    expect(r.usarDeStock).toBe(40);
+  });
+
+  it("OT sin cliente no esconde el lote que sí tiene cliente", () => {
+    const r = resumenAtpDespacho(
+      [lote({ id: "a", cliente: "CHMLAB", cantidad_libre: 10 })],
+      null,
+      10
+    );
+    expect(r.ptUsables.map((l) => l.id)).toEqual(["a"]);
+    expect(r.clienteDistinto.map((l) => l.id)).toEqual(["a"]);
+    expect(r.cobertura).toBe("total");
   });
 
   it("sin cantidad en la OT → sin_cantidad", () => {

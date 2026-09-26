@@ -1353,6 +1353,8 @@ function StockArticuloDetalleDialog({
   const [ajusteOpen, setAjusteOpen] = useState(false);
   const [ajusteCantidad, setAjusteCantidad] = useState("");
   const [ajusteBultos, setAjusteBultos] = useState("");
+  const [ajusteUdsBulto, setAjusteUdsBulto] = useState("");
+  const [ajustePico, setAjustePico] = useState("");
   const [ajusteNotas, setAjusteNotas] = useState("");
   const [ajusteForzar, setAjusteForzar] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -1381,6 +1383,10 @@ function StockArticuloDetalleDialog({
   function openAjusteForm(r: AtpConCritico) {
     setAjusteCantidad(String(r.cantidad_fisica));
     setAjusteBultos(r.bultos != null ? String(r.bultos) : "");
+    setAjusteUdsBulto(
+      r.unidades_por_bulto != null ? String(r.unidades_por_bulto) : ""
+    );
+    setAjustePico(r.pico != null ? String(r.pico) : "");
     setAjusteNotas("");
     setAjusteForzar(false);
     setAjusteOpen(true);
@@ -1464,10 +1470,6 @@ function StockArticuloDetalleDialog({
   async function submitAjuste() {
     if (!row) return;
     const nota = ajusteNotas.trim();
-    if (!nota) {
-      toast.error("La nota es obligatoria en un ajuste.");
-      return;
-    }
     const nueva = parseStockImportInt(ajusteCantidad);
     if (
       nueva == null ||
@@ -1493,25 +1495,62 @@ function StockArticuloDetalleDialog({
       toast.error("Bultos debe ser un entero >= 0.");
       return;
     }
-    const bultosUnchanged =
-      bultosN === null || bultosN === row.bultos;
-    if (nueva === row.cantidad_fisica && bultosUnchanged) {
-      toast.info("La cantidad y los bultos no cambiaron.");
+    const udsRaw = ajusteUdsBulto.trim();
+    const udsN = udsRaw ? parseStockImportInt(udsRaw) : null;
+    if (
+      udsRaw &&
+      (udsN == null || !Number.isFinite(udsN) || Number.isNaN(udsN) || udsN <= 0)
+    ) {
+      toast.error("Uds/bulto debe ser un entero > 0 (o vacío para no tocarlo).");
+      return;
+    }
+    const picoRaw = ajustePico.trim();
+    const picoN = picoRaw ? parseStockImportInt(picoRaw) : null;
+    if (
+      picoRaw &&
+      (picoN == null || !Number.isFinite(picoN) || Number.isNaN(picoN) || picoN < 0)
+    ) {
+      toast.error("Pico debe ser un entero >= 0 (o vacío para no tocarlo).");
+      return;
+    }
+
+    const bultosUnchanged = bultosN === null || bultosN === row.bultos;
+    const udsUnchanged = udsN === null || udsN === row.unidades_por_bulto;
+    const picoUnchanged = picoN === null || picoN === row.pico;
+    const cantidadUnchanged = nueva === row.cantidad_fisica;
+    if (cantidadUnchanged && bultosUnchanged && udsUnchanged && picoUnchanged) {
+      toast.info("No hay cambios en cantidad ni embalaje.");
+      return;
+    }
+    if ((!cantidadUnchanged || !bultosUnchanged) && !nota) {
+      toast.error("La nota es obligatoria cuando cambia la cantidad o los bultos.");
       return;
     }
 
     setSubmitting(true);
     try {
-      const { error } = await supabase.rpc("prod_stock_articulos_ajustar", {
-        p_stock_id: row.id,
-        p_cantidad_nueva: nueva,
-        p_bultos: bultosN === null ? undefined : bultosN,
-        p_notas: nota,
-        p_forzar: ajusteForzar || undefined,
-      });
-      if (error) throw error;
+      if (!cantidadUnchanged || !bultosUnchanged) {
+        const { error } = await supabase.rpc("prod_stock_articulos_ajustar", {
+          p_stock_id: row.id,
+          p_cantidad_nueva: nueva,
+          p_bultos: bultosN === null ? undefined : bultosN,
+          p_notas: nota,
+          p_forzar: ajusteForzar || undefined,
+        });
+        if (error) throw error;
+      }
+      if (!udsUnchanged || !picoUnchanged) {
+        const { error } = await supabase.rpc("prod_stock_articulos_editar_datos", {
+          p_stock_id: row.id,
+          p_unidades_por_bulto: udsUnchanged ? undefined : udsN ?? undefined,
+          p_pico: picoUnchanged ? undefined : picoN ?? undefined,
+        });
+        if (error) throw error;
+      }
       toast.success(
-        `Ajuste: ${row.cantidad_fisica.toLocaleString("es-ES")} → ${nueva.toLocaleString("es-ES")} ${row.unidad}`
+        cantidadUnchanged
+          ? "Embalaje del lote actualizado."
+          : `Ajuste: ${row.cantidad_fisica.toLocaleString("es-ES")} → ${nueva.toLocaleString("es-ES")} ${row.unidad}`
       );
       setAjusteOpen(false);
       onClose();
@@ -1859,20 +1898,59 @@ function StockArticuloDetalleDialog({
                   placeholder="Ej. 1.000"
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Bultos (opcional)</Label>
-                <Input
-                  inputMode="numeric"
-                  value={ajusteBultos}
-                  onChange={(e) => setAjusteBultos(e.target.value)}
-                />
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500">Bultos</Label>
+                  <Input
+                    inputMode="numeric"
+                    value={ajusteBultos}
+                    onChange={(e) => setAjusteBultos(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500">Uds / bulto</Label>
+                  <Input
+                    inputMode="numeric"
+                    value={ajusteUdsBulto}
+                    onChange={(e) => setAjusteUdsBulto(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500">Pico</Label>
+                  <Input
+                    inputMode="numeric"
+                    value={ajustePico}
+                    onChange={(e) => setAjustePico(e.target.value)}
+                  />
+                </div>
               </div>
+              {(() => {
+                if (row.unidad !== "uds") return null;
+                if (!ajusteBultos.trim() || !ajusteUdsBulto.trim()) return null;
+                const b = parseStockImportInt(ajusteBultos);
+                const u = parseStockImportInt(ajusteUdsBulto);
+                const p = ajustePico.trim() ? parseStockImportInt(ajustePico) : 0;
+                const q = parseStockImportInt(ajusteCantidad);
+                if (b == null || u == null || p == null || q == null) return null;
+                const total = b * u + p;
+                if (total === q) return null;
+                return (
+                  <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    Bultos × uds/bulto + pico ={" "}
+                    <strong>{total.toLocaleString("es-ES")}</strong> ≠ cantidad{" "}
+                    {q.toLocaleString("es-ES")}. Se guarda igual: la cantidad es el
+                    recuento.
+                  </p>
+                );
+              })()}
               <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Nota *</Label>
+                <Label className="text-xs text-slate-500">
+                  Nota (obligatoria si cambia cantidad o bultos)
+                </Label>
                 <Input
                   value={ajusteNotas}
                   onChange={(e) => setAjusteNotas(e.target.value)}
-                  placeholder="Obligatoria (auditoría)"
+                  placeholder="Auditoría del recuento"
                 />
               </div>
               <label className="flex items-start gap-2 text-xs text-slate-600 cursor-pointer">

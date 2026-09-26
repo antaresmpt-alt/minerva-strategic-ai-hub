@@ -323,6 +323,8 @@ Orden acordado (Claude 25 sep): **picker solo buscar** → **15.1a editar_datos 
 | 25 sep 2026 | **15.2:** asistente despacho (OT simple con ref. Minerva) consulta `stock_articulos_atp` (PT uds, libre>0, cliente compatible: dedicado primero, luego genérico FIFO) + reservas vivas de la OT. Aviso en cabecera + modal al pulsar Despachar sin decisión. **Usar stock** (cubre todo) = reserva multi-lote `[OT_ENTREGA]`, num_pedido = pedido cliente; no despacha. **Mezclar** (parcial) = texto para partir en Optimus (OT entrega N + OT fabricación resto), copiar; no despacha. **Fabricar completo** = despacho normal. WIP y stock de otro cliente solo informativos. Contenedor: sin ATP. Lib `stock-articulos-atp-despacho.ts` + tests. |
 | 25 sep 2026 | Smoke fixes: botones Consumir/Liberar visibles; tag `[OT_ENTREGA]` sin duplicar; overlay de diálogo apilado por orden (padre queda oscurecido, hijo con anillo); aviso no bloqueante si bultos×uds/bulto+pico ≠ físico en Editar datos. |
 | 25 sep noche | Review Claude 15.2: (1) cliente distinto silencia ATP → fix sin SQL: no excluir por cliente dentro de misma ref. + aviso amarillo; (2) falta `es_ot_entrega` en OT (SQL→Claude) o OTs «Usar stock» quedan colgadas; (3) Mezclar no reserva → preferir reservar ya; confirmar numeración Optimus al partir. Detalle: `.MANUALES/SESIONES/SESION_25SEP2026_BLOQUE15_STOCK_ARTICULOS.md`. |
+| 26 sep tarde | **Pasada 1 (sin SQL):** ATP no esconde stock si el cliente no coincide (aviso ámbar + copiar nombre de la OT al artículo). Alta de artículo: cliente desde lista de OTs, texto libre. Ajustar: uds/bulto y pico vía `editar_datos`; aviso si no cuadra, no bloquea. |
+| 26 sep | Decisiones Manel (sin código): nombre bueno = cliente de la OT; limpieza artículos + lotes; desplegable de clientes desde maestro OTs (texto libre si no está; sin tabla ni Odoo). `es_ot_entrega` en maestro y al pulsar OT entrega. Paso único Entrega. María José cierra con **Consumir** (debe cerrar paso + histórico). Ajustar gana uds/bulto y pico; no se funde con Editar ni se bloquea si el embalaje no cuadra. **Mezclar queda fuera.** Prompt: `.MANUALES/SESIONES/SESION_26SEP2026_BLOQUE15_DECISIONES.md`. |
 
 ---
 
@@ -330,12 +332,17 @@ Orden acordado (Claude 25 sep): **picker solo buscar** → **15.1a editar_datos 
 
 Rama: **`feature/bloque15-stock-articulos`**.
 
-**Siguiente (orden):**  
-1. **Fix cliente 15.2** (no excluir dentro de misma ref. + aviso amarillo).  
-2. **Smoke** OT 98046 / M-01632 (≤120 Usar stock · 300 Mezclar · Fabricar · **paso 4** cliente distinto/vacío).  
-3. Draft SQL **`es_ot_entrega`** en `prod_ots_general` → review Claude → aplicar.  
-4. **Mezclar:** reservar ya (cuando Manel confirme cómo Optimus numera al partir).  
-5. `TEST_PILOTO` a 0 → merge `main` → carga Gabri → **15.5**.
+**Siguiente (orden, 26 sep):** ver prompt en `.MANUALES/SESIONES/SESION_26SEP2026_BLOQUE15_DECISIONES.md`.
+
+1. No esconder stock si el cliente no coincide (aviso amarillo + copiar nombre de la OT).  
+2. Limpieza: cliente del artículo y de los lotes = grafía de las OTs (conflictos: listar, no adivinar). SQL → Claude antes de aplicar.  
+3. Alta de artículo: desplegable de clientes del maestro de OTs + texto libre.  
+4. `es_ot_entrega` (checkbox maestro + botón OT entrega). Fuera de «no despachadas». SQL → Claude.  
+5. Paso único Entrega. **Consumir** baja físico, cierra el paso y manda al histórico.  
+6. Ajustar: cantidad + bultos + uds/bulto + pico. Sin bloqueo si no cuadra.  
+7. Smoke OT 98046.
+
+**Fuera de esta tanda:** reservar al Mezclar. Después: `TEST_PILOTO` a 0 · merge `main` · carga Gabri · **15.5**.
 
 ~~15.1a~~ · ~~15.1b~~ · ~~15.1d~~ · ~~15.3~~ · ~~15.4~~ · ~~15.2~~ (UI; pulidos post-Claude).
 

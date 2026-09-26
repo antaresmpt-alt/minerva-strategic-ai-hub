@@ -694,6 +694,7 @@ function ArticuloFormDialog({
     Map<string, number>
   >(() => new Map());
   const [cajaCodigos, setCajaCodigos] = useState<string[]>([]);
+  const [clientesOt, setClientesOt] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -705,10 +706,10 @@ function ArticuloFormDialog({
         .select("codigo, bultos_por_palet_default")
         .eq("activo", true)
         .order("orden");
-      if (cancelled || !data) return;
+      if (cancelled) return;
       const map = new Map<string, number>();
       const codes: string[] = [];
-      for (const c of data) {
+      for (const c of data ?? []) {
         if (!c.codigo) continue;
         codes.push(c.codigo);
         if (c.bultos_por_palet_default != null) {
@@ -718,6 +719,28 @@ function ArticuloFormDialog({
       }
       setCajasDefaultByCodigo(map);
       setCajaCodigos(codes);
+
+      const nombres = new Set<string>();
+      const chunk = 1000;
+      for (let from = 0; from < 200000; from += chunk) {
+        const { data: ots, error } = await supabase
+          .from("prod_ots_general")
+          .select("cliente")
+          .not("cliente", "is", null)
+          .order("id", { ascending: true })
+          .range(from, from + chunk - 1);
+        if (cancelled || error || !ots?.length) break;
+        for (const row of ots) {
+          const c = String(row.cliente ?? "").trim();
+          if (c) nombres.add(c);
+        }
+        if (ots.length < chunk) break;
+      }
+      if (!cancelled) {
+        setClientesOt(
+          Array.from(nombres).sort((a, b) => a.localeCompare(b, "es"))
+        );
+      }
     })();
     return () => {
       cancelled = true;
@@ -854,9 +877,18 @@ function ArticuloFormDialog({
               <Input
                 className="h-8 text-xs"
                 placeholder="LABORATORIOS ANUR, S.L"
+                list="articulo-clientes-ot"
                 value={form.cliente}
                 onChange={(e) => set("cliente", e.target.value)}
               />
+              <datalist id="articulo-clientes-ot">
+                {clientesOt.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+              <p className="text-[10px] text-slate-400">
+                Lista de las OTs (Optimus). Puedes escribir un cliente que aún no esté.
+              </p>
             </div>
           </div>
 

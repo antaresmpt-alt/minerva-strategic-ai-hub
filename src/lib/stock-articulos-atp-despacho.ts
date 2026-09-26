@@ -35,12 +35,23 @@ export type AtpDespachoCobertura =
 
 export type AtpDespachoResumen = {
   cantidadPedida: number | null;
-  /** Terminado en uds, cliente compatible, libre > 0. Orden de consumo. */
+  /**
+   * Terminado en uds, libre > 0, de esta referencia (ya filtrada aguas arriba).
+   * Incluye cliente distinto: se ofrece y se avisa. Orden de consumo.
+   */
   ptUsables: AtpDespachoLote[];
   librePtUsable: number;
-  /** WIP (impreso/troquelado/hojas…) compatible: solo informativo. */
+  /** WIP (impreso/troquelado/hojas…): solo informativo. Incluye cliente distinto. */
   wipUsables: AtpDespachoLote[];
-  /** Stock dedicado a otro cliente: no se ofrece. */
+  /**
+   * Misma referencia, texto de cliente distinto al de la OT (o OT sin cliente).
+   * Se ofrece igual; la UI avisa y puede copiar el nombre de la OT.
+   */
+  clienteDistinto: AtpDespachoLote[];
+  /**
+   * Reservado. En esta referencia no se esconde stock por el texto del cliente.
+   * Queda vacío: un lote de otro cliente en otra referencia no llega a esta función.
+   */
   otrosClientes: AtpDespachoLote[];
   cobertura: AtpDespachoCobertura;
   /** min(libre usable, pedida). */
@@ -50,8 +61,9 @@ export type AtpDespachoResumen = {
 };
 
 /**
- * Lote sin cliente = usable por cualquiera. Lote con cliente = solo si la OT
- * tiene cliente y encaja (comparación laxa, como el aviso de reservas).
+ * Lote sin cliente = cualquiera. Lote con cliente = la OT encaja (laxo).
+ * No decide si el lote se esconde: en la misma referencia el stock se ofrece
+ * igual y `clienteDistinto` marca el aviso.
  */
 export function loteClienteCompatible(
   loteCliente: string | null | undefined,
@@ -72,21 +84,22 @@ export function resumenAtpDespacho(
   cantidadPedida: number | null
 ): AtpDespachoResumen {
   const conLibre = lotes.filter((l) => l.cantidad_libre > 0);
-  const compatibles = conLibre.filter((l) =>
-    loteClienteCompatible(l.cliente, otCliente)
-  );
-  const otrosClientes = conLibre.filter(
+  const clienteDistinto = conLibre.filter(
     (l) => !loteClienteCompatible(l.cliente, otCliente)
   );
 
-  // Primero lo dedicado a este cliente (es suyo), luego libre genérico; FIFO.
-  const ptUsables = compatibles.filter(esPtUds).sort((a, b) => {
-    const ad = (a.cliente ?? "").trim() ? 0 : 1;
-    const bd = (b.cliente ?? "").trim() ? 0 : 1;
-    if (ad !== bd) return ad - bd;
+  // Mismo cliente (o genérico) antes que un texto distinto; dentro, FIFO.
+  const rankCliente = (l: AtpDespachoLote) => {
+    if (!loteClienteCompatible(l.cliente, otCliente)) return 2;
+    return (l.cliente ?? "").trim() ? 0 : 1;
+  };
+  const ptUsables = conLibre.filter(esPtUds).sort((a, b) => {
+    const ra = rankCliente(a);
+    const rb = rankCliente(b);
+    if (ra !== rb) return ra - rb;
     return a.created_at.localeCompare(b.created_at);
   });
-  const wipUsables = compatibles.filter((l) => !esPtUds(l));
+  const wipUsables = conLibre.filter((l) => !esPtUds(l));
   const librePtUsable = ptUsables.reduce((s, l) => s + l.cantidad_libre, 0);
 
   const pedida =
@@ -109,7 +122,8 @@ export function resumenAtpDespacho(
     ptUsables,
     librePtUsable,
     wipUsables,
-    otrosClientes,
+    clienteDistinto,
+    otrosClientes: [],
     cobertura,
     usarDeStock,
     faltan,

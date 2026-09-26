@@ -4658,6 +4658,7 @@ export function DespachoWizardDialog({
             otNumero={atpOt}
             otCliente={meta.cliente || null}
             pedidoCliente={meta.pedido_cliente || null}
+            referenciaId={form.referencia_id}
             referenciaCodigo={form.referencia_codigo || null}
             onDecision={onAtpDecision}
             onReservado={stockAtp.reload}

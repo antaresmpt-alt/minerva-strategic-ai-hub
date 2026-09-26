@@ -89,15 +89,12 @@ Hoy solo copia texto; las uds siguen libres → otra OT puede pillárselas; la O
 
 ### Orden mañana
 
-1. Fix punto 1 (cliente) → smoke 98046 pasos 1–4.  
-2. Draft SQL `es_ot_entrega` → Claude.  
-3. Mezclar (3a) cuando esté clara la numeración Optimus.  
-4. Luego: `TEST_PILOTO` a 0 · merge · carga Gabri · 15.5.
+Decidido el **26 sep** (esta lista queda sustituida): `.MANUALES/SESIONES/SESION_26SEP2026_BLOQUE15_DECISIONES.md`.
+
+Mezclar / reservar al partir **no** entra en la tanda. El nombre bueno del cliente es el de la OT. `es_ot_entrega` se marca en el maestro y al reservar con OT entrega. María José termina con **Consumir**.
 
 ---
 
 ## Pendiente
 
-- Fix cliente 15.2 + smoke (+ paso 4) · `es_ot_entrega` · Mezclar reserva · lotes `TEST_PILOTO` a 0 · carga Gabri · **15.5**.
-- Merge de la rama a `main` tras smoke.
-- B16 Fase A (validar §9 con Gemma/Carlos).
+Pasado a la sesión del 26 sep. B16 Fase A (validar §9 con Gemma/Carlos) sigue en paralelo, sin código.
