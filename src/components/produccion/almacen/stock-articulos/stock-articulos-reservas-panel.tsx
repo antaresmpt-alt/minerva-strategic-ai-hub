@@ -253,12 +253,25 @@ export function StockArticulosReservasPanel({
   );
   const clienteMismatch = clientesOtLoteDifieren(loteCliente, otCliente);
 
+  function pendienteDe(otNumero: string): number | null {
+    const viva = reservas.find(
+      (r) =>
+        r.ot_numero === otNumero &&
+        (r.estado === "activa" || r.estado === "parcial")
+    );
+    if (!viva) return null;
+    const pendiente = viva.cantidad_reservada - viva.cantidad_consumida;
+    return pendiente > 0 ? pendiente : null;
+  }
+
   function openMode(m: Mode, presetOt?: string) {
     setMode(m);
     setOt(presetOt ?? "");
     setOtCliente(null);
     setOtTitulo(null);
-    setCantidad("");
+    const pendiente =
+      m === "consumir" && presetOt ? pendienteDe(presetOt) : null;
+    setCantidad(pendiente != null ? String(pendiente) : "");
     setBultos("");
     setNumPedido("");
     setNotas(m === "ot_entrega" ? OT_ENTREGA_TAG : "");
@@ -681,7 +694,9 @@ export function StockArticulosReservasPanel({
                   placeholder={
                     mode === "reservar" || mode === "ot_entrega"
                       ? `Prefill = pedido OT · máx. libre ${libre.toLocaleString("es-ES")}`
-                      : "Ej. 5.000"
+                      : mode === "consumir"
+                        ? "Pendiente de la reserva"
+                        : "Ej. 5.000"
                   }
                 />
               </div>

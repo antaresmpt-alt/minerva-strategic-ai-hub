@@ -64,7 +64,7 @@ Pendiente de esta tanda: punto 7 (smoke formal). Puntos 4 y 5 hechos el 26 sep n
 
 Excel de las 15 parejas Blanxart para Zaida: `.MANUALES/DUDAS/BLANXART_PAREJAS_ZAIDA_2026-09-26.xlsx` (el `.xlsx` no entra en git). No se ha borrado ninguna ficha.
 
-Manual de uso: `.MANUALES/MANUALES_USUARIO/MINERVA_MANUAL_STOCK_ARTICULOS.md`. Lunes: minidemo a Gabri y Zaida. Los lotes `TEST_PILOTO` se anulan hoy o el lunes, después de enseñarlos. Smoke 98046 lo hace Manel en la app (checkbox, reserva de 1, Consumir).
+Manual de uso: `.MANUALES/MANUALES_USUARIO/MINERVA_MANUAL_STOCK_ARTICULOS.md`. Lunes: minidemo a Gabri y Zaida. Los lotes `TEST_PILOTO` se anulan hoy o el lunes, después de enseñarlos. Smoke 98046 hecho: reserva 130, Consumir entero, lote en Agotado, ya no sale en el pipeline.
 
 ---
 

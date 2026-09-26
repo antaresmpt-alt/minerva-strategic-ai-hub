@@ -1681,7 +1681,7 @@ function StockArticuloDetalleDialog({
           if (!o) onClose();
         }}
       >
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-full sm:max-w-4xl max-h-[90vh] overflow-y-auto">
           {row ? (
             <>
               <DialogHeader>
