@@ -28,9 +28,12 @@ import type { ProdOtProducidaRow } from "@/types/prod-ot-producidas";
 
 const PAGE_SIZE = 500;
 
+/** Texto fijo que escribe `prod_ot_entrega_cerrar_si_consumida` al archivar. */
+const MOTIVO_CIERRE_OT_ENTREGA =
+  "OT de entrega: cierre por Consumir, sin horas de planta.";
+
 function esCierreEntrega(r: ProdOtProducidaRow): boolean {
-  const texto = `${r.motivo_exclusion ?? ""} ${r.observaciones_revision ?? ""}`.toLowerCase();
-  return texto.includes("entrega") || texto.includes("sin horas de planta");
+  return (r.motivo_exclusion ?? "").trim() === MOTIVO_CIERRE_OT_ENTREGA;
 }
 
 const LIST_SELECT =

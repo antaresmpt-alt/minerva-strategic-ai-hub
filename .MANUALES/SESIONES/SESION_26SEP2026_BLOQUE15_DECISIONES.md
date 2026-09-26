@@ -82,7 +82,7 @@ La migración `20260926193000` dejó `prod_ot_entrega_marcar` solo mirando la se
 En código, en `main`:
 
 - Reservar primero y marcar después. Si la reserva falla, no se quita una marca que ya estaba.
-- «Usar stock» del despacho marca la OT cuando la reserva sale bien (también si ya estaba cubierta). **Bug pendiente:** si falla a medias, el `catch` aún llama a marcar → ver abajo.
+- «Usar stock» del despacho marca la OT cuando la reserva sale bien (también si ya estaba cubierta). Reserva parcial: no marca; aviso para repetir Usar stock.
 - El checkbox del maestro solo llama a marcar si la casilla ha cambiado.
 - «Poner el cliente de la OT» solo si se puede escribir stock.
 - Histórico: fecha, rol de quien cerró (si el perfil se puede leer) y la nota «Entrega de stock».
@@ -91,21 +91,15 @@ Reimportar Optimus no toca OTs que ya existen: solo inserta las nuevas. El upser
 
 ---
 
-## Próxima sesión — review Claude del `c398f19` (27 sep o cuando toque)
+## Review Claude post-`c398f19` — hecho (misma noche)
 
-Claude revisó el commit en GitHub. **Casi todo OK.** Dos tareas:
+### ~~P0~~ — «Usar stock» parcial no marca la OT
 
-### P0 — corregir (sin SQL, ~2 líneas)
+Quitado `marcarEntrega()` del `catch`. Aviso: reserva parcial → volver a pulsar Usar stock.
 
-**«Usar stock» a medias no debe marcar la OT.** Hoy, si reserva 2 de 3 lotes y el tercero falla, el `catch` de `despacho-stock-articulos-atp.tsx` llama igual a `marcarEntrega()`. La OT sale de pendientes, se consumen solo los lotes reservados y `cerrar_si_consumida` cierra cuando no queda reserva viva, **aunque la pedida no esté cubierta**.
+### ~~P2~~ — badge Entrega en Producidas
 
-→ Quitar `marcarEntrega()` del `catch`. Toast del estilo: «Reservado parcialmente; vuelve a pulsar Usar stock». Al repetir, solo falta lo pendiente; marcar cuando el plan completo termine bien.
-
-### P2 — menor (UI)
-
-**Etiqueta «Entrega» en Producidas.** `esCierreEntrega` busca la palabra «entrega» en observaciones; una OT normal con «cliente adelantó la entrega» podría salir en verde.
-
-→ Mejor: `motivo_exclusion === 'OT de entrega: cierre por Consumir, sin horas de planta.'` (texto fijo de la migración `193000`) o comprobar snapshot con un solo paso «Entrega».
+`esCierreEntrega` compara el `motivo_exclusion` exacto de `prod_ot_entrega_cerrar_si_consumida`.
 
 ### Mejora futura (no ahora)
 

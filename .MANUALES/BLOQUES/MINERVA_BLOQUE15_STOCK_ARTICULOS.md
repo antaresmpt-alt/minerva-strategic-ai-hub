@@ -327,6 +327,7 @@ Orden acordado (Claude 25 sep): **picker solo buscar** → **15.1a editar_datos 
 | 26 sep | Decisiones Manel (sin código): nombre bueno = cliente de la OT; limpieza artículos + lotes; desplegable de clientes desde maestro OTs (texto libre si no está; sin tabla ni Odoo). `es_ot_entrega` en maestro y al pulsar OT entrega. Paso único Entrega. María José cierra con **Consumir** (debe cerrar paso + histórico). Ajustar gana uds/bulto y pico; no se funde con Editar ni se bloquea si el embalaje no cuadra. **Mezclar queda fuera.** Prompt: `.MANUALES/SESIONES/SESION_26SEP2026_BLOQUE15_DECISIONES.md`. |
 | 26 sep noche | `es_ot_entrega` + paso Entrega + Consumir archiva la OT al agotar la reserva (sin horas de planta). Excel Blanxart para Zaida, sin borrar fichas. Smoke 98046. |
 | 26 sep noche | Permiso en `prod_ot_entrega_marcar` (`20260926210000`, visto bueno Claude, aplicada). Marcar después de reservar. «Usar stock» también marca. Histórico enseña fecha, rol y «Entrega de stock». En `main` `c398f19`. |
+| 26 sep noche | Post-review: «Usar stock» parcial no marca OT; badge Entrega en Producidas por motivo exacto. |
 
 ---
 
@@ -346,7 +347,7 @@ Rama: **`feature/bloque15-stock-articulos`**.
 
 **Fuera de esta tanda:** reservar al Mezclar. Después: anular `TEST_PILOTO` · carga Gabri · **15.5**. Lunes: borrar FICT-98001 de la hoja de ruta (dejar el apunte PUENTE del 24).
 
-**Próxima sesión (review Claude `c398f19`):** quitar marcar OT en el `catch` de «Usar stock» si la reserva fue parcial; afinar badge Entrega en Producidas (motivo exacto, no grep «entrega»). Mejora futura: no cerrar OT si lo consumido < pedida.
+**Review Claude `c398f19` (26 sep noche):** «Usar stock» parcial ya no marca la OT; badge Entrega en Producidas por `motivo_exclusion` exacto. Mejora futura: no cerrar OT si lo consumido < pedida.
 
 ~~15.1a~~ · ~~15.1b~~ · ~~15.1d~~ · ~~15.3~~ · ~~15.4~~ · ~~15.2~~ (UI; pulidos post-Claude).
 

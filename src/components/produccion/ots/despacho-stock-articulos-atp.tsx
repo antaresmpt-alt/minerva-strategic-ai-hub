@@ -368,16 +368,15 @@ export function DespachoStockAtpDialog({
       onReservado();
       onDecision("usar_stock");
     } catch (e) {
+      const errMsg = errorMessageFromUnknown(e);
       if (hechas > 0) {
-        const marca = await marcarEntrega();
-        if (marca) {
-          toast.warning(`Parte reservada, y la marca de entrega falló: ${marca}`);
-        }
+        toast.warning(
+          `Reservado parcialmente (${hechas} de ${plan.length} lotes). Vuelve a pulsar Usar stock. ${errMsg}`
+        );
+        onReservado();
+      } else {
+        toast.error(errMsg);
       }
-      toast.error(
-        `${hechas > 0 ? `Se reservaron ${hechas} de ${plan.length} lotes. ` : ""}${errorMessageFromUnknown(e)}`
-      );
-      if (hechas > 0) onReservado();
     } finally {
       setReservando(false);
     }
