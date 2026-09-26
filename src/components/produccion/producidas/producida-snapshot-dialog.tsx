@@ -207,6 +207,8 @@ export function ProducidaSnapshotDialog({
             {yaReabierta
               ? ` Reabierta ${fmtDate(row?.reabierta_at ?? null)}.`
               : " Metadatos de revisión editables; snapshot no."}
+            {row?.observaciones_revision ? ` ${row.observaciones_revision}` : ""}
+            {row?.motivo_exclusion ? ` Motivo: ${row.motivo_exclusion}` : ""}
           </DialogDescription>
         </DialogHeader>
 

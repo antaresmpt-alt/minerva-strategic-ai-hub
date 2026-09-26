@@ -405,13 +405,6 @@ export function StockArticulosReservasPanel({
 
       setSubmitting(true);
       try {
-        if (mode === "ot_entrega") {
-          const { error: marcaErr } = await supabase.rpc("prod_ot_entrega_marcar", {
-            p_num_pedido: otN,
-            p_marcar: true,
-          });
-          if (marcaErr) throw marcaErr;
-        }
         const { error } = await supabase.rpc("prod_stock_articulos_reservar", {
           p_stock_id: stockId,
           p_ot_numero: otN,
@@ -420,18 +413,26 @@ export function StockArticulosReservasPanel({
           p_bultos: bultosN,
           p_notas: uniqueNotes || undefined,
         });
-        if (error) {
-          if (mode === "ot_entrega") {
-            await supabase.rpc("prod_ot_entrega_marcar", {
-              p_num_pedido: otN,
-              p_marcar: false,
-            });
+        if (error) throw error;
+        let marcada = mode !== "ot_entrega";
+        if (mode === "ot_entrega") {
+          const { error: marcaErr } = await supabase.rpc("prod_ot_entrega_marcar", {
+            p_num_pedido: otN,
+            p_marcar: true,
+          });
+          if (marcaErr) {
+            toast.warning(
+              `Reservado, pero la OT no quedó marcada como entrega: ${errorMessageFromUnknown(marcaErr)}`
+            );
+          } else {
+            marcada = true;
           }
-          throw error;
         }
         toast.success(
           mode === "ot_entrega"
-            ? `OT entrega ${otN}: reservados ${qty.toLocaleString("es-ES")} ${unidad}. Paso Entrega en el pipeline.`
+            ? marcada
+              ? `OT entrega ${otN}: reservados ${qty.toLocaleString("es-ES")} ${unidad}. Paso Entrega en el pipeline.`
+              : `Reservados ${qty.toLocaleString("es-ES")} ${unidad} en la OT ${otN}.`
             : `Reservado ${qty.toLocaleString("es-ES")} ${unidad} · OT ${otN}`
         );
         setMode(null);

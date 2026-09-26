@@ -72,3 +72,19 @@ Manual de uso: `.MANUALES/MANUALES_USUARIO/MINERVA_MANUAL_STOCK_ARTICULOS.md`. L
 
 - Lunes: borrar **FICT-98001** de la hoja de ruta de etiquetas. No tocar el apunte PUENTE del 24.
 - Anular lotes `TEST_PILOTO` (poner a 0) cuando se cierre la prueba de stock.
+
+---
+
+## Review de Claude (26 sep, noche) — código listo, SQL sin aplicar
+
+La migración `20260926193000` ya está en la base. El agujero: `prod_ot_entrega_marcar` solo mira la sesión. Visto bueno de Claude y aplicada: `supabase/migrations/20260926210000_bloque15_ot_entrega_permiso.sql`. Exige `minerva_can_write_stock_articulos()` (admin, gerencia, oficina técnica, logística, o la capacidad de Gabri). Un comercial recibe «Sin permiso» y no llega a tocar la OT.
+
+En código, subido a `main`:
+
+- Reservar primero y marcar después. Si la reserva falla, no se quita una marca que ya estaba.
+- «Usar stock» del despacho marca la OT cuando la reserva sale bien (también si ya estaba cubierta). Si un lote falla a medias, no desmarca.
+- El checkbox del maestro solo llama a marcar si la casilla ha cambiado.
+- «Poner el cliente de la OT» solo si se puede escribir stock.
+- Histórico: fecha, rol de quien cerró (si el perfil se puede leer) y la nota «Entrega de stock».
+
+Reimportar Optimus no toca OTs que ya existen: solo inserta las nuevas. El upsert de la hija no manda `es_ot_entrega`.

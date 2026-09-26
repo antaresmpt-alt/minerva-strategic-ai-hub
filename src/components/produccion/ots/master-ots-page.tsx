@@ -492,7 +492,10 @@ export function MasterOtsPage() {
     [externoOtSet, externoIdSet]
   );
 
+  const entregaAlAbrir = useRef(false);
+
   const openEdit = useCallback((r: ProdOtsGeneralRow) => {
+    entregaAlAbrir.current = Boolean(r.es_ot_entrega);
     setEditing({ ...r });
     setEditOpen(true);
   }, []);
@@ -684,11 +687,13 @@ export function MasterOtsPage() {
         .update(payload)
         .eq("id", editing.id);
       if (error) throw error;
-      const { error: marcaErr } = await supabase.rpc("prod_ot_entrega_marcar", {
-        p_num_pedido: editing.num_pedido,
-        p_marcar: Boolean(editing.es_ot_entrega),
-      });
-      if (marcaErr) throw marcaErr;
+      if (Boolean(editing.es_ot_entrega) !== entregaAlAbrir.current) {
+        const { error: marcaErr } = await supabase.rpc("prod_ot_entrega_marcar", {
+          p_num_pedido: editing.num_pedido,
+          p_marcar: Boolean(editing.es_ot_entrega),
+        });
+        if (marcaErr) throw marcaErr;
+      }
       toast.success("OT actualizada.");
       setEditOpen(false);
       setEditing(null);

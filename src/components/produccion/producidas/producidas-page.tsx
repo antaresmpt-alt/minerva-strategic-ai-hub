@@ -23,9 +23,15 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { errorMessageFromUnknown } from "@/lib/error-message";
 import { fmtCantidad, fmtDate } from "@/lib/hoja-ruta/hoja-ruta-formatters";
 import { exportProducidasAExcel } from "@/lib/prod-ot-producidas-export";
+import { formatRoleLabel } from "@/lib/permissions";
 import type { ProdOtProducidaRow } from "@/types/prod-ot-producidas";
 
 const PAGE_SIZE = 500;
+
+function esCierreEntrega(r: ProdOtProducidaRow): boolean {
+  const texto = `${r.motivo_exclusion ?? ""} ${r.observaciones_revision ?? ""}`.toLowerCase();
+  return texto.includes("entrega") || texto.includes("sin horas de planta");
+}
 
 const LIST_SELECT =
   "id, ot_numero, ot_id, referencia_id, referencia_minerva, referencia_cliente, cliente, trabajo, cantidad_pedida, cantidad_producida, material, gramaje, formato, tintas, troquel, poses, acabado_pral, tipo_engomado, codigo_caja_embalaje, estuches_por_bulto, fsc, fecha_inicio_real, fecha_fin_real, fecha_cierre, horas_prep_impresion_reales, horas_tiraje_impresion_reales, horas_prep_troquelado_reales, horas_tiraje_troquelado_reales, horas_prep_engomado_reales, horas_tiraje_engomado_reales, horas_guillotina_reales, horas_ctp_reales, horas_desbroce_reales, horas_total_reales, merma_total, snapshot, snapshot_version, version, cerrada_por, cerrada_at, observaciones_revision, excluido_de_promedios, motivo_exclusion, reabierta_desde_id, reabierta_at, reabierta_por, created_at";
@@ -33,6 +39,7 @@ const LIST_SELECT =
 export function ProducidasPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [rows, setRows] = useState<ProdOtProducidaRow[]>([]);
+  const [rolPorId, setRolPorId] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
@@ -69,10 +76,29 @@ export function ProducidasPage() {
         from += PAGE_SIZE;
       }
       setRows(all);
+      const ids = [
+        ...new Set(
+          all
+            .map((r) => r.cerrada_por)
+            .filter((id): id is string => typeof id === "string" && id.length > 0)
+        ),
+      ];
+      const map: Record<string, string> = {};
+      for (let i = 0; i < ids.length; i += 80) {
+        const { data: perfiles } = await supabase
+          .from("profiles")
+          .select("id, role")
+          .in("id", ids.slice(i, i + 80));
+        for (const p of perfiles ?? []) {
+          if (p.id) map[p.id] = formatRoleLabel(p.role ?? null);
+        }
+      }
+      setRolPorId(map);
     } catch (e) {
       console.error("[Producidas] load", e);
       setError(errorMessageFromUnknown(e, "No se pudo cargar el histórico."));
       setRows([]);
+      setRolPorId({});
     } finally {
       setLoading(false);
     }
@@ -259,11 +285,36 @@ export function ProducidasPage() {
                     <td className="px-3 py-2 text-right tabular-nums text-xs">
                       {r.horas_total_reales != null ? `${r.horas_total_reales}` : "—"}
                     </td>
-                    <td className="px-3 py-2 text-xs text-slate-600">
-                      {fmtDate(r.cerrada_at)}
+                    <td
+                      className="px-3 py-2 text-xs text-slate-600"
+                      title={
+                        [r.observaciones_revision, r.motivo_exclusion]
+                          .filter(Boolean)
+                          .join(" · ") || undefined
+                      }
+                    >
+                      <div>{fmtDate(r.cerrada_at)}</div>
+                      {r.cerrada_por && rolPorId[r.cerrada_por] ? (
+                        <div className="text-[10px] text-slate-500">
+                          por {rolPorId[r.cerrada_por]}
+                        </div>
+                      ) : null}
+                      {esCierreEntrega(r) ? (
+                        <div className="text-[10px] font-medium text-emerald-800">
+                          Entrega de stock
+                        </div>
+                      ) : null}
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex flex-wrap gap-1">
+                        {esCierreEntrega(r) ? (
+                          <span
+                            className="inline-flex rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800"
+                            title={r.observaciones_revision ?? r.motivo_exclusion ?? undefined}
+                          >
+                            Entrega
+                          </span>
+                        ) : null}
                         {r.excluido_de_promedios ? (
                           <span
                             className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800"
@@ -279,7 +330,7 @@ export function ProducidasPage() {
                             Reab.
                           </span>
                         ) : null}
-                        {!r.excluido_de_promedios && !r.reabierta_at ? (
+                        {!r.excluido_de_promedios && !r.reabierta_at && !esCierreEntrega(r) ? (
                           <span className="text-[10px] text-slate-400">—</span>
                         ) : null}
                       </div>

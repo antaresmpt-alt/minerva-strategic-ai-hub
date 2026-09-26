@@ -16,6 +16,10 @@ import {
 } from "@/components/ui/dialog";
 import { errorMessageFromUnknown } from "@/lib/error-message";
 import {
+  canWriteStockArticulosClient,
+  fetchProfileCapacidades,
+} from "@/lib/stock-articulos-permissions";
+import {
   buildReservaNotas,
   planReservaLotes,
   resumenAtpDespacho,
@@ -262,6 +266,34 @@ export function DespachoStockAtpDialog({
 }) {
   const [reservando, setReservando] = useState(false);
   const [copiandoCliente, setCopiandoCliente] = useState(false);
+  const [puedeEscribirStock, setPuedeEscribirStock] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+      const role =
+        prof && typeof (prof as { role?: unknown }).role === "string"
+          ? String((prof as { role: string }).role)
+          : null;
+      const caps = await fetchProfileCapacidades(supabase, user.id);
+      if (!cancelled) {
+        setPuedeEscribirStock(canWriteStockArticulosClient(role, caps));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, supabase]);
   const nombresDistintos = [
     ...new Set(
       resumen.clienteDistinto
@@ -291,11 +323,24 @@ export function DespachoStockAtpDialog({
     [otCliente, otNumero, pedida, pedidoCliente, referenciaCodigo, usarMezcla]
   );
 
+  async function marcarEntrega(): Promise<string | null> {
+    const { error } = await supabase.rpc("prod_ot_entrega_marcar", {
+      p_num_pedido: otNumero,
+      p_marcar: true,
+    });
+    return error ? errorMessageFromUnknown(error) : null;
+  }
+
   async function usarStock() {
     if (pedida == null) return;
     if (pendienteReservar <= 0) {
+      const marca = await marcarEntrega();
       onDecision("usar_stock");
-      toast.success("La OT ya está cubierta con reservas de stock.");
+      if (marca) {
+        toast.warning(`La OT sigue cubierta, pero no quedó marcada como entrega: ${marca}`);
+      } else {
+        toast.success("La OT ya está cubierta con reservas de stock.");
+      }
       return;
     }
     const plan = planReservaLotes(resumen.ptUsables, pendienteReservar);
@@ -313,12 +358,22 @@ export function DespachoStockAtpDialog({
         if (error) throw error;
         hechas += 1;
       }
+      const marca = await marcarEntrega();
       toast.success(
         `Reservadas ${fmt(pendienteReservar)} uds en ${plan.length} lote${plan.length === 1 ? "" : "s"} para la OT ${otNumero}.`
       );
+      if (marca) {
+        toast.warning(`Reservado, pero la OT no quedó marcada como entrega: ${marca}`);
+      }
       onReservado();
       onDecision("usar_stock");
     } catch (e) {
+      if (hechas > 0) {
+        const marca = await marcarEntrega();
+        if (marca) {
+          toast.warning(`Parte reservada, y la marca de entrega falló: ${marca}`);
+        }
+      }
       toast.error(
         `${hechas > 0 ? `Se reservaron ${hechas} de ${plan.length} lotes. ` : ""}${errorMessageFromUnknown(e)}`
       );
@@ -459,7 +514,7 @@ export function DespachoStockAtpDialog({
                 Es la misma referencia: el stock se ofrece. El nombre bueno es el
                 de la OT.
               </p>
-              {otCliente?.trim() && referenciaId ? (
+              {otCliente?.trim() && referenciaId && puedeEscribirStock ? (
                 <Button
                   type="button"
                   size="sm"
