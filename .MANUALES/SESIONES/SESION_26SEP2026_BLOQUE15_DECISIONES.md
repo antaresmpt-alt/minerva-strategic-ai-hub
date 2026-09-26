@@ -1,7 +1,7 @@
 # Sesión 26 sep 2026 — Bloque 15: decisiones y cierre
 
 > **Rama:** `feature/bloque15-stock-articulos` → merge a `main` el mismo día.  
-> **Horario aprox.:** 17:00 → 20:00 (~3,5 h)  
+> **Horario aprox.:** 17:00 → 20:45 (~4 h)  
 > **Quién:** Manel (decisiones y smoke) · Cursor (código y manual)  
 > **Brief:** `.MANUALES/BLOQUES/MINERVA_BLOQUE15_STOCK_ARTICULOS.md`  
 > **Manual:** `.MANUALES/MANUALES_USUARIO/MINERVA_MANUAL_STOCK_ARTICULOS.md`
@@ -27,7 +27,7 @@ Sesiones **Hoy** I/T/N: al día siguiente la casilla amanece sin marcar; el cale
 3. **OT entrega ≠ Reservar.** Mismo efecto de stock. OT entrega escribe la marca de entrega (no se fabrica). Reservar aparta sin esa marca.
 4. **Nombre de cliente.** El bueno es el de la OT (texto Optimus). El del maestro de artículos lo escribieron a mano y es el que hay que igualar. El Excel de Gabri no graba el cliente del lote: lo copia del artículo. No hay tabla de clientes ni se espera a Odoo: el desplegable sale de los nombres distintos del maestro de OTs, con texto libre si el cliente aún no está en ninguna OT.
 5. **Ajustar ≠ Editar.** Ajustar es el recuento (cambia el físico, nota obligatoria). Editar no toca la cantidad. No se funden. No se obliga a que bultos × uds/bulto + pico = físico (aviso amarillo y se guarda). En Ajustar faltan uds/bulto y pico en el mismo diálogo.
-6. **`es_ot_entrega`.** Campo en la OT, no solo el tag en notas de la reserva. Checkbox en el maestro de OTs, y el botón **OT entrega** lo pone al reservar. Sale de pendientes de despachar. Sigue visible: un solo paso **Entrega** en el pipeline. **Consumir** cierra ese paso y manda la OT al histórico (hoy Consumir solo baja el stock).
+6. **`es_ot_entrega`.** Campo en la OT, no solo el tag en notas de la reserva. Checkbox en el maestro de OTs, y el botón **OT entrega** lo pone al reservar. Sale de pendientes de despachar. Sigue visible: un solo paso **Entrega** en el pipeline. **Consumir** cierra ese paso y manda la OT al histórico.
 
 ---
 
@@ -75,11 +75,11 @@ Manual de uso: `.MANUALES/MANUALES_USUARIO/MINERVA_MANUAL_STOCK_ARTICULOS.md`. L
 
 ---
 
-## Review de Claude (26 sep, noche) — código listo, SQL sin aplicar
+## Review de Claude (26 sep, noche) — aplicada y en `main` (`c398f19`)
 
-La migración `20260926193000` ya está en la base. El agujero: `prod_ot_entrega_marcar` solo mira la sesión. Visto bueno de Claude y aplicada: `supabase/migrations/20260926210000_bloque15_ot_entrega_permiso.sql`. Exige `minerva_can_write_stock_articulos()` (admin, gerencia, oficina técnica, logística, o la capacidad de Gabri). Un comercial recibe «Sin permiso» y no llega a tocar la OT.
+La migración `20260926193000` dejó `prod_ot_entrega_marcar` solo mirando la sesión. Visto bueno de Claude y aplicada: `supabase/migrations/20260926210000_bloque15_ot_entrega_permiso.sql`. Exige `minerva_can_write_stock_articulos()` (admin, gerencia, oficina técnica, logística, o la capacidad de Gabri). Comprobado: la función sale una sola vez; un comercial recibe «Sin permiso» y no llega a la OT; un admin pasa el permiso.
 
-En código, subido a `main`:
+En código, en `main`:
 
 - Reservar primero y marcar después. Si la reserva falla, no se quita una marca que ya estaba.
 - «Usar stock» del despacho marca la OT cuando la reserva sale bien (también si ya estaba cubierta). Si un lote falla a medias, no desmarca.

@@ -39,7 +39,7 @@ Eso basta para tener el almacén al día. Asignar una OT es opcional.
 2. Si hay bastante: en Optimus, una OT de entrega (el pedido de verdad, no la palabra «fabricación»).
 3. Si falta: dos OTs, mismo pedido de cliente. Una por lo que hay. Otra solo por lo que hay que fabricar.
 4. En el lote, **OT entrega**, con el número ya importado de Optimus. Reserva esa cantidad (baja el libre, el físico sigue) y marca la OT.
-5. Cuando sale de verdad, **Consumir** esa reserva. Al gastarla entera, la OT pasa a histórico. No pide horas de planta.
+5. Cuando sale de verdad, **Consumir** esa reserva. Al gastarla entera, la OT pasa a histórico. No pide horas de planta. En **Producidas** se ve la fecha, el rol de quien cerró y la etiqueta **Entrega de stock**.
 
 El checkbox **OT de entrega** al editar la OT hace la marca, sin reservar. El botón del lote marca y reserva. Con el botón sobra el checkbox.
 
@@ -49,4 +49,4 @@ Si el cliente del lote y el de la OT no coinciden, el stock **se ofrece igual**,
 
 ## Comercial
 
-Entra en **Stock artículos** y mira. No tiene que reservar ni consumir. Lo que ve es lo que hay apuntado. Si Gabri no lo ha dado de alta, para la pantalla no existe.
+Entra en **Stock artículos** y mira. No reserva, no consume y no puede marcar una OT como entrega. Lo que ve es lo que hay apuntado. Si Gabri no lo ha dado de alta, para la pantalla no existe.

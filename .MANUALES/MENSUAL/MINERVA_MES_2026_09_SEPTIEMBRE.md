@@ -1,4 +1,4 @@
-# Minerva Hub — Trabajo septiembre 2026 (~37,5 h a 26 sep · mes abierto)
+# Minerva Hub — Trabajo septiembre 2026 (~38 h a 26 sep · mes abierto)
 
 **Manel · desarrollo en solitario (Cursor + IA) en paralelo con Optimus**  
 **Objetivo del mes:** pasar de «funciona en agosto» a **uso real con OTs de verdad** (4–5 OTs E2E, reunión Gemma 6 sep), y abrir los módulos que pide la oficina: **fichas comercial**, **compras/facturas** y **stock de producto terminado**.
@@ -25,7 +25,7 @@ Septiembre puso **Compras y almacén de papel en uso diario** (OCR de albaranes,
 | **Compras / almacén** | Kg en cartelas · solo hojas brutas · **conciliar factura por albarán** (prorrateo €) · **análisis residuos v1** (Excel/PDF) · tabla Compras con columnas fijas y scroll arriba | OT 36254 · 12 sep |
 | **Demo STOP** | Guion peor caso OT **98045** para Gemma | 12 sep |
 | **Etiquetas Hugo** | Sesiones «Hoy» por I/T/N | 25 sep |
-| **B15 Stock artículos** | Lotes PT/WIP · import Excel · export · reservas · aviso al despachar · `es_ot_entrega` · Consumir archiva · manual de uso | En `main` 26 sep · carga real de Gabri pendiente |
+| **B15 Stock artículos** | Lotes PT/WIP · import Excel · export · reservas · aviso al despachar · `es_ot_entrega` · Consumir archiva · permiso de marcar · manual de uso | En `main` 26 sep (`c398f19`) · carga real de Gabri pendiente |
 | **B16 Listados + mail 08:00** | Diseño cerrado (sin código) | 25 sep |
 
 ---
@@ -41,11 +41,11 @@ Septiembre puso **Compras y almacén de papel en uso diario** (OCR de albaranes,
 | **12 sep** | Compras: kg, factura por albarán, residuos, UX tabla · guion 98045 |
 | **15 sep** | Maestro artículos: crear → editar con foto |
 | **25 sep** | Etiquetas «Hoy» · **Bloque 15 Fase A** (22 commits) · diseño B16 |
-| **26 sep** | B15 cerrado: no esconder stock, clientes, Ajustar, OT entrega, Consumir archiva. Manual. Merge `main` |
+| **26 sep** | B15 cerrado: no esconder stock, clientes, Ajustar, OT entrega, Consumir archiva, permiso de marcar. Manual. Merge `main` |
 
 ---
 
-## Horas (~37,5 h) — reparto orientativo
+## Horas (~38 h) — reparto orientativo
 
 | Día | h | Contenido |
 |-----|---|-----------|
@@ -58,10 +58,10 @@ Septiembre puso **Compras y almacén de papel en uso diario** (OCR de albaranes,
 | 12 sep | ~4 | Compras / residuos / factura + docs 98045 |
 | 15 sep | ~1 | Maestro artículos |
 | 25 sep | ~8 | Etiquetas + B15 completo + B16 diseño |
-| 26 sep | ~3,5 | B15: decisiones, código de cierre, manual, merge `main` |
-| **Total** | **~37,5** | |
+| 26 sep | ~4 | B15: decisiones, código de cierre, manual, review del permiso, merge `main` |
+| **Total** | **~38** | |
 
-Por bloque: **B14 fichas ~9,5 h** · **Compras/almacén (9.7 + 12 sep) ~8 h** · **B15 stock artículos ~10,5 h** (7 h el 25 + 3,5 h el 26) · **Reunión + perf planta ~5 h** · **Despacho/maestro/etiquetas ~3,5 h** · **B16 diseño ~0,5 h**.
+Por bloque: **B14 fichas ~9,5 h** · **Compras/almacén (9.7 + 12 sep) ~8 h** · **B15 stock artículos ~11 h** (7 h el 25 + 4 h el 26) · **Reunión + perf planta ~5 h** · **Despacho/maestro/etiquetas ~3,5 h** · **B16 diseño ~0,5 h**.
 
 ---
 

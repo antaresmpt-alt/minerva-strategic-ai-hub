@@ -5,7 +5,7 @@ Un archivo por mes para pasar a Gemma **horas + lo realizado**. Se alimenta de l
 | Mes | Archivo | Horas |
 |-----|---------|-------|
 | Agosto 2026 | [`MINERVA_MES_2026_08_AGOSTO.md`](MINERVA_MES_2026_08_AGOSTO.md) | ~61 h |
-| Septiembre 2026 | [`MINERVA_MES_2026_09_SEPTIEMBRE.md`](MINERVA_MES_2026_09_SEPTIEMBRE.md) | ~37,5 h (abierto a 26 sep) |
+| Septiembre 2026 | [`MINERVA_MES_2026_09_SEPTIEMBRE.md`](MINERVA_MES_2026_09_SEPTIEMBRE.md) | ~38 h (abierto a 26 sep) |
 
 ## Cómo se hace
 

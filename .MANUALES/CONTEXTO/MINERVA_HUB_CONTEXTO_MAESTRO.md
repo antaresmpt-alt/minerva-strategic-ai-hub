@@ -1,7 +1,7 @@
 # MINERVA HUB — Contexto Maestro
 > **FUENTE DE VERDAD MAESTRA.** Pegar al inicio de cualquier sesión con Claude o Cursor para dar contexto completo del proyecto.
 > Si hay contradicción con otros `.md`, este documento manda para visión/estado global. Para detalle fino por bloques, consultar `.MANUALES/CONTEXTO/FASES_HOJA_RUTA_DIGITAL.md`.
-> Última actualización: **26 sep 2026 noche** (Bloque **15** en `main` · manual de stock artículos · septiembre ~37,5 h).
+> Última actualización: **26 sep 2026 noche** (Bloque **15** en `main` `c398f19` · marcar OT entrega con permiso · septiembre ~38 h).
 
 ---
 
@@ -77,8 +77,8 @@
 | **`.MANUALES/SESIONES/SESION_20AGO2026_HANDOFF_NOCHE_CLAUDE.md`** | **Handoff noche 20 ago para Claude** — día completo. **Empezar aquí.** |
 | `.MANUALES/SESIONES/SESION_20AGO2026_SUPABASE_TYPES_TRIAGE.md` | Sesión 20 ago: tipos `Database` + triage 44 errores tsc. |
 | `.MANUALES/BRIEFS/MINERVA_BRIEFING.md` | Onboarding narrativo largo; útil, pero secundario frente a este maestro. |
-| `.MANUALES/MENSUAL/MINERVA_MES_AAAA_MM_*.md` | **Resumen mensual para Gemma** (horas + entregables). Agosto ~61 h · Septiembre ~37,5 h (abierto a 26 sep). Convención: `.MANUALES/MENSUAL/README.md`. |
-| `.MANUALES/SESIONES/SESION_26SEP2026_BLOQUE15_DECISIONES.md` | 26 sep: B15 cerrado (cliente OT, `es_ot_entrega`, Consumir archiva). Manual de uso. Merge `main`. |
+| `.MANUALES/MENSUAL/MINERVA_MES_AAAA_MM_*.md` | **Resumen mensual para Gemma** (horas + entregables). Agosto ~61 h · Septiembre ~38 h (abierto a 26 sep). Convención: `.MANUALES/MENSUAL/README.md`. |
+| `.MANUALES/SESIONES/SESION_26SEP2026_BLOQUE15_DECISIONES.md` | 26 sep: B15 cerrado (cliente OT, `es_ot_entrega`, Consumir archiva, permiso de marcar). Manual. `main` `c398f19`. |
 | `.MANUALES/SESIONES/SESION_25SEP2026_BLOQUE15_STOCK_ARTICULOS.md` | Día B15: 15.0→15.2, decisiones Optimus/OT entrega, smokes, guion smoke 15.2. |
 
 ---
@@ -298,7 +298,7 @@ src/components/produccion/planificacion/
 | 12 | Roles, permisos, landing por perfil | 📋 **Documentado** — operario→ejecución; gestor→home rico. **14 ago:** 1 tableta/máquina (Ramón). Aparcado de código; crítico antes usuarios masivos |
 | 13 | Visibilidad planta / comercial | 📋 Diseño — pipeline recortado, no calendario; TV/andon después. `.MANUALES/BLOQUES/MINERVA_BLOQUE13_VISIBILIDAD_PLANTA.md` |
 | 14 | Fichas comercial (maestro + PDF) | 🚧 En curso — `.MANUALES/BLOQUES/MINERVA_BLOQUE14_FICHAS_COMERCIAL.md` |
-| 15 | Stock artículos (producto / WIP) | ✅ **Fase A en `main`** (26 sep). ATP al despachar, `es_ot_entrega`, Consumir archiva. ⏳ carga Gabri · anular `TEST_PILOTO` · 15.5. Manual: `.MANUALES/MANUALES_USUARIO/MINERVA_MANUAL_STOCK_ARTICULOS.md` |
+| 15 | Stock artículos (producto / WIP) | ✅ **Fase A en `main`** (26 sep, `c398f19`). ATP al despachar, `es_ot_entrega` con permiso de escritura, Consumir archiva. ⏳ carga Gabri · anular `TEST_PILOTO` · 15.5. Manual: `.MANUALES/MANUALES_USUARIO/MINERVA_MANUAL_STOCK_ARTICULOS.md` |
 | 16 | Listados + digests mail | 📋 **Diseño 25 sep** — queries por `clave` en código; mail laborables. MVP sin esperar B15. `.MANUALES/BLOQUES/MINERVA_BLOQUE16_LISTADOS_PERSONALIZADOS.md` |
 
 Detalle 1–3.x histórico: ver commits jun / `.MANUALES/CONTEXTO/FASES_HOJA_RUTA_DIGITAL.md`.
@@ -360,7 +360,7 @@ Detalle 1–3.x histórico: ver commits jun / `.MANUALES/CONTEXTO/FASES_HOJA_RUT
 - [x] **Plataforma — print Electron:** migrado `useReactToPrint` → `printElementInNewWindow` (externos, fichas, tablón semanal, ventas). Ya OK: detalle-día + mesa diaria.
 - [ ] **Bloque 12** (cuando toque usuarios): landing operario/gestor; tableta = máquina — `MINERVA_BLOQUE12_…` (no abrir ya; default gestor = maestro OTs)
 - [ ] **Bloque 5 puente**: Rita lanza OTs a Hugo (no bloquea paralelo si Hugo sigue a mano)
-- [x] **Bloque 15 Fase A** en `main` (26 sep): no esconder stock · clientes · Ajustar · `es_ot_entrega` · Consumir archiva. ⏳ carga Gabri · 15.5. Manual `.MANUALES/MANUALES_USUARIO/MINERVA_MANUAL_STOCK_ARTICULOS.md`
+- [x] **Bloque 15 Fase A** en `main` (26 sep, `c398f19`): no esconder stock · clientes · Ajustar · `es_ot_entrega` (solo quien escribe stock) · Consumir archiva. ⏳ carga Gabri · anular `TEST_PILOTO` · 15.5. Manual `.MANUALES/MANUALES_USUARIO/MINERVA_MANUAL_STOCK_ARTICULOS.md`
 - [ ] **Resumen mensual** septiembre: cerrar a fin de mes (días 26–30) y pasar a Gemma — `.MANUALES/MENSUAL/MINERVA_MES_2026_09_SEPTIEMBRE.md`
 - [ ] **Bloque 16** (📋): validar §9 con Gemma/Carlos → Fase A (claves + UI + digest 08:00) — puede ir **en paralelo** a B15 — `.MANUALES/BLOQUES/MINERVA_BLOQUE16_LISTADOS_PERSONALIZADOS.md`
 
@@ -368,7 +368,7 @@ Detalle 1–3.x histórico: ver commits jun / `.MANUALES/CONTEXTO/FASES_HOJA_RUT
 - [x] **25 sep:** Briefs **Bloque 15/16** niquelados + **15.0** migración/tipos en rama `feature/bloque15-stock-articulos` (reservas aparte, ATP calc., tag OT_ENTREGA en diseño).
 - [x] **25 sep (tarde):** **15.1–15.1d** UI/import/export + **15.3** reservas + **15.4** OT entrega (tag en notas reserva sobre OT Optimus existente; sin crear OT).
 - [x] **25 sep (noche):** writers sin almacén/administración + comercial RO · bandeja Pedido/OT + acciones lote · prefill OT entrega · **15.2** ATP en despacho (usar stock = reserva multi-lote OT entrega; mezclar = texto para partir en Optimus; fabricar = normal) · fixes smoke (Consumir/Liberar visibles, tag sin duplicar, diálogos apilados, aviso embalaje).
-- [x] **26 sep:** B15 cerrado (~3,5 h) — código de cierre, manual, merge `main`. `.MANUALES/SESIONES/SESION_26SEP2026_BLOQUE15_DECISIONES.md`
+- [x] **26 sep:** B15 cerrado (~4 h) — código de cierre, permiso de marcar, manual, merge `main` `c398f19`. `.MANUALES/SESIONES/SESION_26SEP2026_BLOQUE15_DECISIONES.md`
 - [x] **25 sep:** documentación **mensual** — `.MANUALES/MENSUAL/` (agosto movido desde BRIEFS + septiembre).
 - [x] **sep:** Etiquetas Hugo — sesiones **«Hoy»** por I/T/N (`prod_etiquetas_hoja_ruta_sesiones`) + filtro Tocadas hoy.
 - [x] **2 sep:** **9.7 OCR albaranes** — PDF/fotos → tabla revisión → recepciones en Pendientes (`0bfef6b`). No cartela automático. Pendiente: 1 partida → 2+ OTs. `.MANUALES/SESIONES/SESION_02SEP2026_BLOQUE9_7_OCR_ALBARANES.md`
@@ -477,7 +477,7 @@ Detalle 1–3.x histórico: ver commits jun / `.MANUALES/CONTEXTO/FASES_HOJA_RUT
 
 26. **Reunión Gemma 6 sep 2026:** app vista de arriba a abajo; ritmo = 4–5 OTs reales E2E. **Bloque 13** (📋): vista comercial = pipeline recortado, no el calendario; TV aeropuerto / mapa planta = después. Cierre OT ≠ albarán María José (B6+B7). Promedios siguen bajo demanda. **Perf Iniciar contenedor:** optimistic + fetch paralelo — `.MANUALES/SESIONES/SESION_06SEP2026_REUNION_GEMMA_CONTENEDOR.md`.
 
-27. **Bloque 15 — Stock de artículos / WIP (25–26 sep 2026):** producto/WIP en tablas propias (≠ B9 palets). Reservas en `prod_stock_articulos_reservas`; libre/estado **calculados**. El nombre bueno del cliente es el de la OT. **OT entrega** marca `es_ot_entrega` y reserva. **Consumir** la reserva entera cierra el paso Entrega y archiva la OT, sin horas de planta. ATP al despachar ofrece el stock aunque el cliente no coincida (aviso ámbar). **Mezclar** no reserva. Lotes no se borran (anular = 0). En `main` desde el 26 sep. Manual: `.MANUALES/MANUALES_USUARIO/MINERVA_MANUAL_STOCK_ARTICULOS.md`. Brief: `.MANUALES/BLOQUES/MINERVA_BLOQUE15_STOCK_ARTICULOS.md`.
+27. **Bloque 15 — Stock de artículos / WIP (25–26 sep 2026):** producto/WIP en tablas propias (≠ B9 palets). Reservas en `prod_stock_articulos_reservas`; libre/estado **calculados**. El nombre bueno del cliente es el de la OT. **OT entrega** marca `es_ot_entrega` y reserva; marcar exige el mismo permiso que reservar (comercial y tableta no pueden). **Consumir** la reserva entera cierra el paso Entrega y archiva la OT, sin horas de planta. En Producidas: fecha, rol y «Entrega de stock». ATP al despachar ofrece el stock aunque el cliente no coincida (aviso ámbar) y «Usar stock» también marca. **Mezclar** no reserva. Lotes no se borran (anular = 0). En `main` `c398f19`. Manual: `.MANUALES/MANUALES_USUARIO/MINERVA_MANUAL_STOCK_ARTICULOS.md`. Brief: `.MANUALES/BLOQUES/MINERVA_BLOQUE15_STOCK_ARTICULOS.md`.
 
 28. **Bloque 16 — Listados + digests (25 sep 2026, diseño):** listados = `clave` estable + query en código + suscriptores + cron mail (~08:00 laborables). **Prohibido** SQL libre en UI/BD. Gemma = material llega hoy (+ mañana). MVP digests **no espera** B15. Brief: `.MANUALES/BLOQUES/MINERVA_BLOQUE16_LISTADOS_PERSONALIZADOS.md`.
 

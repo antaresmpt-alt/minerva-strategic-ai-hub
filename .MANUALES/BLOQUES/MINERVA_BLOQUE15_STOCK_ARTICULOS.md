@@ -325,7 +325,8 @@ Orden acordado (Claude 25 sep): **picker solo buscar** → **15.1a editar_datos 
 | 25 sep noche | Review Claude 15.2: (1) cliente distinto silencia ATP → fix sin SQL: no excluir por cliente dentro de misma ref. + aviso amarillo; (2) falta `es_ot_entrega` en OT (SQL→Claude) o OTs «Usar stock» quedan colgadas; (3) Mezclar no reserva → preferir reservar ya; confirmar numeración Optimus al partir. Detalle: `.MANUALES/SESIONES/SESION_25SEP2026_BLOQUE15_STOCK_ARTICULOS.md`. |
 | 26 sep tarde | **Pasada 1 (sin SQL):** ATP no esconde stock si el cliente no coincide (aviso ámbar + copiar nombre de la OT al artículo). Alta de artículo: cliente desde lista de OTs, texto libre. Ajustar: uds/bulto y pico vía `editar_datos`; aviso si no cuadra, no bloquea. |
 | 26 sep | Decisiones Manel (sin código): nombre bueno = cliente de la OT; limpieza artículos + lotes; desplegable de clientes desde maestro OTs (texto libre si no está; sin tabla ni Odoo). `es_ot_entrega` en maestro y al pulsar OT entrega. Paso único Entrega. María José cierra con **Consumir** (debe cerrar paso + histórico). Ajustar gana uds/bulto y pico; no se funde con Editar ni se bloquea si el embalaje no cuadra. **Mezclar queda fuera.** Prompt: `.MANUALES/SESIONES/SESION_26SEP2026_BLOQUE15_DECISIONES.md`. |
-| 26 sep noche | `es_ot_entrega` + paso Entrega + Consumir archiva la OT al agotar la reserva (sin horas de planta). Excel Blanxart para Zaida, sin borrar fichas. |
+| 26 sep noche | `es_ot_entrega` + paso Entrega + Consumir archiva la OT al agotar la reserva (sin horas de planta). Excel Blanxart para Zaida, sin borrar fichas. Smoke 98046. |
+| 26 sep noche | Permiso en `prod_ot_entrega_marcar` (`20260926210000`, visto bueno Claude, aplicada). Marcar después de reservar. «Usar stock» también marca. Histórico enseña fecha, rol y «Entrega de stock». En `main` `c398f19`. |
 
 ---
 
@@ -333,17 +334,17 @@ Orden acordado (Claude 25 sep): **picker solo buscar** → **15.1a editar_datos 
 
 Rama: **`feature/bloque15-stock-articulos`**.
 
-**En `main` desde el 26 sep noche.** Manual: `.MANUALES/MANUALES_USUARIO/MINERVA_MANUAL_STOCK_ARTICULOS.md`.
+**En `main` desde el 26 sep noche** (`c398f19`). Manual: `.MANUALES/MANUALES_USUARIO/MINERVA_MANUAL_STOCK_ARTICULOS.md`.
 
 1. ~~No esconder stock~~ (hecho).  
 2. Limpieza de grafías hecha salvo conflictos. Blanxart: Excel para Zaida, sin borrar.  
 3. ~~Alta de artículo: desplegable + texto libre~~ (hecho).  
-4. ~~`es_ot_entrega`~~ (hecho: checkbox, botón OT entrega, fuera de no despachadas).  
+4. ~~`es_ot_entrega`~~ (hecho: checkbox, botón OT entrega, fuera de no despachadas). Solo quien escribe stock puede marcar.  
 5. ~~Paso Entrega. Consumir cierra y archiva~~ (hecho, al agotar la reserva).  
 6. ~~Ajustar con uds/bulto y pico~~ (hecho).  
-7. Smoke OT 98046.
+7. ~~Smoke OT 98046~~ (hecho: agotado, fuera del pipeline, en Producidas como entrega).
 
-**Fuera de esta tanda:** reservar al Mezclar. Después: `TEST_PILOTO` a 0 · merge `main` · carga Gabri · **15.5**.
+**Fuera de esta tanda:** reservar al Mezclar. Después: anular `TEST_PILOTO` · carga Gabri · **15.5**. Lunes: borrar FICT-98001 de la hoja de ruta (dejar el apunte PUENTE del 24).
 
 ~~15.1a~~ · ~~15.1b~~ · ~~15.1d~~ · ~~15.3~~ · ~~15.4~~ · ~~15.2~~ (UI; pulidos post-Claude).
 
